@@ -7641,14 +7641,20 @@ export function StudioShell({
         if (!(target instanceof Element)) return;
         // Priming on first press unlocks AudioContext for later semantic sounds.
         void primeUiSounds();
-        if (
-          target.closest(
-            "button, [role='button'], a[href], .cursor-tree-row, .desk-file-grid-item, [data-studio-tap], input[type='checkbox'], input[type='radio'], summary, .studio-dm-send, .profile-post-rail-btn, .profile-post-rail-follow",
-          )
-        ) {
-          // Semantic handlers play their own tone when marked.
-          if (target.closest("[data-studio-sfx]")) return;
-          playStudioTapFeedback();
+        // Semantic handlers (like/send/…) play their own tone.
+        if (target.closest("[data-studio-sfx]")) return;
+        // Tab / section / nav chrome → warmer nav tone.
+        if (target.closest(STUDIO_NAV_SFX_SELECTOR)) {
+          // Closing a tab should stay a soft tap, not a nav whoosh.
+          if (target.closest(".cursor-tab-close, .cursor-unified-tab-close")) {
+            playStudioTapFeedback("tap");
+            return;
+          }
+          playStudioTapFeedback("nav");
+          return;
+        }
+        if (target.closest(STUDIO_TAP_SFX_SELECTOR)) {
+          playStudioTapFeedback("tap");
         }
       }}
     >
@@ -26133,10 +26139,55 @@ function readComposerEditorText(editor) {
 
 let studioTapLast = 0;
 
-function playStudioTapFeedback() {
+const STUDIO_NAV_SFX_SELECTOR = [
+  "[role='tab']",
+  ".cursor-unified-tab",
+  ".studio-mobile-nav-btn",
+  ".studio-settings-horizontal-menu button",
+  ".studio-admin-head-tab",
+  ".studio-feed-mode-menu button",
+  "[data-studio-nav]",
+].join(", ");
+
+const STUDIO_TAP_SFX_SELECTOR = [
+  "button",
+  "[role='button']",
+  "[role='tab']",
+  "[role='menuitem']",
+  "[role='option']",
+  "[role='switch']",
+  "a[href]",
+  "summary",
+  "[data-clickable]",
+  "[data-studio-tap]",
+  "input[type='checkbox']",
+  "input[type='radio']",
+  ".cursor-tree-row",
+  ".desk-file-list-row",
+  ".desk-file-grid-item",
+  ".desk-file-preview-item",
+  ".cursor-unified-tab",
+  ".cursor-tab-close",
+  ".cursor-clickable",
+  ".studio-inline-tag",
+  ".studio-mobile-nav-btn",
+  ".studio-settings-pill",
+  ".studio-credit-pill",
+  ".studio-dm-send",
+  ".studio-dm-attach",
+  ".studio-dm-row",
+  ".profile-post-rail-btn",
+  ".profile-post-rail-follow",
+  ".profile-comments-post-action",
+  ".studio-audio-switch",
+  "[class*='cursor-tab']",
+  "[class*='cursor-tree']",
+].join(", ");
+
+function playStudioTapFeedback(kind = "tap") {
   if (typeof window === "undefined") return;
   const now = performance.now();
-  if (now - studioTapLast < 45) return;
+  if (now - studioTapLast < 40) return;
   studioTapLast = now;
   let coarse = false;
   try {
@@ -26144,19 +26195,17 @@ function playStudioTapFeedback() {
   } catch {
     coarse = false;
   }
-  // Haptics on touch when the frame has user activation.
   if (coarse) {
     try {
       const active = navigator.userActivation?.isActive ?? true;
       if (active && typeof navigator.vibrate === "function") {
-        navigator.vibrate(8);
+        navigator.vibrate(kind === "nav" ? 10 : 8);
       }
     } catch {
       // best-effort tactile feedback
     }
   }
-  // Shared Web Audio pack (prefs + reduced-motion aware) — desktop and mobile.
-  playUiSound("tap");
+  playUiSound(kind === "nav" || kind === "navBack" ? kind : "tap");
 }
 
 const GENERATION_PROGRESS_STAGES = new Set(["queued", "generating", "saving"]);
