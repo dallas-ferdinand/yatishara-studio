@@ -21934,6 +21934,22 @@ export function StudioShell({
                 />
                 <button
                   type="button"
+                  className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
+                  onClick={() => {
+                    void toggleBrowserFullscreen();
+                  }}
+                  aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
+                  title={browserFullscreen ? "Exit full screen" : "Full screen"}
+                  aria-pressed={browserFullscreen}
+                >
+                  {browserFullscreen ? (
+                    <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                </button>
+                <button
+                  type="button"
                   className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
                   onClick={() => {
                     setHistoryOpen(false);
@@ -22834,6 +22850,22 @@ export function StudioShell({
                 isProfileTabActive={activeTab.startsWith("profile:")}
                 onViewProfile={openOwnProfile}
               />
+              <button
+                type="button"
+                className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
+                onClick={() => {
+                  void toggleBrowserFullscreen();
+                }}
+                aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
+                title={browserFullscreen ? "Exit full screen" : "Full screen"}
+                aria-pressed={browserFullscreen}
+              >
+                {browserFullscreen ? (
+                  <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </button>
               <button
                 type="button"
                 className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
