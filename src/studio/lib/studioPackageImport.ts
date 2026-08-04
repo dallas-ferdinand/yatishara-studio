@@ -7,6 +7,7 @@ import {
   type StudioPackageMediaKind,
   type StudioPackageProjectLike,
 } from "../../../convex/lib/studioPackageFormat";
+import { unwrapStudioPackageBytes } from "../../../convex/lib/studioPackageEnvelope";
 import type { ExtractedZipEntry } from "./studioZipImport";
 
 export type ParsedStudioPackage = {
@@ -81,7 +82,8 @@ function entriesFromUnzipped(
 }
 
 export async function extractStudioPackageFile(file: File): Promise<ParsedStudioPackage> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const raw = new Uint8Array(await file.arrayBuffer());
+  const bytes = unwrapStudioPackageBytes(raw);
   const unzipped = await unzipBytes(bytes);
   const entries = entriesFromUnzipped(unzipped);
   const packages = await parseStudioPackagesFromEntries(entries);

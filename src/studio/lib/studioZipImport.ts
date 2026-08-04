@@ -1,4 +1,5 @@
 import { unzip } from "fflate";
+import { unwrapStudioPackageBytes } from "../../../convex/lib/studioPackageEnvelope";
 
 const SKIP_NAME =
   /(?:^|\/)(?:__MACOSX|\.DS_Store|Thumbs\.db)(?:\/|$)/i;
@@ -142,7 +143,10 @@ async function unpackZipTree(
       const packageRoot = /\.studio$/i.test(leaf)
         ? joinRelative(underPrefix, `${nestedFolder}.studio`)
         : joinRelative(underPrefix, nestedFolder);
-      await unpackZipTree(data, packageRoot, depth + 1, state);
+      const nestedBytes = /\.studio$/i.test(leaf)
+        ? unwrapStudioPackageBytes(data)
+        : data;
+      await unpackZipTree(nestedBytes, packageRoot, depth + 1, state);
       continue;
     }
 

@@ -149,11 +149,14 @@ from `--mos-plate`:
   `Name.studio`. Dropping a `.studio` (or a ZIP that contains package trees)
   imports a **unique fork** (new assets + new project). Editor **Export as** supports
   Video (MP4), Audio (MP3/WAV/M4A), and Studio package, with live progress.
-  In-app `.studio` thumb: white plate + Yatishara dark logo, bottom-left
-  clapperboard chip (same pattern as folder type chips). Glyph icon `studioProject`
-  is a cut-scene clapperboard with the Y mark inside. Packages ship `icon.svg`
-  matching that mark. OS Finder/Explorer still need native filetype registration
-  to override zip sniffing on download.
+  In-app `.studio` thumb: cut-scene clapperboard with the real
+  `yatishara-logo-dark` composited on the slate
+  (`/branding/studio-project-icon*.png`). Thumb plate uses
+  `--desk-transparency-bg` (never a checkerboard — memory 669).
+  Glyph `studioProject` is the clapperboard chip. Downloads use a `YSTUDIO`
+  magic envelope (`application/vnd.yatishara.studio`) so OS sniffers do not
+  show a ZIP icon. Optional OS packs: `resources/studio-filetype/`.
+  Legacy raw-zip `.studio` still imports.
 
 ### Select / dropdown (locked decision)
 
