@@ -49,9 +49,10 @@ function ThumbWithPeek({
   onRenameCommit,
   onRenameDismiss,
   onDoubleClickRename,
+  wrapMod = "",
 }) {
   return (
-    <div className="desk-file-thumb-peek-wrap">
+    <div className={`desk-file-thumb-peek-wrap${wrapMod ? ` ${wrapMod}` : ""}`}>
       {children}
       {badge ? (
         <span className="desk-file-thumb-badge" aria-hidden>
@@ -785,6 +786,7 @@ export function FileEntryThumb({
         Boolean(thumbUrl && isVideoFileUrl(thumbUrl));
       visual = (
         <ThumbWithPeek name={label} badge={hasEditMedia ? "clapperboard" : undefined}
+          wrapMod="desk-file-thumb-peek-wrap--studio"
           renaming={renaming}
           renameInitialName={renameInitialName}
           onRenameCommit={onRenameCommit}
