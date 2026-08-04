@@ -585,6 +585,7 @@ export function FileEntryThumb({
   let inlinePeekLabel = false;
 
   if (kind === "dir" || kind === "parent") {
+    const isRecents = entry?.studioKind === "recents";
     const isTrash = entry?.studioKind === "trash";
     const isMessages =
       entry?.studioKind === "messages" || entry?.systemKind === "messages";
@@ -594,26 +595,31 @@ export function FileEntryThumb({
       entry?.studioKind === "public" || entry?.systemKind === "public_assets";
     const isShared =
       entry?.studioKind === "shared" || entry?.systemKind === "shared_with_me";
-    if (isTrash || isMessages || isPurchased || isPublic || isShared) {
+    if (isRecents || isTrash || isMessages || isPurchased || isPublic || isShared) {
       // System folders: big center glyph only — no bottom-left type chip.
-      const systemIcon = isTrash
-        ? "trash"
-        : isMessages
-          ? "message"
-          : isPurchased
-            ? "shoppingBag"
-            : isShared
-              ? "share"
-              : "globe";
-      const systemMod = isTrash
-        ? "trash"
-        : isMessages
-          ? "messages"
-          : isPurchased
-            ? "purchased"
-            : isShared
-              ? "shared"
-              : "public";
+      // Keep in sync with explorerEntryIcon (list view uses that).
+      const systemIcon = isRecents
+        ? "clock"
+        : isTrash
+          ? "trash"
+          : isMessages
+            ? "message"
+            : isPurchased
+              ? "shoppingBag"
+              : isShared
+                ? "share"
+                : "globe";
+      const systemMod = isRecents
+        ? "recents"
+        : isTrash
+          ? "trash"
+          : isMessages
+            ? "messages"
+            : isPurchased
+              ? "purchased"
+              : isShared
+                ? "shared"
+                : "public";
       visual = (
         <div
           className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder desk-file-thumb-peek-wrap--system desk-file-thumb-peek-wrap--${systemMod}`}

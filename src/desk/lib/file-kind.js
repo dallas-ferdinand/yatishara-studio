@@ -82,6 +82,7 @@ export function fileIconName(nameOrPath, { isDir = false } = {}) {
 }
 
 export function explorerEntryIcon(entry) {
+  if (entry?.studioKind === "recents") return "clock";
   if (entry?.studioKind === "trash") return "trash";
   if (entry?.studioKind === "messages" || entry?.systemKind === "messages") {
     return "message";
@@ -97,6 +98,12 @@ export function explorerEntryIcon(entry) {
     entry?.systemKind === "public_assets"
   ) {
     return "globe";
+  }
+  if (
+    entry?.studioKind === "shared" ||
+    entry?.systemKind === "shared_with_me"
+  ) {
+    return "share";
   }
   if (entry?.type === "dir" || entry?.type === "parent") return entry?.type === "parent" ? "chevL" : "folder";
   if (entry?.studioKind === "videoEdit") return "studioProject";
