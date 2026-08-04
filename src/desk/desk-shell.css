@@ -1551,6 +1551,17 @@ select.cursor-select:focus {
   gap: 10px;
 }
 
+/* Full Files workspace list — Finder/Explorer columns. */
+.desk-file-list.is-detail .desk-file-list-head,
+.desk-file-list.is-detail .desk-file-list-row {
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(96px, 128px)
+    minmax(64px, 80px)
+    minmax(88px, 140px);
+  gap: 12px;
+}
+
 .desk-file-list-head {
   padding: 3px 8px 5px;
   font-size: 10px;
@@ -1559,6 +1570,43 @@ select.cursor-select:focus {
   text-transform: uppercase;
   color: var(--color-cursor-muted);
   border-bottom: 1px solid var(--color-cursor-border-soft);
+}
+
+.desk-file-list-head-date,
+.desk-file-list-head-size,
+.desk-file-list-col-date,
+.desk-file-list-col-size {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.desk-file-list-head-kind,
+.desk-file-list-col-kind {
+  text-align: left;
+}
+
+.desk-file-list-col-date,
+.desk-file-list-col-size,
+.desk-file-list-col-kind {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--color-cursor-muted);
+}
+
+@media (max-width: 900px) {
+  .desk-file-list.is-detail .desk-file-list-head,
+  .desk-file-list.is-detail .desk-file-list-row {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(84px, 110px)
+      minmax(56px, 72px)
+      minmax(72px, 110px);
+    gap: 8px;
+  }
 }
 
 .desk-file-entry-icon--pinned {

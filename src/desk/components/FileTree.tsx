@@ -5,7 +5,7 @@ import { Icon } from "./Icons";
 import { icon as svgIcon } from "@mos-app/icons.js";
 import { FileEntryThumb, InlineRenameInput } from "./FileEntryThumb";
 import { explorerEntryIcon, fileExt, fileViewerKind } from "@/desk/lib/file-kind";
-import { formatFileDate } from "@/desk/lib/explorer-file-actions";
+import { formatFileDate, formatFileSize } from "@/desk/lib/explorer-file-actions";
 import {
   armExplorerDrag,
   beginTouchFileHold,
@@ -1340,9 +1340,56 @@ function entryRowKey(entry, index) {
   return `${entry.type ?? "entry"}:${entry.path ?? entry.name ?? ".."}:${index}`;
 }
 
+/** Finder/Explorer-style kind column for full Files list. */
+function entryKindLabel(entry) {
+  if (!entry || entry.type === "parent" || entry.type === "search-divider") return "";
+  if (entry.type === "dir" || entry.studioKind === "folder") return "Folder";
+  if (entry.studioKind === "messages" || entry.systemKind === "messages") return "Folder";
+  if (entry.studioKind === "purchased" || entry.systemKind === "purchased_assets") return "Folder";
+  if (entry.studioKind === "public" || entry.systemKind === "public_assets") return "Folder";
+  if (entry.studioKind === "shared" || entry.systemKind === "shared_with_me") return "Folder";
+  if (entry.studioKind === "trash") return "Folder";
+  if (entry.kindLabel) return String(entry.kindLabel);
+  if (entry.studioKind === "document") return "Ad copy";
+  if (entry.studioKind === "videoEdit") return "Video edit";
+  if (entry.studioKind === "element") {
+    if (entry.elementType === "character") return "Character";
+    if (entry.elementType === "prop") return "Prop";
+    if (entry.elementType === "location") return "Location";
+    if (entry.elementType === "style_sheet") return "Style sheet";
+    return "Element";
+  }
+  if (entry.kind === "image") return "Image";
+  if (entry.kind === "video") return "Video";
+  if (entry.kind === "audio") return "Audio";
+  const ext = entry.ext || fileExt(entry.name || entry.path || "");
+  const viewer = fileViewerKind(ext);
+  if (viewer === "markdown") return "Markdown";
+  if (viewer === "pdf") return "PDF";
+  if (viewer === "csv") return "Spreadsheet";
+  if (viewer === "archive") return "Archive";
+  if (viewer === "code" || viewer === "html") return ext ? `${ext.slice(1).toUpperCase()} file` : "File";
+  if (ext) return `${ext.slice(1).toUpperCase()} file`;
+  return "File";
+}
+
+function entrySizeLabel(entry) {
+  if (!entry || entry.type === "parent" || entry.type === "search-divider") return "";
+  if (entry.type === "dir") return "—";
+  const bytes = entry.byteSize ?? entry.size;
+  if (bytes == null || bytes === "") return "—";
+  return formatFileSize(bytes) || "—";
+}
+
+function entryDateLabel(entry) {
+  if (!entry || entry.type === "parent" || entry.type === "search-divider") return "";
+  return formatFileDate(entry.mtimeMs ?? entry.modified) || "—";
+}
+
 function renderEntryRows({
   list,
   viewMode,
+  detailColumns = false,
   workspaceId,
   pinnedPaths,
   searchScope,
@@ -1558,8 +1605,20 @@ function renderEntryRows({
   return (
     <>
       <div className="desk-file-list-head" aria-hidden>
-        <span className="desk-file-list-head-name">Content</span>
-        <span className="desk-file-list-head-meta">{searchActive ? "Found in" : "Updated"}</span>
+        <span className="desk-file-list-head-name">Name</span>
+        {detailColumns ? (
+          <>
+            <span className="desk-file-list-head-date">Date modified</span>
+            <span className="desk-file-list-head-size">Size</span>
+            <span className="desk-file-list-head-kind">
+              {searchActive ? "Kind / Location" : "Kind"}
+            </span>
+          </>
+        ) : (
+          <span className="desk-file-list-head-meta">
+            {searchActive ? "Found in" : "Updated"}
+          </span>
+        )}
       </div>
       {list.map((e, index) => {
         if (e.type === "search-divider") {
@@ -1568,6 +1627,10 @@ function renderEntryRows({
         const label = entryLabel(e);
         const metaDate = entryMeta(e, searchActive, searchScope);
         const renaming = isRenaming(e);
+        const kind = entryKindLabel(e);
+        const size = entrySizeLabel(e);
+        const date = entryDateLabel(e);
+        const location = searchActive ? searchResultMeta(e, searchScope) : "";
         return (
           <FileEntryButton
             key={entryRowKey(e, index)}
@@ -1627,7 +1690,28 @@ function renderEntryRows({
                 </span>
               )}
             </span>
-            <span className="desk-file-list-meta">{metaDate}</span>
+            {detailColumns ? (
+              <>
+                <span className="desk-file-list-col-date" title={date}>
+                  {e.type === "parent" ? "" : date}
+                </span>
+                <span className="desk-file-list-col-size" title={size}>
+                  {e.type === "parent" ? "" : size}
+                </span>
+                <span
+                  className="desk-file-list-col-kind"
+                  title={searchActive && location ? `${kind} · ${location}` : kind}
+                >
+                  {e.type === "parent"
+                    ? ""
+                    : searchActive && location
+                      ? `${kind} · ${location}`
+                      : kind}
+                </span>
+              </>
+            ) : (
+              <span className="desk-file-list-meta">{metaDate}</span>
+            )}
           </FileEntryButton>
         );
       })}
@@ -1637,6 +1721,8 @@ function renderEntryRows({
 
 export function FileTree({
   viewMode = "list",
+  /** Full Files workspace list shows Name / Date / Size / Kind like Finder. */
+  chromeLayout = "sidebar",
   rootEntries,
   listDir,
   onOpenFile,
@@ -1671,6 +1757,7 @@ export function FileTree({
   onOpenReactionPicker,
 }) {
   void listDir;
+  const detailColumns = chromeLayout === "workspace" && viewMode === "list";
   const searchActive = Boolean(searchQuery.trim());
   const empty = ExplorerEmpty({ flatEntries, rootEntries });
   const pickedSet =
@@ -1751,8 +1838,9 @@ export function FileTree({
       const loc = searchResultMeta(e, scope);
       if (loc) return loc;
     }
+    // Compact sidebar list: date for files, kind shorthand for folders.
     if (e.type === "dir") return "Folder";
-    return formatFileDate(e.mtimeMs);
+    return formatFileDate(e.mtimeMs ?? e.modified);
   };
 
   const pinnedFolderIconClass = (e) =>
@@ -1770,6 +1858,7 @@ export function FileTree({
   const rows = renderEntryRows({
     list,
     viewMode,
+    detailColumns,
     workspaceId,
     pinnedPaths,
     searchScope,
@@ -1799,7 +1888,11 @@ export function FileTree({
 
   return (
     <div className="desk-file-tree-scroll" {...treeScrollProps(onBlankContextMenu)}>
-      {viewMode === "list" ? <div className="desk-file-list">{rows}</div> : rows}
+      {viewMode === "list" ? (
+        <div className={`desk-file-list${detailColumns ? " is-detail" : ""}`}>{rows}</div>
+      ) : (
+        rows
+      )}
       {searchActive && searchTruncated ? (
         <div className="desk-file-search-truncated" role="status">
           Showing first matches — refine your search

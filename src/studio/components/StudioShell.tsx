@@ -29575,6 +29575,7 @@ function StudioFilesExplorerBody({
   const tree = isNetworkMode ? null : (
       <FileTree
         viewMode={filterActive ? "grid" : viewMode}
+        chromeLayout={chromeLayout}
         workspaceId={WORKSPACE_ID}
         rootEntries={displayRootEntries}
         flatEntries={displayCurrentEntries}
@@ -32253,6 +32254,15 @@ function sharedListItemToEntry(item) {
     kind: item.assetKind,
     mediaKind: item.assetKind,
     mimeType: item.mimeType,
+    kindLabel:
+      item.assetKind === "image"
+        ? "Image"
+        : item.assetKind === "video"
+          ? "Video"
+          : item.assetKind === "audio"
+            ? "Audio"
+            : "Content",
+    byteSize: item.byteSize,
     thumbnailUrl: item.thumbnailUrl,
     ...sharedMeta,
   };
