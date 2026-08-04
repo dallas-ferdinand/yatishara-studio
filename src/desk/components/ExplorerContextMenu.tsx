@@ -90,6 +90,8 @@ function buildMenuItems(entry, {
   networkPlatformOwned = false,
   presentation = "menu",
   hasOutgoingShare = false,
+  copyHereAvailable = false,
+  canCopyToFolder = false,
 }) {
   if (!entry) return [];
 
@@ -141,6 +143,10 @@ function buildMenuItems(entry, {
 
   if (isBlank) {
     const items = [];
+    if (copyHereAvailable) {
+      items.push({ id: "copy-here", label: "Copy here", iconKey: "copy-path" });
+      items.push({ id: "sep-copy-here", sep: true });
+    }
     if (creationChildren.length) {
       items.push({ id: "new", label: "New", children: creationChildren });
     }
@@ -168,6 +174,10 @@ function buildMenuItems(entry, {
   }
 
   const items = [];
+  if (copyHereAvailable && isDir) {
+    items.push({ id: "copy-here", label: "Copy here", iconKey: "copy-path" });
+    items.push({ id: "sep-copy-here", sep: true });
+  }
   const isImageAsset =
     isFile &&
     entry.studioKind === "asset" &&
@@ -216,6 +226,22 @@ function buildMenuItems(entry, {
     isFile &&
     entry.studioKind === "asset" &&
     entry.studioId
+  ) {
+    items.push({
+      id: "copy-to-folder",
+      label: "Copy to…",
+      iconKey: "copy-path",
+    });
+  } else if (
+    canCopyToFolder &&
+    !isSharedLiveItem &&
+    !isLockedNetworkAsset &&
+    entry.studioId &&
+    (entry.studioKind === "asset" ||
+      entry.studioKind === "document" ||
+      entry.studioKind === "videoEdit" ||
+      entry.studioKind === "folder" ||
+      entry.type === "dir")
   ) {
     items.push({
       id: "copy-to-folder",
@@ -436,6 +462,8 @@ export function ExplorerContextMenu({
   hasOutgoingShare = false,
   shareRecipients = null,
   onRevokeShare = null,
+  copyHereAvailable = false,
+  canCopyToFolder = false,
 }) {
   const menuRef = useRef(null);
   const submenuRef = useRef(null);
@@ -496,6 +524,8 @@ export function ExplorerContextMenu({
         networkPlatformOwned,
         presentation,
         hasOutgoingShare,
+        copyHereAvailable,
+        canCopyToFolder,
       }),
     [
       entry,
@@ -517,6 +547,8 @@ export function ExplorerContextMenu({
       networkPlatformOwned,
       presentation,
       hasOutgoingShare,
+      copyHereAvailable,
+      canCopyToFolder,
     ],
   );
 

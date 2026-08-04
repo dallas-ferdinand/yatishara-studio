@@ -38,6 +38,9 @@ import {
   Folder,
   Gauge,
   History,
+  Copy,
+  Trash2,
+  ChevronDown,
   Image as ImageIcon,
   Inbox,
   CircleDot,
@@ -115,6 +118,7 @@ import {
   ShareConfirmMenu,
   type SharePeoplePeer,
 } from "@/studio/components/StudioSharePeoplePanel";
+import { StudioConfirmOverlay } from "@/studio/components/StudioConfirmOverlay";
 import { warmThumbUrl } from "@/desk/components/FileEntryThumb";
 import { isAllowedReactionEmoji } from "@/studio/lib/itemReactions";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
@@ -1108,6 +1112,8 @@ export function StudioShell({
   const updateAsset = useMutation(api.assets.update);
   const setAssetReaction = useMutation(api.assets.setReaction);
   const duplicateAsset = useMutation(api.assets.duplicate);
+  const duplicateDocument = useMutation(api.documents.duplicate);
+  const duplicateVideoEdit = useMutation(api.videoEdits.duplicate);
   const trashAsset = useMutation(api.assets.moveToTrash);
   const restoreAsset = useMutation(api.assets.restore);
   const deleteAssetForever = useMutation(api.assets.deleteForever);
@@ -1348,6 +1354,9 @@ export function StudioShell({
   const [reactionPickerAnchor, setReactionPickerAnchor] = useState(null);
   const [fileSelectionMode, setFileSelectionMode] = useState(false);
   const [selectedFileEntries, setSelectedFileEntries] = useState([]);
+  /** Full-screen confirm (payment-style) — never window.confirm for Files. */
+  const [filesConfirm, setFilesConfirm] = useState(null);
+  const [filesConfirmBusy, setFilesConfirmBusy] = useState(false);
   const [fileTransfers, setFileTransfers] = useState([]);
   const fileTransferControllersRef = useRef(new Map());
   const fileTransferPayloadsRef = useRef(new Map());
@@ -1809,16 +1818,87 @@ export function StudioShell({
     : isRecentsView
       ? RECENTS_ACTIVE_FOLDER
     : activeFolderId
-      ? (selectedFolder ??
-          folderByIdRef.current.get(activeFolderId) ??
-          trashedFolders?.find((folder) => folder._id === activeFolderId) ??
-          topFolders?.find((folder) => folder._id === activeFolderId) ??
-          null)
+      ? selectedFolder === null
+        ? null
+        : (selectedFolder ??
+            folderByIdRef.current.get(activeFolderId) ??
+            trashedFolders?.find((folder) => folder._id === activeFolderId) ??
+            topFolders?.find((folder) => folder._id === activeFolderId) ??
+            null)
       : (topFolders?.[0] ?? null);
 
   useEffect(() => {
     if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
   }, [isMobile, mobileSection]);
+
+  /** Leave a deleted/missing folder and close tabs that lived there. */
+  const leaveMissingFolder = useCallback(
+    (missingFolderId, folderPath = "") => {
+      if (!missingFolderId) return;
+      const pathPrefix = String(folderPath || "")
+        .trim()
+        .replace(/\/+$/, "");
+      setOpenTabs((tabs) => {
+        const next = tabs.filter((key) => {
+          if (key === `folder:${missingFolderId}` || key === `files:${missingFolderId}`) {
+            return false;
+          }
+          const snap = tabEntrySnapshots[key];
+          if (!snap) return true;
+          if (snap.folderId === missingFolderId) return false;
+          if (snap.studioKind === "folder" && snap.studioId === missingFolderId) {
+            return false;
+          }
+          if (pathPrefix && typeof snap.path === "string") {
+            const p = snap.path.replace(/\/+$/, "");
+            if (p === pathPrefix || p.startsWith(`${pathPrefix}/`)) return false;
+          }
+          return true;
+        });
+        if (next.length !== tabs.length) {
+          setActiveTab((current) =>
+            next.includes(current) ? current : next[next.length - 1] || "",
+          );
+        }
+        return next;
+      });
+      setNavTrail((trail) => {
+        const idx = trail.findIndex((crumb) => crumb.id === missingFolderId);
+        let nextTrail = trail;
+        if (idx >= 0) {
+          nextTrail = trail.slice(0, Math.max(1, idx));
+        } else if (activeFolderId === missingFolderId && trail.length > 1) {
+          nextTrail = trail.slice(0, -1);
+        } else if (activeFolderId === missingFolderId) {
+          const root = topFolders?.[0];
+          if (root?._id) {
+            nextTrail = [{ id: root._id, name: root.name || "Home" }];
+          }
+        }
+        const parent = nextTrail[nextTrail.length - 1];
+        if (parent?.id && (activeFolderId === missingFolderId || idx >= 0)) {
+          setActiveFolderId(parent.id);
+        }
+        return nextTrail;
+      });
+    },
+    [activeFolderId, tabEntrySnapshots, topFolders],
+  );
+
+  // Folder deleted/trashed while browsing or with an edit open → leave + close tabs.
+  useEffect(() => {
+    if (!activeFolderId || isTrashView || isRecentsView || isTrashBrowse) return;
+    if (selectedFolder === undefined) return;
+    if (selectedFolder !== null) return;
+    leaveMissingFolder(activeFolderId);
+  }, [
+    selectedFolder,
+    activeFolderId,
+    isTrashView,
+    isRecentsView,
+    isTrashBrowse,
+    leaveMissingFolder,
+  ]);
 
   // Keep React dock flags in sync for callers that only setMobileSection.
   // Visual open/close is driven by data-files-open (see paintMobileFilesDock).
@@ -5903,6 +5983,162 @@ export function StudioShell({
     }
   }
 
+  function requestFilesConfirm(spec) {
+    return new Promise((resolve) => {
+      setFilesConfirmBusy(false);
+      setFilesConfirm({
+        ...spec,
+        resolve,
+      });
+    });
+  }
+
+  function closeFilesConfirm(result) {
+    const pending = filesConfirm;
+    setFilesConfirm(null);
+    setFilesConfirmBusy(false);
+    pending?.resolve?.(result);
+  }
+
+  async function copyOwnedEntryToFolder(entry, targetFolderId) {
+    if (!entry?.studioId || !targetFolderId) return;
+    if (entry.studioKind === "asset") {
+      await duplicateAsset({ assetId: entry.studioId, targetFolderId });
+      return;
+    }
+    if (entry.studioKind === "document") {
+      await duplicateDocument({ documentId: entry.studioId, targetFolderId });
+      return;
+    }
+    if (entry.studioKind === "videoEdit") {
+      await duplicateVideoEdit({ projectId: entry.studioId, targetFolderId });
+      return;
+    }
+    if (entry.studioKind === "folder" || entry.type === "dir") {
+      if (entry.studioId === targetFolderId) {
+        throw new Error("Can’t copy a folder into itself");
+      }
+      const folderName = stripStudioProjectExt(entry.name) || entry.name || "Folder";
+      const newFolderId = await createFolder({
+        parentId: targetFolderId,
+        name: folderName,
+        icon: entry.icon || "Folder",
+        color: entry.color || "#22c55e",
+      });
+      const [childFolders, childAssets, childDocs, childEdits] = await Promise.all([
+        convex.query(api.folders.list, { parentId: entry.studioId }),
+        convex.query(api.assets.listByFolder, { folderId: entry.studioId }),
+        convex.query(api.documents.listByFolder, { folderId: entry.studioId }),
+        convex.query(api.videoEdits.listByFolder, { folderId: entry.studioId }),
+      ]);
+      for (const child of childFolders ?? []) {
+        await copyOwnedEntryToFolder(
+          {
+            type: "dir",
+            studioKind: "folder",
+            studioId: child._id,
+            name: child.name,
+            icon: child.icon,
+            color: child.color,
+          },
+          newFolderId,
+        );
+      }
+      for (const asset of childAssets ?? []) {
+        await copyOwnedEntryToFolder(
+          { studioKind: "asset", studioId: asset._id, name: asset.name },
+          newFolderId,
+        );
+      }
+      for (const doc of childDocs ?? []) {
+        await copyOwnedEntryToFolder(
+          { studioKind: "document", studioId: doc._id, name: doc.title },
+          newFolderId,
+        );
+      }
+      for (const edit of childEdits ?? []) {
+        await copyOwnedEntryToFolder(
+          { studioKind: "videoEdit", studioId: edit._id, name: edit.name },
+          newFolderId,
+        );
+      }
+      return;
+    }
+    if (entry.studioKind === "element") {
+      throw new Error(`Elements can’t be copied yet (${entry.name || "element"})`);
+    }
+    throw new Error(`Can’t copy “${entry.name || "item"}”`);
+  }
+
+  function beginCopyEntries(entries) {
+    const list = (entries ?? []).filter(
+      (entry) =>
+        entry?.studioId &&
+        entry.type !== "parent" &&
+        entry.studioKind !== "trash" &&
+        entry.studioKind !== "recents" &&
+        !isLockedSystemFolder(entry),
+    );
+    if (!list.length) {
+      toast.message("Nothing to copy");
+      return;
+    }
+    const name =
+      list.length === 1
+        ? list[0].name || "item"
+        : `${list.length} items`;
+    setFileSelectionMode(false);
+    setSelectedFileEntries([]);
+    setCopyDestBusy(false);
+    setCopyDestRequest({
+      kind: "entries",
+      entries: list,
+      name,
+    });
+    if (isMobile) {
+      setMobileSection("files");
+      setFilesDockExpanded(true);
+    }
+    toast.message("Open a folder, then Copy here");
+  }
+
+  async function runCopyHere() {
+    if (!copyDestRequest || !activeFolder?._id) return;
+    if (
+      activeFolder.systemKind === "shared_with_me" ||
+      (currentUser?.userId &&
+        activeFolder.ownerId &&
+        activeFolder.ownerId !== currentUser.userId)
+    ) {
+      toast.error("Pick one of your own folders");
+      return;
+    }
+    setCopyDestBusy(true);
+    try {
+      if (copyDestRequest.kind === "shared-asset" || copyDestRequest.assetId) {
+        await copySharedToFolder({
+          assetId: copyDestRequest.assetId,
+          targetFolderId: activeFolder._id,
+        });
+        toast.success("Copy started — landing in this folder");
+      } else {
+        const entries = copyDestRequest.entries ?? [];
+        for (const entry of entries) {
+          await copyOwnedEntryToFolder(entry, activeFolder._id);
+        }
+        toast.success(
+          entries.length === 1
+            ? `Copied “${entries[0].name}” here`
+            : `Copied ${entries.length} items here`,
+        );
+      }
+      endCopyDest();
+    } catch (error) {
+      setCopyDestBusy(false);
+      toast.error(friendlyConvexError(error, "Could not copy"));
+    }
+  }
+
   async function trashEntry(entry) {
     if (
       !entry ||
@@ -5913,37 +6149,113 @@ export function StudioShell({
     ) {
       return;
     }
-    const ok = window.confirm(`Move "${entry.name}" to trash?`);
+    const ok = await requestFilesConfirm({
+      title: entry.studioKind === "folder" || entry.type === "dir" ? "Delete folder?" : "Move to trash?",
+      body:
+        entry.studioKind === "folder" || entry.type === "dir"
+          ? `“${entry.name}” goes to Trash. Open tabs from this folder will close.`
+          : `“${entry.name}” goes to Trash.`,
+      confirmLabel: "Move to trash",
+      danger: true,
+      icon: Trash2,
+    });
     if (!ok) return;
-    if (entry.studioKind === "folder") {
-      await trashFolder({ folderId: entry.studioId });
-      setPinnedFolders(removePinnedFoldersUnder(entry.path, explorerUserId));
-    } else if (entry.studioKind === "document") {
-      await trashDocument({ documentId: entry.studioId });
-    } else if (entry.studioKind === "asset") {
-      await trashAsset({ assetId: entry.studioId });
-    } else if (entry.studioKind === "element") {
-      await trashElement({ elementId: entry.studioId });
-    } else if (entry.studioKind === "videoEdit") {
-      await trashVideoEdit({ projectId: entry.studioId });
+    try {
+      if (entry.studioKind === "folder" || entry.type === "dir") {
+        await trashFolder({ folderId: entry.studioId });
+        setPinnedFolders(removePinnedFoldersUnder(entry.path, explorerUserId));
+        leaveMissingFolder(entry.studioId, entry.path);
+      } else if (entry.studioKind === "document") {
+        await trashDocument({ documentId: entry.studioId });
+        closeTab(`document:${entry.studioId}`);
+      } else if (entry.studioKind === "asset") {
+        await trashAsset({ assetId: entry.studioId });
+        closeTab(`asset:${entry.studioId}`);
+      } else if (entry.studioKind === "element") {
+        await trashElement({ elementId: entry.studioId });
+        closeTab(`element:${entry.studioId}`);
+      } else if (entry.studioKind === "videoEdit") {
+        await trashVideoEdit({ projectId: entry.studioId });
+        closeTab(`videoEdit:${entry.studioId}`);
+        closeTab(`edit:project:${entry.studioId}`);
+      }
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not move to trash"));
     }
-    closeTab(`${entry.studioKind}:${entry.studioId}`);
+  }
+
+  async function trashSelectedEntries(entries) {
+    const list = (entries ?? []).filter(
+      (entry) =>
+        entry?.studioId &&
+        !isLockedSystemFolder(entry) &&
+        !isLockedNetworkAsset(entry) &&
+        entry.studioKind !== "trash" &&
+        entry.studioKind !== "recents",
+    );
+    if (!list.length) return;
+    const ok = await requestFilesConfirm({
+      title: list.length === 1 ? "Move to trash?" : `Move ${list.length} items to trash?`,
+      body:
+        list.length === 1
+          ? `“${list[0].name}” goes to Trash.`
+          : "Selected files and folders go to Trash. Open tabs inside deleted folders will close.",
+      confirmLabel: "Move to trash",
+      danger: true,
+      icon: Trash2,
+    });
+    if (!ok) return;
+    for (const entry of list) {
+      try {
+        if (entry.studioKind === "folder" || entry.type === "dir") {
+          await trashFolder({ folderId: entry.studioId });
+          setPinnedFolders(removePinnedFoldersUnder(entry.path, explorerUserId));
+          leaveMissingFolder(entry.studioId, entry.path);
+        } else if (entry.studioKind === "document") {
+          await trashDocument({ documentId: entry.studioId });
+          closeTab(`document:${entry.studioId}`);
+        } else if (entry.studioKind === "asset") {
+          await trashAsset({ assetId: entry.studioId });
+          closeTab(`asset:${entry.studioId}`);
+        } else if (entry.studioKind === "element") {
+          await trashElement({ elementId: entry.studioId });
+          closeTab(`element:${entry.studioId}`);
+        } else if (entry.studioKind === "videoEdit") {
+          await trashVideoEdit({ projectId: entry.studioId });
+          closeTab(`videoEdit:${entry.studioId}`);
+          closeTab(`edit:project:${entry.studioId}`);
+        }
+      } catch (error) {
+        toast.error(friendlyConvexError(error, `Could not trash “${entry.name}”`));
+      }
+    }
+    setSelectedFileEntries([]);
+    setFileSelectionMode(false);
   }
 
   async function restoreEntry(entry) {
     if (!entry || entry.studioKind === "trash") return;
-    const ok = window.confirm(`Restore "${entry.name}"?`);
+    const ok = await requestFilesConfirm({
+      title: "Restore?",
+      body: `Put “${entry.name}” back where it was.`,
+      confirmLabel: "Restore",
+      icon: Folder,
+    });
     if (!ok) return;
-    if (entry.studioKind === "folder") {
-      await restoreFolder({ folderId: entry.studioId });
-    } else if (entry.studioKind === "document") {
-      await restoreDocument({ documentId: entry.studioId });
-    } else if (entry.studioKind === "asset") {
-      await restoreAsset({ assetId: entry.studioId });
-    } else if (entry.studioKind === "element") {
-      await restoreElement({ elementId: entry.studioId });
-    } else if (entry.studioKind === "videoEdit") {
-      await restoreVideoEdit({ projectId: entry.studioId });
+    try {
+      if (entry.studioKind === "folder") {
+        await restoreFolder({ folderId: entry.studioId });
+      } else if (entry.studioKind === "document") {
+        await restoreDocument({ documentId: entry.studioId });
+      } else if (entry.studioKind === "asset") {
+        await restoreAsset({ assetId: entry.studioId });
+      } else if (entry.studioKind === "element") {
+        await restoreElement({ elementId: entry.studioId });
+      } else if (entry.studioKind === "videoEdit") {
+        await restoreVideoEdit({ projectId: entry.studioId });
+      }
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not restore"));
     }
   }
 
@@ -5958,9 +6270,13 @@ export function StudioShell({
       );
       return;
     }
-    const ok = window.confirm(
-      `Permanently delete "${entry.name}"? This frees the storage it uses and cannot be undone.`,
-    );
+    const ok = await requestFilesConfirm({
+      title: "Delete forever?",
+      body: `Permanently delete “${entry.name}”? This frees the storage it uses and cannot be undone.`,
+      confirmLabel: "Delete forever",
+      danger: true,
+      icon: Trash2,
+    });
     if (!ok) return;
     try {
       await deleteAssetForever({ assetId: entry.studioId });
@@ -5972,9 +6288,13 @@ export function StudioShell({
   }
 
   async function handleEmptyTrash() {
-    const ok = window.confirm(
-      "Permanently delete every file in the trash? This frees their storage and cannot be undone.",
-    );
+    const ok = await requestFilesConfirm({
+      title: "Empty trash?",
+      body: "Permanently delete every file in the trash? This frees their storage and cannot be undone.",
+      confirmLabel: "Empty trash",
+      danger: true,
+      icon: Trash2,
+    });
     if (!ok) return;
     try {
       const purged = await emptyTrash({});
@@ -12496,6 +12816,88 @@ export function StudioShell({
         .studio-payment-celebration-btn.is-secondary {
           background: color-mix(in srgb, var(--color-cursor-muted) 18%, transparent);
           color: var(--color-cursor-text-bright, var(--mos-text));
+        }
+        .studio-payment-celebration-btn.is-danger {
+          background: color-mix(in srgb, var(--mos-danger, #ef4444) 92%, #000);
+          color: #fff;
+        }
+        .studio-confirm-overlay-icon {
+          width: 76px;
+          height: 76px;
+          color: var(--cursor-accent);
+          filter: drop-shadow(0 8px 24px color-mix(in srgb, var(--cursor-accent) 28%, transparent));
+        }
+        .studio-confirm-overlay-icon.is-danger {
+          color: var(--mos-danger, #ef4444);
+          filter: drop-shadow(0 8px 24px color-mix(in srgb, var(--mos-danger, #ef4444) 35%, transparent));
+        }
+        .studio-copy-dest-close {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          padding: 0;
+          border: 0;
+          border-radius: 999px;
+          background: transparent;
+          color: var(--color-cursor-muted, var(--mos-muted));
+          cursor: pointer;
+        }
+        .studio-copy-dest-close:hover:not(:disabled) {
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          background: color-mix(in srgb, var(--color-cursor-muted) 14%, transparent);
+        }
+        .studio-copy-dest-close:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .studio-copy-dest-close svg {
+          width: 22px;
+          height: 22px;
+        }
+        .studio-file-selection-bar .studio-file-take-action {
+          position: relative;
+        }
+        .studio-file-take-action-menu {
+          position: absolute;
+          right: 0;
+          bottom: calc(100% + 6px);
+          z-index: 40;
+          min-width: 168px;
+          padding: 4px;
+          border-radius: var(--cursor-radius-md, 8px);
+          border: 1px solid var(--color-cursor-border-soft);
+          background: var(--mos-plate, var(--cursor-surface-raised));
+          box-shadow: var(--cursor-shadow-md, 0 8px 24px rgba(0, 0, 0, 0.18));
+        }
+        .studio-file-take-action-menu button {
+          display: flex;
+          width: 100%;
+          align-items: center;
+          gap: 8px;
+          min-height: 32px;
+          padding: 0 10px;
+          border: 0;
+          border-radius: 6px;
+          background: transparent;
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          font: inherit;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          text-align: left;
+        }
+        .studio-file-take-action-menu button:hover {
+          background: var(--mos-hover, var(--color-cursor-hover));
+        }
+        .studio-file-take-action-menu button.is-danger {
+          color: var(--mos-danger, #ef4444);
+        }
+        .studio-file-take-action-menu button svg {
+          width: 14px;
+          height: 14px;
+          flex: 0 0 auto;
         }
         .studio-payment-celebration-actions {
           display: flex;
@@ -21167,18 +21569,20 @@ export function StudioShell({
                   <strong>Copy to folder</strong>
                   <span>
                     {copyDestRequest?.name
-                      ? `Choose a folder for ${copyDestRequest.name}`
-                      : "Open a folder, then Done"}
+                      ? `Open a folder for ${copyDestRequest.name}, then Copy here`
+                      : "Open a folder, then Copy here"}
                   </span>
                 </div>
                 <div className="studio-share-people-top-actions">
                   <button
                     type="button"
-                    className="studio-share-people-cancel"
+                    className="studio-copy-dest-close"
                     onClick={endCopyDest}
                     disabled={copyDestBusy}
+                    aria-label="Cancel copy"
+                    title="Cancel"
                   >
-                    Cancel
+                    <XCircle aria-hidden="true" strokeWidth={1.75} />
                   </button>
                   <button
                     type="button"
@@ -21192,25 +21596,10 @@ export function StudioShell({
                         activeFolder.ownerId !== currentUser.userId)
                     }
                     onClick={() => {
-                      if (!copyDestRequest?.assetId || !activeFolder?._id) return;
-                      setCopyDestBusy(true);
-                      void copySharedToFolder({
-                        assetId: copyDestRequest.assetId,
-                        targetFolderId: activeFolder._id,
-                      })
-                        .then(() => {
-                          toast.success("Copy started — landing in this folder");
-                          endCopyDest();
-                        })
-                        .catch((error) => {
-                          setCopyDestBusy(false);
-                          toast.error(
-                            friendlyConvexError(error, "Could not copy"),
-                          );
-                        });
+                      void runCopyHere();
                     }}
                   >
-                    Done
+                    {copyDestBusy ? "Copying…" : "Copy here"}
                   </button>
                 </div>
               </div>
@@ -21256,6 +21645,8 @@ export function StudioShell({
             }}
             onEntrySelect={toggleFileSelection}
             onDownloadSelected={() => startArchiveDownload(selectedFileEntries)}
+            onCopySelected={() => beginCopyEntries(selectedFileEntries)}
+            onTrashSelected={() => void trashSelectedEntries(selectedFileEntries)}
             onClearSelection={() => setSelectedFileEntries([])}
             transfers={fileTransfers}
             onCancelTransfer={cancelFileTransfer}
@@ -21668,6 +22059,8 @@ export function StudioShell({
                 }}
                 onEntrySelect={toggleFileSelection}
                 onDownloadSelected={() => startArchiveDownload(selectedFileEntries)}
+                onCopySelected={() => beginCopyEntries(selectedFileEntries)}
+                onTrashSelected={() => void trashSelectedEntries(selectedFileEntries)}
                 onClearSelection={() => setSelectedFileEntries([])}
                 transfers={fileTransfers}
                 onCancelTransfer={cancelFileTransfer}
@@ -22287,6 +22680,8 @@ export function StudioShell({
           }}
           onEntrySelect={toggleFileSelection}
           onDownloadSelected={() => startArchiveDownload(selectedFileEntries)}
+          onCopySelected={() => beginCopyEntries(selectedFileEntries)}
+          onTrashSelected={() => void trashSelectedEntries(selectedFileEntries)}
           onClearSelection={() => setSelectedFileEntries([])}
           transfers={fileTransfers}
           onCancelTransfer={cancelFileTransfer}
@@ -22586,6 +22981,23 @@ export function StudioShell({
           isMobile={isMobile}
         />
       ) : null}
+      {filesConfirm && typeof document !== "undefined"
+        ? createPortal(
+            <StudioConfirmOverlay
+              open
+              title={filesConfirm.title}
+              body={filesConfirm.body}
+              icon={filesConfirm.icon}
+              confirmLabel={filesConfirm.confirmLabel}
+              cancelLabel={filesConfirm.cancelLabel}
+              danger={Boolean(filesConfirm.danger)}
+              busy={filesConfirmBusy}
+              onCancel={() => closeFilesConfirm(false)}
+              onConfirm={() => closeFilesConfirm(true)}
+            />,
+            document.body,
+          )
+        : null}
       {paymentCelebration && typeof document !== "undefined"
         ? createPortal(
             <PaymentReceivedOverlay
@@ -22642,6 +23054,8 @@ export function StudioShell({
           currentPath={explorerPinParent}
           canDownloadZip={!isTrashNav}
           canPin={!isTrashNav}
+          copyHereAvailable={Boolean(copyDestRequest) && !isTrashNav}
+          canCopyToFolder={!isTrashNav && !useSharedListing}
           canListOnNetwork={mySellerStatus?.status === "approved"}
           networkListingId={myListingForContextAsset?._id ?? null}
           networkListingStatus={myListingForContextAsset?.status ?? null}
@@ -22716,10 +23130,11 @@ export function StudioShell({
               return;
             }
             if (action === "copy-to-folder") {
-              if (entry?.studioKind === "asset" && entry.studioId) {
+              if (entry?.isSharedLive && entry?.studioKind === "asset" && entry.studioId) {
                 endSharePeople();
                 setCopyDestBusy(false);
                 setCopyDestRequest({
+                  kind: "shared-asset",
                   assetId: entry.studioId,
                   name: entry.name || "file",
                 });
@@ -22727,7 +23142,13 @@ export function StudioShell({
                   setMobileSection("files");
                   setFilesDockExpanded(true);
                 }
+              } else if (entry) {
+                beginCopyEntries([entry]);
               }
+              return;
+            }
+            if (action === "copy-here") {
+              void runCopyHere();
               return;
             }
             if (action === "delete-forever") void deleteEntryForever(entry);
@@ -22826,11 +23247,15 @@ export function StudioShell({
             if (action === "release-network") {
               const listing = myListingForContextAsset;
               if (!listing) return;
-              const ok = window.confirm(
-                `Release "${listing.title}" to the platform? It stays live for buyers. Future sales profits go to the platform. This cannot be undone.`,
-              );
-              if (!ok) return;
               void (async () => {
+                const ok = await requestFilesConfirm({
+                  title: "Release to platform?",
+                  body: `Release “${listing.title}” to the platform? It stays live for buyers. Future sales profits go to the platform. This cannot be undone.`,
+                  confirmLabel: "Release",
+                  danger: true,
+                  icon: Store,
+                });
+                if (!ok) return;
                 try {
                   await releaseListingToPlatform({ listingId: listing._id });
                   toast.success("Listing released to the platform");
@@ -29779,6 +30204,8 @@ function StudioFilesExplorerBody({
   onToggleSelectionMode,
   onEntrySelect,
   onDownloadSelected,
+  onCopySelected,
+  onTrashSelected,
   onClearSelection,
   transfers = [],
   onCancelTransfer,
@@ -30013,15 +30440,12 @@ function StudioFilesExplorerBody({
             {selectedCount ? (
               <button type="button" onClick={onClearSelection}>Clear</button>
             ) : null}
-            <button
-              type="button"
-              className="is-primary"
+            <SelectionTakeActionMenu
               disabled={!selectedCount}
-              onClick={onDownloadSelected}
-            >
-              <Download size={13} />
-              Download ZIP
-            </button>
+              onDownload={() => onDownloadSelected?.()}
+              onCopy={() => onCopySelected?.()}
+              onTrash={() => onTrashSelected?.()}
+            />
           </div>
         </div>
       ) : null}
@@ -30759,6 +31183,81 @@ function SettingsSidePanel({
       </div>
       {pane}
     </aside>
+  );
+}
+
+function SelectionTakeActionMenu({ disabled = false, onDownload, onCopy, onTrash }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="studio-file-take-action" ref={rootRef}>
+      <button
+        type="button"
+        className="is-primary"
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        Take action
+        <ChevronDown size={13} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="studio-file-take-action-menu" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onCopy?.();
+            }}
+          >
+            <Copy aria-hidden="true" />
+            Copy
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onDownload?.();
+            }}
+          >
+            <Download aria-hidden="true" />
+            Download ZIP
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="is-danger"
+            onClick={() => {
+              setOpen(false);
+              onTrash?.();
+            }}
+          >
+            <Trash2 aria-hidden="true" />
+            Move to trash
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

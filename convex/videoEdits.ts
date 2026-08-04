@@ -453,6 +453,48 @@ export const save = authedMutation({
   },
 });
 
+/** Copy an edit into a folder (same media refs — like asset.duplicate). */
+export const duplicate = authedMutation({
+  args: {
+    projectId: v.id("videoEditProjects"),
+    targetFolderId: v.optional(v.id("folders")),
+    name: v.optional(v.string()),
+  },
+  returns: v.id("videoEditProjects"),
+  handler: async (ctx, args) => {
+    await requireShareEdit(ctx, "videoEdit", args.projectId);
+    const row = await ctx.db.get("videoEditProjects", args.projectId);
+    if (!row || row.deletedAt) {
+      throw new Error("Edit project is in trash.");
+    }
+    if (row.ownerId !== ctx.user._id) {
+      throw new Error("Only the owner can duplicate this edit");
+    }
+    const folderId = args.targetFolderId ?? row.folderId;
+    await requireFolderOwner(ctx, folderId, ctx.user._id);
+    const now = Date.now();
+    const name = args.name?.trim() || `Copy of ${row.name}`;
+    let projectJson = row.projectJson;
+    try {
+      const parsed = parseProject(row.projectJson);
+      parsed.name = name;
+      parsed.folderId = folderId;
+      projectJson = JSON.stringify(parsed);
+    } catch {
+      // keep raw json if corrupt
+    }
+    return await ctx.db.insert("videoEditProjects", {
+      ownerId: ctx.user._id,
+      folderId,
+      name,
+      projectJson,
+      sourceAssetId: row.sourceAssetId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
 export const update = authedMutation({
   args: {
     projectId: v.id("videoEditProjects"),
