@@ -531,32 +531,65 @@ const SOUND_PLAYERS = {
     });
   },
   notify: (gain) => {
+    // Soft social chime — warm major lift, long smooth fade (followed posts).
     playTone(gain, {
-      freq: 400,
-      duration: 0.07,
-      release: 0.14,
-      volume: 0.045,
-      type: "sine",
-      lowpass: 1200,
-    });
-    playTone(gain, {
-      freq: 500,
-      duration: 0.08,
-      release: 0.16,
+      freq: 392,
+      duration: 0.05,
+      release: 0.28,
       volume: 0.038,
       type: "sine",
-      attack: 0.08,
-      lowpass: 1300,
+      attack: 0.012,
+      lowpass: 1600,
+    });
+    playTone(gain, {
+      freq: 523.25,
+      duration: 0.06,
+      release: 0.34,
+      volume: 0.034,
+      type: "sine",
+      attack: 0.07,
+      lowpass: 1800,
+      detune: 2,
+    });
+    playTone(gain, {
+      freq: 659.25,
+      duration: 0.05,
+      release: 0.4,
+      volume: 0.022,
+      type: "sine",
+      attack: 0.14,
+      lowpass: 2000,
     });
   },
   message: (gain) => {
+    // Incoming DM — soft two-note dopamine chime, clean and smooth.
     playTone(gain, {
-      freq: 360,
-      duration: 0.05,
-      release: 0.14,
+      freq: 523.25,
+      duration: 0.045,
+      release: 0.26,
       volume: 0.042,
       type: "sine",
-      lowpass: 1100,
+      attack: 0.01,
+      lowpass: 1800,
+    });
+    playTone(gain, {
+      freq: 659.25,
+      duration: 0.055,
+      release: 0.36,
+      volume: 0.036,
+      type: "sine",
+      attack: 0.09,
+      lowpass: 2000,
+      detune: -3,
+    });
+    playTone(gain, {
+      freq: 783.99,
+      duration: 0.04,
+      release: 0.42,
+      volume: 0.016,
+      type: "sine",
+      attack: 0.16,
+      lowpass: 2200,
     });
   },
   lock: (gain) => {

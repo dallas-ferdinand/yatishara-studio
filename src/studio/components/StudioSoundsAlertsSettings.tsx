@@ -61,19 +61,19 @@ const SOUND_CATEGORIES: Array<{
   {
     id: "messaging",
     label: "Messages",
-    hint: "DM send and comment post",
-    preview: "send",
+    hint: "Incoming DM chime + send",
+    preview: "message",
   },
   {
     id: "social",
     label: "Social",
-    hint: "Like, save, follow, share",
-    preview: "like",
+    hint: "Followed-post chime, like, save, follow",
+    preview: "notify",
   },
   {
     id: "feedback",
     label: "Feedback",
-    hint: "Success, errors, alerts",
+    hint: "Success and errors",
     preview: "success",
   },
 ];

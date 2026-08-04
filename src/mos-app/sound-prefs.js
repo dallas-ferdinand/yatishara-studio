@@ -42,9 +42,9 @@ export const UI_SOUND_CATEGORY_BY_ID = {
   follow: "social",
   unfollow: "social",
   share: "social",
+  notify: "social",
   success: "feedback",
   error: "feedback",
-  notify: "feedback",
   lock: "feedback",
 };
 

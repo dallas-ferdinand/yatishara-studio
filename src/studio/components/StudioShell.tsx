@@ -267,6 +267,7 @@ import { displayWorkspacePath } from "@/desk/lib/display-path";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
 import { playUiSound, primeUiSounds } from "@/mos-app/sounds.js";
+import { useIncomingAlertChimes } from "@/studio/lib/useIncomingAlertChimes";
 import {
   fallbackWallpaper,
   getWallpaper,
@@ -1690,6 +1691,18 @@ export function StudioShell({
     api.notifications.listMine,
     hasCurrentUser && (settingsOpen || historyOpen) ? {} : "skip",
   );
+  const alertWatch = useQuery(
+    api.notifications.watchRecent,
+    hasCurrentUser ? {} : "skip",
+  );
+  useIncomingAlertChimes({
+    rows: alertWatch,
+    activeConversationId: activeDmConversationId,
+    viewingMessages:
+      mobileSection === "messages" ||
+      activeTab === MESSAGES_TAB ||
+      String(activeTab ?? "").startsWith("messages:"),
+  });
   // Handle + signed nav avatar (no seller). Full getMine stays for settings/DM.
   const myPublicProfile = useQuery(
     api.profiles.getMyHandle,

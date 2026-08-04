@@ -50,6 +50,32 @@ export const listMine = authedQuery({
   },
 });
 
+/** Lightweight live feed for in-app chimes (not full activity history). */
+export const watchRecent = authedQuery({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id("notifications"),
+      kind: notificationKind,
+      conversationId: v.optional(v.id("dmConversations")),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("notifications")
+      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+      .order("desc")
+      .take(24);
+    return rows.map((row) => ({
+      _id: row._id,
+      kind: row.kind,
+      conversationId: row.conversationId,
+      createdAt: row.createdAt,
+    }));
+  },
+});
+
 export const markRead = authedMutation({
   args: { notificationId: v.id("notifications") },
   returns: v.null(),
