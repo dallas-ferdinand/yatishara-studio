@@ -9447,9 +9447,9 @@ export function StudioShell({
           gap: 6px;
           flex: 0 0 auto;
         }
-        /* Desktop: same app grid as mobile, top-right popover (no dim overlay). */
+        /* Desktop: same app grid as mobile, tuck under Menu control (no dim overlay). */
         .studio-mobile-app-menu-sheet.is-desktop-popover {
-          --studio-desktop-menu-inset: 12px;
+          --studio-desktop-menu-inset: 4px;
           left: auto;
           right: var(--studio-desktop-menu-inset);
           top: calc(
@@ -9460,7 +9460,7 @@ export function StudioShell({
           height: auto !important;
           max-height: min(72vh, 560px);
           border-radius: 18px;
-          padding-top: 10px;
+          padding-top: 8px;
           box-shadow:
             0 1px 0 rgba(255, 255, 255, 0.35) inset,
             0 18px 48px rgba(0, 0, 0, 0.22);
@@ -24906,14 +24906,28 @@ function StudioMobileAppMenu({
     if (!el || !desktop) return;
     const polish = el.closest?.(".studio-polish") ?? document.querySelector(".studio-polish");
     const head = polish?.querySelector?.(".cursor-workspace-head");
-    const inset = 12;
-    const top = Math.round((head?.getBoundingClientRect().bottom ?? 44) + inset);
+    const trigger =
+      polish?.querySelector?.(
+        '.cursor-workspace-tools [aria-label="Close menu"], .cursor-workspace-tools [aria-label="Open menu"]',
+      ) ?? null;
+    const gap = 4;
+    const headRect = head?.getBoundingClientRect();
+    const triggerRect = trigger?.getBoundingClientRect();
+    const topAnchor = Math.max(
+      headRect?.bottom ?? 44,
+      triggerRect?.bottom ?? 0,
+    );
+    const top = Math.round(topAnchor + gap);
+    // Align popover's right edge with the Menu button (flush with tools, not viewport).
+    const right = triggerRect
+      ? Math.round(Math.max(2, window.innerWidth - triggerRect.right))
+      : gap;
     el.style.top = `${top}px`;
-    el.style.right = `${inset}px`;
-    if (polish instanceof HTMLElement) {
+    el.style.right = `${right}px`;
+    if (polish instanceof HTMLElement && headRect) {
       polish.style.setProperty(
         "--studio-desktop-top-chrome",
-        `${Math.round(head?.getBoundingClientRect().height ?? 44)}px`,
+        `${Math.round(headRect.height)}px`,
       );
     }
   };
