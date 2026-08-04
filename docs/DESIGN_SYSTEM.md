@@ -152,10 +152,11 @@ from `--mos-plate`:
   Video (MP4), Audio (MP3/WAV/M4A), and Studio package, with live progress.
   In-app `.studio` thumb: cut-scene clapperboard with real `yatishara-logo-dark`
   on light-mode platform grey slate (`#ececf0` / `--mos-bg`), square bottom
-  corners. Files tile is icon-only (`desk-file-thumb-peek-wrap--studio` — no
-  plate or inset ring). Downloads are open zip + `.studio` name (no magic
-  envelope / no required MIME install — OS may show ZIP icon). Import still
-  unwraps legacy `YSTUDIO` files. Optional OS packs: `resources/studio-filetype/`.
+  corners.   Files tile: CapCut icon on transparent plate (`desk-file-thumb-peek-wrap--studio`
+  — no plate fill/ring) **plus** bottom-left type chip (`studioProject`), same
+  as folder/media. Downloads are open zip + `.studio` name (no magic envelope /
+  no required MIME install — OS may show ZIP icon). Import still unwraps legacy
+  `YSTUDIO` files. Optional OS packs: `resources/studio-filetype/`.
 
 ### Select / dropdown (locked decision)
 

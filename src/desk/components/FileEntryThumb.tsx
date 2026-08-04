@@ -780,12 +780,8 @@ export function FileEntryThumb({
     } else if (isVideoEdit) {
       const editPosterUrl =
         thumbUrl && thumbUrl !== mediaUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : undefined;
-      const hasEditMedia =
-        Boolean(editPosterUrl) ||
-        Boolean(mediaUrl) ||
-        Boolean(thumbUrl && isVideoFileUrl(thumbUrl));
       visual = (
-        <ThumbWithPeek name={label} badge={hasEditMedia ? "clapperboard" : undefined}
+        <ThumbWithPeek name={label} badge="studioProject"
           wrapMod="desk-file-thumb-peek-wrap--studio"
           renaming={renaming}
           renameInitialName={renameInitialName}
