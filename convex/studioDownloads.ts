@@ -3,6 +3,10 @@ import type { Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { authedQuery, type StudioCtx } from "./lib/customFunctions";
 import { signBunnyFullUrl } from "./lib/bunny";
+import {
+  buildVideoEditPackageFiles,
+  expandVideoEditPackageIntoFiles,
+} from "./studioPackage";
 
 const selection = v.union(
   v.object({ kind: v.literal("folder"), id: v.id("folders") }),
@@ -137,11 +141,15 @@ async function addFolder(
     if (files.length >= maxFiles || project.ownerId !== ctx.user._id || project.deletedAt) {
       continue;
     }
-    files.push({
-      path: `${folderPath}/${safeSegment(withExtension(project.name, ".edit.json"), "Video edit.edit.json")}`,
-      kind: "text",
-      text: project.projectJson,
-    });
+    const hitMax = await expandVideoEditPackageIntoFiles(
+      ctx,
+      project._id,
+      expiresUnix,
+      folderPath,
+      files,
+      maxFiles,
+    );
+    if (hitMax) return true;
   }
   for (const element of elements) {
     if (files.length >= maxFiles || element.ownerId !== ctx.user._id || element.deletedAt) {
@@ -156,7 +164,7 @@ async function addFolder(
   for (const child of children) {
     if (files.length >= maxFiles) return true;
     if (!child.deletedAt) {
-      const truncated = await addFolder(
+      const hitMax = await addFolder(
         ctx,
         child._id,
         folderPath,
@@ -165,7 +173,7 @@ async function addFolder(
         visited,
         maxFiles,
       );
-      if (truncated) return true;
+      if (hitMax) return true;
     }
   }
   return files.length >= maxFiles;
@@ -260,11 +268,35 @@ export const manifest = authedQuery({
         const project = await ctx.db.get("videoEditProjects", item.id);
         if (project && project.ownerId === ctx.user._id && !project.deletedAt) {
           if (args.selections.length === 1) firstName = project.name;
-          pushUnique({
-            path: safeSegment(withExtension(project.name, ".edit.json"), "Video edit.edit.json"),
-            kind: "text",
-            text: project.projectJson,
-          });
+          // Lone video-edit download: flat package root so the saved file is Name.studio.
+          // Multi/folder selections embed under Name.studio/ inside the outer ZIP.
+          if (args.selections.length === 1) {
+            const built = await buildVideoEditPackageFiles(
+              ctx,
+              project._id,
+              args.expiresUnix,
+              "",
+            );
+            if (built) {
+              for (const file of built.files) {
+                if (files.length >= maxFiles) {
+                  truncated = true;
+                  break;
+                }
+                pushUnique(file);
+              }
+            }
+          } else {
+            truncated =
+              (await expandVideoEditPackageIntoFiles(
+                ctx,
+                project._id,
+                args.expiresUnix,
+                "",
+                files,
+                maxFiles,
+              )) || truncated;
+          }
         }
         continue;
       }
@@ -279,12 +311,14 @@ export const manifest = authedQuery({
       }
     }
 
+    const loneVideoEdit =
+      args.selections.length === 1 && args.selections[0]?.kind === "videoEdit";
     const archiveBase =
       args.selections.length === 1
         ? safeSegment(firstName.replace(/\.[^.]+$/, ""), "Studio files")
         : `Studio selection (${args.selections.length})`;
     return {
-      archiveName: `${archiveBase}.zip`,
+      archiveName: loneVideoEdit ? `${archiveBase}.studio` : `${archiveBase}.zip`,
       files,
       truncated,
     };

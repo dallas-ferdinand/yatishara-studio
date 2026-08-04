@@ -129,18 +129,20 @@ async function unpackZipTree(
     const parentRel = parentParts.join("/");
     const underPrefix = joinRelative(pathPrefix, parentRel);
 
-    if (/\.zip$/i.test(leaf)) {
+    if (/\.(zip|studio)$/i.test(leaf)) {
       if (depth >= MAX_NESTED_ZIP_DEPTH) {
         state.skipped += 1;
         continue;
       }
-      const nestedFolder = folderNameFromZip(leaf);
-      await unpackZipTree(
-        data,
-        joinRelative(underPrefix, nestedFolder),
-        depth + 1,
-        state,
-      );
+      const nestedFolder = /\.studio$/i.test(leaf)
+        ? leaf.replace(/\.studio$/i, "").trim() || "Imported project"
+        : folderNameFromZip(leaf);
+      // Nested .studio packages unpack flat under a temp folder name ending in .studio
+      // so partitionStudioPackageEntries can detect manifest.json roots.
+      const packageRoot = /\.studio$/i.test(leaf)
+        ? joinRelative(underPrefix, `${nestedFolder}.studio`)
+        : joinRelative(underPrefix, nestedFolder);
+      await unpackZipTree(data, packageRoot, depth + 1, state);
       continue;
     }
 
@@ -175,4 +177,11 @@ export function isZipFile(file: File): boolean {
     type === "application/zip" ||
     type === "application/x-zip-compressed"
   );
+}
+
+/** True for portable Studio project packages (zip bytes with .studio extension). */
+export function isStudioPackageZipName(fileName: string): boolean {
+  return String(fileName || "")
+    .toLowerCase()
+    .endsWith(".studio");
 }

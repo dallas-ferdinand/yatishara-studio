@@ -252,6 +252,13 @@ import {
   isZipFile,
 } from "@/studio/lib/studioZipImport";
 import {
+  extractStudioPackageFile,
+  isStudioPackageFile,
+  mediaKindFromPackage,
+  partitionStudioPackageEntries,
+  remapImportedStudioProject,
+} from "@/studio/lib/studioPackageImport";
+import {
   StudioFileTransferTray,
 } from "@/studio/components/StudioFileTransferTray";
 import {
@@ -1106,6 +1113,7 @@ export function StudioShell({
   const deleteAssetForever = useMutation(api.assets.deleteForever);
   const emptyTrash = useMutation(api.assets.emptyTrash);
   const createVideoEdit = useMutation(api.videoEdits.create);
+  const saveVideoEdit = useMutation(api.videoEdits.save);
   const updateVideoEdit = useMutation(api.videoEdits.update);
   const setVideoEditReaction = useMutation(api.videoEdits.setReaction);
   const trashVideoEdit = useMutation(api.videoEdits.moveToTrash);
@@ -6072,6 +6080,64 @@ export function StudioShell({
     }, 4500);
   }
 
+  async function importParsedStudioPackage(pkg, folderId, signal, onProgress) {
+    const baseName =
+      stripStudioProjectExt(pkg.manifest.name || pkg.project.name || "Imported project") ||
+      "Imported project";
+    const exists = entryNamesSet(displayCurrentEntries.entries);
+    const displayName = uniqueName(withStudioProjectExt(baseName), exists);
+    const name = stripStudioProjectExt(displayName);
+    const keyToAssetId = new Map();
+    const mediaList = [...pkg.mediaFiles.entries()];
+    let uploaded = 0;
+    for (const [key, file] of mediaList) {
+      if (signal?.aborted) throw new DOMException("Upload canceled", "AbortError");
+      const mediaMeta = pkg.manifest.media.find((item) => item.key === key);
+      onProgress?.(
+        uploaded,
+        mediaList.length,
+        `Media ${uploaded + 1}/${mediaList.length || 1} · ${file.name}`,
+      );
+      const assetId = await uploadStudioAsset({
+        file,
+        folderId,
+        kind: mediaKindFromPackage(mediaMeta?.kind, file),
+        name: mediaMeta?.originalName || file.name,
+        reserveUpload,
+        commitStagingUpload,
+        signal,
+      });
+      keyToAssetId.set(key, assetId);
+      uploaded += 1;
+    }
+    const { project, unresolvedClips } = remapImportedStudioProject(
+      pkg.project,
+      keyToAssetId,
+      folderId,
+      name,
+    );
+    const result = await saveVideoEdit({
+      folderId,
+      name,
+      project,
+      sourceAssetId: typeof project.sourceAssetId === "string" ? project.sourceAssetId : undefined,
+    });
+    const entry = videoEditToEntry({
+      _id: result.projectId,
+      name,
+      folderId,
+      updatedAt: wallClockMs(),
+    });
+    setTabEntrySnapshots((snapshots) => ({
+      ...snapshots,
+      [`videoEdit:${result.projectId}`]: entry,
+    }));
+    setRecentFileRows(
+      recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
+    );
+    return { projectId: result.projectId, name, unresolvedClips, entry };
+  }
+
   async function runFileTransfer(id) {
     const payload = fileTransferPayloadsRef.current.get(id);
     if (!payload) return;
@@ -6119,6 +6185,39 @@ export function StudioShell({
         return assetId;
       }
 
+      if (payload.type === "studio-package-import") {
+        updateFileTransfer(id, {
+          detail: `Unpacking · ${payload.file.name}`,
+          total: 1,
+        });
+        const pkg = await extractStudioPackageFile(payload.file);
+        if (controller.signal.aborted) {
+          throw new DOMException("Upload canceled", "AbortError");
+        }
+        const imported = await importParsedStudioPackage(
+          pkg,
+          payload.folderId,
+          controller.signal,
+          (loaded, total, detail) => updateFileTransfer(id, { loaded, total, detail }),
+        );
+        if (imported.unresolvedClips > 0) {
+          toast.warning(
+            `Imported “${imported.name}” with ${imported.unresolvedClips} clip${imported.unresolvedClips === 1 ? "" : "s"} missing media`,
+          );
+        } else {
+          toast.success(`Imported “${imported.name}${STUDIO_PROJECT_EXT}”`);
+        }
+        openTab(`videoEdit:${imported.projectId}`);
+        finishFileTransfer(id, {
+          status: "done",
+          loaded: 1,
+          total: 1,
+          name: withStudioProjectExt(imported.name),
+          detail: `Imported · ${withStudioProjectExt(imported.name)}`,
+        });
+        return imported.projectId;
+      }
+
       if (payload.type === "zip-import") {
         updateFileTransfer(id, {
           detail: `Unpacking · ${payload.file.name}`,
@@ -6128,7 +6227,8 @@ export function StudioShell({
         if (controller.signal.aborted) {
           throw new DOMException("Upload canceled", "AbortError");
         }
-        if (!extracted.entries.length) {
+        const { packages, loose } = await partitionStudioPackageEntries(extracted.entries);
+        if (!packages.length && !loose.length) {
           throw new Error("That ZIP had no importable files");
         }
         const rootFolderId = await createFolder({
@@ -6174,8 +6274,37 @@ export function StudioShell({
         };
 
         let uploaded = 0;
-        const totalFiles = extracted.entries.length;
-        for (const entry of extracted.entries) {
+        const totalSteps = packages.length + loose.length;
+        let unresolvedTotal = 0;
+        for (const pkg of packages) {
+          if (controller.signal.aborted) {
+            throw new DOMException("Upload canceled", "AbortError");
+          }
+          const parentDir = pkg.root.includes("/")
+            ? pkg.root.slice(0, pkg.root.lastIndexOf("/"))
+            : "";
+          const targetFolderId = await ensureFolder(parentDir);
+          updateFileTransfer(id, {
+            loaded: uploaded,
+            total: totalSteps,
+            detail: `${uploaded + 1}/${totalSteps || 1} · ${pkg.manifest.name || "project"}.studio`,
+          });
+          const imported = await importParsedStudioPackage(
+            pkg,
+            targetFolderId,
+            controller.signal,
+            (loaded, total, detail) =>
+              updateFileTransfer(id, {
+                loaded: uploaded + (total ? loaded / total : 0),
+                total: totalSteps,
+                detail,
+              }),
+          );
+          unresolvedTotal += imported.unresolvedClips;
+          uploaded += 1;
+        }
+
+        for (const entry of loose) {
           if (controller.signal.aborted) {
             throw new DOMException("Upload canceled", "AbortError");
           }
@@ -6184,8 +6313,8 @@ export function StudioShell({
           const targetFolderId = await ensureFolder(dir);
           updateFileTransfer(id, {
             loaded: uploaded,
-            total: totalFiles,
-            detail: `${uploaded + 1}/${totalFiles} · ${entry.relativePath}`,
+            total: totalSteps,
+            detail: `${uploaded + 1}/${totalSteps || 1} · ${entry.relativePath}`,
           });
           await uploadStudioAsset({
             file: entry.file,
@@ -6199,7 +6328,16 @@ export function StudioShell({
         }
 
         if (extracted.truncated) {
-          toast.warning(`Imported first ${totalFiles} files from ${payload.file.name}`);
+          toast.warning(`Imported first ${totalSteps} items from ${payload.file.name}`);
+        } else if (packages.length) {
+          toast.success(
+            `Imported ${packages.length} project${packages.length === 1 ? "" : "s"}${loose.length ? ` + ${loose.length} file${loose.length === 1 ? "" : "s"}` : ""} into “${extracted.folderName}”`,
+          );
+          if (unresolvedTotal > 0) {
+            toast.warning(
+              `${unresolvedTotal} clip${unresolvedTotal === 1 ? "" : "s"} missing media after import`,
+            );
+          }
         } else if (extracted.skipped > 0) {
           toast.message(
             `Imported ${uploaded} file${uploaded === 1 ? "" : "s"} into “${extracted.folderName}”`,
@@ -6211,8 +6349,8 @@ export function StudioShell({
         }
         finishFileTransfer(id, {
           status: "done",
-          loaded: totalFiles,
-          total: totalFiles,
+          loaded: totalSteps,
+          total: totalSteps,
           name: extracted.folderName,
           detail: `Imported · ${extracted.folderName}`,
         });
@@ -6299,6 +6437,14 @@ export function StudioShell({
     }
     const incoming = Array.from(files ?? []).filter((file) => file instanceof File);
     for (const file of incoming) {
+      if (isStudioPackageFile(file)) {
+        queueFileTransfer(
+          { type: "studio-package-import", file, folderId },
+          `Import · ${file.name}`,
+          "upload",
+        );
+        continue;
+      }
       if (isZipFile(file)) {
         queueFileTransfer(
           { type: "zip-import", file, folderId },
@@ -6350,9 +6496,11 @@ export function StudioShell({
       return;
     }
     const name =
-      selections.length === 1 && entries[0]?.type === "dir"
-        ? `${entries[0].name ?? "Folder"}.zip`
-        : `Studio selection (${selections.length}).zip`;
+      selections.length === 1 && entries[0]?.studioKind === "videoEdit"
+        ? withStudioProjectExt(stripStudioProjectExt(entries[0]?.name ?? "Video edit"))
+        : selections.length === 1 && entries[0]?.type === "dir"
+          ? `${entries[0].name ?? "Folder"}.zip`
+          : `Studio selection (${selections.length}).zip`;
     queueFileTransfer({ type: "archive", selections }, name, "download");
   }
 

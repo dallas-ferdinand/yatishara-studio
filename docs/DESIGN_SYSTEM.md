@@ -143,6 +143,12 @@ from `--mos-plate`:
   recursively into folders of the same name (`A.zip` containing `B.zip` → folder
   `A` with folder `B` inside). The zip blob is never stored as an asset.
   Folder/multi-select **Download ZIP** remains export-only.
+- **`.studio` project packages:** virtual video-edit files show as `{name}.studio`
+  in Files (Convex-backed, unbundled in-app). **Download** packs an open zip
+  (`manifest.json` + `project.json` + `media/*`, no encryption) saved as
+  `Name.studio`. Dropping a `.studio` (or a ZIP that contains package trees)
+  imports a **unique fork** (new assets + new project). Editor **Export** remains
+  ffmpeg → MP4 and is separate from package download.
 
 ### Select / dropdown (locked decision)
 

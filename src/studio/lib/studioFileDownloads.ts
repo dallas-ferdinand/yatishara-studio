@@ -19,6 +19,14 @@ type DownloadProgress = {
 
 type ProgressHandler = (progress: DownloadProgress) => void;
 
+type ManifestFile = {
+  path: string;
+  kind: "remote" | "text";
+  url?: string;
+  text?: string;
+  byteSize?: number;
+};
+
 function saveBlob(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -102,12 +110,118 @@ function saveViaAnchor(url: string, name: string): void {
   anchor.remove();
 }
 
+async function packManifestFiles(args: {
+  files: ManifestFile[];
+  archiveName: string;
+  signal?: AbortSignal;
+  onProgress?: ProgressHandler;
+}): Promise<string> {
+  if (!args.files.length) throw new Error("This item has no downloadable content");
+  const knownTotal = args.files.reduce((sum, file) => {
+    if (file.kind === "text") return sum + strToU8(file.text ?? "").byteLength;
+    return sum + (file.byteSize ?? 0);
+  }, 0);
+  const output: Uint8Array[] = [];
+  let loaded = 0;
+  let currentFile = args.files[0]?.path ?? args.archiveName;
+  const completed = new Promise<Blob>((resolve, reject) => {
+    const zip = new Zip((error, chunk, final) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      output.push(chunk);
+      if (final) resolve(bytesToBlob(output, "application/zip"));
+    });
+
+    void (async () => {
+      try {
+        for (const item of args.files) {
+          if (args.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
+          currentFile = item.path;
+          const entry = new ZipPassThrough(item.path);
+          zip.add(entry);
+          if (item.kind === "text") {
+            const bytes = strToU8(item.text ?? "");
+            entry.push(bytes, true);
+            loaded += bytes.byteLength;
+            args.onProgress?.({
+              loaded,
+              total: knownTotal,
+              fileName: currentFile,
+              phase: "packing",
+            });
+            continue;
+          }
+          if (!item.url) {
+            entry.push(new Uint8Array(), true);
+            continue;
+          }
+          await readRemote(item.url, args.signal, (chunk) => {
+            entry.push(chunk);
+            loaded += chunk.byteLength;
+            args.onProgress?.({
+              loaded,
+              total: knownTotal,
+              fileName: currentFile,
+              phase: "downloading",
+            });
+          });
+          entry.push(new Uint8Array(), true);
+        }
+        args.onProgress?.({
+          loaded,
+          total: knownTotal || loaded,
+          fileName: args.archiveName,
+          phase: "packing",
+        });
+        zip.end();
+      } catch (error) {
+        zip.terminate();
+        reject(error);
+      }
+    })();
+  });
+  const blob = await completed;
+  saveBlob(blob, args.archiveName);
+  return args.archiveName;
+}
+
+export async function downloadStudioPackage(args: {
+  convex: ConvexReactClient;
+  projectId: Id<"videoEditProjects">;
+  signal?: AbortSignal;
+  onProgress?: ProgressHandler;
+}): Promise<string> {
+  args.onProgress?.({ loaded: 0, total: 0, fileName: "Preparing package…", phase: "preparing" });
+  if (args.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
+  const result = await args.convex.query(api.studioPackage.packageManifest, {
+    projectId: args.projectId,
+    expiresUnix: Math.floor(Date.now() / 1000) + 60 * 60,
+  });
+  return await packManifestFiles({
+    files: result.files,
+    archiveName: result.packageName,
+    signal: args.signal,
+    onProgress: args.onProgress,
+  });
+}
+
 export async function downloadStudioEntry(args: {
   convex: ConvexReactClient;
   selection: Exclude<StudioDownloadSelection, { kind: "folder" }>;
   signal?: AbortSignal;
   onProgress?: ProgressHandler;
 }): Promise<string> {
+  if (args.selection.kind === "videoEdit") {
+    return await downloadStudioPackage({
+      convex: args.convex,
+      projectId: args.selection.id,
+      signal: args.signal,
+      onProgress: args.onProgress,
+    });
+  }
+
   args.onProgress?.({ loaded: 0, total: 0, fileName: "Preparing…", phase: "preparing" });
   const result = await manifest(args.convex, [args.selection], args.signal);
   const file = result.files[0];
@@ -163,72 +277,11 @@ export async function downloadStudioArchive(args: {
   args.onProgress?.({ loaded: 0, total: 0, fileName: "Preparing ZIP…", phase: "preparing" });
   const result = await manifest(args.convex, args.selections, args.signal);
   if (!result.files.length) throw new Error("The selection has no downloadable files");
-  const knownTotal = result.files.reduce((sum, file) => {
-    if (file.kind === "text") return sum + strToU8(file.text ?? "").byteLength;
-    return sum + (file.byteSize ?? 0);
-  }, 0);
-  const output: Uint8Array[] = [];
-  let loaded = 0;
-  let currentFile = result.files[0]?.path ?? result.archiveName;
-  const completed = new Promise<Blob>((resolve, reject) => {
-    const zip = new Zip((error, chunk, final) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      output.push(chunk);
-      if (final) resolve(bytesToBlob(output, "application/zip"));
-    });
-
-    void (async () => {
-      try {
-        for (const item of result.files) {
-          if (args.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
-          currentFile = item.path;
-          const entry = new ZipPassThrough(item.path);
-          zip.add(entry);
-          if (item.kind === "text") {
-            const bytes = strToU8(item.text ?? "");
-            entry.push(bytes, true);
-            loaded += bytes.byteLength;
-            args.onProgress?.({
-              loaded,
-              total: knownTotal,
-              fileName: currentFile,
-              phase: "packing",
-            });
-            continue;
-          }
-          if (!item.url) {
-            entry.push(new Uint8Array(), true);
-            continue;
-          }
-          await readRemote(item.url, args.signal, (chunk) => {
-            entry.push(chunk);
-            loaded += chunk.byteLength;
-            args.onProgress?.({
-              loaded,
-              total: knownTotal,
-              fileName: currentFile,
-              phase: "downloading",
-            });
-          });
-          entry.push(new Uint8Array(), true);
-        }
-        args.onProgress?.({
-          loaded,
-          total: knownTotal || loaded,
-          fileName: result.archiveName,
-          phase: "packing",
-        });
-        zip.end();
-      } catch (error) {
-        zip.terminate();
-        reject(error);
-      }
-    })();
+  const name = await packManifestFiles({
+    files: result.files,
+    archiveName: result.archiveName,
+    signal: args.signal,
+    onProgress: args.onProgress,
   });
-  const blob = await completed;
-  saveBlob(blob, result.archiveName);
-  return { name: result.archiveName, truncated: result.truncated };
+  return { name, truncated: result.truncated };
 }
