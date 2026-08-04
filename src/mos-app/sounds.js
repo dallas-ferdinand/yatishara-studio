@@ -83,7 +83,8 @@ export function subscribeUiSoundPrefs(listener) {
 }
 
 export async function primeUiSounds() {
-  if (!isBrowser() || primed) return;
+  if (!isBrowser()) return;
+  // Always re-read prefs — Settings / other tabs may have changed them.
   prefs = readUiSoundPrefs();
   if (!audioContext) {
     const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -97,8 +98,10 @@ export async function primeUiSounds() {
     masterLowpass.Q.value = 0.55;
     masterGain.connect(masterLowpass);
     masterLowpass.connect(audioContext.destination);
-    applyMasterGain();
   }
+  applyMasterGain();
+  // Browsers re-suspend after backgrounding. Never skip resume just because we
+  // primed once — that made all later taps play into a silent suspended context.
   if (audioContext.state === "suspended") {
     try {
       await audioContext.resume();
@@ -616,10 +619,17 @@ const SOUND_PLAYERS = {
 
 /** @param {string} id */
 export function playUiSound(id) {
-  if (!isBrowser() || !prefs.enabled || uiSoundsReducedBySystem()) return;
+  if (!isBrowser()) return;
+  // Refresh prefs before gate checks (prime also refreshes, but we must not
+  // early-return on a stale in-memory disabled flag).
+  prefs = readUiSoundPrefs();
+  if (!prefs.enabled || uiSoundsReducedBySystem()) return;
   if (!uiSoundCategoryEnabled(id, prefs)) return;
   void primeUiSounds().then(() => {
-    if (!audioContext || !masterGain || masterGain.gain.value <= 0) return;
+    if (!audioContext || !masterGain) return;
+    if (audioContext.state !== "running") return;
+    applyMasterGain();
+    if (masterGain.gain.value <= 0) return;
     const player = SOUND_PLAYERS[id];
     if (!player) return;
     player(masterGain);
