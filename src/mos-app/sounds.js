@@ -288,27 +288,49 @@ const SOUND_PLAYERS = {
       lowpass: 1100,
     });
   },
+  /** Premium tab/section — muted glass tick, no whoosh sweep */
   nav: (gain) => {
+    playNoise(gain, { duration: 0.032, volume: 0.01, freq: 260, q: 0.35 });
     playTone(gain, {
-      freq: 260,
-      freqEnd: 400,
-      duration: 0.07,
-      release: 0.16,
-      volume: 0.05,
+      freq: 186,
+      duration: 0.026,
+      release: 0.2,
+      volume: 0.036,
       type: "sine",
-      lowpass: 1200,
+      attack: 0.005,
+      lowpass: 520,
     });
-    playNoise(gain, { duration: 0.06, volume: 0.014, freq: 380, q: 0.5 });
+    playTone(gain, {
+      freq: 279,
+      duration: 0.02,
+      release: 0.18,
+      volume: 0.014,
+      type: "sine",
+      attack: 0.01,
+      lowpass: 640,
+      detune: -4,
+    });
   },
   navBack: (gain) => {
+    playNoise(gain, { duration: 0.03, volume: 0.009, freq: 240, q: 0.35 });
     playTone(gain, {
-      freq: 400,
-      freqEnd: 250,
-      duration: 0.065,
-      release: 0.15,
-      volume: 0.048,
+      freq: 168,
+      duration: 0.028,
+      release: 0.2,
+      volume: 0.034,
       type: "sine",
-      lowpass: 1100,
+      attack: 0.006,
+      lowpass: 480,
+    });
+    playTone(gain, {
+      freq: 252,
+      duration: 0.018,
+      release: 0.16,
+      volume: 0.012,
+      type: "sine",
+      attack: 0.012,
+      lowpass: 580,
+      detune: 3,
     });
   },
   success: (gain) => {
