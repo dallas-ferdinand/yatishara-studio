@@ -54,6 +54,7 @@ import {
   LogOut,
   MapPin,
   Maximize2,
+  Minimize2,
   Menu,
   MessageCircle,
   Mic,
@@ -8018,7 +8019,6 @@ export function StudioShell({
   // left rail even while Messages/Feed is the active pane.
   const pickingFromFiles = Boolean(assetPickRequest) && !isMobile;
   const sharingToPeople = Boolean(sharePeopleRequest);
-  const copyingToFolder = Boolean(copyDestRequest);
   const effectiveMessagesRail = isMessagesRail && !pickingFromFiles;
   const effectiveSocialRail = isSocialRail && !pickingFromFiles;
   /** Files workspace tab owns the left rail (Windows-style nav), same Panel as Messages.
