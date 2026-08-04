@@ -320,6 +320,7 @@ import "./marketplace-offers-pane.css";
 import "./public-profile.css";
 import "./studio-messages.css";
 import "./studio-asset-picker.css";
+import "./studio-share-people.css";
 import "./studio-profile-avatar.css";
 import "./media-load-frame.css";
 import "./logo-loader.css";
@@ -12831,31 +12832,6 @@ export function StudioShell({
           color: var(--mos-danger, #ef4444);
           filter: drop-shadow(0 8px 24px color-mix(in srgb, var(--mos-danger, #ef4444) 35%, transparent));
         }
-        .studio-copy-dest-close {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 28px;
-          height: 28px;
-          padding: 0;
-          border: 0;
-          border-radius: 999px;
-          background: transparent;
-          color: var(--color-cursor-muted, var(--mos-muted));
-          cursor: pointer;
-        }
-        .studio-copy-dest-close:hover:not(:disabled) {
-          color: var(--color-cursor-text-bright, var(--mos-text));
-          background: color-mix(in srgb, var(--color-cursor-muted) 14%, transparent);
-        }
-        .studio-copy-dest-close:disabled {
-          opacity: 0.45;
-          cursor: not-allowed;
-        }
-        .studio-copy-dest-close svg {
-          width: 22px;
-          height: 22px;
-        }
         .studio-file-selection-bar .studio-file-take-action {
           position: relative;
         }
@@ -21563,47 +21539,6 @@ export function StudioShell({
           />
         ) : (
           <>
-            {copyingToFolder ? (
-              <div className="studio-share-people-top" role="status">
-                <div className="studio-share-people-top-copy">
-                  <strong>Copy to folder</strong>
-                  <span>
-                    {copyDestRequest?.name
-                      ? `Open a folder for ${copyDestRequest.name}, then Copy here`
-                      : "Open a folder, then Copy here"}
-                  </span>
-                </div>
-                <div className="studio-share-people-top-actions">
-                  <button
-                    type="button"
-                    className="studio-copy-dest-close"
-                    onClick={endCopyDest}
-                    disabled={copyDestBusy}
-                    aria-label="Cancel copy"
-                    title="Cancel"
-                  >
-                    <XCircle aria-hidden="true" strokeWidth={1.75} />
-                  </button>
-                  <button
-                    type="button"
-                    className="studio-share-people-confirm"
-                    disabled={
-                      copyDestBusy ||
-                      !activeFolder ||
-                      activeFolder.systemKind === "shared_with_me" ||
-                      (currentUser?.userId &&
-                        activeFolder.ownerId &&
-                        activeFolder.ownerId !== currentUser.userId)
-                    }
-                    onClick={() => {
-                      void runCopyHere();
-                    }}
-                  >
-                    {copyDestBusy ? "Copying…" : "Copy here"}
-                  </button>
-                </div>
-              </div>
-            ) : null}
           <StudioFilesExplorerBody
             search={search}
             setSearch={setSearch}
@@ -21648,6 +21583,12 @@ export function StudioShell({
             onCopySelected={() => beginCopyEntries(selectedFileEntries)}
             onTrashSelected={() => void trashSelectedEntries(selectedFileEntries)}
             onClearSelection={() => setSelectedFileEntries([])}
+            copyDestRequest={copyDestRequest}
+            copyDestBusy={copyDestBusy}
+            onCopyHere={() => {
+              void runCopyHere();
+            }}
+            onCancelCopy={endCopyDest}
             transfers={fileTransfers}
             onCancelTransfer={cancelFileTransfer}
             onDismissTransfer={dismissFileTransfer}
@@ -22062,6 +22003,12 @@ export function StudioShell({
                 onCopySelected={() => beginCopyEntries(selectedFileEntries)}
                 onTrashSelected={() => void trashSelectedEntries(selectedFileEntries)}
                 onClearSelection={() => setSelectedFileEntries([])}
+                copyDestRequest={copyDestRequest}
+                copyDestBusy={copyDestBusy}
+                onCopyHere={() => {
+                  void runCopyHere();
+                }}
+                onCancelCopy={endCopyDest}
                 transfers={fileTransfers}
                 onCancelTransfer={cancelFileTransfer}
                 onDismissTransfer={dismissFileTransfer}
@@ -22683,6 +22630,12 @@ export function StudioShell({
           onCopySelected={() => beginCopyEntries(selectedFileEntries)}
           onTrashSelected={() => void trashSelectedEntries(selectedFileEntries)}
           onClearSelection={() => setSelectedFileEntries([])}
+          copyDestRequest={copyDestRequest}
+          copyDestBusy={copyDestBusy}
+          onCopyHere={() => {
+            void runCopyHere();
+          }}
+          onCancelCopy={endCopyDest}
           transfers={fileTransfers}
           onCancelTransfer={cancelFileTransfer}
           onDismissTransfer={dismissFileTransfer}
@@ -30207,6 +30160,10 @@ function StudioFilesExplorerBody({
   onCopySelected,
   onTrashSelected,
   onClearSelection,
+  copyDestRequest = null,
+  copyDestBusy = false,
+  onCopyHere,
+  onCancelCopy,
   transfers = [],
   onCancelTransfer,
   onDismissTransfer,
@@ -30430,6 +30387,58 @@ function StudioFilesExplorerBody({
             </button>
           ) : null}
           {pathbarTools}
+        </div>
+      ) : null}
+      {!isNetworkMode && copyDestRequest ? (
+        <div className="studio-share-people-top studio-copy-dest-bar" role="status">
+          <div className="studio-share-people-top-copy">
+            <span
+              className="studio-share-people-count"
+              aria-label={`${
+                copyDestRequest.entries?.length ||
+                (copyDestRequest.assetId || copyDestRequest.kind === "shared-asset" ? 1 : 0)
+              } to copy`}
+            >
+              {copyDestRequest.entries?.length ||
+                (copyDestRequest.assetId || copyDestRequest.kind === "shared-asset" ? 1 : 0)}
+            </span>
+            <Copy aria-hidden="true" />
+            <span className="studio-share-people-item-label">
+              {copyDestRequest.name
+                ? `Copy ${copyDestRequest.name}`
+                : "Copy items"}
+            </span>
+          </div>
+          <div className="studio-share-people-top-actions">
+            <button
+              type="button"
+              className="studio-share-people-icon-btn is-close"
+              onClick={onCancelCopy}
+              disabled={copyDestBusy}
+              title="Close"
+              aria-label="Cancel copy"
+            >
+              <X aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="studio-share-people-icon-btn is-share"
+              disabled={
+                copyDestBusy ||
+                !activeFolder ||
+                activeFolder.systemKind === "shared_with_me" ||
+                activeFolder.systemKind === "purchased_assets" ||
+                activeFolder.systemKind === "public_assets" ||
+                activeFolder.systemKind === "messages"
+              }
+              onClick={() => onCopyHere?.()}
+              title="Copy here"
+              aria-label={copyDestBusy ? "Copying" : "Copy here"}
+            >
+              <Copy aria-hidden="true" />
+              <span>{copyDestBusy ? "Copying…" : "Copy here"}</span>
+            </button>
+          </div>
         </div>
       ) : null}
       {!isNetworkMode ? tree : null}
