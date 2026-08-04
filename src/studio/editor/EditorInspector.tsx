@@ -73,7 +73,10 @@ import {
 } from "./projectContract";
 import {
   DEFAULT_EXPORT_RESOLUTION,
+  EXPORT_AUDIO_FORMAT_PRESETS,
+  EXPORT_KIND_PRESETS,
   EXPORT_RESOLUTION_PRESETS,
+  EXPORT_VIDEO_FORMAT_PRESETS,
   exportSizeForRatioAndResolution,
   normalizeExportResolution,
 } from "../../../convex/lib/editorExport";
@@ -442,11 +445,21 @@ export function EditorModeRail({
 
 function ExportPanel({
   project,
+  exportKind,
   resolution,
+  videoFormat,
+  audioFormat,
   filename,
   exporting,
-  canExport,
+  exportProgress,
+  exportPhase,
+  canExportVideo,
+  canExportAudio,
+  canExportStudio,
+  onExportKindChange,
   onResolutionChange,
+  onVideoFormatChange,
+  onAudioFormatChange,
   onFilenameChange,
   onExport,
   onUpdateProject,
@@ -454,82 +467,181 @@ function ExportPanel({
   const frameRatio = normalizeFrameRatio(project.frameRatio);
   const size = exportSizeForRatioAndResolution(frameRatio, resolution);
   const placeholder = project.name?.trim() || "export";
+  const canExport =
+    exportKind === "studio"
+      ? canExportStudio
+      : exportKind === "audio"
+        ? canExportAudio
+        : canExportVideo;
+  const disabledReason =
+    exportKind === "studio"
+      ? "Save the project before exporting a .studio package"
+      : exportKind === "audio"
+        ? "Add a video clip (with soundtrack) before exporting audio"
+        : "Add a video clip before exporting";
 
   return (
     <>
       <header className="studio-editor-inspector-panel-head">
         <div className="studio-editor-inspector-identity">
           <InspectorThumb kind="canvas" />
-          <span className="studio-editor-inspector-name">Export</span>
+          <span className="studio-editor-inspector-name">Export as</span>
         </div>
       </header>
 
       <div className="studio-editor-inspector-body">
-        <InspectorSection
-          title="Resolution"
-          hint="How many pixels to render. Does not change frame shape."
-        >
-          <div className="studio-editor-export-tiers" role="group" aria-label="Export resolution">
-            {EXPORT_RESOLUTION_PRESETS.map((preset) => {
-              const active = resolution === preset.id;
+        <InspectorSection title="Type" hint="What to export from this timeline.">
+          <div className="studio-editor-export-tiers" role="group" aria-label="Export type">
+            {EXPORT_KIND_PRESETS.map((preset) => {
+              const active = exportKind === preset.id;
               return (
                 <button
                   key={preset.id}
                   type="button"
                   className={`studio-editor-export-tier${active ? " is-active" : ""}`}
                   aria-pressed={active}
-                  title={preset.label}
-                  onClick={() => onResolutionChange(preset.id)}
+                  title={preset.hint}
+                  onClick={() => onExportKindChange(preset.id)}
                 >
                   {preset.label}
                 </button>
               );
             })}
           </div>
-          <p className="studio-editor-export-size">
-            {size.width} × {size.height}
-          </p>
         </InspectorSection>
 
-        <InspectorSection
-          title="Frame"
-          hint="Output canvas ratio. Zoom the preview separately with canvas controls."
-        >
-          <div className="studio-editor-frame-presets" role="group" aria-label="Frame ratio">
-            {FRAME_RATIO_PRESETS.map((preset) => {
-              const active = frameRatio === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={`studio-editor-frame-preset${active ? " is-active" : ""}`}
-                  aria-pressed={active}
-                  title={`${preset.label} ${preset.shortLabel}`}
-                  onClick={() => onUpdateProject?.({ frameRatio: preset.id })}
-                >
-                  <span className="studio-editor-frame-preset-glyph">
-                    <StudioRatioGlyph ratio={preset.id} />
-                  </span>
-                  <span className="studio-editor-frame-preset-label">{preset.shortLabel}</span>
-                </button>
-              );
-            })}
+        {exportKind === "video" ? (
+          <>
+            <InspectorSection title="Format" hint="Container for the rendered video.">
+              <div className="studio-editor-export-tiers" role="group" aria-label="Video format">
+                {EXPORT_VIDEO_FORMAT_PRESETS.map((preset) => {
+                  const active = videoFormat === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`studio-editor-export-tier${active ? " is-active" : ""}`}
+                      aria-pressed={active}
+                      onClick={() => onVideoFormatChange?.(preset.id)}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </InspectorSection>
+
+            <InspectorSection
+              title="Resolution"
+              hint="How many pixels to render. Does not change frame shape."
+            >
+              <div className="studio-editor-export-tiers" role="group" aria-label="Export resolution">
+                {EXPORT_RESOLUTION_PRESETS.map((preset) => {
+                  const active = resolution === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`studio-editor-export-tier${active ? " is-active" : ""}`}
+                      aria-pressed={active}
+                      title={preset.label}
+                      onClick={() => onResolutionChange(preset.id)}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="studio-editor-export-size">
+                {size.width} × {size.height}
+              </p>
+            </InspectorSection>
+
+            <InspectorSection
+              title="Frame"
+              hint="Output canvas ratio. Zoom the preview separately with canvas controls."
+            >
+              <div className="studio-editor-frame-presets" role="group" aria-label="Frame ratio">
+                {FRAME_RATIO_PRESETS.map((preset) => {
+                  const active = frameRatio === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`studio-editor-frame-preset${active ? " is-active" : ""}`}
+                      aria-pressed={active}
+                      title={`${preset.label} ${preset.shortLabel}`}
+                      onClick={() => onUpdateProject?.({ frameRatio: preset.id })}
+                    >
+                      <span className="studio-editor-frame-preset-glyph">
+                        <StudioRatioGlyph ratio={preset.id} />
+                      </span>
+                      <span className="studio-editor-frame-preset-label">{preset.shortLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </InspectorSection>
+          </>
+        ) : null}
+
+        {exportKind === "audio" ? (
+          <InspectorSection title="Format" hint="Audio container for the mixed soundtrack.">
+            <div className="studio-editor-export-tiers" role="group" aria-label="Audio format">
+              {EXPORT_AUDIO_FORMAT_PRESETS.map((preset) => {
+                const active = audioFormat === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`studio-editor-export-tier${active ? " is-active" : ""}`}
+                    aria-pressed={active}
+                    onClick={() => onAudioFormatChange?.(preset.id)}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+          </InspectorSection>
+        ) : null}
+
+        {exportKind === "studio" ? (
+          <InspectorSection
+            title="Package"
+            hint="Open zip with timeline + original clip media. Anyone can unzip it."
+          >
+            <p className="studio-editor-export-size">Saves as {placeholder}.studio</p>
+          </InspectorSection>
+        ) : null}
+
+        {exportKind !== "studio" ? (
+          <InspectorSection title="Filename" hint="Optional. Leave blank to use the project name.">
+            <label className="studio-editor-field-full">
+              <span className="sr-only">Export filename</span>
+              <input
+                type="text"
+                value={filename}
+                placeholder={placeholder}
+                onChange={(event) => onFilenameChange(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+          </InspectorSection>
+        ) : null}
+
+        {exporting ? (
+          <div className="studio-editor-export-progress" aria-live="polite">
+            <div className="studio-editor-export-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={exportProgress ?? 0}>
+              <span style={{ width: `${Math.max(4, exportProgress ?? 0)}%` }} />
+            </div>
+            <p className="studio-editor-export-progress-label">
+              {exportPhase || "Exporting…"}
+              {typeof exportProgress === "number" ? ` · ${Math.round(exportProgress)}%` : ""}
+            </p>
           </div>
-        </InspectorSection>
-
-        <InspectorSection title="Filename" hint="Optional. Leave blank to use the project name.">
-          <label className="studio-editor-field-full">
-            <span className="sr-only">Export filename</span>
-            <input
-              type="text"
-              value={filename}
-              placeholder={placeholder}
-              onChange={(event) => onFilenameChange(event.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </label>
-        </InspectorSection>
+        ) : null}
 
         <div className="studio-editor-export-actions">
           <button
@@ -541,12 +653,20 @@ function ExportPanel({
               exporting
                 ? "Exporting…"
                 : !canExport
-                  ? "Add a video clip before exporting"
-                  : "Export video"
+                  ? disabledReason
+                  : exportKind === "studio"
+                    ? "Download .studio package"
+                    : exportKind === "audio"
+                      ? `Export ${String(audioFormat || "mp3").toUpperCase()}`
+                      : "Export MP4"
             }
           >
             <Download size={15} aria-hidden="true" />
-            {exporting ? "Exporting…" : "Export"}
+            {exporting
+              ? "Exporting…"
+              : exportKind === "studio"
+                ? "Download .studio"
+                : "Export"}
           </button>
         </div>
       </div>
@@ -681,11 +801,21 @@ export function EditorInspector({
   onUpdateProject,
   onSetJointTransition,
   onAddTextClip,
+  exportKind = "video",
   exportResolution = DEFAULT_EXPORT_RESOLUTION,
+  exportVideoFormat = "mp4",
+  exportAudioFormat = "mp3",
   exportFilename = "",
   exporting = false,
-  canExport = false,
+  exportProgress = 0,
+  exportPhase = "",
+  canExportVideo = false,
+  canExportAudio = false,
+  canExportStudio = false,
+  onExportKindChange,
   onExportResolutionChange,
+  onExportVideoFormatChange,
+  onExportAudioFormatChange,
   onExportFilenameChange,
   onExport,
 }) {
@@ -706,11 +836,21 @@ export function EditorInspector({
         <div className="studio-editor-inspector-main">
           <ExportPanel
             project={project}
+            exportKind={exportKind}
             resolution={resolution}
+            videoFormat={exportVideoFormat}
+            audioFormat={exportAudioFormat}
             filename={exportFilename}
             exporting={exporting}
-            canExport={canExport}
+            exportProgress={exportProgress}
+            exportPhase={exportPhase}
+            canExportVideo={canExportVideo}
+            canExportAudio={canExportAudio}
+            canExportStudio={canExportStudio}
+            onExportKindChange={onExportKindChange}
             onResolutionChange={onExportResolutionChange}
+            onVideoFormatChange={onExportVideoFormatChange}
+            onAudioFormatChange={onExportAudioFormatChange}
             onFilenameChange={onExportFilenameChange}
             onExport={onExport}
             onUpdateProject={onUpdateProject}

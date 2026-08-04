@@ -25,8 +25,12 @@ import {
 } from "./lib/naturalAudioSpeed";
 import {
   DEFAULT_EXPORT_RESOLUTION,
+  audioExportExt,
+  audioExportMime,
   exportSizeForRatioAndResolution,
+  normalizeExportAudioFormat,
   normalizeExportResolution,
+  type ExportAudioFormat,
   type ExportResolution,
 } from "./lib/editorExport";
 import { clipAtPlayhead } from "./lib/editorProjectOps";
@@ -834,41 +838,72 @@ async function runExportVideo(
     name: string;
     project: EditorProject;
     exportResolution?: ExportResolution;
+    exportKind?: "video" | "audio";
+    audioFormat?: ExportAudioFormat;
+    jobId?: Id<"exportJobs">;
   },
 ): Promise<{ assetId: Id<"assets"> }> {
+  const report = async (phase: string, progress: number) => {
+    if (!args.jobId) return;
+    try {
+      await ctx.runMutation(internal.exportJobs.patchProgress, {
+        jobId: args.jobId,
+        phase,
+        progress,
+      });
+    } catch {
+      // Progress is best-effort; never fail the export on reporting.
+    }
+  };
+
   try {
     await execFileAsync("ffmpeg", ["-version"]);
     await execFileAsync("ffprobe", ["-version"]);
   } catch {
-    throw new Error(
-      "Export requires ffmpeg and ffprobe on the Convex action runtime. Install both binaries on the action host, then retry.",
-    );
+    const message =
+      "Export requires ffmpeg and ffprobe on the Convex action runtime. Install both binaries on the action host, then retry.";
+    if (args.jobId) {
+      await ctx.runMutation(internal.exportJobs.fail, { jobId: args.jobId, error: message });
+    }
+    throw new Error(message);
   }
 
+  const exportKind = args.exportKind === "audio" ? "audio" : "video";
+  const audioFormat = normalizeExportAudioFormat(args.audioFormat);
   const project = args.project;
   const resolution = normalizeExportResolution(
     args.exportResolution ?? DEFAULT_EXPORT_RESOLUTION,
   );
+  // Audio-only can render at 720p for speed — picture is discarded.
+  const renderResolution = exportKind === "audio" ? ("720p" as ExportResolution) : resolution;
   const { width: exportWidth, height: exportHeight } = exportSizeForRatioAndResolution(
     project.frameRatio,
-    resolution,
+    renderResolution,
   );
   const videoTrack = project.tracks.find((track) => track.kind === "video");
   const audioTrack = project.tracks.find((track) => track.kind === "audio");
   const textTrack = project.tracks.find((track) => track.kind === "text");
   if (!videoTrack) {
-    throw new Error("No video track in project.");
+    const message = "No video track in project.";
+    if (args.jobId) {
+      await ctx.runMutation(internal.exportJobs.fail, { jobId: args.jobId, error: message });
+    }
+    throw new Error(message);
   }
 
   const clips = project.clips
     .filter((clip) => clip.trackId === videoTrack.id && clip.assetId)
     .sort((a, b) => a.startTime - b.startTime);
   if (!clips.length) {
-    throw new Error("Add at least one video clip before exporting.");
+    const message = "Add at least one video clip before exporting.";
+    if (args.jobId) {
+      await ctx.runMutation(internal.exportJobs.fail, { jobId: args.jobId, error: message });
+    }
+    throw new Error(message);
   }
 
   const textClips =
-    textTrack?.id
+    exportKind === "video" && textTrack?.id
       ? project.clips.filter((clip) => clip.trackId === textTrack.id && clip.kind === "text")
       : [];
   const audioClips =
@@ -886,6 +921,7 @@ async function runExportVideo(
   const transitionClips: Array<EditorClip | null> = [];
 
   try {
+    await report("Preparing clips…", 5);
     const segments = timelineSegments(clips);
     for (const [index, segment] of segments.entries()) {
       const segmentPath = join(tempDir, `segment-${index}.mp4`);
@@ -917,8 +953,11 @@ async function runExportVideo(
         transitionClips.push(segment.clip);
       }
       segmentPaths.push(segmentPath);
+      const pct = 5 + Math.round(((index + 1) / Math.max(1, segments.length)) * 50);
+      await report(`Rendering clip ${index + 1} of ${segments.length}…`, pct);
     }
 
+    await report("Compositing timeline…", 60);
     let composedPath = await concatNormalizedSegments(
       segmentPaths,
       transitionClips,
@@ -926,6 +965,7 @@ async function runExportVideo(
       exportWidth,
       exportHeight,
     );
+    await report("Mixing audio…", 72);
     composedPath = await mixAudioTrack({
       videoPath: composedPath,
       audioClips,
@@ -940,31 +980,76 @@ async function runExportVideo(
       tempDir,
     });
 
-    const body = await readFile(composedPath);
-    const rawName = (args.name || "export").replace(/\.(mp4|mov|webm)$/i, "");
-    const filename = `${rawName.replace(/[^\w.-]+/g, "-").slice(0, 48) || "export"}.mp4`;
+    let body: Buffer;
+    let filename: string;
+    let mimeType: string;
+    let kind: "video" | "audio";
+
+    if (exportKind === "audio") {
+      await report(`Encoding ${audioFormat.toUpperCase()}…`, 85);
+      const audioOut = join(tempDir, `export-audio${audioExportExt(audioFormat)}`);
+      const codecArgs =
+        audioFormat === "wav"
+          ? ["-vn", "-c:a", "pcm_s16le"]
+          : audioFormat === "m4a"
+            ? ["-vn", "-c:a", "aac", "-b:a", "192k"]
+            : ["-vn", "-c:a", "libmp3lame", "-b:a", "192k"];
+      await execFileAsync("ffmpeg", ["-y", "-i", composedPath, ...codecArgs, audioOut]);
+      body = await readFile(audioOut);
+      const rawName = (args.name || "export").replace(/\.(mp3|wav|m4a|mp4|mov|webm)$/i, "");
+      filename = `${rawName.replace(/[^\w.-]+/g, "-").slice(0, 48) || "export"}${audioExportExt(audioFormat)}`;
+      mimeType = audioExportMime(audioFormat);
+      kind = "audio";
+    } else {
+      await report("Uploading video…", 88);
+      body = await readFile(composedPath);
+      const rawName = (args.name || "export").replace(/\.(mp4|mov|webm)$/i, "");
+      filename = `${rawName.replace(/[^\w.-]+/g, "-").slice(0, 48) || "export"}.mp4`;
+      mimeType = "video/mp4";
+      kind = "video";
+    }
+
     const prepared = await ctx.runMutation(internal.videoEditInternal.createExportAsset, {
       userId,
       folderId: args.folderId,
       name: filename,
+      kind,
+      mimeType,
     });
     await putObject({
       path: prepared.bunnyPath,
       body,
-      contentType: "video/mp4",
+      contentType: mimeType,
     });
     await ctx.runMutation(internal.videoEditInternal.finalizeExportAsset, {
       assetId: prepared.assetId,
       byteSize: body.byteLength,
     });
-    if (args.projectId) {
+    if (args.projectId && exportKind === "video") {
       await ctx.runMutation(internal.videoEditInternal.attachOutput, {
         userId,
         projectId: args.projectId,
         outputAssetId: prepared.assetId,
       });
     }
+    if (args.jobId) {
+      await ctx.runMutation(internal.exportJobs.complete, {
+        jobId: args.jobId,
+        resultAssetId: prepared.assetId,
+      });
+    }
+    await report("Export ready", 100);
     return { assetId: prepared.assetId };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? "Export failed");
+    if (args.jobId) {
+      try {
+        await ctx.runMutation(internal.exportJobs.fail, { jobId: args.jobId, error: message });
+      } catch {
+        // ignore
+      }
+    }
+    throw error;
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -976,6 +1061,9 @@ const exportResolutionValidator = v.union(
   v.literal("4K"),
 );
 
+const exportKindValidator = v.union(v.literal("video"), v.literal("audio"));
+const audioFormatValidator = v.union(v.literal("mp3"), v.literal("wav"), v.literal("m4a"));
+
 export const exportVideo = action({
   args: {
     projectId: v.optional(v.id("videoEditProjects")),
@@ -983,6 +1071,9 @@ export const exportVideo = action({
     name: v.string(),
     project: v.any(),
     exportResolution: v.optional(exportResolutionValidator),
+    exportKind: v.optional(exportKindValidator),
+    audioFormat: v.optional(audioFormatValidator),
+    jobId: v.optional(v.id("exportJobs")),
   },
   returns: v.object({
     assetId: v.id("assets"),
@@ -992,12 +1083,22 @@ export const exportVideo = action({
     if (!userId) {
       throw new Error("Sign in to export.");
     }
+    if (args.jobId) {
+      const owned = await ctx.runQuery(internal.exportJobs.getOwned, {
+        userId,
+        jobId: args.jobId,
+      });
+      if (!owned) throw new Error("Export job not found.");
+    }
     return await runExportVideo(ctx, userId, {
       projectId: args.projectId,
       folderId: args.folderId,
       name: args.name,
       project: args.project as EditorProject,
       exportResolution: args.exportResolution,
+      exportKind: args.exportKind,
+      audioFormat: args.audioFormat,
+      jobId: args.jobId,
     });
   },
 });

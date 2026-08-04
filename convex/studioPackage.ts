@@ -7,6 +7,7 @@ import { parseEditorProject } from "./lib/editorProjectOps";
 import {
   STUDIO_PACKAGE_FORMAT,
   STUDIO_PACKAGE_FORMAT_VERSION,
+  STUDIO_PACKAGE_ICON_SVG,
   collectClipAssetIds,
   mediaExtForAsset,
   packageDirName,
@@ -116,6 +117,7 @@ async function buildVideoEditPackageFiles(
     kind: "videoEdit",
     name: project.name,
     exportedAt: new Date().toISOString(),
+    icon: "icon.svg",
     media,
     ...(missing.length ? { missing } : {}),
   };
@@ -130,6 +132,11 @@ async function buildVideoEditPackageFiles(
       path: join("project.json"),
       kind: "text",
       text: `${JSON.stringify(rewritten, null, 2)}\n`,
+    },
+    {
+      path: join("icon.svg"),
+      kind: "text",
+      text: STUDIO_PACKAGE_ICON_SVG,
     },
   );
 

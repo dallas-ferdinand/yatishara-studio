@@ -9,7 +9,7 @@ export const EXPLORER_TYPE_FILTERS = [
   { id: "all", label: "All", icon: "layoutGrid" },
   { id: "image", label: "Images", icon: "image" },
   { id: "video", label: "Videos", icon: "play" },
-  { id: "videoEdit", label: "Edits", icon: "clapperboard" },
+  { id: "videoEdit", label: "Edits", icon: "studioProject" },
   { id: "document", label: "Scripts", icon: "fileText" },
   { id: "element", label: "Elements", icon: "user" },
   { id: "audio", label: "Audio", icon: "music" },

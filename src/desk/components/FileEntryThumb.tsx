@@ -85,7 +85,7 @@ function peekItemIcon(item) {
   if (item.icon) return item.icon;
   if (item.kind === "document") return "fileText";
   if (item.kind === "video") return "play";
-  if (item.kind === "videoEdit") return "clapperboard";
+  if (item.kind === "videoEdit") return "studioProject";
   if (item.kind === "image") return "image";
   if (item.kind === "audio") return "music";
   return "file";
@@ -780,7 +780,7 @@ export function FileEntryThumb({
       const editPosterUrl =
         thumbUrl && thumbUrl !== mediaUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : undefined;
       visual = (
-        <ThumbWithPeek name={label} badge="clapperboard"
+        <ThumbWithPeek name={label} badge="studioProject"
           renaming={renaming}
           renameInitialName={renameInitialName}
           onRenameCommit={onRenameCommit}
@@ -797,11 +797,11 @@ export function FileEntryThumb({
             <VideoThumb
               src={mediaUrl ?? thumbUrl}
               className="desk-file-thumb-video"
-              fallbackIcon="clapperboard"
+              fallbackIcon="studioProject"
             />
           ) : (
             <div className="desk-file-thumb-fallback">
-              <Icon name="clapperboard" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+              <Icon name="studioProject" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
             </div>
           )}
         </ThumbWithPeek>

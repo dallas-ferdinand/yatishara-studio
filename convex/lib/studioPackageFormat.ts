@@ -23,9 +23,21 @@ export type StudioPackageManifest = {
   kind: "videoEdit";
   name: string;
   exportedAt: string;
+  icon?: string;
   media: StudioPackageMediaEntry[];
   missing?: Array<{ assetId: string; reason: string }>;
 };
+
+/** Simple branded SVG included in every .studio package for cross-app recognition when unzipped. */
+export const STUDIO_PACKAGE_ICON_SVG = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect width="128" height="128" rx="28" fill="#111827"/>
+  <rect x="28" y="22" width="72" height="84" rx="14" fill="#1f2937" stroke="#38bdf8" stroke-width="4"/>
+  <path d="M44 46h40M44 62h28" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="64" cy="88" r="16" fill="#0ea5e9"/>
+  <path d="M58 80l16 8-16 8z" fill="#ecfeff"/>
+</svg>
+`;
 
 export type StudioPackageProjectLike = {
   name?: string;

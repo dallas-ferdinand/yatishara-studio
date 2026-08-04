@@ -1067,6 +1067,24 @@ export default defineSchema({
     .index("by_folder", ["folderId"])
     .index("by_source_asset", ["sourceAssetId"]),
 
+  /** Live progress for editor Export (video/audio). Client polls by id. */
+  exportJobs: defineTable({
+    ownerId: v.id("users"),
+    projectId: v.optional(v.id("videoEditProjects")),
+    kind: v.union(v.literal("video"), v.literal("audio")),
+    status: v.union(
+      v.literal("running"),
+      v.literal("done"),
+      v.literal("error"),
+    ),
+    phase: v.string(),
+    progress: v.number(),
+    error: v.optional(v.string()),
+    resultAssetId: v.optional(v.id("assets")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
+
   /** Public creative identity — separate from private account details on users. */
   profiles: defineTable({
     userId: v.id("users"),

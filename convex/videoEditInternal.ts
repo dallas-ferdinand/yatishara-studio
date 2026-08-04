@@ -30,6 +30,8 @@ export const createExportAsset = internalMutation({
     userId: v.id("users"),
     folderId: v.id("folders"),
     name: v.string(),
+    kind: v.optional(v.union(v.literal("video"), v.literal("audio"))),
+    mimeType: v.optional(v.string()),
   },
   returns: v.object({
     assetId: v.id("assets"),
@@ -41,12 +43,15 @@ export const createExportAsset = internalMutation({
       throw new Error("Folder not found.");
     }
     const now = Date.now();
+    const kind = args.kind ?? "video";
+    const mimeType =
+      args.mimeType ?? (kind === "audio" ? "audio/mpeg" : "video/mp4");
     const assetId = await ctx.db.insert("assets", {
       ownerId: args.userId,
       folderId: args.folderId,
       name: args.name,
-      kind: "video",
-      mimeType: "video/mp4",
+      kind,
+      mimeType,
       createdAt: now,
       updatedAt: now,
     });

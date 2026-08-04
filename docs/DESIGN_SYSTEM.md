@@ -145,10 +145,13 @@ from `--mos-plate`:
   Folder/multi-select **Download ZIP** remains export-only.
 - **`.studio` project packages:** virtual video-edit files show as `{name}.studio`
   in Files (Convex-backed, unbundled in-app). **Download** packs an open zip
-  (`manifest.json` + `project.json` + `media/*`, no encryption) saved as
+  (`manifest.json` + `project.json` + `media/*` + `icon.svg`, no encryption) saved as
   `Name.studio`. Dropping a `.studio` (or a ZIP that contains package trees)
-  imports a **unique fork** (new assets + new project). Editor **Export** remains
-  ffmpeg → MP4 and is separate from package download.
+  imports a **unique fork** (new assets + new project). Editor **Export as** supports
+  Video (MP4), Audio (MP3/WAV/M4A), and Studio package, with live progress.
+  In-app icon is `studioProject` (Files/tabs). OS Finder/Explorer filetype icons
+  still need the native Studio app registered — browsers cannot brand downloaded
+  zips by themselves.
 
 ### Select / dropdown (locked decision)
 

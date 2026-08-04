@@ -65,7 +65,7 @@ export function fileIconName(nameOrPath, { isDir = false } = {}) {
   const kind = fileViewerKind(ext);
   if (kind === "image") return "image";
   if (kind === "video") return "play";
-  if (kind === "videoEdit") return "clapperboard";
+  if (kind === "videoEdit") return "studioProject";
   if (kind === "audio") return "music";
   if (kind === "pdf") return "filePdf";
   if (kind === "csv") return "table";
@@ -99,7 +99,7 @@ export function explorerEntryIcon(entry) {
     return "globe";
   }
   if (entry?.type === "dir" || entry?.type === "parent") return entry?.type === "parent" ? "chevL" : "folder";
-  if (entry?.studioKind === "videoEdit") return "clapperboard";
+  if (entry?.studioKind === "videoEdit") return "studioProject";
   if (entry?.studioKind === "element") {
     if (entry.elementType === "character") return "user";
     if (entry.elementType === "prop") return "package";
@@ -154,7 +154,7 @@ export function workspaceTabIcon(tab) {
   if (tab.studioKind === "messages") return "message";
   if (tab.studioKind === "files") return "folder";
   if (tab.studioKind === "profile") return "user";
-  if (tab.studioKind === "videoEdit") return "clapperboard";
+  if (tab.studioKind === "videoEdit") return "studioProject";
   if (tab.studioKind === "element") {
     if (tab.elementType === "character") return "user";
     if (tab.elementType === "prop") return "package";

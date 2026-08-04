@@ -68,7 +68,7 @@ function tabPreviewOverlayIcon(tab) {
   if (!tab?.previewUrl) return null;
   if (tab.studioKind === "profile" || tab.studioKind === "profilePost") return null;
   // Match file-manager video-edit badge (clapperboard / theater slate).
-  if (isVideoEditTab(tab)) return "clapperboard";
+  if (isVideoEditTab(tab)) return "studioProject";
   if (tab.previewKind === "video" || tab.kind === "video") return "play";
   if (tab.previewKind === "image" || tab.kind === "image") return "image";
   return null;

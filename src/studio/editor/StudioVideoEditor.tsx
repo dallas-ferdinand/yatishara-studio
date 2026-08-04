@@ -29,9 +29,16 @@ import {
 import { useEditorHotkeys } from "./useEditorHotkeys";
 import { jointByKey } from "./editorTimelineUtils";
 import {
+  DEFAULT_EXPORT_AUDIO_FORMAT,
+  DEFAULT_EXPORT_KIND,
   DEFAULT_EXPORT_RESOLUTION,
+  DEFAULT_EXPORT_VIDEO_FORMAT,
+  type ExportAudioFormat,
+  type ExportKind,
   type ExportResolution,
+  type ExportVideoFormat,
 } from "../../../convex/lib/editorExport";
+import { downloadStudioPackage } from "@/studio/lib/studioFileDownloads";
 import {
   DEFAULT_AUDIO_CLIP_SEC,
   DEFAULT_IMAGE_CLIP_SEC,
@@ -120,6 +127,7 @@ export function StudioVideoEditor({
   onOpenAsset,
   onStatus,
   onProjectSaved,
+  onExportStudioPackage,
 }) {
   const [urlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   const saveTimerRef = useRef(null);
@@ -148,6 +156,7 @@ export function StudioVideoEditor({
   const saveProject = useMutation(api.videoEdits.save);
   const ensureEditProxy = useMutation(api.assets.ensureEditProxy);
   const exportProject = useAction(api.videoEditActions.exportVideo);
+  const createExportJob = useMutation(api.exportJobs.create);
   const downloadClipSegment = useAction(api.videoEditActions.downloadClipSegment);
   const requestedProxyIdsRef = useRef(new Set());
   const [orphanAssetIds, setOrphanAssetIds] = useState([]);
@@ -162,16 +171,37 @@ export function StudioVideoEditor({
   );
   const [hydrated, setHydrated] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportJobId, setExportJobId] = useState(null);
+  const [exportKind, setExportKind] = useState(
+    /** @type {import("../../../convex/lib/editorExport").ExportKind} */ (DEFAULT_EXPORT_KIND),
+  );
   const [exportResolution, setExportResolution] = useState(
     /** @type {import("../../../convex/lib/editorExport").ExportResolution} */ (
       DEFAULT_EXPORT_RESOLUTION
     ),
   );
+  const [exportVideoFormat, setExportVideoFormat] = useState(
+    /** @type {import("../../../convex/lib/editorExport").ExportVideoFormat} */ (
+      DEFAULT_EXPORT_VIDEO_FORMAT
+    ),
+  );
+  const [exportAudioFormat, setExportAudioFormat] = useState(
+    /** @type {import("../../../convex/lib/editorExport").ExportAudioFormat} */ (
+      DEFAULT_EXPORT_AUDIO_FORMAT
+    ),
+  );
   const [exportFilename, setExportFilename] = useState("");
+  const [exportPhaseLocal, setExportPhaseLocal] = useState("");
+  const [exportProgressLocal, setExportProgressLocal] = useState(0);
   const [saveError, setSaveError] = useState(null);
   const [localProjectId, setLocalProjectId] = useState(projectId ?? null);
   const [clipMenu, setClipMenu] = useState(null);
   const [renameRequest, setRenameRequest] = useState(null);
+
+  const exportJob = useQuery(
+    api.exportJobs.get,
+    exportJobId ? { jobId: exportJobId } : "skip",
+  );
 
   // Timeline clips may reference assets outside the open folder (explorer drag,
   // MCP append). Resolve those IDs so beds aren't silent for missing media map entries.
@@ -422,7 +452,11 @@ export function StudioVideoEditor({
   const timelineDuration = Math.max(state.project.duration, projectEndTime(state.project));
   const selectedClip = state.project.clips.find((clip) => clip.id === state.ui.selectedClipId) ?? null;
   const selectedJoint = jointByKey(state.project, state.ui.selectedJointKey);
-  const canExport = state.project.clips.some((clip) => clip.kind === "video" && clip.assetId);
+  const canExportVideo = state.project.clips.some((clip) => clip.kind === "video" && clip.assetId);
+  const canExportAudio = canExportVideo;
+  const canExportStudio = Boolean(localProjectId);
+  const exportProgress = exportJob?.progress ?? exportProgressLocal;
+  const exportPhase = exportJob?.phase || exportPhaseLocal;
   const inspectorOpen = inspectorPanelOpen({
     editorMode: state.ui.editorMode,
     clip: selectedClip,
@@ -625,12 +659,61 @@ export function StudioVideoEditor({
   );
 
   const handleExport = useCallback(async () => {
-    if (!canExport) {
+    if (exportKind === "studio") {
+      if (!localProjectId) {
+        onStatus?.("Save the project before exporting a .studio package.");
+        return;
+      }
+      setExporting(true);
+      setExportPhaseLocal("Packing .studio package…");
+      setExportProgressLocal(8);
+      onStatus?.("Packing .studio package…");
+      try {
+        await queueSave(state.project, state.project.name);
+        setExportProgressLocal(25);
+        if (onExportStudioPackage) {
+          await onExportStudioPackage(localProjectId, state.project.name);
+        } else {
+          await downloadStudioPackage({
+            convex,
+            projectId: localProjectId,
+            onProgress: ({ loaded, total, fileName, phase }) => {
+              const pct =
+                phase === "preparing"
+                  ? 20
+                  : total > 0
+                    ? Math.min(95, 25 + Math.round((loaded / total) * 70))
+                    : 50;
+              setExportProgressLocal(pct);
+              setExportPhaseLocal(fileName || "Downloading…");
+            },
+          });
+        }
+        setExportProgressLocal(100);
+        setExportPhaseLocal("Package ready");
+        onStatus?.("Studio package downloaded.");
+      } catch (error) {
+        onStatus?.(friendlyConvexError(error, "Package export failed."));
+      } finally {
+        setExporting(false);
+        setExportJobId(null);
+      }
+      return;
+    }
+
+    if (exportKind === "video" && !canExportVideo) {
       onStatus?.("Add a video clip before exporting.");
       return;
     }
+    if (exportKind === "audio" && !canExportAudio) {
+      onStatus?.("Add a video clip before exporting audio.");
+      return;
+    }
+
     setExporting(true);
-    onStatus?.("Rendering your video…");
+    setExportPhaseLocal("Starting…");
+    setExportProgressLocal(2);
+    onStatus?.(exportKind === "audio" ? "Rendering audio…" : "Rendering your video…");
     try {
       await queueSave(state.project, state.project.name);
       let pid = localProjectId;
@@ -648,27 +731,44 @@ export function StudioVideoEditor({
         setLocalProjectId(pid);
         onProjectSaved?.(pid, state.project.name);
       }
+      const { jobId } = await createExportJob({
+        projectId: pid,
+        kind: exportKind === "audio" ? "audio" : "video",
+      });
+      setExportJobId(jobId);
       const result = await exportProject({
         projectId: pid,
         folderId: homeFolderId,
         name: exportFilename.trim() || state.project.name,
         project: state.project,
         exportResolution,
+        exportKind: exportKind === "audio" ? "audio" : "video",
+        audioFormat: exportAudioFormat,
+        jobId,
       });
+      setExportProgressLocal(100);
+      setExportPhaseLocal("Export ready");
       onStatus?.("Export ready.");
       if (result?.assetId) onOpenAsset?.(result.assetId);
     } catch (error) {
       onStatus?.(friendlyConvexError(error, "Export failed."));
     } finally {
       setExporting(false);
+      setExportJobId(null);
     }
   }, [
-    canExport,
+    canExportAudio,
+    canExportVideo,
+    convex,
+    createExportJob,
+    exportAudioFormat,
     exportFilename,
+    exportKind,
     exportProject,
     exportResolution,
     homeFolderId,
     localProjectId,
+    onExportStudioPackage,
     onOpenAsset,
     onProjectSaved,
     onStatus,
@@ -940,11 +1040,21 @@ export function StudioVideoEditor({
                     text: opts?.text,
                   });
                 }}
+                exportKind={exportKind}
                 exportResolution={exportResolution}
+                exportVideoFormat={exportVideoFormat}
+                exportAudioFormat={exportAudioFormat}
                 exportFilename={exportFilename}
                 exporting={exporting}
-                canExport={canExport}
+                exportProgress={exportProgress}
+                exportPhase={exportPhase}
+                canExportVideo={canExportVideo}
+                canExportAudio={canExportAudio}
+                canExportStudio={canExportStudio}
+                onExportKindChange={setExportKind}
                 onExportResolutionChange={setExportResolution}
+                onExportVideoFormatChange={setExportVideoFormat}
+                onExportAudioFormatChange={setExportAudioFormat}
                 onExportFilenameChange={setExportFilename}
                 onExport={() => void handleExport()}
               />

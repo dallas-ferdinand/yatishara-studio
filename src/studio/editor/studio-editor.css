@@ -232,6 +232,35 @@
   padding: 0.35rem 0 0.75rem;
 }
 
+.studio-editor-export-progress {
+  margin-top: 0.35rem;
+  margin-bottom: 0.55rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.studio-editor-export-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--mos-plate-strong);
+  overflow: hidden;
+}
+
+.studio-editor-export-progress-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cursor-accent);
+  transition: width 180ms ease;
+}
+
+.studio-editor-export-progress-label {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 560;
+  color: var(--mos-muted);
+}
+
 .studio-editor-export-cta {
   display: inline-flex;
   align-items: center;

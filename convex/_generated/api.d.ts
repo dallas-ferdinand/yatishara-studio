@@ -29,6 +29,7 @@ import type * as dms from "../dms.js";
 import type * as documents from "../documents.js";
 import type * as elementActions from "../elementActions.js";
 import type * as elements from "../elements.js";
+import type * as exportJobs from "../exportJobs.js";
 import type * as folders from "../folders.js";
 import type * as generation from "../generation.js";
 import type * as generationActions from "../generationActions.js";
@@ -92,6 +93,7 @@ import type * as lib_studioApi_folderScope from "../lib/studioApi/folderScope.js
 import type * as lib_studioApi_httpHelpers from "../lib/studioApi/httpHelpers.js";
 import type * as lib_studioApi_openapi from "../lib/studioApi/openapi.js";
 import type * as lib_studioApi_scopes from "../lib/studioApi/scopes.js";
+import type * as lib_studioPackageFormat from "../lib/studioPackageFormat.js";
 import type * as lib_studioShareAccess from "../lib/studioShareAccess.js";
 import type * as lib_styleSheetGuides from "../lib/styleSheetGuides.js";
 import type * as lib_videoDurationPlan from "../lib/videoDurationPlan.js";
@@ -161,6 +163,7 @@ declare const fullApi: ApiFromModules<{
   documents: typeof documents;
   elementActions: typeof elementActions;
   elements: typeof elements;
+  exportJobs: typeof exportJobs;
   folders: typeof folders;
   generation: typeof generation;
   generationActions: typeof generationActions;
@@ -224,6 +227,7 @@ declare const fullApi: ApiFromModules<{
   "lib/studioApi/httpHelpers": typeof lib_studioApi_httpHelpers;
   "lib/studioApi/openapi": typeof lib_studioApi_openapi;
   "lib/studioApi/scopes": typeof lib_studioApi_scopes;
+  "lib/studioPackageFormat": typeof lib_studioPackageFormat;
   "lib/studioShareAccess": typeof lib_studioShareAccess;
   "lib/styleSheetGuides": typeof lib_styleSheetGuides;
   "lib/videoDurationPlan": typeof lib_videoDurationPlan;
