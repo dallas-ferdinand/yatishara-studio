@@ -24,7 +24,17 @@ const PREVIEW_SOUNDS = [
   { id: "success", label: "Success" },
 ] as const;
 
-type UiSoundPrefs = { enabled: boolean; volume: number };
+type UiSoundCategories = {
+  taps: boolean;
+  messaging: boolean;
+  social: boolean;
+  feedback: boolean;
+};
+type UiSoundPrefs = {
+  enabled: boolean;
+  volume: number;
+  categories: UiSoundCategories;
+};
 
 export function UiSoundSettings() {
   const [prefs, setPrefs] = useState<UiSoundPrefs>(DEFAULT_UI_SOUND_PREFS);
@@ -32,12 +42,12 @@ export function UiSoundSettings() {
   const systemReduced = mounted && uiSoundsReducedBySystem();
 
   useEffect(() => {
-    const initial = readUiSoundPrefs();
+    const initial = readUiSoundPrefs() as UiSoundPrefs;
     setPrefs(initial);
     setUiSoundPrefs(initial);
     setMounted(true);
     const unsubscribe = subscribeUiSoundPrefs(() => {
-      setPrefs(getUiSoundPrefs());
+      setPrefs(getUiSoundPrefs() as UiSoundPrefs);
     });
     return () => {
       unsubscribe();
@@ -45,9 +55,7 @@ export function UiSoundSettings() {
   }, []);
 
   const persist = (next: UiSoundPrefs) => {
-    const current = getUiSoundPrefs() as UiSoundPrefs & {
-      categories?: UiSoundPrefs["categories"];
-    };
+    const current = getUiSoundPrefs() as UiSoundPrefs;
     setPrefs(next);
     setUiSoundPrefs({
       ...next,
