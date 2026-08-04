@@ -357,6 +357,11 @@ const ThemeSettings = dynamic(
   () => import("@/desk/components/ThemeSettings").then((m) => m.ThemeSettings),
   { ssr: false },
 );
+const StudioSoundsAlertsSettings = dynamic(
+  () =>
+    import("./StudioSoundsAlertsSettings").then((m) => m.StudioSoundsAlertsSettings),
+  { ssr: false },
+);
 const StudioVideoEditor = dynamic(
   () => import("@/studio/editor/StudioVideoEditor").then((m) => m.StudioVideoEditor),
   { ssr: false },
@@ -30730,6 +30735,7 @@ function SettingsWorkspacePane({
   const items = [
     { id: "billing", label: "Billing" },
     { id: "general", label: "Appearance" },
+    { id: "sounds", label: "Sounds & alerts" },
     { id: "profile", label: "Profile" },
     { id: "storage", label: "Storage" },
     { id: "account", label: "Account details" },
@@ -30939,6 +30945,8 @@ function SettingsWorkspacePane({
             />
           </div>
         ) : null}
+
+        {settingsSectionId === "sounds" ? <StudioSoundsAlertsSettings /> : null}
         </div>
       </div>
   );
@@ -31220,95 +31228,6 @@ function DefaultStudioTabSettings({ value }) {
   );
 }
 
-function BrowserNotificationsCard() {
-  const savePushSubscription = useMutation(api.notifications.savePushSubscription);
-  const removePushSubscription = useMutation(api.notifications.removePushSubscription);
-  const available = isStudioWebPushAvailable();
-  const [permission, setPermission] = useState(() => getNotificationPermission());
-  const [subscribed, setSubscribed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const next = await hasStudioWebPushSubscription();
-      if (!cancelled) {
-        setSubscribed(next);
-        setPermission(getNotificationPermission());
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!available) {
-    return (
-      <section className="cursor-settings-section studio-account-card">
-        <div className="studio-account-fields">
-          <strong>Browser notifications</strong>
-          <p className="studio-settings-field-hint">
-            Available on the live HTTPS site in a supporting browser — not on localhost or the Android app shell.
-          </p>
-        </div>
-      </section>
-    );
-  }
-
-  const denied = permission === "denied";
-  const enabled = subscribed && permission === "granted";
-
-  return (
-    <section className="cursor-settings-section studio-account-card">
-      <div className="studio-account-fields">
-        <strong>Browser notifications</strong>
-        <p className="studio-settings-field-hint">
-          Get alerts for finished generations, DMs, and posts from people you follow.
-        </p>
-        {denied ? (
-          <p className="studio-settings-field-hint">
-            Notifications are blocked in this browser. Allow them in site settings, then enable again.
-          </p>
-        ) : null}
-        {error ? <p className="studio-settings-field-hint">{error}</p> : null}
-      </div>
-      <div className="studio-account-actions">
-        <button
-          type="button"
-          className={`studio-account-save${error ? " is-error" : ""}`}
-          disabled={busy || denied}
-          onClick={() => {
-            setError("");
-            setBusy(true);
-            const run = enabled
-              ? disableStudioWebPush({ remove: removePushSubscription })
-              : enableStudioWebPush({ save: savePushSubscription });
-            void run
-              .then(async () => {
-                setPermission(getNotificationPermission());
-                setSubscribed(await hasStudioWebPushSubscription());
-                if (!enabled) toast.success("Browser notifications enabled");
-                else toast.message("Browser notifications turned off");
-              })
-              .catch((err) => {
-                setError(friendlyConvexError(err, "Could not update notifications"));
-                setPermission(getNotificationPermission());
-              })
-              .finally(() => setBusy(false));
-          }}
-        >
-          {busy ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <span>{enabled ? "Turn off" : "Enable"}</span>
-          )}
-        </button>
-      </div>
-    </section>
-  );
-}
-
 function AccountDetailsCard({ currentUser, onSave }) {
   const { signOut } = useAuthActions();
   const setPassword = useAction(api.passwordAuth.setPassword);
@@ -31475,8 +31394,6 @@ function AccountDetailsCard({ currentUser, onSave }) {
           </button>
         </div>
       </section>
-
-      <BrowserNotificationsCard />
 
       <section className="cursor-settings-section studio-account-card studio-account-password">
         <button

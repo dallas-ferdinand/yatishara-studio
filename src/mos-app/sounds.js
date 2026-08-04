@@ -5,6 +5,7 @@
 import {
   DEFAULT_UI_SOUND_PREFS,
   readUiSoundPrefs,
+  uiSoundCategoryEnabled,
   uiSoundsReducedBySystem,
   writeUiSoundPrefs,
 } from "./sound-prefs.js";
@@ -65,6 +66,10 @@ export function setUiSoundPrefs(next) {
   prefs = {
     enabled: next.enabled,
     volume: Math.min(1, Math.max(0, next.volume)),
+    categories: {
+      ...DEFAULT_UI_SOUND_PREFS.categories,
+      ...(next.categories ?? {}),
+    },
   };
   writeUiSoundPrefs(prefs);
   applyMasterGain();
@@ -523,6 +528,7 @@ const SOUND_PLAYERS = {
 /** @param {string} id */
 export function playUiSound(id) {
   if (!isBrowser() || !prefs.enabled || uiSoundsReducedBySystem()) return;
+  if (!uiSoundCategoryEnabled(id, prefs)) return;
   void primeUiSounds().then(() => {
     if (!audioContext || !masterGain || masterGain.gain.value <= 0) return;
     const player = SOUND_PLAYERS[id];

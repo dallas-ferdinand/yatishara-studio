@@ -45,8 +45,19 @@ export function UiSoundSettings() {
   }, []);
 
   const persist = (next: UiSoundPrefs) => {
+    const current = getUiSoundPrefs() as UiSoundPrefs & {
+      categories?: UiSoundPrefs["categories"];
+    };
     setPrefs(next);
-    setUiSoundPrefs(next);
+    setUiSoundPrefs({
+      ...next,
+      categories: current.categories ?? {
+        taps: true,
+        messaging: true,
+        social: true,
+        feedback: true,
+      },
+    });
   };
 
   return (

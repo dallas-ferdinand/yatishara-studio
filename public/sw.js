@@ -48,18 +48,45 @@ self.addEventListener("push", (e) => {
   } catch {
     /* ignore malformed push payload */
   }
-  const options = {
-    body: payload.body,
-    data: payload.data,
-    icon: payload.icon || fallbackIcon,
-    badge: payload.badge || fallbackBadge,
-    tag: payload.tag || undefined,
-    renotify: Boolean(payload.tag || payload.renotify),
-  };
-  if (payload.image) {
-    options.image = payload.image;
-  }
-  e.waitUntil(self.registration.showNotification(payload.title, options));
+
+  e.waitUntil(
+    (async () => {
+      const kind =
+        (payload.data && payload.data.kind) ||
+        (typeof payload.tag === "string" ? payload.tag.split(":")[0] : "");
+      try {
+        const cache = await caches.open("studio-alert-prefs-v1");
+        const cached = await cache.match("/__studio-alert-prefs");
+        if (cached) {
+          const prefs = await cached.json();
+          const map = {
+            generation_completed: "generations",
+            generation_failed: "generations",
+            dm_message: "messages",
+            followed_post: "follows",
+            payment_status: "payments",
+          };
+          const key = map[kind];
+          if (key && prefs && prefs[key] === false) return;
+        }
+      } catch {
+        /* show notification if prefs unreadable */
+      }
+
+      const options = {
+        body: payload.body,
+        data: payload.data,
+        icon: payload.icon || fallbackIcon,
+        badge: payload.badge || fallbackBadge,
+        tag: payload.tag || undefined,
+        renotify: Boolean(payload.tag || payload.renotify),
+      };
+      if (payload.image) {
+        options.image = payload.image;
+      }
+      await self.registration.showNotification(payload.title, options);
+    })(),
+  );
 });
 
 self.addEventListener("notificationclick", (e) => {
