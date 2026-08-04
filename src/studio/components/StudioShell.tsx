@@ -7813,7 +7813,7 @@ export function StudioShell({
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-desktop-app-menu-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -8660,7 +8660,7 @@ export function StudioShell({
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-desktop-app-menu-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -9447,29 +9447,20 @@ export function StudioShell({
           gap: 6px;
           flex: 0 0 auto;
         }
-        /* Desktop: hamburger opens the same app grid as a top-right popover. */
-        .studio-desktop-app-menu-backdrop {
-          position: fixed;
-          inset: 0;
-          z-index: 54;
-          margin: 0;
-          padding: 0;
-          border: 0;
-          background: rgba(15, 16, 20, 0.18);
-          cursor: default;
-        }
-        [data-appearance="light"] .studio-desktop-app-menu-backdrop {
-          background: rgba(20, 22, 28, 0.12);
-        }
+        /* Desktop: same app grid as mobile, top-right popover (no dim overlay). */
         .studio-mobile-app-menu-sheet.is-desktop-popover {
+          --studio-desktop-menu-inset: 12px;
           left: auto;
-          right: 12px;
-          top: calc(var(--studio-desktop-top-chrome, 48px) + 8px);
+          right: var(--studio-desktop-menu-inset);
+          top: calc(
+            var(--studio-desktop-top-chrome, 44px) + var(--studio-desktop-menu-inset)
+          );
           bottom: auto;
-          width: min(360px, calc(100vw - 24px));
+          width: min(360px, calc(100vw - (var(--studio-desktop-menu-inset) * 2)));
           height: auto !important;
           max-height: min(72vh, 560px);
           border-radius: 18px;
+          padding-top: 10px;
           box-shadow:
             0 1px 0 rgba(255, 255, 255, 0.35) inset,
             0 18px 48px rgba(0, 0, 0, 0.22);
@@ -9487,20 +9478,6 @@ export function StudioShell({
             transform: translate3d(0, 0, 0);
             opacity: 1;
           }
-        }
-        .studio-desktop-app-menu-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          flex: 0 0 auto;
-          padding: 10px 10px 6px 14px;
-        }
-        .studio-desktop-app-menu-title {
-          font-size: 12px;
-          font-weight: 600;
-          letter-spacing: 0.02em;
-          color: var(--mos-muted, var(--cursor-muted, #6b6f76));
         }
         .studio-mobile-app-menu-sheet.is-desktop-popover .studio-mobile-app-menu-scroll {
           flex: 1 1 auto;
@@ -24891,6 +24868,27 @@ function StudioMobileAppMenu({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Desktop: dismiss on outside click (no dim overlay). Skip the header Menu
+  // trigger so its toggle doesn't double-fire with this close.
+  useEffect(() => {
+    if (!desktop) return undefined;
+    const onPointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (sheetRef.current?.contains(target)) return;
+      if (
+        target.closest(
+          '[aria-label="Open menu"], [aria-label="Close menu"]',
+        )
+      ) {
+        return;
+      }
+      onClose?.();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [desktop, onClose]);
+
   const readTokenPx = (el, name, fallback) => {
     if (!el) return fallback;
     const raw = getComputedStyle(el).getPropertyValue(name).trim();
@@ -24901,6 +24899,23 @@ function StudioMobileAppMenu({
     const h = probe.getBoundingClientRect().height;
     probe.remove();
     return h > 0 ? h : fallback;
+  };
+
+  const placeDesktopPopover = () => {
+    const el = sheetRef.current;
+    if (!el || !desktop) return;
+    const polish = el.closest?.(".studio-polish") ?? document.querySelector(".studio-polish");
+    const head = polish?.querySelector?.(".cursor-workspace-head");
+    const inset = 12;
+    const top = Math.round((head?.getBoundingClientRect().bottom ?? 44) + inset);
+    el.style.top = `${top}px`;
+    el.style.right = `${inset}px`;
+    if (polish instanceof HTMLElement) {
+      polish.style.setProperty(
+        "--studio-desktop-top-chrome",
+        `${Math.round(head?.getBoundingClientRect().height ?? 44)}px`,
+      );
+    }
   };
 
   const refreshMetrics = () => {
@@ -24937,9 +24952,13 @@ function StudioMobileAppMenu({
 
   useLayoutEffect(() => {
     if (desktop) {
+      placeDesktopPopover();
+      const onResize = () => placeDesktopPopover();
+      window.addEventListener("resize", onResize);
       const id = window.requestAnimationFrame(() => setEntered(true));
       return () => {
         window.cancelAnimationFrame(id);
+        window.removeEventListener("resize", onResize);
         endWindowDrag();
       };
     }
@@ -25125,28 +25144,15 @@ function StudioMobileAppMenu({
     { label: "Sign out", Icon: LogOut, onClick: onSignOut, danger: true },
   ];
 
-  const host = document.querySelector(".studio-polish") ?? document.body;
-  const sheet = (
+  return createPortal(
     <div
       ref={sheetRef}
       className={`studio-mobile-app-menu-sheet${desktop ? " is-desktop-popover" : ""}${entered ? " is-entered" : " is-entering"}${!desktop && isFull ? " is-full" : ""}${!desktop && dragging ? " is-dragging" : ""}${!desktop && settling ? " is-settling" : ""}`}
       role="dialog"
-      aria-modal="true"
+      aria-modal={desktop ? undefined : true}
       aria-label="Studio menu"
     >
-      {desktop ? (
-        <div className="studio-desktop-app-menu-head">
-          <span className="studio-desktop-app-menu-title">Menu</span>
-          <button
-            type="button"
-            className="studio-settings-pill studio-settings-trigger studio-mobile-app-menu-close"
-            onClick={() => onClose?.()}
-            aria-label="Close menu"
-          >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        </div>
-      ) : (
+      {desktop ? null : (
         <div
           className="studio-mobile-app-menu-sheet-handle"
           onPointerDown={onHandlePointerDown}
@@ -25183,26 +25189,10 @@ function StudioMobileAppMenu({
           })}
         </nav>
       </div>
-    </div>
-  );
-
-  return createPortal(
-    desktop ? (
-      <>
-        <button
-          type="button"
-          className="studio-desktop-app-menu-backdrop"
-          aria-label="Dismiss menu"
-          onClick={() => onClose?.()}
-        />
-        {sheet}
-      </>
-    ) : (
-      sheet
-    ),
+    </div>,
     // Must live inside .studio-polish (wallpaper overflow root) or backdrop-filter
     // samples blank like the old body-portal glass bug — same as composer.
-    host,
+    document.querySelector(".studio-polish") ?? document.body,
   );
 }
 
