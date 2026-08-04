@@ -178,6 +178,7 @@ async function resolvePushChrome(
   notification: Doc<"notifications">,
 ): Promise<{
   icon: string;
+  brandIcon: string;
   badge: string;
   image?: string;
   tag: string;
