@@ -9,10 +9,9 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
-/** Format a 6-digit OTP as `123-456` for email display. */
+/** Format a 6-digit OTP for email display (no dash — digits only). */
 export function formatSignInCode(token: string): string {
   const digits = String(token).replace(/\D/g, "").slice(0, 6);
-  if (digits.length === 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   return digits || String(token);
 }
 
