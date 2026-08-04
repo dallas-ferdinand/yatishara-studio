@@ -239,6 +239,11 @@ import {
 import { isVideoFileUrl, playableMediaUrl } from "@/studio/lib/mediaPlayback";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import {
+  STUDIO_PROJECT_EXT,
+  stripStudioProjectExt,
+  withStudioProjectExt,
+} from "@/studio/lib/studioProjectExt";
+import {
   downloadStudioArchive,
   downloadStudioEntry as downloadStudioFile,
 } from "@/studio/lib/studioFileDownloads";
@@ -3931,7 +3936,7 @@ export function StudioShell({
     // Keep edit:asset: tabs stable. Swapping the key remounts the editor and
     // briefly wipes the timeline (looks like media vanished on ratio change).
     // Prefer the folder baked into the tab / prior snapshot — never the Files
-    // rail browse folder (switching folders must not relocate the .edit).
+    // rail browse folder (switching folders must not relocate the .studio).
     const folderFromAssetTab = fromTabKey?.startsWith("edit:asset:")
       ? fromTabKey.split(":").slice(2).join(":")
       : null;
@@ -3961,8 +3966,8 @@ export function StudioShell({
             studioKind: "videoEdit",
             studioId: projectId,
             name: name
-              ? `${String(name).replace(/\.edit$/i, "")}.edit`
-              : "Untitled.edit",
+              ? withStudioProjectExt(String(name))
+              : withStudioProjectExt("Untitled"),
           },
           explorerUserId,
           RECENT_ACTIVITY.edited,
@@ -3995,8 +4000,8 @@ export function StudioShell({
           studioKind: "videoEdit",
           studioId: projectId,
           name: name
-            ? `${String(name).replace(/\.edit$/i, "")}.edit`
-            : "Untitled.edit",
+            ? withStudioProjectExt(String(name))
+            : withStudioProjectExt("Untitled"),
         },
         explorerUserId,
         RECENT_ACTIVITY.edited,
@@ -4270,8 +4275,8 @@ export function StudioShell({
       }
       if (kind === "videoEdit") {
         if (!isVideoEditorPreviewEnabled()) return;
-        const fileName = uniqueName("Untitled.edit", exists);
-        const name = fileName.replace(/\.edit$/i, "");
+        const fileName = uniqueName(withStudioProjectExt("Untitled"), exists);
+        const name = stripStudioProjectExt(fileName);
         const result = await createVideoEdit({
           folderId: activeFolder._id,
           name,
@@ -4346,7 +4351,7 @@ export function StudioShell({
       target.studioKind === "document"
         ? String(target.name ?? "").replace(/\.md$/i, "")
         : target.studioKind === "videoEdit"
-          ? String(target.name ?? "").replace(/\.edit$/i, "")
+          ? stripStudioProjectExt(String(target.name ?? ""))
           : target.studioKind === "element"
             ? String(target.name ?? "").replace(/^@/, "")
             : String(target.name ?? "");
@@ -5675,7 +5680,7 @@ export function StudioShell({
     } else if (entry.studioKind === "videoEdit") {
       await updateVideoEdit({
         projectId: entry.studioId,
-        name: trimmed.replace(/\.edit$/i, ""),
+        name: stripStudioProjectExt(trimmed),
       });
     } else if (entry.studioKind === "element") {
       await updateElement({ elementId: entry.studioId, name: trimmed });
@@ -5690,7 +5695,7 @@ export function StudioShell({
             entry.studioKind === "document"
               ? `${trimmed.replace(/\.md$/i, "")}.md`
               : entry.studioKind === "videoEdit"
-                ? `${trimmed.replace(/\.edit$/i, "")}.edit`
+                ? withStudioProjectExt(trimmed)
                 : trimmed,
         },
         explorerUserId,
@@ -5706,7 +5711,7 @@ export function StudioShell({
         entry.studioKind === "element"
           ? `@${trimmed.replace(/^@/, "")}`
           : entry.studioKind === "videoEdit"
-            ? `${trimmed.replace(/\.edit$/i, "")}.edit`
+            ? withStudioProjectExt(trimmed)
             : entry.studioKind === "document"
               ? trimmed.replace(/\.md$/i, "")
               : trimmed;
@@ -5732,7 +5737,7 @@ export function StudioShell({
     const key = String(tab.key);
     if (key.startsWith("edit:project:")) {
       const projectId = key.slice("edit:project:".length);
-      const trimmed = String(nextName ?? "").trim().replace(/\.edit$/i, "");
+      const trimmed = stripStudioProjectExt(String(nextName ?? "").trim());
       if (!trimmed) return;
       await updateVideoEdit({ projectId, name: trimmed });
       return;
@@ -32253,12 +32258,12 @@ function sharedListItemToEntry(item) {
   if (itemKind === "videoEdit") {
     return {
       type: "file",
-      name: name.endsWith(".edit") ? name : `${name}.edit`,
-      path: `/Studio/shared/edits/${itemId}.edit`,
+      name: withStudioProjectExt(name),
+      path: `/Studio/shared/edits/${itemId}${STUDIO_PROJECT_EXT}`,
       displayPath: displayWorkspacePath(`/Studio/Shared with me/${name}`),
       modified: item.createdAt ?? item.updatedAt,
       mtimeMs: item.createdAt ?? item.updatedAt,
-      ext: ".edit",
+      ext: STUDIO_PROJECT_EXT,
       studioKind: "videoEdit",
       studioId: itemId,
       folderId: item.folderId,
@@ -32330,12 +32335,12 @@ function videoEditToEntry(project) {
           : undefined;
   return {
     type: "file",
-    name: `${project.name}.edit`,
-    path: `/Studio/edits/${project._id}.edit`,
-    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(project.name, ".edit")}`),
+    name: withStudioProjectExt(project.name),
+    path: `/Studio/edits/${project._id}${STUDIO_PROJECT_EXT}`,
+    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(project.name, STUDIO_PROJECT_EXT)}`),
     modified: project.updatedAt,
     mtimeMs: project.updatedAt,
-    ext: ".edit",
+    ext: STUDIO_PROJECT_EXT,
     studioKind: "videoEdit",
     studioId: project._id,
     folderId: project.folderId,
@@ -32699,7 +32704,7 @@ function tabDescriptor({
     const projectId = key.slice("videoEdit:".length);
     const snapshot = snapshots?.[key];
     const project = videoEdits?.find((item) => item._id === projectId);
-    const title = snapshot?.name?.replace(/\.edit$/i, "") ?? project?.name ?? "Video edit";
+    const title = snapshot?.name ? stripStudioProjectExt(snapshot.name) : project?.name ?? "Video edit";
     const thumbUrl =
       (typeof project?.signedThumbnailUrl === "string" && project.signedThumbnailUrl) ||
       (typeof snapshot?.thumbnailUrl === "string" && snapshot.thumbnailUrl) ||
@@ -32715,7 +32720,7 @@ function tabDescriptor({
       title,
       status: "ready",
       studioKind: "videoEdit",
-      ext: ".edit",
+      ext: STUDIO_PROJECT_EXT,
       previewUrl,
       // Keep media type for <img> vs <video>; overlay uses studioKind → clapperboard.
       previewKind: thumbUrl ? "image" : previewUrl ? "video" : undefined,
@@ -32736,7 +32741,7 @@ function tabDescriptor({
         title: project?.name ?? "Video edit",
         status: "ready",
         studioKind: "videoEdit",
-        ext: ".edit",
+        ext: STUDIO_PROJECT_EXT,
         previewUrl,
         previewKind: thumbUrl ? "image" : previewUrl ? "video" : undefined,
       };
@@ -32756,7 +32761,7 @@ function tabDescriptor({
         title: entry ? safeEntryTitle(entry) : "Edit video",
         status: "ready",
         studioKind: "videoEdit",
-        ext: ".edit",
+        ext: STUDIO_PROJECT_EXT,
         previewUrl,
         previewKind:
           entry?.kind === "video" && previewUrl && !entry?.thumbnailUrl
@@ -32766,7 +32771,7 @@ function tabDescriptor({
               : undefined,
       };
     }
-    return { key, kind: "file", title: "Edit video", status: "ready", studioKind: "videoEdit", ext: ".edit" };
+    return { key, kind: "file", title: "Edit video", status: "ready", studioKind: "videoEdit", ext: STUDIO_PROJECT_EXT };
   }
   if (key.startsWith("thread:")) {
     const thread = threads?.find((item) => item._id === key.slice("thread:".length));

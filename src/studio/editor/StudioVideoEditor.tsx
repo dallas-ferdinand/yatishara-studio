@@ -125,7 +125,7 @@ export function StudioVideoEditor({
   const saveTimerRef = useRef(null);
   const saveChainRef = useRef(Promise.resolve());
   const creatingProjectRef = useRef(false);
-  /** Sticky home folder for this .edit — never follows the Files rail browse folder. */
+  /** Sticky home folder for this .studio — never follows the Files rail browse folder. */
   const [homeFolderId, setHomeFolderId] = useState(folderId);
 
   const existing = useQuery(api.videoEdits.get, projectId ? { projectId } : "skip");
@@ -242,7 +242,7 @@ export function StudioVideoEditor({
     });
     // Intentionally omit sourceAssetName / hydrated / localProjectId / folderId —
     // rename, first-save promotion, and Files-rail folder switches must not wipe
-    // the timeline or relocate the .edit file.
+    // the timeline or relocate the .studio file.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, sourceAssetId]);
 

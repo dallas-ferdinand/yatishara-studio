@@ -7,7 +7,7 @@ import { X } from "lucide-react";
 function stripRenameExt(name: string, studioKind?: string) {
   let next = String(name ?? "").replace(/^@/, "");
   if (studioKind === "document") next = next.replace(/\.md$/i, "");
-  if (studioKind === "videoEdit") next = next.replace(/\.edit$/i, "");
+  if (studioKind === "videoEdit") next = next.replace(/\.(studio|edit)$/i, "");
   return next;
 }
 

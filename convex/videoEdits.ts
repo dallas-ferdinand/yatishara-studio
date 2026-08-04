@@ -427,7 +427,7 @@ export const save = authedMutation({
       if (incomingPlaceholder && existingCustom) {
         name = existing.name.trim();
       }
-      // Autosave must not relocate the .edit file when the user browses folders.
+      // Autosave must not relocate the .studio file when the user browses folders.
       // Intentional moves go through videoEdits.update({ folderId }).
       const folderId = existing.folderId;
       const projectPayload = { ...args.project, name, folderId };

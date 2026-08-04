@@ -26,7 +26,7 @@ export function fileExt(nameOrPath = "") {
 export function fileViewerKind(ext) {
   const e = ext?.startsWith(".") ? ext.toLowerCase() : fileExt(ext);
   if (!e) return "binary";
-  if (e === ".edit") return "videoEdit";
+  if (e === ".studio" || e === ".edit") return "videoEdit";
   if (IMAGE.has(e)) return "image";
   if (VIDEO.has(e)) return "video";
   if (AUDIO.has(e)) return "audio";

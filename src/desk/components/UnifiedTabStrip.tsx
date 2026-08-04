@@ -50,7 +50,7 @@ function stripTabRenameExt(name, tab) {
     key.startsWith("videoEdit:") ||
     key.startsWith("edit:project:")
   ) {
-    next = next.replace(/\.edit$/i, "");
+    next = next.replace(/\.(studio|edit)$/i, "");
   }
   return next;
 }
@@ -59,7 +59,7 @@ function stripTabRenameExt(name, tab) {
 function isVideoEditTab(tab) {
   if (!tab) return false;
   if (tab.studioKind === "videoEdit" || tab.previewKind === "videoEdit") return true;
-  if (tab.ext === ".edit") return true;
+  if (tab.ext === ".studio" || tab.ext === ".edit") return true;
   const key = String(tab.key ?? "");
   return key.startsWith("videoEdit:") || key.startsWith("edit:");
 }

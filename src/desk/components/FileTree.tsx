@@ -1359,7 +1359,7 @@ function entryFileTypeLabel(entry) {
     return "Folder";
   }
   if (entry.studioKind === "document") return "MD";
-  if (entry.studioKind === "videoEdit") return "EDIT";
+  if (entry.studioKind === "videoEdit") return "STUDIO";
   if (entry.studioKind === "element") {
     if (entry.elementType === "character") return "CHARACTER";
     if (entry.elementType === "prop") return "PROP";
@@ -1436,7 +1436,9 @@ function renderEntryRows({
   const renameSeedName = (e) => {
     const raw = e?.name ?? e?.path?.split("/").pop() ?? "";
     if (e?.studioKind === "document") return String(raw).replace(/\.md$/i, "");
-    if (e?.studioKind === "videoEdit") return String(raw).replace(/\.edit$/i, "");
+    if (e?.studioKind === "videoEdit") {
+      return String(raw).replace(/\.(studio|edit)$/i, "");
+    }
     if (e?.studioKind === "element") return String(raw).replace(/^@/, "");
     return String(raw);
   };
