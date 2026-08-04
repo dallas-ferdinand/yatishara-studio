@@ -93,7 +93,7 @@ export async function primeUiSounds() {
     // Soft ceiling — leave headroom for clear mid-ticks (not wall-thud muffled).
     masterLowpass = audioContext.createBiquadFilter();
     masterLowpass.type = "lowpass";
-    masterLowpass.frequency.value = 3600;
+    masterLowpass.frequency.value = 3000;
     masterLowpass.Q.value = 0.55;
     masterGain.connect(masterLowpass);
     masterLowpass.connect(audioContext.destination);
@@ -232,137 +232,137 @@ function playChord(gain, freqs, spacing, duration, volume = 0.045) {
 
 /** @type {Record<string, (gain: GainNode) => void>} */
 const SOUND_PLAYERS = {
-  /** Soft press confirm — clear mid tick, not a muddy thud */
+  /** Soft press confirm — warm mid tick, clear attack (not thud, not ping) */
   tap: (gain) => {
-    playNoise(gain, { duration: 0.018, volume: 0.012, freq: 1400, q: 0.7 });
+    playNoise(gain, { duration: 0.016, volume: 0.01, freq: 700, q: 0.55 });
     playTone(gain, {
-      freq: 540,
-      freqEnd: 620,
-      duration: 0.028,
-      release: 0.09,
-      volume: 0.07,
-      type: "sine",
-      attack: 0.003,
-      lowpass: 2200,
-    });
-    playTone(gain, {
-      freq: 1080,
-      duration: 0.016,
-      release: 0.07,
-      volume: 0.018,
-      type: "sine",
-      attack: 0.002,
-      lowpass: 2800,
-    });
-  },
-  button: (gain) => {
-    playNoise(gain, { duration: 0.02, volume: 0.011, freq: 1200, q: 0.65 });
-    playTone(gain, {
-      freq: 480,
-      freqEnd: 560,
-      duration: 0.032,
+      freq: 340,
+      freqEnd: 380,
+      duration: 0.03,
       release: 0.1,
-      volume: 0.074,
-      type: "triangle",
+      volume: 0.068,
+      type: "sine",
       attack: 0.003,
-      lowpass: 2000,
+      lowpass: 1400,
     });
     playTone(gain, {
-      freq: 720,
-      duration: 0.02,
+      freq: 510,
+      duration: 0.016,
       release: 0.08,
-      volume: 0.022,
-      type: "sine",
-      attack: 0.004,
-      lowpass: 2400,
-      detune: 4,
-    });
-  },
-  toggle: (gain) => {
-    playTone(gain, {
-      freq: 440,
-      duration: 0.022,
-      release: 0.07,
-      volume: 0.055,
-      type: "sine",
-      attack: 0.003,
-      lowpass: 2000,
-    });
-    playTone(gain, {
-      freq: 660,
-      duration: 0.03,
-      release: 0.09,
-      volume: 0.05,
-      type: "sine",
-      attack: 0.028,
-      lowpass: 2400,
-    });
-  },
-  select: (gain) => {
-    playTone(gain, {
-      freq: 520,
-      freqEnd: 580,
-      duration: 0.03,
-      release: 0.09,
-      volume: 0.058,
-      type: "sine",
-      attack: 0.003,
-      lowpass: 2100,
-    });
-    playTone(gain, {
-      freq: 780,
-      duration: 0.016,
-      release: 0.07,
-      volume: 0.016,
-      type: "sine",
-      attack: 0.003,
-      lowpass: 2600,
-    });
-  },
-  /** Premium tab/section — clear glass tick (confirms press; still no whoosh) */
-  nav: (gain) => {
-    playNoise(gain, { duration: 0.016, volume: 0.008, freq: 900, q: 0.45 });
-    playTone(gain, {
-      freq: 420,
-      freqEnd: 460,
-      duration: 0.024,
-      release: 0.12,
-      volume: 0.055,
-      type: "sine",
-      attack: 0.003,
-      lowpass: 1800,
-    });
-    playTone(gain, {
-      freq: 630,
-      duration: 0.018,
-      release: 0.1,
-      volume: 0.022,
-      type: "sine",
-      attack: 0.005,
-      lowpass: 2200,
-      detune: -3,
-    });
-  },
-  navBack: (gain) => {
-    playNoise(gain, { duration: 0.015, volume: 0.007, freq: 800, q: 0.45 });
-    playTone(gain, {
-      freq: 380,
-      freqEnd: 340,
-      duration: 0.026,
-      release: 0.12,
-      volume: 0.05,
+      volume: 0.014,
       type: "sine",
       attack: 0.003,
       lowpass: 1600,
     });
+  },
+  button: (gain) => {
+    playNoise(gain, { duration: 0.018, volume: 0.01, freq: 650, q: 0.55 });
     playTone(gain, {
-      freq: 570,
+      freq: 300,
+      freqEnd: 340,
+      duration: 0.034,
+      release: 0.11,
+      volume: 0.072,
+      type: "triangle",
+      attack: 0.003,
+      lowpass: 1300,
+    });
+    playTone(gain, {
+      freq: 450,
+      duration: 0.018,
+      release: 0.08,
+      volume: 0.016,
+      type: "sine",
+      attack: 0.004,
+      lowpass: 1500,
+      detune: 3,
+    });
+  },
+  toggle: (gain) => {
+    playTone(gain, {
+      freq: 300,
+      duration: 0.024,
+      release: 0.08,
+      volume: 0.052,
+      type: "sine",
+      attack: 0.003,
+      lowpass: 1300,
+    });
+    playTone(gain, {
+      freq: 450,
+      duration: 0.03,
+      release: 0.09,
+      volume: 0.044,
+      type: "sine",
+      attack: 0.03,
+      lowpass: 1500,
+    });
+  },
+  select: (gain) => {
+    playTone(gain, {
+      freq: 360,
+      freqEnd: 400,
+      duration: 0.03,
+      release: 0.1,
+      volume: 0.056,
+      type: "sine",
+      attack: 0.003,
+      lowpass: 1400,
+    });
+    playTone(gain, {
+      freq: 540,
+      duration: 0.014,
+      release: 0.07,
+      volume: 0.012,
+      type: "sine",
+      attack: 0.003,
+      lowpass: 1600,
+    });
+  },
+  /** Premium tab/section — warm glass tick (confirms press; still no whoosh) */
+  nav: (gain) => {
+    playNoise(gain, { duration: 0.014, volume: 0.007, freq: 520, q: 0.4 });
+    playTone(gain, {
+      freq: 280,
+      freqEnd: 310,
+      duration: 0.026,
+      release: 0.13,
+      volume: 0.052,
+      type: "sine",
+      attack: 0.003,
+      lowpass: 1200,
+    });
+    playTone(gain, {
+      freq: 420,
+      duration: 0.018,
+      release: 0.1,
+      volume: 0.016,
+      type: "sine",
+      attack: 0.005,
+      lowpass: 1400,
+      detune: -3,
+    });
+  },
+  navBack: (gain) => {
+    playNoise(gain, { duration: 0.014, volume: 0.006, freq: 480, q: 0.4 });
+    playTone(gain, {
+      freq: 260,
+      freqEnd: 240,
+      duration: 0.028,
+      release: 0.13,
+      volume: 0.048,
+      type: "sine",
+      attack: 0.003,
+      lowpass: 1100,
+    });
+    playTone(gain, {
+      freq: 390,
       duration: 0.016,
       release: 0.09,
-      volume: 0.018,
+      volume: 0.014,
       type: "sine",
       attack: 0.006,
-      lowpass: 2000,
+      lowpass: 1300,
       detune: 3,
     });
   },
@@ -371,16 +371,16 @@ const SOUND_PLAYERS = {
   },
   sheet: (gain) => {
     playTone(gain, {
-      freq: 200,
-      freqEnd: 340,
+      freq: 180,
+      freqEnd: 300,
       duration: 0.09,
       release: 0.16,
-      volume: 0.052,
+      volume: 0.05,
       type: "sine",
       attack: 0.01,
-      lowpass: 1400,
+      lowpass: 1100,
     });
-    playNoise(gain, { duration: 0.07, volume: 0.014, freq: 500, q: 0.5 });
+    playNoise(gain, { duration: 0.07, volume: 0.014, freq: 420, q: 0.5 });
   },
   /** Soft whoosh up — messaging send */
   send: (gain) => {
