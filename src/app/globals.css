@@ -233,23 +233,24 @@ summary {
   }
 }
 
-/* Sonner — neat overlay toasts (never participate in layout) */
+/* Sonner — Studio plate toasts (sheet language, not generic glass + floating X) */
 [data-sonner-toaster] {
-  --normal-bg: color-mix(in srgb, var(--color-mos-composer, #07111f) 78%, transparent);
-  --normal-border: rgba(255, 255, 255, 0.12);
-  --normal-text: #f4f1ea;
-  --success-bg: color-mix(in srgb, var(--color-mos-composer, #07111f) 78%, transparent);
-  --success-border: rgba(255, 255, 255, 0.12);
-  --success-text: #f4f1ea;
-  --error-bg: color-mix(in srgb, var(--color-mos-composer, #07111f) 78%, transparent);
-  --error-border: rgba(255, 255, 255, 0.12);
-  --error-text: #f4f1ea;
-  --info-bg: color-mix(in srgb, var(--color-mos-composer, #07111f) 78%, transparent);
-  --info-border: rgba(255, 255, 255, 0.12);
-  --info-text: #f4f1ea;
-  --warning-bg: color-mix(in srgb, var(--color-mos-composer, #07111f) 78%, transparent);
-  --warning-border: rgba(255, 255, 255, 0.12);
-  --warning-text: #f4f1ea;
+  --normal-bg: var(--mos-plate, var(--mos-panel, #0a1018));
+  --normal-border: var(--color-cursor-border-soft, var(--mos-border-soft, rgba(148, 163, 184, 0.1)));
+  --normal-text: var(--color-cursor-text-bright, var(--mos-text-bright, #fff));
+  --success-bg: var(--normal-bg);
+  --success-border: var(--normal-border);
+  --success-text: var(--normal-text);
+  --error-bg: var(--normal-bg);
+  --error-border: var(--normal-border);
+  --error-text: var(--normal-text);
+  --info-bg: var(--normal-bg);
+  --info-border: var(--normal-border);
+  --info-text: var(--normal-text);
+  --warning-bg: var(--normal-bg);
+  --warning-border: var(--normal-border);
+  --warning-text: var(--normal-text);
+  --toast-status: var(--cursor-accent, var(--mos-accent, #22c55e));
   font-family: var(--font-onest), system-ui, sans-serif;
   z-index: 2147483000 !important;
   pointer-events: none;
@@ -257,7 +258,7 @@ summary {
 }
 
 [data-sonner-toaster][data-x-position="right"] {
-  right: 16px !important;
+  right: 14px !important;
   left: auto !important;
 }
 
@@ -265,31 +266,52 @@ summary {
   left: 50% !important;
   right: auto !important;
   transform: translateX(-50%);
-  width: min(420px, calc(100vw - 28px)) !important;
+  width: min(360px, calc(100vw - 24px)) !important;
 }
 
 [data-sonner-toaster][data-y-position="bottom"] {
   bottom: 0 !important;
 }
 
+[data-sonner-toaster][data-y-position="top"] {
+  top: 0 !important;
+}
+
 [data-sonner-toaster] [data-sonner-toast] {
+  position: relative;
   pointer-events: auto;
-  width: min(320px, calc(100vw - 24px)) !important;
-  max-width: min(320px, calc(100vw - 24px)) !important;
-  padding: 11px 14px !important;
-  border-radius: 14px !important;
+  width: min(300px, calc(100vw - 28px)) !important;
+  max-width: min(300px, calc(100vw - 28px)) !important;
+  min-height: 40px;
+  padding: 10px 14px 10px 16px !important;
+  border-radius: var(--studio-r-xl, 12px) !important;
   border: 1px solid var(--normal-border) !important;
   background: var(--normal-bg) !important;
   color: var(--normal-text) !important;
-  backdrop-filter: saturate(160%) blur(16px);
-  -webkit-backdrop-filter: saturate(160%) blur(16px);
+  /* Solid plate — match sheets/menus, not muddy translucent glass. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
-  gap: 8px !important;
-  font-size: 13px !important;
+    0 10px 28px color-mix(in srgb, #000 34%, transparent),
+    0 2px 8px color-mix(in srgb, #000 18%, transparent) !important;
+  gap: 0 !important;
+  font-size: var(--studio-fs-md, 13px) !important;
   line-height: 1.35 !important;
-  align-items: center !important;
+  align-items: flex-start !important;
+  overflow: hidden;
+}
+
+/* Quiet status rail — replaces loud default icons */
+[data-sonner-toaster] [data-sonner-toast]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--toast-status);
+  opacity: 0.9;
 }
 
 [data-sonner-toaster][data-x-position="center"] [data-sonner-toast] {
@@ -298,79 +320,73 @@ summary {
   margin-inline: auto;
 }
 
+/* Hide Sonner default icons + any leftover close chrome */
+[data-sonner-toaster] [data-icon],
+[data-sonner-toaster] [data-close-button],
+.studio-sonner-close {
+  display: none !important;
+}
+
 .studio-sonner-toast {
-  --border-radius: 14px;
+  --border-radius: var(--studio-r-xl, 12px);
 }
 
 .studio-sonner-title {
-  font-size: 13px !important;
-  font-weight: 600 !important;
+  font-size: var(--studio-fs-md, 13px) !important;
+  font-weight: var(--studio-w-semibold, 600) !important;
   line-height: 1.3 !important;
   letter-spacing: -0.01em !important;
   color: inherit !important;
+  margin: 0 !important;
 }
 
 .studio-sonner-description {
-  font-size: 12px !important;
-  font-weight: 500 !important;
+  font-size: var(--studio-fs-sm, 12px) !important;
+  font-weight: var(--studio-w-medium, 500) !important;
   line-height: 1.35 !important;
-  opacity: 0.72 !important;
-  color: inherit !important;
+  opacity: 0.7 !important;
+  color: var(--color-cursor-muted, var(--mos-muted)) !important;
+  margin: 2px 0 0 !important;
 }
 
-.studio-sonner-close {
-  background: color-mix(in srgb, var(--color-cursor-text) 12%, transparent) !important;
-  border: 1px solid var(--color-cursor-border, var(--mos-border)) !important;
-  color: var(--color-cursor-text-bright) !important;
-  width: 20px !important;
-  height: 20px !important;
-  border-radius: 999px !important;
-  left: auto !important;
-  right: -6px !important;
-  top: -6px !important;
-  transform: none !important;
+.studio-sonner-success {
+  --toast-status: var(--cursor-accent, var(--mos-success, #22c55e));
 }
 
-.studio-sonner-close:hover {
-  background: color-mix(in srgb, #000 72%, transparent) !important;
-  color: #fff !important;
+.studio-sonner-info {
+  --toast-status: color-mix(in srgb, var(--cursor-accent, #7dd3fc) 70%, #93c5fd);
 }
 
-.studio-sonner-success [data-icon],
-.studio-sonner-info [data-icon] {
-  color: var(--cursor-accent, #d8ff3e) !important;
+.studio-sonner-error {
+  --toast-status: var(--mos-error, #f87171);
 }
 
-.studio-sonner-error [data-icon] {
-  color: #ff6b7a !important;
-}
-
-.studio-sonner-warning [data-icon] {
-  color: #ffc53d !important;
+.studio-sonner-warning {
+  --toast-status: #eab308;
 }
 
 [data-appearance="light"] [data-sonner-toaster] {
-  --normal-bg: color-mix(in srgb, #ffffff 90%, transparent);
-  --normal-border: rgba(15, 23, 42, 0.1);
-  --normal-text: #0f172a;
-  --success-bg: color-mix(in srgb, #ffffff 90%, transparent);
-  --success-border: rgba(15, 23, 42, 0.1);
-  --success-text: #0f172a;
-  --error-bg: color-mix(in srgb, #ffffff 90%, transparent);
-  --error-border: rgba(15, 23, 42, 0.1);
-  --error-text: #0f172a;
-  --info-bg: color-mix(in srgb, #ffffff 90%, transparent);
-  --info-border: rgba(15, 23, 42, 0.1);
-  --info-text: #0f172a;
-  --warning-bg: color-mix(in srgb, #ffffff 90%, transparent);
-  --warning-border: rgba(15, 23, 42, 0.1);
-  --warning-text: #0f172a;
+  --normal-bg: var(--mos-plate, var(--mos-panel, #f5f5f7));
+  --normal-border: var(--color-cursor-border-soft, rgba(15, 23, 42, 0.1));
+  --normal-text: var(--color-cursor-text-bright, #0f172a);
+  --success-bg: var(--normal-bg);
+  --success-border: var(--normal-border);
+  --success-text: var(--normal-text);
+  --error-bg: var(--normal-bg);
+  --error-border: var(--normal-border);
+  --error-text: var(--normal-text);
+  --info-bg: var(--normal-bg);
+  --info-border: var(--normal-border);
+  --info-text: var(--normal-text);
+  --warning-bg: var(--normal-bg);
+  --warning-border: var(--normal-border);
+  --warning-text: var(--normal-text);
 }
 
-[data-appearance="light"] .studio-sonner-close {
-  background: color-mix(in srgb, #0f172a 8%, #fff) !important;
-  border-color: rgba(15, 23, 42, 0.1) !important;
-  color: color-mix(in srgb, #0f172a 72%, transparent) !important;
+[data-appearance="light"] [data-sonner-toaster] [data-sonner-toast] {
+  box-shadow:
+    0 10px 24px color-mix(in srgb, #000 12%, transparent),
+    0 2px 6px color-mix(in srgb, #000 6%, transparent) !important;
 }
 
 @media (max-width: 899px) {
@@ -379,46 +395,33 @@ summary {
   }
 
   [data-sonner-toaster][data-x-position="center"] {
-    width: calc(100vw - 28px) !important;
-    max-width: 420px !important;
+    width: calc(100vw - 24px) !important;
+    max-width: 380px !important;
   }
 
   [data-sonner-toaster] [data-sonner-toast] {
     width: 100% !important;
     max-width: 100% !important;
-    min-height: 44px;
-    padding: 12px 16px !important;
-    border-radius: 16px !important;
+    min-height: 42px;
+    padding: 12px 16px 12px 18px !important;
+    border-radius: var(--studio-r-2xl, 14px) !important;
     box-shadow:
-      0 12px 32px rgba(0, 0, 0, 0.36),
-      inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+      0 12px 28px color-mix(in srgb, #000 32%, transparent),
+      0 2px 8px color-mix(in srgb, #000 16%, transparent) !important;
   }
 
   .studio-sonner-title {
-    font-size: 14px !important;
-    font-weight: 600 !important;
+    font-size: var(--studio-fs-lg, 14px) !important;
   }
 
   .studio-sonner-description {
-    font-size: 12.5px !important;
-  }
-
-  /* Floating X clips / fights thumbs on phones — auto-dismiss instead. */
-  [data-sonner-toaster] [data-close-button],
-  .studio-sonner-close {
-    display: none !important;
-  }
-
-  [data-sonner-toaster] [data-icon] {
-    width: 18px !important;
-    height: 18px !important;
-    margin: 0 !important;
+    font-size: var(--studio-fs-sm, 12px) !important;
   }
 }
 
 @media (min-width: 900px) {
   [data-sonner-toaster] {
-    --studio-toast-top: 56px;
+    --studio-toast-top: 52px;
   }
 }
 @keyframes mos-brand-halo-outer {
