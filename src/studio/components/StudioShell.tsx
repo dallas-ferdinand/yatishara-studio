@@ -1698,10 +1698,15 @@ export function StudioShell({
   useIncomingAlertChimes({
     rows: alertWatch,
     activeConversationId: activeDmConversationId,
-    viewingMessages:
-      mobileSection === "messages" ||
-      activeTab === MESSAGES_TAB ||
-      String(activeTab ?? "").startsWith("messages:"),
+    // Only mute when the Messages thread UI is actually on screen — not when
+    // Generate/Feed/Network is showing with a stale conversation id left over.
+    messagesThreadVisible: Boolean(
+      activeDmConversationId &&
+        (isMobile
+          ? mobileSection === "messages"
+          : activeTab === MESSAGES_TAB ||
+            String(activeTab ?? "").startsWith("messages:")),
+    ),
   });
   // Handle + signed nav avatar (no seller). Full getMine stays for settings/DM.
   const myPublicProfile = useQuery(

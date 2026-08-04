@@ -10,25 +10,54 @@ type WatchRow = {
   createdAt: number;
 };
 
-const CHIME_COOLDOWN_MS = 900;
-const FRESH_WINDOW_MS = 45_000;
+const CHIME_COOLDOWN_MS = 700;
+const FRESH_WINDOW_MS = 60_000;
+
+function playIncoming(kind: "dm_message" | "followed_post") {
+  playUiSound(kind === "dm_message" ? "message" : "notify");
+}
 
 /**
- * Soft in-app chimes when DMs / followed posts land while Studio is open.
- * Skips: first snapshot, hidden tab (OS push owns that), active open chat.
+ * WhatsApp-style in-app chimes:
+ * - Hear on Generate / Feed / Network / etc. — any Studio surface
+ * - Mute only when that DM thread is the one open on screen
+ * - If the browser tab was in the background, play one catch-up chime on return
+ *   (OS push still covers fully backgrounded alerts)
  */
 export function useIncomingAlertChimes(args: {
   rows: WatchRow[] | undefined;
+  /** Conversation id for the thread currently shown in the Messages UI. */
   activeConversationId?: string | null;
-  viewingMessages?: boolean;
+  /** True only when the Messages chat surface is actually visible. */
+  messagesThreadVisible?: boolean;
 }) {
   const seededRef = useRef(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
   const lastChimeAtRef = useRef(0);
+  const deferredRef = useRef<"dm_message" | "followed_post" | null>(null);
   const activeConversationIdRef = useRef(args.activeConversationId);
-  const viewingMessagesRef = useRef(args.viewingMessages);
+  const messagesThreadVisibleRef = useRef(args.messagesThreadVisible);
   activeConversationIdRef.current = args.activeConversationId;
-  viewingMessagesRef.current = args.viewingMessages;
+  messagesThreadVisibleRef.current = args.messagesThreadVisible;
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      const pending = deferredRef.current;
+      if (!pending) return;
+      deferredRef.current = null;
+      const now = Date.now();
+      if (now - lastChimeAtRef.current < CHIME_COOLDOWN_MS) return;
+      playIncoming(pending);
+      lastChimeAtRef.current = now;
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, []);
 
   useEffect(() => {
     const rows = args.rows;
@@ -49,44 +78,41 @@ export function useIncomingAlertChimes(args: {
     }
     if (!fresh.length) return;
 
-    // Cap seen set growth.
     if (seen.size > 200) {
-      const keep = new Set(rows.map((row) => row._id));
-      seenIdsRef.current = keep;
+      seenIdsRef.current = new Set(rows.map((row) => row._id));
     }
-
-    if (typeof document !== "undefined" && document.hidden) return;
 
     const now = Date.now();
-    let played = false;
+    const tabHidden =
+      typeof document !== "undefined" && (document.hidden || !document.hasFocus?.());
+
     for (const row of fresh) {
       if (now - row.createdAt > FRESH_WINDOW_MS) continue;
+      if (row.kind !== "dm_message" && row.kind !== "followed_post") continue;
 
-      if (row.kind === "dm_message") {
-        if (
-          viewingMessagesRef.current &&
-          row.conversationId &&
-          row.conversationId === activeConversationIdRef.current
-        ) {
-          continue;
+      // WA: no ding while that exact chat is open on screen.
+      if (
+        row.kind === "dm_message" &&
+        messagesThreadVisibleRef.current &&
+        row.conversationId &&
+        row.conversationId === activeConversationIdRef.current
+      ) {
+        continue;
+      }
+
+      if (tabHidden) {
+        // Prefer the more personal DM chime if both arrived while away.
+        if (row.kind === "dm_message" || deferredRef.current !== "dm_message") {
+          deferredRef.current = row.kind;
         }
-        if (now - lastChimeAtRef.current < CHIME_COOLDOWN_MS) continue;
-        playUiSound("message");
-        lastChimeAtRef.current = now;
-        played = true;
-        break;
+        continue;
       }
 
-      if (row.kind === "followed_post") {
-        if (now - lastChimeAtRef.current < CHIME_COOLDOWN_MS) continue;
-        playUiSound("notify");
-        lastChimeAtRef.current = now;
-        played = true;
-        break;
-      }
+      if (now - lastChimeAtRef.current < CHIME_COOLDOWN_MS) continue;
+      playIncoming(row.kind);
+      lastChimeAtRef.current = now;
+      deferredRef.current = null;
+      break;
     }
-
-    // One chime per burst even if mixed kinds arrived together.
-    void played;
   }, [args.rows]);
 }
