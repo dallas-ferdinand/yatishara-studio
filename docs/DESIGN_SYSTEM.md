@@ -350,6 +350,10 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
   `grid-auto-rows: max-content` so sheet collapse scrolls instead of squishing
   tiles. Landing 40px plate fade masks on `.studio-mobile-app-menu-scroll`.
   Scoped via `.is-app-grid`. Memory: **790**.
+- **Desktop header** keeps New + Credits + Avatar + Menu only. Feed / Network /
+  Messages / Files / History / Settings / Admin / Full screen live in the same
+  app grid via `.studio-mobile-app-menu-sheet.is-desktop-popover` (top-right
+  floating panel + dim backdrop). Do not re-grow the desktop tools row.
 
 **DM peer right sidebar** (`StudioDmPeerSidebar`) reuses this chrome — do not invent a
 second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /

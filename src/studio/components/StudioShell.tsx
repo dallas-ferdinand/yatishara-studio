@@ -7813,7 +7813,7 @@ export function StudioShell({
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-desktop-app-menu-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -8660,7 +8660,7 @@ export function StudioShell({
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-desktop-app-menu-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -9446,6 +9446,67 @@ export function StudioShell({
           align-items: center;
           gap: 6px;
           flex: 0 0 auto;
+        }
+        /* Desktop: hamburger opens the same app grid as a top-right popover. */
+        .studio-desktop-app-menu-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 54;
+          margin: 0;
+          padding: 0;
+          border: 0;
+          background: rgba(15, 16, 20, 0.18);
+          cursor: default;
+        }
+        [data-appearance="light"] .studio-desktop-app-menu-backdrop {
+          background: rgba(20, 22, 28, 0.12);
+        }
+        .studio-mobile-app-menu-sheet.is-desktop-popover {
+          left: auto;
+          right: 12px;
+          top: calc(var(--studio-desktop-top-chrome, 48px) + 8px);
+          bottom: auto;
+          width: min(360px, calc(100vw - 24px));
+          height: auto !important;
+          max-height: min(72vh, 560px);
+          border-radius: 18px;
+          box-shadow:
+            0 1px 0 rgba(255, 255, 255, 0.35) inset,
+            0 18px 48px rgba(0, 0, 0, 0.22);
+          animation: studio-desktop-app-menu-pop 120ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .studio-mobile-app-menu-sheet.is-desktop-popover.is-entered {
+          animation: none;
+        }
+        @keyframes studio-desktop-app-menu-pop {
+          from {
+            transform: translate3d(0, -6px, 0);
+            opacity: 0.88;
+          }
+          to {
+            transform: translate3d(0, 0, 0);
+            opacity: 1;
+          }
+        }
+        .studio-desktop-app-menu-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          flex: 0 0 auto;
+          padding: 10px 10px 6px 14px;
+        }
+        .studio-desktop-app-menu-title {
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          color: var(--mos-muted, var(--cursor-muted, #6b6f76));
+        }
+        .studio-mobile-app-menu-sheet.is-desktop-popover .studio-mobile-app-menu-scroll {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow-y: auto;
+          padding-bottom: 10px;
         }
         /* Studio hamburger menu — History-parity bottom sheet (handle drag, no X). */
         .studio-mobile-app-menu-sheet {
@@ -21303,54 +21364,11 @@ export function StudioShell({
             </div>
             {!isMobile ? (
               <>
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${activeTab.startsWith("feed:") ? " is-active" : ""}`}
-                  onClick={openFeed}
-                  aria-label="Open feed"
-                  title="Feed"
-                  aria-pressed={activeTab.startsWith("feed:")}
-                >
-                  <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${isNetworkRail ? " is-active" : ""}`}
-                  onClick={() => openNetworkTab()}
-                  aria-label="Open Creative Network"
-                  title="Creative Network"
-                  aria-pressed={isNetworkRail}
-                >
-                  <Store className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${isMessagesRail ? " is-active" : ""}`}
-                  onClick={openMessages}
-                  aria-label="Open messages"
-                  title="Messages"
-                  aria-pressed={isMessagesRail}
-                >
-                  <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
-                  onClick={openFiles}
-                  aria-label="Open files"
-                  title="Files"
-                  aria-pressed={isFilesTab}
-                >
-                  <Folder className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
                 <CreditPill
                   creditBalance={billingAccount?.creditBalance}
                   creditPriceCents={pricing?.creditPriceCents}
                   onClick={openCreditsPane}
                 />
-                {isAdminUser ? (
-                  <AdminQuickLinks onOpenAdminTab={openAdminTab} />
-                ) : null}
                 <StudioProfileMenu
                   currentUser={currentUser}
                   profile={myPublicProfile}
@@ -21358,39 +21376,23 @@ export function StudioShell({
                   isProfileTabActive={activeTab.startsWith("profile:")}
                   onViewProfile={openOwnProfile}
                 />
-                {showHistory ? (
-                  <button
-                    className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
-                    onClick={() => {
-                      void import("./StudioHistoryPanel");
-                      setMobileAppMenuOpen(false);
-                      setSettingsOpen(false);
-                      setHistoryOpen((open) => !open);
-                    }}
-                    aria-label="Generation history"
-                    title="Generation history"
-                    aria-pressed={historyOpen}
-                  >
-                    <History className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                ) : null}
-                <StudioSettingsLauncher
-                  isActive={settingsOpen}
-                  onOpenSettingsTab={openSettingsTab}
-                />
                 <button
                   type="button"
-                  className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
-                  onClick={() => void toggleBrowserFullscreen()}
-                  aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
-                  title={browserFullscreen ? "Exit full screen" : "Full screen"}
-                  aria-pressed={browserFullscreen}
+                  className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
+                  onClick={() => {
+                    setHistoryOpen(false);
+                    setSettingsOpen(false);
+                    setMobileAppMenuOpen((open) => !open);
+                  }}
+                  aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
+                  title="Menu"
+                  aria-expanded={mobileAppMenuOpen}
                 >
-                  <Icon
-                    name={browserFullscreen ? "exitFullscreen" : "maximize"}
-                    size={14}
-                    className="h-3.5 w-3.5"
-                  />
+                  {mobileAppMenuOpen ? (
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <Menu className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
                 </button>
               </>
             ) : isAdminUser ? (
@@ -22283,10 +22285,12 @@ export function StudioShell({
         />
       ) : null}
 
-      {isMobile && mobileAppMenuOpen ? (
+      {mobileAppMenuOpen ? (
         <StudioMobileAppMenu
+          desktop={!isMobile}
           isAdminUser={isAdminUser}
           showHistory={showHistory}
+          browserFullscreen={browserFullscreen}
           onClose={() => setMobileAppMenuOpen(false)}
           onViewProfile={() => {
             setMobileAppMenuOpen(false);
@@ -22310,6 +22314,10 @@ export function StudioShell({
               openFiles();
               return;
             }
+            if (section === "settings" && !isMobile) {
+              openSettingsTab("general");
+              return;
+            }
             openMobileSection(section);
           }}
           onOpenSettings={(section) => {
@@ -22320,7 +22328,7 @@ export function StudioShell({
             setMobileAppMenuOpen(false);
             openCreditsPane();
           }}
-            onOpenHistory={() => {
+          onOpenHistory={() => {
             void import("./StudioHistoryPanel");
             setMobileAppMenuOpen(false);
             setSettingsOpen(false);
@@ -22329,6 +22337,10 @@ export function StudioShell({
           onOpenAdmin={() => {
             setMobileAppMenuOpen(false);
             openAdminTab("payments");
+          }}
+          onToggleFullscreen={() => {
+            setMobileAppMenuOpen(false);
+            void toggleBrowserFullscreen();
           }}
           onSignOut={() => {
             setMobileAppMenuOpen(false);
@@ -24859,8 +24871,10 @@ function StudioProfileMenu({
 }
 
 function StudioMobileAppMenu({
+  desktop = false,
   isAdminUser,
   showHistory = true,
+  browserFullscreen = false,
   onClose,
   onViewProfile,
   onEditProfile,
@@ -24871,6 +24885,7 @@ function StudioMobileAppMenu({
   onOpenCredits,
   onOpenHistory,
   onOpenAdmin,
+  onToggleFullscreen,
   onSignOut,
 }) {
   const sheetRef = useRef(null);
@@ -24936,6 +24951,13 @@ function StudioMobileAppMenu({
   };
 
   useLayoutEffect(() => {
+    if (desktop) {
+      const id = window.requestAnimationFrame(() => setEntered(true));
+      return () => {
+        window.cancelAnimationFrame(id);
+        endWindowDrag();
+      };
+    }
     const { peek } = refreshMetrics();
     applyHeight(peek);
     const id = window.requestAnimationFrame(() => setEntered(true));
@@ -24943,7 +24965,7 @@ function StudioMobileAppMenu({
       window.cancelAnimationFrame(id);
       endWindowDrag();
     };
-  }, []);
+  }, [desktop]);
 
   const settleTo = (fromH, target) => {
     const { peek, full } = metricsRef.current;
@@ -24958,6 +24980,7 @@ function StudioMobileAppMenu({
   };
 
   const finishDrag = () => {
+    if (desktop) return;
     const drag = dragRef.current;
     if (!drag) return;
     dragRef.current = null;
@@ -25012,6 +25035,7 @@ function StudioMobileAppMenu({
   };
 
   const onHandlePointerDown = (event) => {
+    if (desktop) return;
     if (event.button != null && event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
@@ -25102,27 +25126,52 @@ function StudioMobileAppMenu({
     { label: "Credits", Icon: Zap, onClick: onOpenCredits },
     { label: "Activity", Icon: Clock3, onClick: () => onOpenSettings?.("activity") },
     { label: "API", ariaLabel: "API keys", Icon: KeyRound, onClick: () => onOpenSettings?.("api-keys") },
+    ...(desktop
+      ? [
+          {
+            label: browserFullscreen ? "Exit FS" : "Full screen",
+            ariaLabel: browserFullscreen ? "Exit full screen" : "Enter full screen",
+            Icon: Maximize2,
+            onClick: onToggleFullscreen,
+          },
+        ]
+      : []),
     ...(isAdminUser ? [{ label: "Admin", Icon: Gauge, onClick: onOpenAdmin }] : []),
     { label: "Sign out", Icon: LogOut, onClick: onSignOut, danger: true },
   ];
 
-  return createPortal(
+  const host = document.querySelector(".studio-polish") ?? document.body;
+  const sheet = (
     <div
       ref={sheetRef}
-      className={`studio-mobile-app-menu-sheet${entered ? " is-entered" : " is-entering"}${isFull ? " is-full" : ""}${dragging ? " is-dragging" : ""}${settling ? " is-settling" : ""}`}
+      className={`studio-mobile-app-menu-sheet${desktop ? " is-desktop-popover" : ""}${entered ? " is-entered" : " is-entering"}${!desktop && isFull ? " is-full" : ""}${!desktop && dragging ? " is-dragging" : ""}${!desktop && settling ? " is-settling" : ""}`}
       role="dialog"
       aria-modal="true"
       aria-label="Studio menu"
     >
-      <div
-        className="studio-mobile-app-menu-sheet-handle"
-        onPointerDown={onHandlePointerDown}
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize menu"
-      >
-        <span className="studio-mobile-app-menu-sheet-grab" aria-hidden="true" />
-      </div>
+      {desktop ? (
+        <div className="studio-desktop-app-menu-head">
+          <span className="studio-desktop-app-menu-title">Menu</span>
+          <button
+            type="button"
+            className="studio-settings-pill studio-settings-trigger studio-mobile-app-menu-close"
+            onClick={() => onClose?.()}
+            aria-label="Close menu"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      ) : (
+        <div
+          className="studio-mobile-app-menu-sheet-handle"
+          onPointerDown={onHandlePointerDown}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize menu"
+        >
+          <span className="studio-mobile-app-menu-sheet-grab" aria-hidden="true" />
+        </div>
+      )}
       <div className="studio-mobile-app-menu-scroll">
         <nav
           className="studio-mobile-app-menu-body is-app-grid"
@@ -25130,7 +25179,7 @@ function StudioMobileAppMenu({
           role="menu"
         >
           {items.map((item) => {
-            const Icon = item.Icon;
+            const ItemIcon = item.Icon;
             return (
               <button
                 key={item.ariaLabel || item.label}
@@ -25141,7 +25190,7 @@ function StudioMobileAppMenu({
                 onClick={item.onClick}
               >
                 <span className="studio-mobile-app-menu-item-icon" aria-hidden="true">
-                  <Icon />
+                  <ItemIcon />
                 </span>
                 <span className="studio-mobile-app-menu-item-label">{item.label}</span>
               </button>
@@ -25149,10 +25198,26 @@ function StudioMobileAppMenu({
           })}
         </nav>
       </div>
-    </div>,
+    </div>
+  );
+
+  return createPortal(
+    desktop ? (
+      <>
+        <button
+          type="button"
+          className="studio-desktop-app-menu-backdrop"
+          aria-label="Dismiss menu"
+          onClick={() => onClose?.()}
+        />
+        {sheet}
+      </>
+    ) : (
+      sheet
+    ),
     // Must live inside .studio-polish (wallpaper overflow root) or backdrop-filter
     // samples blank like the old body-portal glass bug — same as composer.
-    document.querySelector(".studio-polish") ?? document.body,
+    host,
   );
 }
 
