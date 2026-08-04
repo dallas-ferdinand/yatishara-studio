@@ -24772,21 +24772,6 @@ function StudioInlineSettingPopover({ icon: Icon, label, valueLabel, menuLabel, 
   );
 }
 
-function StudioSettingsLauncher({ onOpenSettingsTab, isActive }) {
-  return (
-                      <button
-                        type="button"
-      className={`studio-settings-pill studio-settings-trigger${isActive ? " is-active" : ""}`}
-      title="Settings"
-      aria-label="Open settings"
-      aria-pressed={isActive}
-      onClick={() => onOpenSettingsTab("general")}
-    >
-      <Settings className="h-3.5 w-3.5" aria-hidden="true" />
-                      </button>
-  );
-}
-
 function AdminQuickLinks({ onOpenAdminTab }) {
   return (
     <button
