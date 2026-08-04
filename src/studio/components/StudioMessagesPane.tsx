@@ -2597,24 +2597,14 @@ export function StudioMessagesPane({
     }
   }, [conversationId, dropOptimistic, messages, optimisticMessages]);
 
-  const pinDmScrollBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+  const pinDmScrollBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     stickToBottomRef.current = true;
-    setShowJumpDown(false);
-    if (behavior === "smooth") {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-      // Smooth scroll fires mid-way scroll events — keep stick through the glide.
-      window.setTimeout(() => {
-        stickToBottomRef.current = true;
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-        setShowJumpDown(false);
-      }, 420);
-      return;
-    }
+    // Instant pin — smooth scrollTo often sits idle ~0.5–1s on long DM threads
+    // before the glide starts (Chrome/Android).
     el.scrollTop = el.scrollHeight;
+    setShowJumpDown(false);
   }, []);
 
   // Stick to latest: first open often lands short because images/layout settle
@@ -3456,7 +3446,7 @@ export function StudioMessagesPane({
             className="studio-dm-jump-down"
             aria-label="Scroll to latest messages"
             title="Latest"
-            onClick={() => pinDmScrollBottom("smooth")}
+            onClick={() => pinDmScrollBottom()}
           >
             <ChevronDown aria-hidden="true" strokeWidth={2.35} />
           </button>
