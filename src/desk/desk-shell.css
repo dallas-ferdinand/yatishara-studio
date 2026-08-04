@@ -1574,15 +1574,12 @@ select.cursor-select:focus {
 
 .desk-file-list-head-date,
 .desk-file-list-head-size,
+.desk-file-list-head-kind,
 .desk-file-list-col-date,
-.desk-file-list-col-size {
+.desk-file-list-col-size,
+.desk-file-list-col-kind {
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-.desk-file-list-head-kind,
-.desk-file-list-col-kind {
-  text-align: left;
 }
 
 .desk-file-list-col-date,
@@ -1595,6 +1592,7 @@ select.cursor-select:focus {
   font-size: 12px;
   line-height: 1.25;
   color: var(--color-cursor-muted);
+  justify-self: end;
 }
 
 @media (max-width: 900px) {

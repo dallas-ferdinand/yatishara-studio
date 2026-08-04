@@ -1340,36 +1340,50 @@ function entryRowKey(entry, index) {
   return `${entry.type ?? "entry"}:${entry.path ?? entry.name ?? ".."}:${index}`;
 }
 
-/** Finder/Explorer-style kind column for full Files list. */
-function entryKindLabel(entry) {
+/** File-type column for full Files list (extension / type, not soft kind labels). */
+function entryFileTypeLabel(entry) {
   if (!entry || entry.type === "parent" || entry.type === "search-divider") return "";
-  if (entry.type === "dir" || entry.studioKind === "folder") return "Folder";
-  if (entry.studioKind === "messages" || entry.systemKind === "messages") return "Folder";
-  if (entry.studioKind === "purchased" || entry.systemKind === "purchased_assets") return "Folder";
-  if (entry.studioKind === "public" || entry.systemKind === "public_assets") return "Folder";
-  if (entry.studioKind === "shared" || entry.systemKind === "shared_with_me") return "Folder";
-  if (entry.studioKind === "trash") return "Folder";
-  if (entry.kindLabel) return String(entry.kindLabel);
-  if (entry.studioKind === "document") return "Ad copy";
-  if (entry.studioKind === "videoEdit") return "Video edit";
-  if (entry.studioKind === "element") {
-    if (entry.elementType === "character") return "Character";
-    if (entry.elementType === "prop") return "Prop";
-    if (entry.elementType === "location") return "Location";
-    if (entry.elementType === "style_sheet") return "Style sheet";
-    return "Element";
+  if (
+    entry.type === "dir" ||
+    entry.studioKind === "folder" ||
+    entry.studioKind === "messages" ||
+    entry.studioKind === "purchased" ||
+    entry.studioKind === "public" ||
+    entry.studioKind === "shared" ||
+    entry.studioKind === "trash" ||
+    entry.systemKind === "messages" ||
+    entry.systemKind === "purchased_assets" ||
+    entry.systemKind === "public_assets" ||
+    entry.systemKind === "shared_with_me"
+  ) {
+    return "Folder";
   }
-  if (entry.kind === "image") return "Image";
-  if (entry.kind === "video") return "Video";
-  if (entry.kind === "audio") return "Audio";
-  const ext = entry.ext || fileExt(entry.name || entry.path || "");
-  const viewer = fileViewerKind(ext);
-  if (viewer === "markdown") return "Markdown";
-  if (viewer === "pdf") return "PDF";
-  if (viewer === "csv") return "Spreadsheet";
-  if (viewer === "archive") return "Archive";
-  if (viewer === "code" || viewer === "html") return ext ? `${ext.slice(1).toUpperCase()} file` : "File";
-  if (ext) return `${ext.slice(1).toUpperCase()} file`;
+  if (entry.studioKind === "document") return "MD";
+  if (entry.studioKind === "videoEdit") return "EDIT";
+  if (entry.studioKind === "element") {
+    if (entry.elementType === "character") return "CHARACTER";
+    if (entry.elementType === "prop") return "PROP";
+    if (entry.elementType === "location") return "LOCATION";
+    if (entry.elementType === "style_sheet") return "STYLE";
+    if (entry.elementType === "doc") return "NOTES";
+    return "ELEMENT";
+  }
+  const fromExt = entry.ext || fileExt(entry.name || entry.path || "");
+  if (fromExt) return fromExt.slice(1).toUpperCase();
+  if (entry.mimeType && typeof entry.mimeType === "string") {
+    const sub = entry.mimeType.split("/")[1];
+    if (sub) {
+      const clean = sub.split(";")[0].trim().toUpperCase();
+      if (clean === "JPEG") return "JPG";
+      if (clean === "QUICKTIME") return "MOV";
+      if (clean === "MPEG") return "MP3";
+      if (clean === "X-M4A") return "M4A";
+      return clean.replace(/^X-/, "");
+    }
+  }
+  if (entry.kind === "image") return "PNG";
+  if (entry.kind === "video") return "MP4";
+  if (entry.kind === "audio") return "MP3";
   return "File";
 }
 
@@ -1611,7 +1625,7 @@ function renderEntryRows({
             <span className="desk-file-list-head-date">Date modified</span>
             <span className="desk-file-list-head-size">Size</span>
             <span className="desk-file-list-head-kind">
-              {searchActive ? "Kind / Location" : "Kind"}
+              {searchActive ? "File type / Location" : "File type"}
             </span>
           </>
         ) : (
@@ -1627,7 +1641,7 @@ function renderEntryRows({
         const label = entryLabel(e);
         const metaDate = entryMeta(e, searchActive, searchScope);
         const renaming = isRenaming(e);
-        const kind = entryKindLabel(e);
+        const fileType = entryFileTypeLabel(e);
         const size = entrySizeLabel(e);
         const date = entryDateLabel(e);
         const location = searchActive ? searchResultMeta(e, searchScope) : "";
@@ -1700,13 +1714,15 @@ function renderEntryRows({
                 </span>
                 <span
                   className="desk-file-list-col-kind"
-                  title={searchActive && location ? `${kind} · ${location}` : kind}
+                  title={
+                    searchActive && location ? `${fileType} · ${location}` : fileType
+                  }
                 >
                   {e.type === "parent"
                     ? ""
                     : searchActive && location
-                      ? `${kind} · ${location}`
-                      : kind}
+                      ? `${fileType} · ${location}`
+                      : fileType}
                 </span>
               </>
             ) : (
