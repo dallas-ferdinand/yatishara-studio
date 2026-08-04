@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Open handler for *.studio — launches Studio web; import by dropping the file in Files.
+set -euo pipefail
+STUDIO_URL="${YATISHARA_STUDIO_URL:-https://studio.yatishara.com/}"
+FILE="${1:-}"
+
+if command -v xdg-open >/dev/null 2>&1; then
+  xdg-open "$STUDIO_URL" >/dev/null 2>&1 || true
+elif command -v gio >/dev/null 2>&1; then
+  gio open "$STUDIO_URL" >/dev/null 2>&1 || true
+fi
+
+MSG="Drop this .studio file into Studio Files to import."
+if [[ -n "$FILE" ]]; then
+  MSG="Import in Studio Files: $(basename -- "$FILE")"
+fi
+
+if command -v notify-send >/dev/null 2>&1; then
+  notify-send -a "Yatishara Studio" "Yatishara Studio project" "$MSG" || true
+fi
+
+exit 0

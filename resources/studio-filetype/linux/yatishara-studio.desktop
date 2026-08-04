@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Yatishara Studio
+GenericName=Studio project
+Comment=Open Yatishara Studio project packages (.studio)
+Exec=yatishara-studio-open %f
+Icon=application-vnd.yatishara.studio
+Terminal=false
+Categories=AudioVideo;Graphics;Office;
+MimeType=application/vnd.yatishara.studio;
+StartupNotify=false
+NoDisplay=false
