@@ -675,7 +675,7 @@ function CommentsBody({
                 className={`profile-comments-post-action${postActions.liked ? " is-liked" : ""}`}
                 data-studio-sfx="like"
                 aria-pressed={postActions.liked}
-                aria-label={postActions.liked ? "Remove trophy" : "Give trophy"}
+                aria-label={postActions.liked ? "Remove award" : "Give award"}
                 onClick={postActions.onLike}
               >
                 <Award aria-hidden="true" fill="currentColor" strokeWidth={0} />

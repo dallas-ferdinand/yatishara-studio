@@ -901,7 +901,7 @@ function FeedActions({
           onLike();
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        aria-label={post.likedByViewer ? "Remove trophy" : "Give trophy"}
+        aria-label={post.likedByViewer ? "Remove award" : "Give award"}
       >
         <Award aria-hidden="true" fill="currentColor" strokeWidth={0} />
         <span>{formatCount(post.likeCount)}</span>
