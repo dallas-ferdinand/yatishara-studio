@@ -21435,6 +21435,7 @@ export function StudioShell({
             activeDmConversationId={activeDmConversationId}
             onSelectConversation={setActiveDmConversationId}
             onStartChat={openChatWith}
+            onOpenMessages={openMessages}
             onOpenProfile={openPublicProfile}
             onOpenFeedPost={(postId) => openProfilePost("", postId)}
           />
@@ -30819,6 +30820,7 @@ function StudioSocialLeftRail({
   activeDmConversationId,
   onSelectConversation,
   onStartChat,
+  onOpenMessages,
   onOpenProfile,
   onOpenFeedPost,
 }) {
@@ -30829,6 +30831,7 @@ function StudioSocialLeftRail({
         onSelectConversation={onSelectConversation}
         onOpenProfile={onOpenProfile}
         onOpenFeedPost={onOpenFeedPost}
+        onOpenFullMessages={onOpenMessages}
         embeddedInRail
       />
     );
@@ -30839,6 +30842,7 @@ function StudioSocialLeftRail({
       activeConversationId={activeDmConversationId}
       onSelectConversation={onSelectConversation}
       onStartChat={onStartChat}
+      onOpenFullMessages={onOpenMessages}
       expiresUnix={expiresUnix}
     />
   );
@@ -30903,6 +30907,7 @@ function StudioNetworkLeftRail({
         onOpenProfile={onOpenProfile}
         onOpenFeedPost={onOpenFeedPost}
         onOpenOffersJobs={onOpenOffersJobs}
+        onOpenFullMessages={onOpenMessages}
         embeddedInRail
       />
     );
@@ -30913,6 +30918,7 @@ function StudioNetworkLeftRail({
       activeConversationId={activeDmConversationId}
       onSelectConversation={onSelectConversation}
       onStartChat={onStartChat}
+      onOpenFullMessages={onOpenMessages}
       expiresUnix={expiresUnix}
     />
   );

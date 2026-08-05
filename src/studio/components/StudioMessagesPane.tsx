@@ -17,6 +17,7 @@ import {
   Loader2,
   Hammer,
   MessageCircle,
+  MessagesSquare,
   Mic,
   Copy,
   Music,
@@ -1899,6 +1900,8 @@ type StudioMessagesPaneProps = {
    * never opens a Messages tab, and skips the peer-details split.
    */
   embeddedInRail?: boolean;
+  /** Embedded rail only — open the full Messages workspace tab. */
+  onOpenFullMessages?: () => void;
   /**
    * Desktop: open the left Files rail in pick mode (owner-scoped root).
    * When omitted (mobile), the sheet picker is used instead.
@@ -2037,6 +2040,7 @@ export function StudioMessagesPane({
   onOpenOffersJobs,
   showChatListWhenEmpty = false,
   embeddedInRail = false,
+  onOpenFullMessages,
   onRequestPickAsset,
   onOpenStudioShareItem,
 }: StudioMessagesPaneProps) {
@@ -3374,6 +3378,18 @@ export function StudioMessagesPane({
               onClick={() => setPeerSidebarOpen((open) => !open)}
             >
               <Hammer size={13} strokeWidth={2.25} aria-hidden="true" />
+            </button>
+          </div>
+        ) : onOpenFullMessages ? (
+          <div className="cursor-panel-head-tools studio-dm-chat-head-tools">
+            <button
+              type="button"
+              className="studio-composer-circle-btn studio-dm-open-full"
+              aria-label="Open Messages"
+              title="Open Messages"
+              onClick={onOpenFullMessages}
+            >
+              <MessagesSquare size={13} strokeWidth={2.25} aria-hidden="true" />
             </button>
           </div>
         ) : null}

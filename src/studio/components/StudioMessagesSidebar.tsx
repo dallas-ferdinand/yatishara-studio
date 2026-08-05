@@ -70,6 +70,8 @@ type StudioMessagesSidebarProps = {
   activeConversationId: DmConversationId | null;
   onSelectConversation: (conversationId: DmConversationId) => void;
   onStartChat: (username: string) => void;
+  /** Open the full Messages workspace tab (left-rail list chrome). */
+  onOpenFullMessages?: () => void;
   expiresUnix: number;
 };
 
@@ -96,6 +98,7 @@ export function StudioMessagesSidebar({
   activeConversationId,
   onSelectConversation,
   onStartChat,
+  onOpenFullMessages,
   expiresUnix,
 }: StudioMessagesSidebarProps) {
   const [search, setSearch] = useState("");
@@ -326,6 +329,20 @@ export function StudioMessagesSidebar({
   return (
     <div className="studio-dm-sidebar">
       <div className="studio-dm-sidebar-chrome">
+        {onOpenFullMessages ? (
+          <div className="studio-dm-sidebar-head">
+            <strong>Messages</strong>
+            <button
+              type="button"
+              className="studio-composer-circle-btn studio-dm-open-full"
+              aria-label="Open Messages"
+              title="Open Messages"
+              onClick={onOpenFullMessages}
+            >
+              <MessagesSquare size={13} strokeWidth={2.25} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
         <PanelSearchBar
           value={search}
           onChange={setSearch}
