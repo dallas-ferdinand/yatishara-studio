@@ -10,7 +10,7 @@ import {
   ChevronRight,
   ChevronUp,
   Heart,
-  Share2,
+  Forward,
   MessageCircle,
   Pause,
   Play,
@@ -946,10 +946,10 @@ function FeedActions({
         onPointerDown={(event) => event.stopPropagation()}
         aria-label="Share"
       >
-        <Share2
+        <Forward
           className="profile-post-rail-share"
           aria-hidden="true"
-          strokeWidth={2.25}
+          strokeWidth={2.35}
         />
         <span>{formatCount(localShares)}</span>
       </button>

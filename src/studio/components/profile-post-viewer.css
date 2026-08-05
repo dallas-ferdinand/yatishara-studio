@@ -910,10 +910,10 @@
     drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
 }
 
-/* Share matches other rail glyphs. */
+/* Curved Forward arrow — slightly larger + thicker stroke for weight. */
 .profile-post-rail-btn .profile-post-rail-share {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   filter:
     drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
     drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
