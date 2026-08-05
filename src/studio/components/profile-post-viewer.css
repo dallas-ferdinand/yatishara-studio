@@ -910,7 +910,7 @@
     drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
 }
 
-/* Filled IG plane reads smaller optically — bump past other rail glyphs. */
+/* Share plane slightly larger so it matches visual weight of filled icons. */
 .profile-post-rail-btn .profile-post-rail-share {
   width: 26px;
   height: 26px;

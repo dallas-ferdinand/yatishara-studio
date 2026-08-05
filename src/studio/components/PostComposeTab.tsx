@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import {
   Bookmark,
   Award,
+  Send,
   Loader2,
   MessageCircle,
 } from "lucide-react";
@@ -27,7 +28,6 @@ import {
 import { MediaLoadFrame } from "./media-load-frame";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { CaptionChipText } from "./CaptionChipText";
-import { IgPaperPlaneIcon } from "./icons/IgPaperPlaneIcon";
 
 type PostComposeTabProps = {
   assetId: string;
@@ -877,7 +877,7 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                 <span>0</span>
               </div>
               <div className="profile-post-rail-btn">
-                <IgPaperPlaneIcon className="profile-post-rail-share" />
+                <Send className="profile-post-rail-share" aria-hidden="true" strokeWidth={2.35} />
                 <span>0</span>
               </div>
             </div>
