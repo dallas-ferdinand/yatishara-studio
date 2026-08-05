@@ -329,25 +329,24 @@ export function StudioMessagesSidebar({
   return (
     <div className="studio-dm-sidebar">
       <div className="studio-dm-sidebar-chrome">
-        {onOpenFullMessages ? (
-          <div className="studio-dm-sidebar-head">
-            <strong>Messages</strong>
-            <button
-              type="button"
-              className="studio-composer-circle-btn studio-dm-open-full"
-              aria-label="Open Messages"
-              title="Open Messages"
-              onClick={onOpenFullMessages}
-            >
-              <MessagesSquare size={13} strokeWidth={2.25} aria-hidden="true" />
-            </button>
-          </div>
-        ) : null}
         <PanelSearchBar
           value={search}
           onChange={setSearch}
           placeholder="Search people, chats & messages"
           aria-label="Search people, chats, messages, and labels"
+          end={
+            onOpenFullMessages ? (
+              <button
+                type="button"
+                className="studio-composer-circle-btn studio-dm-open-full"
+                aria-label="Open Messages"
+                title="Open Messages"
+                onClick={onOpenFullMessages}
+              >
+                <MessagesSquare size={13} strokeWidth={2.25} aria-hidden="true" />
+              </button>
+            ) : null
+          }
         />
 
         <div className="studio-dm-rail-row">
