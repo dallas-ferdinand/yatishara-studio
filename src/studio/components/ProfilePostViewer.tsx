@@ -9,7 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Heart,
+  Trophy,
   Send,
   MessageCircle,
   Pause,
@@ -901,9 +901,9 @@ function FeedActions({
           onLike();
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        aria-label={post.likedByViewer ? "Unlike" : "Like"}
+        aria-label={post.likedByViewer ? "Remove trophy" : "Give trophy"}
       >
-        <Heart aria-hidden="true" fill="currentColor" strokeWidth={0} />
+        <Trophy aria-hidden="true" fill="currentColor" strokeWidth={0} />
         <span>{formatCount(post.likeCount)}</span>
       </button>
       <button
@@ -1960,7 +1960,7 @@ export function ProfilePostViewer({
                 />
                 {role === "current" && likeBurst ? (
                   <div className="profile-post-like-burst" aria-hidden="true">
-                    <Heart fill="currentColor" strokeWidth={0} />
+                    <Trophy fill="currentColor" strokeWidth={0} />
                   </div>
                 ) : null}
               </article>
