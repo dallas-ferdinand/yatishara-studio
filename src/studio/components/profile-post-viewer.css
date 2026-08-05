@@ -225,7 +225,7 @@
   display: grid;
   place-items: center;
   pointer-events: none;
-  color: #ffb000;
+  color: #ff3b5c;
   animation: profile-post-like-burst 700ms ease-out forwards;
 }
 
@@ -910,10 +910,10 @@
     drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
 }
 
-/* Share plane slightly larger so it matches visual weight of filled icons. */
+/* Share matches other rail glyphs. */
 .profile-post-rail-btn .profile-post-rail-share {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   filter:
     drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
     drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
@@ -935,9 +935,9 @@
 
 .profile-post-rail-btn.is-liked svg,
 .profile-post-rail-btn.is-liked:hover svg {
-  color: #ffb000 !important;
+  color: #ff3b5c !important;
   filter:
-    drop-shadow(0 1px 0 #a87400)
+    drop-shadow(0 1px 0 #a01028)
     drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
 }
 
@@ -985,7 +985,7 @@
 
 .profile-post-rail.is-on-dark .profile-post-rail-btn.is-liked svg,
 .profile-post-rail.is-on-dark .profile-post-rail-btn.is-liked:hover svg {
-  color: #ffb000 !important;
+  color: #ff3b5c !important;
 }
 
 .profile-post-rail.is-on-dark .profile-post-rail-btn.is-saved svg,
@@ -1020,7 +1020,7 @@
 
 .profile-post-rail.is-on-light .profile-post-rail-btn.is-liked svg,
 .profile-post-rail.is-on-light .profile-post-rail-btn.is-liked:hover svg {
-  color: #d97706 !important;
+  color: #e11d48 !important;
   filter: none;
 }
 
@@ -1281,7 +1281,7 @@
 
 .profile-comments-post-action.is-liked svg,
 .profile-comments-post-action.is-liked:hover svg {
-  color: #ffb000 !important;
+  color: #ff3b5c !important;
 }
 
 .profile-comments-post-action.is-saved {

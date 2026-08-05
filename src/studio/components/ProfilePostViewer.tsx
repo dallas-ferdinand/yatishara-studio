@@ -9,8 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Award,
-  Send,
+  Heart,
+  Share2,
   MessageCircle,
   Pause,
   Play,
@@ -901,9 +901,9 @@ function FeedActions({
           onLike();
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        aria-label={post.likedByViewer ? "Remove award" : "Give award"}
+        aria-label={post.likedByViewer ? "Unlike" : "Like"}
       >
-        <Award aria-hidden="true" fill="currentColor" strokeWidth={0} />
+        <Heart aria-hidden="true" fill="currentColor" strokeWidth={0} />
         <span>{formatCount(post.likeCount)}</span>
       </button>
       <button
@@ -946,10 +946,10 @@ function FeedActions({
         onPointerDown={(event) => event.stopPropagation()}
         aria-label="Share"
       >
-        <Send
+        <Share2
           className="profile-post-rail-share"
           aria-hidden="true"
-          strokeWidth={2.35}
+          strokeWidth={2.25}
         />
         <span>{formatCount(localShares)}</span>
       </button>
@@ -1960,7 +1960,7 @@ export function ProfilePostViewer({
                 />
                 {role === "current" && likeBurst ? (
                   <div className="profile-post-like-burst" aria-hidden="true">
-                    <Award fill="currentColor" strokeWidth={0} />
+                    <Heart fill="currentColor" strokeWidth={0} />
                   </div>
                 ) : null}
               </article>

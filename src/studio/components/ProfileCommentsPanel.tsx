@@ -8,7 +8,6 @@ import {
   Check,
   ChevronLeft,
   Heart,
-  Award,
   Image as ImageIcon,
   Loader2,
   MessageCircle,
@@ -675,10 +674,10 @@ function CommentsBody({
                 className={`profile-comments-post-action${postActions.liked ? " is-liked" : ""}`}
                 data-studio-sfx="like"
                 aria-pressed={postActions.liked}
-                aria-label={postActions.liked ? "Remove award" : "Give award"}
+                aria-label={postActions.liked ? "Unlike" : "Like"}
                 onClick={postActions.onLike}
               >
-                <Award aria-hidden="true" fill="currentColor" strokeWidth={0} />
+                <Heart aria-hidden="true" fill="currentColor" strokeWidth={0} />
                 <span>{formatCount(postActions.likeCount)}</span>
               </button>
               <button
