@@ -9,7 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Trophy,
+  Award,
   MessageCircle,
   Pause,
   Play,
@@ -903,7 +903,7 @@ function FeedActions({
         onPointerDown={(event) => event.stopPropagation()}
         aria-label={post.likedByViewer ? "Remove trophy" : "Give trophy"}
       >
-        <Trophy aria-hidden="true" fill="currentColor" strokeWidth={0} />
+        <Award aria-hidden="true" fill="currentColor" strokeWidth={0} />
         <span>{formatCount(post.likeCount)}</span>
       </button>
       <button
@@ -1956,7 +1956,7 @@ export function ProfilePostViewer({
                 />
                 {role === "current" && likeBurst ? (
                   <div className="profile-post-like-burst" aria-hidden="true">
-                    <Trophy fill="currentColor" strokeWidth={0} />
+                    <Award fill="currentColor" strokeWidth={0} />
                   </div>
                 ) : null}
               </article>

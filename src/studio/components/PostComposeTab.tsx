@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import {
   Bookmark,
-  Trophy,
+  Award,
   Loader2,
   MessageCircle,
 } from "lucide-react";
@@ -865,7 +865,7 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                 />
               </div>
               <div className="profile-post-rail-btn is-liked">
-                <Trophy aria-hidden="true" fill="currentColor" strokeWidth={0} />
+                <Award aria-hidden="true" fill="currentColor" strokeWidth={0} />
                 <span>0</span>
               </div>
               <div className="profile-post-rail-btn">

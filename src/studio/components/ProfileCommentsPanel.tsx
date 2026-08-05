@@ -8,7 +8,7 @@ import {
   Check,
   ChevronLeft,
   Heart,
-  Trophy,
+  Award,
   Image as ImageIcon,
   Loader2,
   MessageCircle,
@@ -678,7 +678,7 @@ function CommentsBody({
                 aria-label={postActions.liked ? "Remove trophy" : "Give trophy"}
                 onClick={postActions.onLike}
               >
-                <Trophy aria-hidden="true" fill="currentColor" strokeWidth={0} />
+                <Award aria-hidden="true" fill="currentColor" strokeWidth={0} />
                 <span>{formatCount(postActions.likeCount)}</span>
               </button>
               <button
