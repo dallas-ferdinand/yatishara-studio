@@ -9210,7 +9210,9 @@ export function StudioShell({
           color: color-mix(in srgb, var(--color-cursor-text-bright) 90%, transparent) !important;
         }
         @media (hover: hover) {
-          .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover) :where(svg, .icon-inline) {
+          /* Feed like/save/share keep their own ink; bright hover must not
+             override liked red / saved gold while the pointer stays down. */
+          .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover):not(.profile-post-rail-btn):not(.profile-post-rail-follow):not(.profile-comments-post-action):not(.profile-comment-like) :where(svg, .icon-inline) {
             color: var(--color-cursor-text-bright) !important;
           }
         }
