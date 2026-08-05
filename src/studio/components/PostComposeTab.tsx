@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import {
   Bookmark,
   Heart,
-  Share2,
+  Send,
   Loader2,
   MessageCircle,
 } from "lucide-react";
@@ -877,7 +877,7 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                 <span>0</span>
               </div>
               <div className="profile-post-rail-btn">
-                <Share2 className="profile-post-rail-share" aria-hidden="true" strokeWidth={2.25} />
+                <Send className="profile-post-rail-share" aria-hidden="true" strokeWidth={2.25} />
                 <span>0</span>
               </div>
             </div>
