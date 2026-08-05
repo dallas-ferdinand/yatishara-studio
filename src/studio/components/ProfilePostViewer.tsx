@@ -9,8 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Forward,
   Heart,
+  Share2,
   MessageCircle,
   Pause,
   Play,
@@ -946,7 +946,7 @@ function FeedActions({
         onPointerDown={(event) => event.stopPropagation()}
         aria-label="Share"
       >
-        <Forward
+        <Share2
           className="profile-post-rail-share"
           aria-hidden="true"
           strokeWidth={2.25}
