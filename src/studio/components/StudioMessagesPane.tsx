@@ -789,6 +789,31 @@ function clampDmLightboxZoom(value: number): number {
   return Math.min(DM_LB_ZOOM_MAX, Math.max(DM_LB_ZOOM_MIN, stepped));
 }
 
+/** Pan so zoomed image edges can meet the stage edge, not stop short or overshoot. */
+function clampDmLightboxPan(
+  next: { x: number; y: number },
+  zoom: number,
+  stageEl: HTMLElement | null,
+  imageEl: HTMLImageElement | null,
+): { x: number; y: number } {
+  if (!stageEl || !imageEl || zoom <= DM_LB_ZOOM_FIT) {
+    return { x: 0, y: 0 };
+  }
+  const stageW = stageEl.clientWidth;
+  const stageH = stageEl.clientHeight;
+  const fitW = imageEl.offsetWidth;
+  const fitH = imageEl.offsetHeight;
+  if (!(stageW > 0 && stageH > 0 && fitW > 0 && fitH > 0)) {
+    return next;
+  }
+  const maxX = Math.max(0, (fitW * zoom - stageW) / 2);
+  const maxY = Math.max(0, (fitH * zoom - stageH) / 2);
+  return {
+    x: Math.min(maxX, Math.max(-maxX, next.x)),
+    y: Math.min(maxY, Math.max(-maxY, next.y)),
+  };
+}
+
 /** WhatsApp-style photo viewer — clipped to the Messages chat pane only. */
 function DmPhotoLightbox({
   state,
@@ -824,15 +849,25 @@ function DmPhotoLightbox({
     moved: boolean;
   } | null>(null);
   const panRef = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(DM_LB_ZOOM_FIT);
   const thumbStripRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const [zoom, setZoom] = useState(DM_LB_ZOOM_FIT);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
 
-  const applyPan = useCallback((next: { x: number; y: number }) => {
-    panRef.current = next;
-    setPan(next);
+  zoomRef.current = zoom;
+
+  const applyPan = useCallback((next: { x: number; y: number }, zoomOverride?: number) => {
+    const clamped = clampDmLightboxPan(
+      next,
+      zoomOverride ?? zoomRef.current,
+      stageRef.current,
+      imageRef.current,
+    );
+    panRef.current = clamped;
+    setPan(clamped);
   }, []);
 
   const bumpZoom = useCallback((delta: number) => {
@@ -841,11 +876,16 @@ function DmPhotoLightbox({
 
   useEffect(() => {
     setZoom(DM_LB_ZOOM_FIT);
+    zoomRef.current = DM_LB_ZOOM_FIT;
     panRef.current = { x: 0, y: 0 };
     setPan({ x: 0, y: 0 });
     setDragging(false);
     dragRef.current = null;
   }, [index, active?.url]);
+
+  useLayoutEffect(() => {
+    applyPan(panRef.current);
+  }, [applyPan, zoom]);
 
   useEffect(() => {
     const strip = thumbStripRef.current;
@@ -862,9 +902,14 @@ function DmPhotoLightbox({
       const direction = event.deltaY > 0 ? -1 : 1;
       bumpZoom(direction * DM_LB_ZOOM_STEP);
     };
+    const onResize = () => applyPan(panRef.current);
     stage.addEventListener("wheel", onWheel, { passive: false });
-    return () => stage.removeEventListener("wheel", onWheel);
-  }, [bumpZoom]);
+    window.addEventListener("resize", onResize);
+    return () => {
+      stage.removeEventListener("wheel", onWheel);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [applyPan, bumpZoom]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -884,6 +929,7 @@ function DmPhotoLightbox({
       }
       if (event.key === "0") {
         setZoom(DM_LB_ZOOM_FIT);
+        zoomRef.current = DM_LB_ZOOM_FIT;
         panRef.current = { x: 0, y: 0 };
         setPan({ x: 0, y: 0 });
         return;
@@ -1070,10 +1116,12 @@ function DmPhotoLightbox({
         <div className="studio-dm-lightbox-canvas">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
+            ref={imageRef}
             className="studio-dm-lightbox-image"
             src={active.url}
             alt={active.caption || "Photo"}
             draggable={false}
+            onLoad={() => applyPan(panRef.current)}
             style={{
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             }}
