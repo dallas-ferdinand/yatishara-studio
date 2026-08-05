@@ -789,6 +789,12 @@ function clampDmLightboxZoom(value: number): number {
   return Math.min(DM_LB_ZOOM_MAX, Math.max(DM_LB_ZOOM_MIN, stepped));
 }
 
+/** Album left/right wraps: last → first, first → last. */
+function wrapDmLightboxIndex(index: number, length: number, delta: number): number {
+  if (length <= 0) return 0;
+  return (index + delta + length) % length;
+}
+
 /** Pan so zoomed image edges can meet the stage edge, not stop short or overshoot. */
 function clampDmLightboxPan(
   next: { x: number; y: number },
@@ -936,9 +942,9 @@ function DmPhotoLightbox({
       }
       if (!hasMany || zoom !== DM_LB_ZOOM_FIT) return;
       if (event.key === "ArrowLeft") {
-        onIndex(Math.max(0, index - 1));
+        onIndex(wrapDmLightboxIndex(index, items.length, -1));
       } else if (event.key === "ArrowRight") {
-        onIndex(Math.min(items.length - 1, index + 1));
+        onIndex(wrapDmLightboxIndex(index, items.length, 1));
       }
     };
     document.addEventListener("keydown", onKey);
@@ -1036,8 +1042,8 @@ function DmPhotoLightbox({
         const dx = t.clientX - start.x;
         const dy = t.clientY - start.y;
         if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
-        if (dx > 0) onIndex(Math.max(0, index - 1));
-        else onIndex(Math.min(items.length - 1, index + 1));
+        if (dx > 0) onIndex(wrapDmLightboxIndex(index, items.length, -1));
+        else onIndex(wrapDmLightboxIndex(index, items.length, 1));
       }}
     >
       <header className="studio-dm-lightbox-head">
@@ -1107,8 +1113,8 @@ function DmPhotoLightbox({
             type="button"
             className="studio-dm-lightbox-nav is-prev"
             aria-label="Previous photo"
-            disabled={index <= 0 || zoom !== DM_LB_ZOOM_FIT}
-            onClick={() => onIndex(Math.max(0, index - 1))}
+            disabled={zoom !== DM_LB_ZOOM_FIT}
+            onClick={() => onIndex(wrapDmLightboxIndex(index, items.length, -1))}
           >
             <ChevronLeft aria-hidden="true" />
           </button>
@@ -1132,8 +1138,8 @@ function DmPhotoLightbox({
             type="button"
             className="studio-dm-lightbox-nav is-next"
             aria-label="Next photo"
-            disabled={index >= items.length - 1 || zoom !== DM_LB_ZOOM_FIT}
-            onClick={() => onIndex(Math.min(items.length - 1, index + 1))}
+            disabled={zoom !== DM_LB_ZOOM_FIT}
+            onClick={() => onIndex(wrapDmLightboxIndex(index, items.length, 1))}
           >
             <ChevronRight aria-hidden="true" />
           </button>
