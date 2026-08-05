@@ -902,6 +902,7 @@
 }
 
 .profile-post-rail-btn svg,
+.profile-post-rail-btn .profile-post-rail-share,
 .profile-post-rail-spin {
   width: 22px;
   height: 22px;
@@ -962,6 +963,7 @@
 }
 
 .profile-post-rail.is-on-dark .profile-post-rail-btn svg,
+.profile-post-rail.is-on-dark .profile-post-rail-btn .profile-post-rail-share,
 .profile-post-rail.is-on-dark .profile-post-rail-spin {
   filter:
     drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
@@ -994,6 +996,7 @@
 }
 
 .profile-post-rail.is-on-light .profile-post-rail-btn svg,
+.profile-post-rail.is-on-light .profile-post-rail-btn .profile-post-rail-share,
 .profile-post-rail.is-on-light .profile-post-rail-spin {
   filter: none;
 }

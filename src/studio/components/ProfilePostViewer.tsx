@@ -10,7 +10,6 @@ import {
   ChevronRight,
   ChevronUp,
   Trophy,
-  Send,
   MessageCircle,
   Pause,
   Play,
@@ -38,6 +37,7 @@ import {
   type CommentsPanelMode,
 } from "./ProfileCommentsPanel";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
+import { IgPaperPlaneIcon } from "./icons/IgPaperPlaneIcon";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
@@ -946,11 +946,7 @@ function FeedActions({
         onPointerDown={(event) => event.stopPropagation()}
         aria-label="Share"
       >
-        <Send
-          className="profile-post-rail-share"
-          aria-hidden="true"
-          strokeWidth={2.25}
-        />
+        <IgPaperPlaneIcon className="profile-post-rail-share" />
         <span>{formatCount(localShares)}</span>
       </button>
     </div>
