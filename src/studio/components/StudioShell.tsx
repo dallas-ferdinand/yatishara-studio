@@ -19651,43 +19651,27 @@ export function StudioShell({
           max-width: none;
           padding: 0 0 28px;
         }
-        .studio-academy-banner {
-          width: 100%;
-          aspect-ratio: 16 / 8;
+        /* Video spans the main column edge-to-edge (body has 16px pad). */
+        .studio-academy-pane .public-offers-body:has(> .studio-academy-detail) {
+          padding-top: 0;
+        }
+        .studio-academy-detail > .studio-academy-player {
+          width: calc(100% + 32px);
+          max-width: none;
+          margin: 0 -16px;
+          border-radius: 0;
+          aspect-ratio: 16 / 9;
+          height: auto;
+          max-height: none;
           overflow: hidden;
-          border-radius: var(--cursor-radius-lg, 10px);
-          background: var(--mos-plate-strong, var(--cursor-surface-raised));
-        }
-        .studio-academy-banner img {
-          display: block;
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        .studio-academy-detail-top {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 12px;
-        }
-        .studio-academy-detail-title {
-          margin: 0;
-          font-size: 1.25rem;
-          font-weight: 650;
-          line-height: 1.25;
-        }
-        .studio-academy-detail-sub {
-          margin: 4px 0 0;
-          font-size: 12px;
-          color: var(--color-cursor-muted);
+          background: #000;
         }
         .studio-academy-player {
-          /* Full width of main pane; height capped so it never eats the viewport. */
           width: 100%;
           max-width: 100%;
           aspect-ratio: 16 / 9;
-          max-height: min(48dvh, calc(100dvh - 14rem));
           height: auto;
+          max-height: none;
           border-radius: 12px;
           overflow: hidden;
           background: #000;
@@ -19698,8 +19682,7 @@ export function StudioShell({
           width: 100%;
           height: 100%;
           border: 0;
-          max-height: 100%;
-          object-fit: contain;
+          object-fit: cover;
           background: #000;
         }
         .studio-academy-play-cta {
