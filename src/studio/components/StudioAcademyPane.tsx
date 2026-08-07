@@ -67,7 +67,6 @@ function CheckoutDock({
   busy,
   confirming,
   owned,
-  courseTitle,
   priceLabel,
   lessonCount,
   needsTopUp,
@@ -83,7 +82,6 @@ function CheckoutDock({
   busy: boolean;
   confirming: boolean;
   owned: boolean;
-  courseTitle: string;
   priceLabel: string;
   lessonCount: number;
   needsTopUp: boolean;
@@ -107,11 +105,6 @@ function CheckoutDock({
           <strong className="studio-academy-checkout-amount">
             {priceLabel}
           </strong>
-          {courseTitle ? (
-            <span className="studio-academy-checkout-course" title={courseTitle}>
-              {courseTitle}
-            </span>
-          ) : null}
           <ul className="studio-academy-checkout-chips" aria-label="Course access">
             <li>Lifetime</li>
             <li>{lessonMeta}</li>
@@ -477,10 +470,10 @@ export function StudioAcademyPane({
     busy,
     confirming: buyArmed,
     owned,
-    courseTitle: detail?.title ?? "",
     priceLabel,
     lessonCount: detail?.lessonCount ?? 0,
     needsTopUp,
+    balanceLabel,
     topUpLabel,
     feeCents,
     totalDueCents,
