@@ -1106,10 +1106,6 @@
     padding-top: 16px;
   }
 
-  .profile-comments-dock .profile-comment-row:first-child {
-    padding-top: 16px;
-  }
-
   .profile-comments-dock .profile-comments-composer {
     flex: 0 0 auto;
     background: transparent;
@@ -1223,16 +1219,28 @@
 
 .profile-comments-search {
   flex: 0 0 auto;
-  padding: 6px 8px 8px;
-  border-bottom: 1px solid var(--color-cursor-border-soft, rgba(255, 255, 255, 0.1));
+  width: 100%;
+  padding: 0;
+  /* PanelSearchBar draws its own bottom rule — avoid double inset chrome. */
+  border-bottom: 0;
 }
 
 .profile-comments-search .cursor-panel-search {
   width: 100%;
+  /* Comments head already has the top divider.
+     Beat `.studio-polish .cursor-panel-search` which re-adds border-top. */
+  border-top: none;
+}
+
+.studio-polish .profile-comments-search .cursor-panel-search,
+.profile-comments-panel .profile-comments-search .cursor-panel-search,
+.profile-comments-dock .profile-comments-search .cursor-panel-search {
+  border-top: none;
+  width: 100%;
 }
 
 [data-appearance="light"] .profile-comments-search {
-  border-bottom-color: var(--color-cursor-border-soft, rgba(15, 23, 42, 0.08));
+  border-bottom: 0;
 }
 
 .profile-comments-close {
