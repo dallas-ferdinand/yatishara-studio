@@ -1085,6 +1085,11 @@
     z-index: 1;
   }
 
+  /* Sort/filter menu must sit above comment rows (Creator tags, etc.). */
+  .profile-comments-dock > .profile-comments-search {
+    z-index: 5;
+  }
+
   .profile-comments-dock .profile-comments-head {
     flex: 0 0 auto;
     border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
@@ -1183,6 +1188,10 @@
   z-index: 1;
 }
 
+.profile-comments-panel.is-sheet > .profile-comments-search {
+  z-index: 5;
+}
+
 .profile-comments-panel.is-sheet .profile-comments-composer {
   padding: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
@@ -1224,7 +1233,8 @@
   /* PanelSearchBar draws its own bottom rule — avoid double inset chrome. */
   border-bottom: 0;
   overflow: visible;
-  z-index: 2;
+  position: relative;
+  z-index: 5;
 }
 
 .profile-comments-search .cursor-panel-search {
@@ -1242,8 +1252,10 @@
 }
 
 .profile-comments-search .desk-explorer-type-filter {
+  position: relative;
   flex: 0 0 auto;
   max-width: 11rem;
+  z-index: 6;
 }
 
 .profile-comments-search .desk-explorer-type-filter-trigger > span {

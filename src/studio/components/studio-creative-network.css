@@ -297,6 +297,7 @@
 
 .profile-comments-locked-shell {
   position: relative;
+  z-index: 0;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -341,6 +342,12 @@
 .studio-cn-book-sidebar-body.is-comments-fill .profile-comments-locked-shell {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* Academy comments: keep sort menu above Creator/Reply tags in the list. */
+.studio-cn-book-sidebar-body .profile-comments-search {
+  position: relative;
+  z-index: 5;
 }
 
 /* Match Messages rail: no stacked top border on search. */
