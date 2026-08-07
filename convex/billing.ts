@@ -1989,6 +1989,30 @@ async function maybeUnlockAcademyCourseAfterTopUp(
   }
 }
 
+/** Retry course unlock after top-up credits land (return sync / late callback). */
+export const finalizeAcademyAfterPaywise = internalMutation({
+  args: {
+    paymentId: v.id("payments"),
+  },
+  returns: v.object({
+    academyCourseId: v.optional(v.id("academyCourses")),
+    academyUnlocked: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment || payment.method !== "paywise") {
+      return { academyUnlocked: false };
+    }
+    if (payment.status !== "payment_completed") {
+      return {
+        academyCourseId: payment.academyCourseId,
+        academyUnlocked: false,
+      };
+    }
+    return await maybeUnlockAcademyCourseAfterTopUp(ctx, payment);
+  },
+});
+
 async function notifyPaymentStatus(
   ctx: MutationCtx,
   args: {

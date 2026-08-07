@@ -4842,6 +4842,7 @@ export function StudioShell({
 
   useEffect(() => {
     if (typeof window === "undefined" || academyPaymentReturnHandledRef.current) return;
+    if (!currentUser?._id) return;
     const params = new URLSearchParams(window.location.search);
     const outcome = params.get("payment");
     const paymentId = params.get("paymentId");
@@ -4868,7 +4869,18 @@ export function StudioShell({
           if (attempt > 0) {
             await sleep(Math.min(6_000, 1_200 * 2 ** Math.min(attempt - 1, 2)));
           }
-          const result = await syncPaywisePayment({ paymentId, force: true });
+          let result;
+          try {
+            result = await syncPaywisePayment({ paymentId, force: true });
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error ?? "");
+            // Auth can hydrate a beat late after the PayWise return redirect.
+            if (/sign in|not authenticated|unauthorized/i.test(message)) {
+              continue;
+            }
+            throw error;
+          }
           if (cancelled) return;
           if (result.status === "payment_completed") {
             setPaymentCelebration({
@@ -4876,9 +4888,12 @@ export function StudioShell({
               kind: "academy",
               amountCents: result.amountCents ?? null,
               creditsGranted: result.creditsGranted ?? null,
-              academyUnlocked: result.academyUnlocked !== false,
+              academyUnlocked: result.academyUnlocked === true,
             });
             openAcademyTab({ courseId: result.academyCourseId || academyCourse });
+            if (result.academyUnlocked !== true) {
+              toast.message("Top-up received — finish unlock from checkout if needed");
+            }
             return;
           }
           if (
@@ -4896,15 +4911,17 @@ export function StudioShell({
           }
         }
         setPaymentCelebration(null);
+        toast.error("Payment is still confirming — check Academy in a moment");
       } catch {
         setPaymentCelebration(null);
+        toast.error("Could not confirm payment — try refreshing Academy");
       }
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot PayWise academy return
-  }, [syncPaywisePayment]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot PayWise academy return after auth
+  }, [currentUser?._id, syncPaywisePayment]);
 
   /** @deprecated Use openNetworkTab — kept for call-site compatibility. */
   function openOffersTab(_section = "home") {

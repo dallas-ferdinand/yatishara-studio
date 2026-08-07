@@ -216,6 +216,17 @@ const applyPaywiseStatusCheckRef = makeFunctionReference<
   StatusApplyResult
 >;
 
+const finalizeAcademyAfterPaywiseRef = makeFunctionReference<
+  "mutation",
+  { paymentId: Id<"payments"> },
+  { academyCourseId?: Id<"academyCourses">; academyUnlocked: boolean }
+>("billing:finalizeAcademyAfterPaywise") as unknown as FunctionReference<
+  "mutation",
+  "internal",
+  { paymentId: Id<"payments"> },
+  { academyCourseId?: Id<"academyCourses">; academyUnlocked: boolean }
+>;
+
 function siteUrl(): string {
   return (process.env.SITE_URL ?? "").replace(/\/$/, "");
 }
@@ -415,6 +426,20 @@ export const syncMyPayment = action({
       payment.status === "payment_completed" ||
       payment.status === "checkout_failed"
     ) {
+      if (payment.status === "payment_completed" && payment.academyCourseId) {
+        const unlock = await ctx.runMutation(finalizeAcademyAfterPaywiseRef, {
+          paymentId: args.paymentId,
+        });
+        return {
+          status: payment.status,
+          granted: false,
+          reason: "already_terminal",
+          amountCents: payment.amountCents,
+          creditsGranted: payment.creditsGranted,
+          academyCourseId: unlock.academyCourseId ?? payment.academyCourseId,
+          academyUnlocked: unlock.academyUnlocked,
+        };
+      }
       return {
         status: payment.status,
         granted: false,
@@ -422,10 +447,7 @@ export const syncMyPayment = action({
         amountCents: payment.amountCents,
         creditsGranted: payment.creditsGranted,
         academyCourseId: payment.academyCourseId,
-        academyUnlocked:
-          payment.status === "payment_completed"
-            ? Boolean(payment.academyCourseId)
-            : undefined,
+        academyUnlocked: undefined,
       };
     }
     if (
@@ -567,6 +589,11 @@ export const settleFromCallback = internalAction({
       payment.status === "payment_completed" ||
       payment.status === "checkout_failed"
     ) {
+      if (payment.status === "payment_completed" && payment.academyCourseId) {
+        await ctx.runMutation(finalizeAcademyAfterPaywiseRef, {
+          paymentId: args.paymentId,
+        });
+      }
       return { ok: true };
     }
     try {
