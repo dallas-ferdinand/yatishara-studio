@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { ArrowDown, ArrowLeft, GraduationCap, Lock } from "lucide-react";
+import { ArrowDown, ArrowLeft } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
@@ -220,47 +220,45 @@ function OwnedLessonRail({
           {detail?.title ?? "Course"}
         </strong>
       </div>
-      <div className="public-offers-rail-body" style={{ padding: "10px" }}>
-        <PanelSearchBar
-          value={academy.lessonSearch}
-          onChange={academy.setLessonSearch}
-          placeholder="Search lessons"
-          aria-label="Search lessons"
-        />
-        {!detail ? (
-          <p className="studio-cn-list-empty">Loading lessons…</p>
-        ) : lessons.length === 0 ? (
-          <p className="studio-cn-list-empty">No lessons match</p>
-        ) : (
-          <ul className="studio-academy-lesson-list">
-            {lessons.map((lesson, index) => {
-              const active = academy.lessonId === lesson._id;
-              return (
-                <li key={lesson._id}>
-                  <button
-                    type="button"
-                    className={`studio-academy-lesson-row${active ? " is-active" : ""}`}
-                    onClick={() => academy.setLessonId(lesson._id)}
-                  >
-                    {lesson.coverUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={lesson.coverUrl} alt="" />
-                    ) : (
-                      <span className="studio-academy-lesson-thumb">
-                        <GraduationCap aria-hidden="true" />
+      <div className="studio-cn-sidebar-body">
+        <div className="studio-cn-sidebar-chrome">
+          <PanelSearchBar
+            value={academy.lessonSearch}
+            onChange={academy.setLessonSearch}
+            placeholder="Search lessons"
+            aria-label="Search lessons"
+          />
+        </div>
+        <div className="studio-cn-rail-scroll public-offers-rail-body">
+          {!detail ? (
+            <p className="studio-cn-list-empty">Loading lessons…</p>
+          ) : lessons.length === 0 ? (
+            <p className="studio-cn-list-empty">No lessons match</p>
+          ) : (
+            <ul className="studio-academy-lesson-list">
+              {lessons.map((lesson, index) => {
+                const active = academy.lessonId === lesson._id;
+                return (
+                  <li key={lesson._id}>
+                    <button
+                      type="button"
+                      className={`studio-academy-lesson-row${active ? " is-active" : ""}`}
+                      onClick={() => academy.setLessonId(lesson._id)}
+                    >
+                      <span className="studio-academy-lesson-num" aria-hidden="true">
+                        {index + 1}
                       </span>
-                    )}
-                    <span className="studio-academy-lesson-meta">
-                      <em>{index + 1}</em>
-                      <strong>{lesson.title}</strong>
-                      <small>{lesson.blurb || "Lesson"}</small>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                      <span className="studio-academy-lesson-meta">
+                        <strong>{lesson.title}</strong>
+                        <small>{lesson.blurb || "Lesson"}</small>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -290,26 +288,27 @@ function UnownedOutlineRail({
           {detail?.title ?? "Course"}
         </strong>
       </div>
-      <div className="public-offers-rail-body" style={{ padding: "10px" }}>
-        <p className="studio-cn-list-empty" style={{ marginBottom: 8 }}>
-          Lessons unlock after checkout
-        </p>
-        <ul className="studio-academy-lesson-list">
-          {(detail?.lessons ?? []).map((lesson, index) => (
-            <li key={lesson._id}>
-              <div className="studio-academy-lesson-row is-locked">
-                <span className="studio-academy-lesson-thumb">
-                  <Lock aria-hidden="true" />
-                </span>
-                <span className="studio-academy-lesson-meta">
-                  <em>{index + 1}</em>
-                  <strong>{lesson.title}</strong>
-                  <small>{lesson.blurb}</small>
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
+      <div className="studio-cn-sidebar-body">
+        <div className="studio-cn-rail-scroll public-offers-rail-body">
+          <p className="studio-cn-list-empty" style={{ marginBottom: 8 }}>
+            Lessons unlock after checkout
+          </p>
+          <ul className="studio-academy-lesson-list">
+            {(detail?.lessons ?? []).map((lesson, index) => (
+              <li key={lesson._id}>
+                <div className="studio-academy-lesson-row is-locked">
+                  <span className="studio-academy-lesson-num" aria-hidden="true">
+                    {index + 1}
+                  </span>
+                  <span className="studio-academy-lesson-meta">
+                    <strong>{lesson.title}</strong>
+                    <small>{lesson.blurb}</small>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   );

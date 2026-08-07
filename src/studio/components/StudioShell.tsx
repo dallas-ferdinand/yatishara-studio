@@ -19568,8 +19568,9 @@ export function StudioShell({
         .studio-academy-detail {
           display: grid;
           gap: 16px;
-          max-width: 820px;
-          padding: 18px 0 28px;
+          width: 100%;
+          max-width: none;
+          padding: 0 0 28px;
         }
         .studio-academy-banner {
           width: 100%;
@@ -19750,7 +19751,7 @@ export function StudioShell({
         }
         .studio-academy-lesson-list {
           list-style: none;
-          margin: 8px 0 0;
+          margin: 0;
           padding: 0;
           display: grid;
           gap: 6px;
@@ -19776,31 +19777,29 @@ export function StudioShell({
           cursor: default;
           opacity: 0.85;
         }
-        .studio-academy-lesson-row img,
-        .studio-academy-lesson-thumb {
-          width: 44px;
-          height: 28px;
-          border-radius: 6px;
-          object-fit: cover;
+        .studio-academy-lesson-num {
+          width: 24px;
+          height: 24px;
+          border-radius: 999px;
           flex: 0 0 auto;
-          background: var(--mos-plate-strong);
           display: grid;
           place-items: center;
+          font-size: 11px;
+          font-weight: 650;
+          line-height: 1;
           color: var(--color-cursor-muted);
+          background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
-        .studio-academy-lesson-thumb svg {
-          width: 14px;
-          height: 14px;
+        .studio-academy-lesson-row.is-active .studio-academy-lesson-num {
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-page));
         }
         .studio-academy-lesson-meta {
           min-width: 0;
           display: grid;
           gap: 1px;
-        }
-        .studio-academy-lesson-meta em {
-          font-style: normal;
-          font-size: 10px;
-          color: var(--color-cursor-muted);
         }
         .studio-academy-lesson-meta strong {
           font-size: 12px;

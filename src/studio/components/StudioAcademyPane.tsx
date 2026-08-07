@@ -363,7 +363,7 @@ export function StudioAcademyPane({
   const courseMain = !detail ? (
     <div className="public-offers-main studio-cn-catalog">
       <div className="public-offers-main-scroll">
-        <main className="public-offers-body is-narrow">
+        <main className="public-offers-body">
           <div className="public-offers-state">
             <Loader2 className="animate-spin" aria-hidden="true" />
             <strong>Loading course…</strong>
@@ -374,7 +374,7 @@ export function StudioAcademyPane({
   ) : owned && selectedLesson ? (
     <div className="public-offers-main studio-cn-catalog">
       <div className="public-offers-main-scroll">
-        <main className="public-offers-body is-narrow">
+        <main className="public-offers-body">
           <div className="studio-academy-detail">
             <BannerStage
               bannerUrl={
@@ -409,7 +409,7 @@ export function StudioAcademyPane({
   ) : (
     <div className="public-offers-main studio-cn-catalog">
       <div className="public-offers-main-scroll">
-        <main className="public-offers-body is-narrow">
+        <main className="public-offers-body">
           <div className="studio-academy-detail">
             <BannerStage
               bannerUrl={courseBannerUrl({
