@@ -19571,6 +19571,12 @@ export function StudioShell({
           gap: 0;
           padding: 0;
           overflow: hidden;
+          text-align: left;
+        }
+        .studio-academy-card-body,
+        .studio-academy-card .public-offers-card-title,
+        .studio-academy-card .public-offers-card-desc {
+          text-align: left;
         }
         .studio-academy-card-media.public-offers-card-media {
           position: relative;
