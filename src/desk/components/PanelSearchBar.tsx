@@ -1,7 +1,6 @@
-// @ts-nocheck
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Icon } from "./Icons";
 
 export function PanelSearchBar({
@@ -10,6 +9,12 @@ export function PanelSearchBar({
   placeholder,
   "aria-label": ariaLabel,
   end = null,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  "aria-label"?: string;
+  end?: ReactNode;
 }) {
   const [focused, setFocused] = useState(false);
 
