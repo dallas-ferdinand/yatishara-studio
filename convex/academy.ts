@@ -865,21 +865,96 @@ export const adminGrantCourse = adminMutation({
   },
 });
 
+async function revokeCoursePurchaseWithRefund(
+  ctx: MutationCtx,
+  purchaseId: Id<"academyPurchases">,
+  reason: string,
+): Promise<{ refundedCredits: number } | null> {
+  const purchase = await ctx.db.get("academyPurchases", purchaseId);
+  if (!purchase) return null;
+
+  let refundedCredits = 0;
+  if (purchase.creditTransactionId) {
+    const spend = await ctx.db.get(
+      "creditTransactions",
+      purchase.creditTransactionId,
+    );
+    if (spend && spend.amount < 0) {
+      const existingRefund = await ctx.db
+        .query("creditTransactions")
+        .withIndex("by_reversed_transaction", (q) =>
+          q.eq("reversesTransactionId", spend._id),
+        )
+        .unique();
+      if (!existingRefund) {
+        const account = await ctx.db.get(
+          "billingAccounts",
+          spend.billingAccountId,
+        );
+        if (account) {
+          const now = Date.now();
+          refundedCredits = Math.abs(spend.amount);
+          const balanceAfter = account.creditBalance + refundedCredits;
+          await ctx.db.patch(account._id, {
+            creditBalance: balanceAfter,
+            updatedAt: now,
+          });
+          await ctx.db.insert("creditTransactions", {
+            userId: purchase.userId,
+            billingAccountId: account._id,
+            kind: "refunded",
+            amount: refundedCredits,
+            balanceAfter,
+            reversesTransactionId: spend._id,
+            coursePurchaseId: purchase._id,
+            reason,
+            createdAt: now,
+          });
+        }
+      }
+    }
+  }
+
+  const course = await ctx.db.get("academyCourses", purchase.courseId);
+  await ctx.db.delete(purchaseId);
+  if (course) {
+    await ctx.db.patch(course._id, {
+      purchaseCount: Math.max(0, course.purchaseCount - 1),
+      updatedAt: Date.now(),
+    });
+  }
+  return { refundedCredits };
+}
+
 export const adminRevokeCourse = adminMutation({
   args: { purchaseId: v.id("academyPurchases") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const purchase = await ctx.db.get("academyPurchases", args.purchaseId);
-    if (!purchase) return null;
-    const course = await ctx.db.get("academyCourses", purchase.courseId);
-    await ctx.db.delete(args.purchaseId);
-    if (course) {
-      await ctx.db.patch(course._id, {
-        purchaseCount: Math.max(0, course.purchaseCount - 1),
-        updatedAt: Date.now(),
-      });
-    }
+    await revokeCoursePurchaseWithRefund(
+      ctx,
+      args.purchaseId,
+      "Academy purchase revoked by admin",
+    );
     return null;
+  },
+});
+
+/** Ops: revoke a purchase and refund credits (CLI / recovery). */
+export const internalRevokeCoursePurchase = internalMutation({
+  args: {
+    purchaseId: v.id("academyPurchases"),
+    reason: v.optional(v.string()),
+  },
+  returns: v.union(
+    v.object({ refundedCredits: v.number() }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    return await revokeCoursePurchaseWithRefund(
+      ctx,
+      args.purchaseId,
+      args.reason ?? "Academy purchase revoked",
+    );
   },
 });
 

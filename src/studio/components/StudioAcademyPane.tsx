@@ -26,6 +26,7 @@ import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { useStudioAcademy } from "./StudioAcademyContext";
 import { ProfileCommentsPanel } from "./ProfileCommentsPanel";
+import { StudioConfirmOverlay } from "./StudioConfirmOverlay";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import "./studio-creative-network.css";
 import "./public-offers.css";
@@ -169,6 +170,7 @@ export function StudioAcademyPane({
   const getLessonPlayback = useAction(api.academyActions.getLessonPlayback);
 
   const [busy, setBusy] = useState(false);
+  const [buyConfirmOpen, setBuyConfirmOpen] = useState(false);
   const [introEmbed, setIntroEmbed] = useState<string | null>(null);
   const [lessonEmbed, setLessonEmbed] = useState<string | null>(null);
   const [loadingPlay, setLoadingPlay] = useState(false);
@@ -188,6 +190,7 @@ export function StudioAcademyPane({
     setIntroEmbed(null);
     setLessonEmbed(null);
     setCheckoutSheetOpen(false);
+    setBuyConfirmOpen(false);
     setCommentsOpen(false);
   }, [academy.courseId]);
 
@@ -248,16 +251,23 @@ export function StudioAcademyPane({
     try {
       await purchase({ courseId: academy.courseId });
       toast.success("Course unlocked");
+      setBuyConfirmOpen(false);
       setCheckoutSheetOpen(false);
     } catch (error) {
       const message = friendlyConvexError(error, "Purchase failed");
       toast.error(message);
       if (/not enough balance|top up/i.test(message)) {
+        setBuyConfirmOpen(false);
         onOpenCredits?.();
       }
     } finally {
       setBusy(false);
     }
+  }
+
+  function requestBuy() {
+    if (!academy.courseId || owned || busy) return;
+    setBuyConfirmOpen(true);
   }
 
   async function playIntro() {
@@ -485,7 +495,7 @@ export function StudioAcademyPane({
           <div className="studio-academy-checkout-strip">
             <CheckoutDock
               showHead={false}
-              onBuy={() => void buy()}
+              onBuy={requestBuy}
               busy={busy}
               owned={owned}
               priceLabel={priceLabel}
@@ -623,7 +633,7 @@ export function StudioAcademyPane({
               <div className="studio-cn-book-sheet-body">
                 <CheckoutDock
                   showHead={false}
-                  onBuy={() => void buy()}
+                  onBuy={requestBuy}
                   busy={busy}
                   owned={owned}
                   priceLabel={priceLabel}
@@ -634,6 +644,23 @@ export function StudioAcademyPane({
           </div>
         ) : null}
       </>
+    ) : null;
+
+  const buyConfirm =
+    detail && buyConfirmOpen ? (
+      <StudioConfirmOverlay
+        open={buyConfirmOpen}
+        title={`Buy ${detail.title}?`}
+        body={`${priceLabel} · lifetime access to all lessons.`}
+        icon={ShoppingBag}
+        confirmLabel={`Confirm · ${priceLabel}`}
+        cancelLabel="Cancel"
+        busy={busy}
+        onConfirm={() => void buy()}
+        onCancel={() => {
+          if (!busy) setBuyConfirmOpen(false);
+        }}
+      />
     ) : null;
 
   if (detailOpen && !isMobile) {
@@ -668,6 +695,7 @@ export function StudioAcademyPane({
             {commentsDock}
           </Panel>
         </PanelGroup>
+        {buyConfirm}
       </div>
     );
   }
@@ -679,6 +707,7 @@ export function StudioAcademyPane({
         {body}
         {mobileExtras}
       </div>
+      {buyConfirm}
     </div>
   );
 }
