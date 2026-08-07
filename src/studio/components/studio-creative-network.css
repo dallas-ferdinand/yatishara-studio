@@ -203,6 +203,30 @@
   border-radius: 12px;
 }
 
+.studio-academy-buy-group {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+}
+
+.studio-academy-buy-group .public-offers-btn.is-block {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.studio-academy-buy-cancel {
+  flex: 0 0 auto;
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.studio-academy-buy-group .public-offers-btn.is-primary.is-confirm {
+  border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border-soft));
+  background: color-mix(in srgb, var(--cursor-accent) 22%, transparent);
+}
+
 .studio-academy-body.is-locked .studio-academy-body-clip {
   max-height: inherit;
   overflow: hidden;

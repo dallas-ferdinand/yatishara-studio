@@ -3,12 +3,14 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
+  Check,
   GraduationCap,
   Library,
   Loader2,
   Lock,
   MessageCircle,
   ShoppingBag,
+  X,
   Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -26,7 +28,6 @@ import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { useStudioAcademy } from "./StudioAcademyContext";
 import { ProfileCommentsPanel } from "./ProfileCommentsPanel";
-import { StudioConfirmOverlay } from "./StudioConfirmOverlay";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import "./studio-creative-network.css";
 import "./public-offers.css";
@@ -46,15 +47,19 @@ function courseBannerUrl(course: {
 
 function CheckoutDock({
   showHead,
-  onBuy,
+  onBuyClick,
+  onCancelConfirm,
   busy,
+  confirming,
   owned,
   priceLabel,
   lessonCount,
 }: {
   showHead: boolean;
-  onBuy: () => void;
+  onBuyClick: () => void;
+  onCancelConfirm: () => void;
   busy: boolean;
+  confirming: boolean;
   owned: boolean;
   priceLabel: string;
   lessonCount: number;
@@ -77,19 +82,42 @@ function CheckoutDock({
         {owned ? (
           <p className="public-offers-note">You own this course.</p>
         ) : (
-          <button
-            type="button"
-            className="public-offers-btn is-primary is-block"
-            disabled={busy}
-            onClick={onBuy}
-          >
-            {busy ? (
-              <Loader2 className="animate-spin" aria-hidden="true" />
-            ) : (
-              <ShoppingBag aria-hidden="true" />
-            )}
-            Buy course
-          </button>
+          <div className="studio-academy-buy-group">
+            {confirming ? (
+              <button
+                type="button"
+                className="public-offers-btn is-quiet studio-academy-buy-cancel"
+                disabled={busy}
+                onClick={onCancelConfirm}
+                aria-label="Cancel purchase"
+                title="Cancel"
+              >
+                <X aria-hidden="true" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={`public-offers-btn is-primary is-block${confirming ? " is-confirm" : ""}`}
+              disabled={busy}
+              onClick={onBuyClick}
+              aria-label={
+                busy
+                  ? "Buying"
+                  : confirming
+                    ? `Confirm buy for ${priceLabel}`
+                    : `Buy course for ${priceLabel}`
+              }
+            >
+              {busy ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : confirming ? (
+                <Check aria-hidden="true" />
+              ) : (
+                <ShoppingBag aria-hidden="true" />
+              )}
+              {busy ? "Buying…" : confirming ? `Confirm · ${priceLabel}` : "Buy course"}
+            </button>
+          </div>
         )}
       </section>
     </div>
@@ -170,7 +198,7 @@ export function StudioAcademyPane({
   const getLessonPlayback = useAction(api.academyActions.getLessonPlayback);
 
   const [busy, setBusy] = useState(false);
-  const [buyConfirmOpen, setBuyConfirmOpen] = useState(false);
+  const [buyArmed, setBuyArmed] = useState(false);
   const [introEmbed, setIntroEmbed] = useState<string | null>(null);
   const [lessonEmbed, setLessonEmbed] = useState<string | null>(null);
   const [loadingPlay, setLoadingPlay] = useState(false);
@@ -190,7 +218,7 @@ export function StudioAcademyPane({
     setIntroEmbed(null);
     setLessonEmbed(null);
     setCheckoutSheetOpen(false);
-    setBuyConfirmOpen(false);
+    setBuyArmed(false);
     setCommentsOpen(false);
   }, [academy.courseId]);
 
@@ -251,13 +279,13 @@ export function StudioAcademyPane({
     try {
       await purchase({ courseId: academy.courseId });
       toast.success("Course unlocked");
-      setBuyConfirmOpen(false);
+      setBuyArmed(false);
       setCheckoutSheetOpen(false);
     } catch (error) {
       const message = friendlyConvexError(error, "Purchase failed");
       toast.error(message);
       if (/not enough balance|top up/i.test(message)) {
-        setBuyConfirmOpen(false);
+        setBuyArmed(false);
         onOpenCredits?.();
       }
     } finally {
@@ -265,9 +293,13 @@ export function StudioAcademyPane({
     }
   }
 
-  function requestBuy() {
+  function handleBuyClick() {
     if (!academy.courseId || owned || busy) return;
-    setBuyConfirmOpen(true);
+    if (buyArmed) {
+      void buy();
+      return;
+    }
+    setBuyArmed(true);
   }
 
   async function playIntro() {
@@ -515,8 +547,10 @@ export function StudioAcademyPane({
           <div className="studio-academy-checkout-strip">
             <CheckoutDock
               showHead={false}
-              onBuy={requestBuy}
+              onBuyClick={handleBuyClick}
+              onCancelConfirm={() => setBuyArmed(false)}
               busy={busy}
+              confirming={buyArmed}
               owned={owned}
               priceLabel={priceLabel}
               lessonCount={detail.lessonCount}
@@ -653,8 +687,10 @@ export function StudioAcademyPane({
               <div className="studio-cn-book-sheet-body">
                 <CheckoutDock
                   showHead={false}
-                  onBuy={requestBuy}
+                  onBuyClick={handleBuyClick}
+                  onCancelConfirm={() => setBuyArmed(false)}
                   busy={busy}
+                  confirming={buyArmed}
                   owned={owned}
                   priceLabel={priceLabel}
                   lessonCount={detail.lessonCount}
@@ -664,23 +700,6 @@ export function StudioAcademyPane({
           </div>
         ) : null}
       </>
-    ) : null;
-
-  const buyConfirm =
-    detail && buyConfirmOpen ? (
-      <StudioConfirmOverlay
-        open={buyConfirmOpen}
-        title={`Buy ${detail.title}?`}
-        body={`${priceLabel} · lifetime access to all lessons.`}
-        icon={ShoppingBag}
-        confirmLabel={`Confirm · ${priceLabel}`}
-        cancelLabel="Cancel"
-        busy={busy}
-        onConfirm={() => void buy()}
-        onCancel={() => {
-          if (!busy) setBuyConfirmOpen(false);
-        }}
-      />
     ) : null;
 
   if (detailOpen && !isMobile) {
@@ -715,7 +734,6 @@ export function StudioAcademyPane({
             {commentsDock}
           </Panel>
         </PanelGroup>
-        {buyConfirm}
       </div>
     );
   }
@@ -727,7 +745,6 @@ export function StudioAcademyPane({
         {body}
         {mobileExtras}
       </div>
-      {buyConfirm}
     </div>
   );
 }
