@@ -19525,14 +19525,21 @@ export function StudioShell({
           opacity: 0;
           pointer-events: none;
         }
+        /* Flat opaque plate — same blank page as admin / Network (no wallpaper). */
         .studio-academy-pane {
           display: flex;
           flex-direction: column;
           min-height: 0;
           flex: 1 1 0;
+          height: 100%;
+          width: 100%;
           overflow: auto;
           padding: 16px 18px 28px;
           gap: 14px;
+          background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
+          -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+          isolation: isolate;
         }
         .studio-academy-head {
           display: flex;
