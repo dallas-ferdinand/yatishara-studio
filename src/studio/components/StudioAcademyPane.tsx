@@ -9,7 +9,6 @@ import {
   Loader2,
   Lock,
   MessageCircle,
-  ShoppingBag,
   X,
   Zap,
 } from "lucide-react";
@@ -177,50 +176,60 @@ function CheckoutDock({
         ) : (
           <>
             <dl className="studio-academy-checkout-receipt">
-              <div className="studio-academy-checkout-row is-total">
+              <div className="studio-academy-checkout-row">
                 <dt>Course</dt>
                 <dd>{priceLabel}</dd>
               </div>
             </dl>
-            <div className="studio-academy-buy-group">
-              {confirming ? (
+            <div className="studio-academy-checkout-paywise">
+              <div className="studio-academy-checkout-wallet-actions">
+                {confirming ? (
+                  <button
+                    type="button"
+                    className="public-offers-btn is-icon studio-academy-buy-cancel"
+                    disabled={busy}
+                    onClick={onCancelConfirm}
+                    aria-label="Cancel purchase"
+                    title="Cancel"
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  className="public-offers-btn is-icon studio-academy-buy-cancel"
+                  className={`studio-settings-topup-pay${busy ? " is-loading" : ""}${confirming ? " is-confirm" : ""}`}
                   disabled={busy}
-                  onClick={onCancelConfirm}
-                  aria-label="Cancel purchase"
-                  title="Cancel"
+                  onClick={onBuyClick}
+                  aria-busy={busy}
+                  aria-label={
+                    busy
+                      ? "Buying"
+                      : confirming
+                        ? `Confirm pay ${priceLabel} from wallet balance`
+                        : `Pay ${priceLabel} with wallet balance`
+                  }
                 >
-                  <X aria-hidden="true" />
+                  {busy ? (
+                    <Loader2
+                      className="studio-settings-topup-pay-spin"
+                      aria-hidden="true"
+                    />
+                  ) : confirming ? (
+                    <Check aria-hidden="true" />
+                  ) : null}
+                  <span className="studio-settings-topup-pay-label">
+                    {busy
+                      ? "Buying…"
+                      : confirming
+                        ? `Confirm · ${priceLabel}`
+                        : "Pay with wallet balance"}
+                  </span>
                 </button>
-              ) : null}
-              <button
-                type="button"
-                className={`public-offers-btn is-primary is-block${confirming ? " is-confirm" : ""}`}
-                disabled={busy}
-                onClick={onBuyClick}
-                aria-label={
-                  busy
-                    ? "Buying"
-                    : confirming
-                      ? `Confirm buy for ${priceLabel}`
-                      : `Buy course for ${priceLabel}`
-                }
-              >
-                {busy ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                ) : confirming ? (
-                  <Check aria-hidden="true" />
-                ) : (
-                  <ShoppingBag aria-hidden="true" />
-                )}
-                {busy
-                  ? "Buying…"
-                  : confirming
-                    ? `Confirm · ${priceLabel}`
-                    : "Buy course"}
-              </button>
+              </div>
+              <p className="studio-settings-topup-secure">
+                <Lock aria-hidden="true" />
+                <span>secure checkout · unlocks right away</span>
+              </p>
             </div>
           </>
         )}
@@ -896,7 +905,7 @@ export function StudioAcademyPane({
                 onClick={() => setCheckoutSheetOpen(true)}
               >
                 <Zap aria-hidden="true" />
-                {needsTopUp ? "Pay with PayWise" : "Buy now"}
+                {needsTopUp ? "Pay with PayWise" : "Pay with wallet"}
               </button>
             ) : null}
           </div>
