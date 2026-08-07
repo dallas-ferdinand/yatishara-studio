@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   Heart,
   Image as ImageIcon,
+  ListFilter,
   Loader2,
   Lock,
   MessageCircle,
@@ -20,6 +21,7 @@ import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from "
 import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { CursorSelect } from "@/desk/components/CursorSelect";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { playUiSound } from "@/mos-app/sounds.js";
@@ -31,6 +33,15 @@ import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 
 const MAX_POST_CAPTION = 2200;
+
+type CommentSort = "newest" | "oldest" | "liked" | "replies";
+
+const COMMENT_SORT_OPTIONS: { value: CommentSort; label: string }[] = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "liked", label: "Most liked" },
+  { value: "replies", label: "Most replies" },
+];
 
 type CommentRow = {
   _id: Id<"profileComments"> | Id<"academyComments">;
@@ -174,6 +185,7 @@ function CommentsBody({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [commentSearch, setCommentSearch] = useState("");
+  const [commentSort, setCommentSort] = useState<CommentSort>("newest");
   const deferredSearch = useDeferredValue(commentSearch.trim());
   const searching = deferredSearch.length > 0 && !locked;
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
@@ -186,7 +198,7 @@ function CommentsBody({
   const rootPostComments = useQuery(
     api.profiles.listComments,
     !isCourse && postId && parentId === null
-      ? { postId, expiresUnix, limit: 50 }
+      ? { postId, expiresUnix, limit: 50, sort: commentSort }
       : "skip",
   );
   const replyPostComments = useQuery(
@@ -196,6 +208,7 @@ function CommentsBody({
           parentId: parentId as Id<"profileComments">,
           expiresUnix,
           limit: 50,
+          sort: commentSort,
         }
       : "skip",
   );
@@ -207,6 +220,7 @@ function CommentsBody({
           lessonId: lessonId ?? undefined,
           expiresUnix,
           limit: 50,
+          sort: commentSort,
         }
       : "skip",
   );
@@ -228,13 +242,14 @@ function CommentsBody({
           parentId: parentId as Id<"academyComments">,
           expiresUnix,
           limit: 50,
+          sort: commentSort,
         }
       : "skip",
   );
   const searchPostComments = useQuery(
     api.profiles.searchComments,
     !isCourse && postId && searching
-      ? { postId, query: deferredSearch, expiresUnix, limit: 40 }
+      ? { postId, query: deferredSearch, expiresUnix, limit: 40, sort: commentSort }
       : "skip",
   );
   const searchCourseComments = useQuery(
@@ -246,6 +261,7 @@ function CommentsBody({
           query: deferredSearch,
           expiresUnix,
           limit: 40,
+          sort: commentSort,
         }
       : "skip",
   );
@@ -915,6 +931,27 @@ function CommentsBody({
             onChange={setCommentSearch}
             placeholder="Search comments & replies"
             aria-label="Search comments and replies"
+            end={
+              <div className="profile-comments-sort">
+                <ListFilter aria-hidden="true" />
+                <CursorSelect
+                  value={commentSort}
+                  options={COMMENT_SORT_OPTIONS}
+                  onChange={(next) => {
+                    if (
+                      next === "newest" ||
+                      next === "oldest" ||
+                      next === "liked" ||
+                      next === "replies"
+                    ) {
+                      setCommentSort(next);
+                    }
+                  }}
+                  ariaLabel="Sort comments"
+                  align="end"
+                />
+              </div>
+            }
           />
         </div>
       ) : null}

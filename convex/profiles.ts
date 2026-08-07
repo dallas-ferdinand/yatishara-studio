@@ -33,6 +33,11 @@ import {
   type FeedMode,
 } from "./lib/feedRanking";
 import {
+  commentSortFetchCap,
+  normalizeCommentSort,
+  sortCommentRows,
+} from "./lib/commentSort";
+import {
   applyPostAffinity,
   clearPostHashtags,
   clearPostMentions,
@@ -2340,6 +2345,14 @@ export const listComments = query({
     postId: v.id("profilePosts"),
     expiresUnix: v.optional(v.number()),
     limit: v.optional(v.number()),
+    sort: v.optional(
+      v.union(
+        v.literal("newest"),
+        v.literal("oldest"),
+        v.literal("liked"),
+        v.literal("replies"),
+      ),
+    ),
   },
   returns: v.array(commentReturnValidator),
   handler: async (ctx, args) => {
@@ -2348,24 +2361,28 @@ export const listComments = query({
     } catch {
       return [];
     }
+    const sort = normalizeCommentSort(args.sort);
     const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const fetchCap = commentSortFetchCap(sort, limit);
     const rows = await ctx.db
       .query("profileComments")
       .withIndex("by_post_and_created", (q) => q.eq("postId", args.postId))
-      .order("desc")
-      .take(limit * 3 + 40);
+      .order(sort === "oldest" ? "asc" : "desc")
+      .take(fetchCap);
 
     const post = await ctx.db.get("profilePosts", args.postId);
     const topLevel: Doc<"profileComments">[] = [];
     for (const row of rows) {
       if (row.deletedAt || row.parentId) continue;
       topLevel.push(row);
-      if (topLevel.length >= limit) break;
+      if (sort === "newest" || sort === "oldest") {
+        if (topLevel.length >= limit) break;
+      }
     }
-    topLevel.reverse();
-    return hydrateComments(ctx, topLevel, post?.ownerId, expiresUnix);
+    const sorted = sortCommentRows(topLevel, sort).slice(0, limit);
+    return hydrateComments(ctx, sorted, post?.ownerId, expiresUnix);
   },
 });
 
@@ -2376,6 +2393,14 @@ export const searchComments = query({
     query: v.string(),
     expiresUnix: v.optional(v.number()),
     limit: v.optional(v.number()),
+    sort: v.optional(
+      v.union(
+        v.literal("newest"),
+        v.literal("oldest"),
+        v.literal("liked"),
+        v.literal("replies"),
+      ),
+    ),
   },
   returns: v.array(commentReturnValidator),
   handler: async (ctx, args) => {
@@ -2386,6 +2411,7 @@ export const searchComments = query({
     } catch {
       return [];
     }
+    const sort = normalizeCommentSort(args.sort);
     const limit = Math.min(Math.max(args.limit ?? 40, 1), 80);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
@@ -2400,7 +2426,7 @@ export const searchComments = query({
       if (row.deletedAt) continue;
       if (row.body.toLowerCase().includes(needle)) {
         candidates.push(row);
-        if (candidates.length >= limit * 2) break;
+        if (candidates.length >= Math.max(limit * 4, 80)) break;
       }
     }
 
@@ -2415,7 +2441,7 @@ export const searchComments = query({
       const hay = `${comment.body} ${comment.displayName} ${comment.username ?? ""}`.toLowerCase();
       return hay.includes(needle);
     });
-    return matched.slice(0, limit);
+    return sortCommentRows(matched, sort).slice(0, limit);
   },
 });
 
@@ -2425,6 +2451,14 @@ export const listCommentReplies = query({
     parentId: v.id("profileComments"),
     expiresUnix: v.optional(v.number()),
     limit: v.optional(v.number()),
+    sort: v.optional(
+      v.union(
+        v.literal("newest"),
+        v.literal("oldest"),
+        v.literal("liked"),
+        v.literal("replies"),
+      ),
+    ),
   },
   returns: v.array(commentReturnValidator),
   handler: async (ctx, args) => {
@@ -2435,18 +2469,21 @@ export const listCommentReplies = query({
     } catch {
       return [];
     }
+    const sort = normalizeCommentSort(args.sort);
     const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const fetchCap = commentSortFetchCap(sort, limit);
     const rows = await ctx.db
       .query("profileComments")
       .withIndex("by_parent_and_created", (q) => q.eq("parentId", args.parentId))
-      .order("asc")
-      .take(limit + 20);
+      .order(sort === "oldest" ? "asc" : "desc")
+      .take(fetchCap);
 
     const post = await ctx.db.get("profilePosts", parent.postId);
-    const alive = rows.filter((row) => !row.deletedAt).slice(0, limit);
-    return hydrateComments(ctx, alive, post?.ownerId, expiresUnix);
+    const alive = rows.filter((row) => !row.deletedAt);
+    const sorted = sortCommentRows(alive, sort).slice(0, limit);
+    return hydrateComments(ctx, sorted, post?.ownerId, expiresUnix);
   },
 });
 

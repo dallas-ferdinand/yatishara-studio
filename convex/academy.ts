@@ -17,6 +17,11 @@ import {
 } from "./lib/bunny";
 import { purchaseCourseForUser } from "./lib/academyPurchase";
 import {
+  commentSortFetchCap,
+  normalizeCommentSort,
+  sortCommentRows,
+} from "./lib/commentSort";
+import {
   accountNameFromUser,
   resolvePublicDisplayName,
 } from "./lib/profileEnsure";
@@ -1610,6 +1615,14 @@ export const listComments = authedQuery({
     lessonId: v.optional(v.id("academyLessons")),
     expiresUnix: v.optional(v.number()),
     limit: v.optional(v.number()),
+    sort: v.optional(
+      v.union(
+        v.literal("newest"),
+        v.literal("oldest"),
+        v.literal("liked"),
+        v.literal("replies"),
+      ),
+    ),
   },
   returns: v.array(academyCommentReturn),
   handler: async (ctx, args) => {
@@ -1622,9 +1635,12 @@ export const listComments = authedQuery({
       const lesson = await ctx.db.get("academyLessons", args.lessonId);
       if (!lesson || lesson.courseId !== args.courseId) return [];
     }
+    const sort = normalizeCommentSort(args.sort);
     const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + COMMENT_URL_TTL_SEC;
+    const fetchCap = commentSortFetchCap(sort, limit);
+    const order = sort === "oldest" ? "asc" : "desc";
 
     let rows: Doc<"academyComments">[];
     if (args.lessonId) {
@@ -1633,14 +1649,14 @@ export const listComments = authedQuery({
         .withIndex("by_lesson_and_created", (q) =>
           q.eq("lessonId", args.lessonId!),
         )
-        .order("desc")
-        .take(limit * 3 + 40);
+        .order(order)
+        .take(fetchCap);
     } else {
       rows = await ctx.db
         .query("academyComments")
         .withIndex("by_course_and_created", (q) => q.eq("courseId", args.courseId))
-        .order("desc")
-        .take(limit * 3 + 40);
+        .order(order)
+        .take(fetchCap);
     }
 
     const course = await ctx.db.get("academyCourses", args.courseId);
@@ -1653,12 +1669,14 @@ export const listComments = authedQuery({
         continue;
       }
       topLevel.push(row);
-      if (topLevel.length >= limit) break;
+      if (sort === "newest" || sort === "oldest") {
+        if (topLevel.length >= limit) break;
+      }
     }
-    topLevel.reverse();
+    const sorted = sortCommentRows(topLevel, sort).slice(0, limit);
     return hydrateAcademyComments(
       ctx,
-      topLevel,
+      sorted,
       course?.createdByAdminId,
       ctx.user._id,
       expiresUnix,
@@ -1674,6 +1692,14 @@ export const searchComments = authedQuery({
     query: v.string(),
     expiresUnix: v.optional(v.number()),
     limit: v.optional(v.number()),
+    sort: v.optional(
+      v.union(
+        v.literal("newest"),
+        v.literal("oldest"),
+        v.literal("liked"),
+        v.literal("replies"),
+      ),
+    ),
   },
   returns: v.array(academyCommentReturn),
   handler: async (ctx, args) => {
@@ -1688,6 +1714,7 @@ export const searchComments = authedQuery({
       const lesson = await ctx.db.get("academyLessons", args.lessonId);
       if (!lesson || lesson.courseId !== args.courseId) return [];
     }
+    const sort = normalizeCommentSort(args.sort);
     const limit = Math.min(Math.max(args.limit ?? 40, 1), 80);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + COMMENT_URL_TTL_SEC;
@@ -1719,7 +1746,7 @@ export const searchComments = authedQuery({
       }
       if (row.body.toLowerCase().includes(needle)) {
         candidates.push(row);
-        if (candidates.length >= limit * 2) break;
+        if (candidates.length >= Math.max(limit * 4, 80)) break;
       }
     }
 
@@ -1735,7 +1762,7 @@ export const searchComments = authedQuery({
       const hay = `${comment.body} ${comment.displayName} ${comment.username ?? ""}`.toLowerCase();
       return hay.includes(needle);
     });
-    return matched.slice(0, limit);
+    return sortCommentRows(matched, sort).slice(0, limit);
   },
 });
 
@@ -1813,6 +1840,14 @@ export const listCommentReplies = authedQuery({
     parentId: v.id("academyComments"),
     expiresUnix: v.optional(v.number()),
     limit: v.optional(v.number()),
+    sort: v.optional(
+      v.union(
+        v.literal("newest"),
+        v.literal("oldest"),
+        v.literal("liked"),
+        v.literal("replies"),
+      ),
+    ),
   },
   returns: v.array(academyCommentReturn),
   handler: async (ctx, args) => {
@@ -1823,19 +1858,22 @@ export const listCommentReplies = authedQuery({
     } catch {
       return [];
     }
+    const sort = normalizeCommentSort(args.sort);
     const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + COMMENT_URL_TTL_SEC;
+    const fetchCap = commentSortFetchCap(sort, limit);
     const rows = await ctx.db
       .query("academyComments")
       .withIndex("by_parent_and_created", (q) => q.eq("parentId", args.parentId))
-      .order("asc")
-      .take(limit + 20);
+      .order(sort === "oldest" ? "asc" : "desc")
+      .take(fetchCap);
     const course = await ctx.db.get("academyCourses", parent.courseId);
-    const alive = rows.filter((row) => !row.deletedAt).slice(0, limit);
+    const alive = rows.filter((row) => !row.deletedAt);
+    const sorted = sortCommentRows(alive, sort).slice(0, limit);
     return hydrateAcademyComments(
       ctx,
-      alive,
+      sorted,
       course?.createdByAdminId,
       ctx.user._id,
       expiresUnix,
