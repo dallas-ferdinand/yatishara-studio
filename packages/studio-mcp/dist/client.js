@@ -214,13 +214,13 @@ const AGENT_START_HERE = {
     "studio_project_context \u2014 pack for an existing project folder",
     "studio_estimate_generation \u2192 studio_generate_* (or studio_generate_batch)",
     "studio_production_guide \u2014 before element/character/prop sheets",
-    "studio_view_media \u2014 inspect outputs before the next generate",
-    "studio_create_edit \u2192 studio_edit_append_clips \u2192 studio_pull_frame \u2192 studio_edit_* \u2192 studio_export_edit \u2014 MCP timeline editing"
+    "studio_view_media \u2014 inspect image outputs; for VIDEO use studio_sample_video_frames first",
+    "studio_sample_video_frames \u2192 Cursor Read frame URLs \u2192 studio_create_edit \u2192 trim bad windows \u2192 studio_pull_frame \u2192 studio_export_edit"
   ],
   lanes: {
     direct: "studio_generate_image|video|script|audio \u2014 agent-owned prompts (default for production skills)",
     assisted: "studio_ensure_brief \u2192 \u2026 \u2192 studio_approve_brief \u2014 Studio Assistance UI lane; use only when user wants assisted briefs",
-    editing: "studio_create_edit \u2192 append/update/reorder/split/transition \u2192 studio_pull_frame \u2192 studio_export_edit (full PUT via studio_update_edit is escape hatch)"
+    editing: "QC with studio_sample_video_frames (Read stills) \u2192 create_edit \u2192 append/update trims \u2192 pull_frame to verify \u2192 export. Keep audio unless asked to mute. Open editor live-syncs MCP writes; use studio_update_edit full replace if timeline stuck. Do not shell-ffmpeg when these tools exist."
   },
   avoidBlindBfs: "Prefer studio_workspace_tree / studio_search over repeated studio_list_folders.",
   stillUsefulNotDuplicates: [

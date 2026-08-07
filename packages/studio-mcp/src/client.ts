@@ -259,15 +259,15 @@ export const AGENT_START_HERE = {
     "studio_project_context — pack for an existing project folder",
     "studio_estimate_generation → studio_generate_* (or studio_generate_batch)",
     "studio_production_guide — before element/character/prop sheets",
-    "studio_view_media — inspect outputs before the next generate",
-    "studio_create_edit → studio_edit_append_clips → studio_pull_frame → studio_edit_* → studio_export_edit — MCP timeline editing",
+    "studio_view_media — inspect image outputs; for VIDEO use studio_sample_video_frames first",
+    "studio_sample_video_frames → Cursor Read frame URLs → studio_create_edit → trim bad windows → studio_pull_frame → studio_export_edit",
   ],
   lanes: {
     direct: "studio_generate_image|video|script|audio — agent-owned prompts (default for production skills)",
     assisted:
       "studio_ensure_brief → … → studio_approve_brief — Studio Assistance UI lane; use only when user wants assisted briefs",
     editing:
-      "studio_create_edit → append/update/reorder/split/transition → studio_pull_frame → studio_export_edit (full PUT via studio_update_edit is escape hatch)",
+      "QC with studio_sample_video_frames (Read stills) → create_edit → append/update trims → pull_frame to verify → export. Keep audio unless asked to mute. Open editor live-syncs MCP writes; use studio_update_edit full replace if timeline stuck. Do not shell-ffmpeg when these tools exist.",
   },
   avoidBlindBfs: "Prefer studio_workspace_tree / studio_search over repeated studio_list_folders.",
   stillUsefulNotDuplicates: [

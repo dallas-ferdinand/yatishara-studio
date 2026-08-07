@@ -9,9 +9,24 @@ function registerAssetTools(server) {
   );
   server.tool(
     "studio_view_media",
-    "Return signed media URLs for the host client to view (e.g. Cursor Read on preferredViewUrl). Does NOT call Studio AI and uses no generation credits. Prefer thumbnailUrl/preferredViewUrl for images.",
+    "Return signed media URLs for the host client to view (e.g. Cursor Read on preferredViewUrl). Does NOT call Studio AI and uses no generation credits. Prefer thumbnailUrl/preferredViewUrl for images. For VIDEO QC before editing, use studio_sample_video_frames (Cursor cannot scrub MP4 via Read).",
     { assetId: z.string() },
     async ({ assetId }) => jsonResult(await studioFetch(`/assets/${encodeURIComponent(assetId)}/media`))
+  );
+  server.tool(
+    "studio_sample_video_frames",
+    "[preferred] QC a video before cutting: ffmpeg stills at timesSec[] or evenly spaced count (default 3, max 6). Saves QC \xB7 *.jpg next to the source; return preferredViewUrl per frame \u2014 Cursor Read those images to spot artifacts/glitches. No edit project required. Uses generate+write scope.",
+    {
+      assetId: z.string(),
+      timesSec: z.array(z.number()).optional().describe("Exact source timestamps to sample (preferred when you suspect a bad window)"),
+      count: z.number().optional().describe("Evenly spaced samples across duration when timesSec omitted (default 3, max 6)")
+    },
+    async ({ assetId, timesSec, count }) => jsonResult(
+      await studioFetch(`/assets/${encodeURIComponent(assetId)}/frames`, {
+        method: "POST",
+        body: JSON.stringify({ timesSec, count })
+      })
+    )
   );
   server.tool(
     "studio_duplicate_asset",

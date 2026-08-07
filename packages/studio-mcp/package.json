@@ -1,6 +1,6 @@
 {
   "name": "@yatishara/studio-mcp",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "MCP server for Yatishara Studio — workspace, generation, edits/export/package, DMs, feed/profiles, Creative Network, notifications, and billing",
   "type": "module",
   "bin": {

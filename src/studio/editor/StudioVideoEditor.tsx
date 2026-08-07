@@ -133,6 +133,11 @@ export function StudioVideoEditor({
   const saveTimerRef = useRef(null);
   const saveChainRef = useRef(Promise.resolve());
   const creatingProjectRef = useRef(false);
+  /** Last Convex updatedAt we wrote or intentionally applied (MCP/other-tab sync). */
+  const lastAckedUpdatedAtRef = useRef(0);
+  /** Skip autosave briefly after adopting a remote timeline so we don't fight the sync. */
+  const suppressAutosaveUntilRef = useRef(0);
+  const projectRef = useRef(null);
   /** Sticky home folder for this .studio — never follows the Files rail browse folder. */
   const [homeFolderId, setHomeFolderId] = useState(folderId);
 
@@ -297,6 +302,7 @@ export function StudioVideoEditor({
       });
       setLocalProjectId(saved._id);
       if (saved.folderId) setHomeFolderId(saved.folderId);
+      lastAckedUpdatedAtRef.current = Number(saved.updatedAt) || 0;
       onProjectSaved?.(saved._id, resolvedName);
       setHydrated(true);
       return;
@@ -345,10 +351,43 @@ export function StudioVideoEditor({
     dispatch({ type: "update_project", patch: { name: remote } });
   }, [existing?.name, existing?.updatedAt, hydrated, state.project.name]);
 
+  projectRef.current = state.project;
+
+  // MCP / other-tab writes bump Convex updatedAt. Adopt remote timeline instead of
+  // letting the 800ms autosave overwrite agent edits with a stale local snapshot.
+  useEffect(() => {
+    if (!hydrated || !existing?.project) return;
+    const remoteUpdatedAt = Number(existing.updatedAt) || 0;
+    if (!remoteUpdatedAt || remoteUpdatedAt <= lastAckedUpdatedAtRef.current) return;
+
+    const resolvedName = existing.name?.trim() || existing.project.name || "Untitled";
+    const remoteProject = { ...existing.project, name: resolvedName };
+    const localProject = projectRef.current;
+    const sameTimeline =
+      localProject &&
+      JSON.stringify(localProject.clips ?? []) === JSON.stringify(remoteProject.clips ?? []) &&
+      JSON.stringify(localProject.tracks ?? []) === JSON.stringify(remoteProject.tracks ?? []) &&
+      String(localProject.frameRatio ?? "") === String(remoteProject.frameRatio ?? "") &&
+      Number(localProject.duration ?? 0) === Number(remoteProject.duration ?? 0);
+
+    lastAckedUpdatedAtRef.current = remoteUpdatedAt;
+    if (sameTimeline) return;
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    suppressAutosaveUntilRef.current = Date.now() + 1200;
+    dispatch({ type: "replace_project", project: remoteProject });
+    if (existing.folderId) setHomeFolderId(existing.folderId);
+    onStatus?.("Timeline updated from sync.");
+  }, [existing?.updatedAt, existing?.project, existing?.name, existing?.folderId, hydrated, onStatus]);
+
   const queueSave = useCallback(
     (projectSnapshot, name) => {
       saveChainRef.current = saveChainRef.current
         .then(async () => {
+          if (Date.now() < suppressAutosaveUntilRef.current) return;
           if (creatingProjectRef.current && !localProjectId) return;
           if (!isRealFolderId(homeFolderId)) return;
           if (!localProjectId) creatingProjectRef.current = true;
@@ -363,6 +402,9 @@ export function StudioVideoEditor({
             if (result?.projectId && !localProjectId) {
               setLocalProjectId(result.projectId);
               onProjectSaved?.(result.projectId, name);
+            }
+            if (typeof result?.updatedAt === "number" && result.updatedAt > 0) {
+              lastAckedUpdatedAtRef.current = result.updatedAt;
             }
             setSaveError(null);
           } catch (error) {
@@ -380,8 +422,10 @@ export function StudioVideoEditor({
 
   useEffect(() => {
     if (!hydrated || saveError) return;
+    if (Date.now() < suppressAutosaveUntilRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
+      if (Date.now() < suppressAutosaveUntilRef.current) return;
       void queueSave(state.project, state.project.name);
     }, 800);
     return () => {

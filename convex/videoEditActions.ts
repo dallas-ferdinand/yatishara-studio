@@ -1897,3 +1897,143 @@ export const pullFrameForApi = internalAction({
     }
   },
 });
+
+/** Sample stills from a source video for agent QC (no edit project required). */
+export const sampleAssetFramesForApi = internalAction({
+  args: {
+    userId: v.id("users"),
+    assetId: v.id("assets"),
+    timesSec: v.optional(v.array(v.number())),
+    count: v.optional(v.number()),
+  },
+  returns: v.object({
+    sourceAssetId: v.id("assets"),
+    durationSec: v.number(),
+    frames: v.array(
+      v.object({
+        timeSec: v.number(),
+        assetId: v.id("assets"),
+        name: v.string(),
+        url: v.string(),
+        thumbnailUrl: v.string(),
+        preferredViewUrl: v.string(),
+      }),
+    ),
+    expiresUnix: v.number(),
+    viewHint: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    try {
+      await execFileAsync("ffmpeg", ["-version"]);
+    } catch {
+      throw new Error(
+        "Frame sample requires ffmpeg on the Convex action runtime. Install ffmpeg on the action host, then retry.",
+      );
+    }
+
+    const source = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+      userId: args.userId,
+      assetId: args.assetId,
+    });
+    if (!source?.bunnyPath) throw new Error("Source media not found.");
+    if (source.kind !== "video") {
+      throw new Error("studio_sample_video_frames only works on video assets.");
+    }
+
+    const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60;
+    const signedSource = await signBunnyCdnUrl(source.bunnyPath, expiresUnix);
+    const tempDir = await mkdtemp(join(tmpdir(), "studio-sample-"));
+    try {
+      const sourcePath = join(tempDir, "source.bin");
+      await downloadToFile(signedSource, sourcePath);
+      const probed = await probeMediaDurationSeconds(sourcePath);
+      const durationSec =
+        typeof source.durationSeconds === "number" && source.durationSeconds > 0.05
+          ? source.durationSeconds
+          : probed;
+
+      let times: number[] = [];
+      if (Array.isArray(args.timesSec) && args.timesSec.length > 0) {
+        times = args.timesSec.map((t) => Math.max(0, Math.min(durationSec - 0.05, Number(t) || 0)));
+      } else {
+        const n = Math.max(1, Math.min(6, Math.floor(args.count ?? 3)));
+        if (n === 1) {
+          times = [Math.max(0, durationSec * 0.5)];
+        } else {
+          for (let i = 0; i < n; i++) {
+            const frac = (i + 0.5) / n;
+            times.push(Math.max(0, Math.min(durationSec - 0.05, durationSec * frac)));
+          }
+        }
+      }
+      // de-dupe + cap
+      times = [...new Set(times.map((t) => Math.round(t * 100) / 100))].slice(0, 6);
+
+      const safeBase = (source.name || "clip").replace(/[^\w.-]+/g, " ").trim().slice(0, 36) || "clip";
+      const frames: Array<{
+        timeSec: number;
+        assetId: Id<"assets">;
+        name: string;
+        url: string;
+        thumbnailUrl: string;
+        preferredViewUrl: string;
+      }> = [];
+
+      for (const seekTime of times) {
+        const framePath = join(tempDir, `frame-${seekTime}.jpg`);
+        await execFileAsync("ffmpeg", [
+          "-y",
+          "-ss",
+          String(seekTime),
+          "-i",
+          sourcePath,
+          "-frames:v",
+          "1",
+          "-q:v",
+          "3",
+          framePath,
+        ]);
+        const body = await readFile(framePath);
+        const timeLabel = seekTime.toFixed(2).replace(".", "s");
+        const filename = `QC · ${safeBase} · ${timeLabel}.jpg`;
+        const prepared: { assetId: Id<"assets">; bunnyPath: string } = await ctx.runMutation(
+          internal.videoEditInternal.createFrameAsset,
+          {
+            userId: args.userId,
+            folderId: source.folderId,
+            name: filename,
+          },
+        );
+        await putObject({
+          path: prepared.bunnyPath,
+          body,
+          contentType: "image/jpeg",
+        });
+        await ctx.runMutation(internal.videoEditInternal.finalizeExportAsset, {
+          assetId: prepared.assetId,
+          byteSize: body.byteLength,
+        });
+        const url = await signBunnyCdnUrl(prepared.bunnyPath, expiresUnix);
+        frames.push({
+          timeSec: seekTime,
+          assetId: prepared.assetId,
+          name: filename,
+          url,
+          thumbnailUrl: url,
+          preferredViewUrl: url,
+        });
+      }
+
+      return {
+        sourceAssetId: args.assetId,
+        durationSec,
+        frames,
+        expiresUnix,
+        viewHint:
+          "Cursor Read preferredViewUrl on each frame to visually QC artifacts before trimming. Prefer timesSec for suspected error windows; default count=3 samples mid thirds.",
+      };
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  },
+});

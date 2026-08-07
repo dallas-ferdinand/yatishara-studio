@@ -92,7 +92,7 @@ const clipPatch = z.object({
 export function registerEditTools(server: McpServer) {
   server.tool(
     "studio_create_edit",
-    "[preferred] Create a video edit project. Pass assetIds to seed sequential clips on the timeline (video/image on track-v1, audio on audio tracks).",
+    "[preferred] Create a video edit project. Pass assetIds to seed sequential clips on the timeline (video/image on track-v1, audio on audio tracks). Before cutting: studio_sample_video_frames on each source to QC artifacts. Keep source audio unless user asks mute (do NOT set effects.volume 0 by default). Open editor live-syncs MCP writes — still prefer studio_get_edit after big replaces.",
     {
       folderId: z.string().optional(),
       name: z.string().optional(),
@@ -129,7 +129,7 @@ export function registerEditTools(server: McpServer) {
 
   server.tool(
     "studio_update_edit",
-    "Save full project JSON (PUT) and/or rename/move (set name/folderId). Prefer granular studio_edit_* tools for clip ops. Pass project for full timeline replace.",
+    "Save full project JSON (PUT) and/or rename/move (set name/folderId). Prefer granular studio_edit_* tools for clip ops. Pass project for full timeline replace when remove/append races or mute state is stuck. Open editor adopts newer Convex updatedAt automatically; verify with studio_get_edit then studio_export_edit.",
     {
       projectId: z.string(),
       name: z.string().optional(),
@@ -175,7 +175,7 @@ export function registerEditTools(server: McpServer) {
 
   server.tool(
     "studio_edit_update_clips",
-    "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects (volume/fades/speed/scale/x/y/rotation), transitionOut, text (text clips). Per-clip mute = effects.volume 0.",
+    "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects (volume/fades/speed/scale/x/y/rotation), transitionOut, text (text clips). Per-clip mute = effects.volume 0 — only when the user asks to mute; exports will be silent if volume is 0. Default leave volume unset/1 to keep source audio.",
     {
       projectId: z.string(),
       clips: z.array(clipPatch).min(1),
@@ -279,7 +279,7 @@ export function registerEditTools(server: McpServer) {
 
   server.tool(
     "studio_pull_frame",
-    "[preferred] Extract a still frame via ffmpeg and save it as an image asset in the edit folder. Pass timeSec for timeline playhead, or assetId + localTimeSec for a source asset. Then studio_view_media / Read preferredViewUrl.",
+    "[preferred] Extract one still from an open edit via ffmpeg (saved in the edit folder). Pass timeSec for timeline playhead, or assetId + localTimeSec for a source. Then Read preferredViewUrl. For pre-edit multi-frame QC of a source clip, use studio_sample_video_frames instead.",
     {
       projectId: z.string(),
       timeSec: z.number().optional().describe("Timeline playhead seconds (default 0)"),

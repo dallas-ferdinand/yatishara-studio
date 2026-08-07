@@ -14,6 +14,9 @@ export const getAssetForExport = internalQuery({
     v.object({
       bunnyPath: v.optional(v.string()),
       name: v.string(),
+      folderId: v.id("folders"),
+      kind: v.string(),
+      durationSeconds: v.optional(v.number()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -21,7 +24,13 @@ export const getAssetForExport = internalQuery({
     if (!asset || asset.ownerId !== args.userId || asset.deletedAt) {
       return null;
     }
-    return { bunnyPath: asset.bunnyPath, name: asset.name };
+    return {
+      bunnyPath: asset.bunnyPath,
+      name: asset.name,
+      folderId: asset.folderId,
+      kind: asset.kind,
+      durationSeconds: asset.durationSeconds,
+    };
   },
 });
 

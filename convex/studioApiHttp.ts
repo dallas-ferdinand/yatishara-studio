@@ -488,6 +488,24 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       return finish(jsonResponse(media));
     }
 
+    const assetFramesMatch = route.match(/^assets\/([^/]+)\/frames$/);
+    if (request.method === "POST" && assetFramesMatch) {
+      const auth = await authFor("generate", "write");
+      if (auth instanceof Response) return finish(auth);
+      const assetId = assetFramesMatch[1] as Id<"assets">;
+      const body = await readJsonBody<{
+        timesSec?: number[];
+        count?: number;
+      }>(request);
+      const result = await ctx.runAction(internal.videoEditActions.sampleAssetFramesForApi, {
+        userId: auth.userId,
+        assetId,
+        timesSec: body.timesSec,
+        count: body.count,
+      });
+      return finish(jsonResponse(result));
+    }
+
     const assetDuplicateMatch = route.match(/^assets\/([^/]+)\/duplicate$/);
     if (request.method === "POST" && assetDuplicateMatch) {
       const auth = await authFor("write", "write");

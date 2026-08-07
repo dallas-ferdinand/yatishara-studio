@@ -407,6 +407,7 @@ export const save = authedMutation({
   },
   returns: v.object({
     projectId: v.id("videoEditProjects"),
+    updatedAt: v.number(),
   }),
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -436,7 +437,7 @@ export const save = authedMutation({
         projectJson: JSON.stringify(projectPayload),
         updatedAt: now,
       });
-      return { projectId: args.projectId };
+      return { projectId: args.projectId, updatedAt: now };
     }
     await requireFolderOwnerOrEditShare(ctx, args.folderId);
     const projectPayload = { ...args.project, name, folderId: args.folderId };
@@ -449,7 +450,7 @@ export const save = authedMutation({
       createdAt: now,
       updatedAt: now,
     });
-    return { projectId };
+    return { projectId, updatedAt: now };
   },
 });
 
