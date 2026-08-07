@@ -32101,8 +32101,14 @@ function SettingsSidePanel({
     <aside className="studio-settings-sidebar flex h-full w-full min-w-0 flex-col border-l border-cursor-border-soft">
       <div className={`${STYLE.panelHead} shrink-0`}>
         <span className="text-sm font-medium text-cursor-text-bright">Settings</span>
-        <button type="button" className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close" onClick={onClose} aria-label="Close settings">
-          ×
+        <button
+          type="button"
+          className="studio-share-people-icon-btn is-close"
+          onClick={onClose}
+          aria-label="Close settings"
+          title="Close"
+        >
+          <X aria-hidden="true" />
         </button>
       </div>
       {pane}
