@@ -2733,6 +2733,7 @@
   pointer-events: none;
 }
 
+.studio-dm-chat-filter .desk-explorer-type-filter-trigger .icon-inline,
 .studio-dm-chat-filter .desk-explorer-type-filter-trigger > svg:first-child {
   width: 13px;
   height: 13px;

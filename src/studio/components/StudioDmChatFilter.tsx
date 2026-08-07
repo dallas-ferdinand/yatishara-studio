@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowDown, Circle, Clock, ListFilter, Mail, MailOpen, MessagesSquare, X } from "lucide-react";
+import { ArrowDown, Circle, Clock, Mail, MailOpen, MessagesSquare, X } from "lucide-react";
 import { createElement, useEffect, useRef, useState } from "react";
 import type { ComponentType } from "react";
+import { Icon } from "@/desk/components/Icons";
 
 export type StudioDmChatFilterId =
   | "all"
@@ -68,7 +69,7 @@ export function StudioDmChatFilter({
         aria-label={filtered ? `Filter: ${active.label}` : "Filter chats"}
         onClick={() => setOpen((prev) => !prev)}
       >
-        <ListFilter aria-hidden={true} />
+        <Icon name="sliders" size={13} />
         <span>{active.label}</span>
         <ArrowDown className="cursor-select-arrow" aria-hidden={true} />
       </button>

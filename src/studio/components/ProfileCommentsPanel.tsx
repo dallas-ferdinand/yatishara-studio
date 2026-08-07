@@ -934,7 +934,6 @@ function CommentsBody({
               <ExplorerTypeFilter
                 value={commentSort}
                 defaultId="newest"
-                triggerIcon="sliders"
                 options={[...COMMENT_SORT_FILTERS]}
                 onChange={(next) => {
                   if (

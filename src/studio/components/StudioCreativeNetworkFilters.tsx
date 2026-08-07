@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowDown, ListFilter, Search } from "lucide-react";
+import { ArrowDown, Search } from "lucide-react";
+import { Icon } from "@/desk/components/Icons";
 import { Fragment, useState } from "react";
 import {
   NETWORK_OPTION_FILTERS,
@@ -95,7 +96,7 @@ export function StudioCreativeNetworkFilters() {
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
         >
-          <ListFilter aria-hidden="true" />
+          <Icon name="sliders" size={14} />
           Filters
           {cn.hasFilters ? <em>{cn.activeChips.length}</em> : null}
         </button>

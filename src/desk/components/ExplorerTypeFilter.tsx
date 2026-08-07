@@ -26,8 +26,8 @@ export const NETWORK_AUDIO_TYPE_FILTERS = [
  * Labeled filter dropdown with leading icons in the menu (shared CursorSelect language).
  * Pass `options` for alternate sets (e.g. network audio All / Music / SFX).
  * `defaultId` is the clear/reset value (Files uses "all"; comments use "newest").
- * `triggerIcon` — when set, always show that Icon on the closed button (e.g. "sliders"
- * for a filter glyph) instead of the active option’s icon. Menu rows still use option icons.
+ * `triggerIcon` — closed-button glyph (default `"sliders"`, same as comments search
+ * filter). Pass `null` to show the active option’s icon instead. Menu rows still use option icons.
  */
 export function ExplorerTypeFilter({
   value = "all",
@@ -35,7 +35,7 @@ export function ExplorerTypeFilter({
   options = EXPLORER_TYPE_FILTERS,
   ariaLabel = "Filter content",
   defaultId = "all",
-  triggerIcon = null,
+  triggerIcon = "sliders",
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
