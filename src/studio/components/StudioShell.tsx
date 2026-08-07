@@ -12059,13 +12059,13 @@ export function StudioShell({
         }
         .studio-settings-billing-hero-icon {
           position: absolute;
-          right: -10px;
+          right: -22px;
           top: 50%;
-          width: 92px;
-          height: 92px;
-          transform: translateY(-46%) rotate(-8deg);
+          width: 128px;
+          height: 128px;
+          transform: translateY(-48%) rotate(-10deg);
           color: var(--cursor-accent);
-          opacity: 0.18;
+          opacity: 0.22;
           pointer-events: none;
           z-index: 0;
         }
