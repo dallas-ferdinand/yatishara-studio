@@ -12033,6 +12033,7 @@ export function StudioShell({
         }
         .studio-settings-workspace .studio-settings-plans {
           padding: 0 !important;
+          gap: 0;
           border-radius: 12px;
           background: var(--mos-page, var(--color-cursor-bg));
         }
