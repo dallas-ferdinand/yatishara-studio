@@ -32705,15 +32705,6 @@ function SettingsWorkspacePane({
                   paywiseTotalCents > 0 ? (
                     <dl className="studio-academy-checkout-receipt studio-settings-billing-receipt">
                       <div className="studio-academy-checkout-row">
-                        <dt>Available balance</dt>
-                        <dd>
-                          {formatTtdFromCredits(
-                            billingAccount?.creditBalance ?? 0,
-                            pricing?.creditPriceCents,
-                          )}
-                        </dd>
-                      </div>
-                      <div className="studio-academy-checkout-row">
                         <dt>Top up</dt>
                         <dd>{formatTtdCents(customAmountCents)}</dd>
                       </div>
@@ -32723,10 +32714,6 @@ function SettingsWorkspacePane({
                           <dd>{formatTtdShort(paywiseFeeCents)}</dd>
                         </div>
                       ) : null}
-                      <div className="studio-academy-checkout-row is-total">
-                        <dt>Total</dt>
-                        <dd>{formatTtdCents(paywiseTotalCents)}</dd>
-                      </div>
                     </dl>
                   ) : null}
                   <button
