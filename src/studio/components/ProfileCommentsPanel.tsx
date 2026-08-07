@@ -16,10 +16,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { playUiSound } from "@/mos-app/sounds.js";
 import { formatPostWhen } from "@/studio/lib/formatPostWhen";
@@ -217,15 +218,37 @@ function CommentsBody({
         }
       : "skip",
   );
-  const comments = isCourse
-    ? parentId === null
-      ? locked
-        ? previewCourseComments
-        : rootCourseComments
-      : replyCourseComments
-    : parentId === null
-      ? rootPostComments
-      : replyPostComments;
+  const searchPostComments = useQuery(
+    api.profiles.searchComments,
+    !isCourse && postId && searching
+      ? { postId, query: deferredSearch, expiresUnix, limit: 40 }
+      : "skip",
+  );
+  const searchCourseComments = useQuery(
+    api.academy.searchComments,
+    isCourse && courseId && searching
+      ? {
+          courseId,
+          lessonId: lessonId ?? undefined,
+          query: deferredSearch,
+          expiresUnix,
+          limit: 40,
+        }
+      : "skip",
+  );
+  const comments = searching
+    ? isCourse
+      ? searchCourseComments
+      : searchPostComments
+    : isCourse
+      ? parentId === null
+        ? locked
+          ? previewCourseComments
+          : rootCourseComments
+        : replyCourseComments
+      : parentId === null
+        ? rootPostComments
+        : replyPostComments;
 
   const addPostComment = useMutation(api.profiles.addComment);
   const deletePostComment = useMutation(api.profiles.deleteComment);
@@ -240,6 +263,9 @@ function CommentsBody({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [commentSearch, setCommentSearch] = useState("");
+  const deferredSearch = useDeferredValue(commentSearch.trim());
+  const searching = deferredSearch.length > 0 && !locked;
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [likeLocal, setLikeLocal] = useState<
@@ -269,8 +295,14 @@ function CommentsBody({
     clearPendingImage();
     setImagePreviewUrl(null);
     setLikeLocal({});
+    setCommentSearch("");
     setStack([{ parentId: null, parentPreview: null, scrollTop: 0 }]);
   }, [postId, courseId, lessonId]);
+
+  useEffect(() => {
+    if (!searching || stack.length <= 1) return;
+    setStack([{ parentId: null, parentPreview: null, scrollTop: 0 }]);
+  }, [searching, stack.length]);
 
   useEffect(() => {
     return () => {
@@ -307,6 +339,7 @@ function CommentsBody({
 
   function openReplies(comment: CommentRow) {
     const scrollTop = saveCurrentScroll();
+    setCommentSearch("");
     setStack((prev) => {
       const next = [...prev];
       const last = next[next.length - 1];
@@ -318,6 +351,26 @@ function CommentsBody({
       });
       return next;
     });
+    setDraft("");
+    setError("");
+    clearPendingImage();
+    setImagePreviewUrl(null);
+  }
+
+  function openSearchHit(comment: CommentRow) {
+    if (!comment.parentId) {
+      setCommentSearch("");
+      return;
+    }
+    setCommentSearch("");
+    setStack([
+      { parentId: null, parentPreview: null, scrollTop: 0 },
+      {
+        parentId: comment.parentId,
+        parentPreview: null,
+        scrollTop: 0,
+      },
+    ]);
     setDraft("");
     setError("");
     clearPendingImage();
@@ -605,6 +658,9 @@ function CommentsBody({
               <div className="profile-comment-meta-top">
                 <strong>{label}</strong>
                 {comment.isOwner ? <span className="profile-comment-creator-tag">Creator</span> : null}
+                {searching && comment.parentId ? (
+                  <span className="profile-comment-creator-tag">Reply</span>
+                ) : null}
               </div>
               <time dateTime={new Date(comment.createdAt).toISOString()}>
                 {formatWhen(comment.createdAt)}
@@ -636,7 +692,16 @@ function CommentsBody({
           ) : null}
           <div className="profile-comment-actions">
             <div className="profile-comment-actions-left">
-              {!locked ? (
+              {searching && comment.parentId ? (
+                <button
+                  type="button"
+                  className="profile-comment-view-replies"
+                  onClick={() => openSearchHit(comment)}
+                >
+                  Open thread
+                </button>
+              ) : null}
+              {!locked && !searching ? (
                 <button
                   type="button"
                   className="profile-comment-action"
@@ -646,7 +711,7 @@ function CommentsBody({
                   Reply
                 </button>
               ) : null}
-              {!locked && replyCount > 0 ? (
+              {!locked && !searching && replyCount > 0 ? (
                 <button
                   type="button"
                   className="profile-comment-view-replies"
@@ -659,6 +724,15 @@ function CommentsBody({
                 <span className="profile-comment-view-replies is-static">
                   {replyCount} {replyCount === 1 ? "reply" : "replies"}
                 </span>
+              ) : null}
+              {searching && !comment.parentId && !locked && replyCount > 0 ? (
+                <button
+                  type="button"
+                  className="profile-comment-view-replies"
+                  onClick={() => openReplies(comment)}
+                >
+                  View {replyCount} {replyCount === 1 ? "reply" : "replies"}
+                </button>
               ) : null}
             </div>
             {locked ? (
@@ -834,9 +908,20 @@ function CommentsBody({
         </header>
       ) : null}
 
+      {!locked ? (
+        <div className="profile-comments-search">
+          <PanelSearchBar
+            value={commentSearch}
+            onChange={setCommentSearch}
+            placeholder="Search comments & replies"
+            aria-label="Search comments and replies"
+          />
+        </div>
+      ) : null}
+
       <div className={`profile-comments-locked-shell${locked ? " is-locked" : ""}`}>
         <div ref={listRef} className={listClass}>
-          {inThread && parent ? renderComment(parent, { isParent: true }) : null}
+          {!searching && inThread && parent ? renderComment(parent, { isParent: true }) : null}
           {repliesLoading ? (
             <div className="profile-comments-empty">
               <Loader2 className="profile-comments-empty-spin" aria-hidden="true" />
@@ -844,13 +929,23 @@ function CommentsBody({
           ) : repliesEmpty ? (
             <div className="profile-comments-empty">
               <MessageCircle className="profile-comments-empty-icon" aria-hidden="true" />
-              <p>{inThread ? "No replies yet" : locked ? "No comments yet" : "No comments yet"}</p>
+              <p>
+                {searching
+                  ? "No matching comments"
+                  : inThread
+                    ? "No replies yet"
+                    : locked
+                      ? "No comments yet"
+                      : "No comments yet"}
+              </p>
               <span>
-                {inThread
-                  ? "Be the first to reply"
-                  : locked
-                    ? "Unlock the course to join the discussion"
-                    : "Be the first to say something"}
+                {searching
+                  ? "Try another name or phrase"
+                  : inThread
+                    ? "Be the first to reply"
+                    : locked
+                      ? "Unlock the course to join the discussion"
+                      : "Be the first to say something"}
               </span>
             </div>
           ) : (

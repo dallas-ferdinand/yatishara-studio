@@ -2369,6 +2369,56 @@ export const listComments = query({
   },
 });
 
+/** Search top-level comments and replies on a post (body + author name). */
+export const searchComments = query({
+  args: {
+    postId: v.id("profilePosts"),
+    query: v.string(),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(commentReturnValidator),
+  handler: async (ctx, args) => {
+    const needle = args.query.trim().toLowerCase();
+    if (needle.length < 1) return [];
+    try {
+      await requirePublicPost(ctx, args.postId);
+    } catch {
+      return [];
+    }
+    const limit = Math.min(Math.max(args.limit ?? 40, 1), 80);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const rows = await ctx.db
+      .query("profileComments")
+      .withIndex("by_post_and_created", (q) => q.eq("postId", args.postId))
+      .order("desc")
+      .take(500);
+
+    const candidates: Doc<"profileComments">[] = [];
+    for (const row of rows) {
+      if (row.deletedAt) continue;
+      if (row.body.toLowerCase().includes(needle)) {
+        candidates.push(row);
+        if (candidates.length >= limit * 2) break;
+      }
+    }
+
+    const post = await ctx.db.get("profilePosts", args.postId);
+    const hydrated = await hydrateComments(
+      ctx,
+      candidates,
+      post?.ownerId,
+      expiresUnix,
+    );
+    const matched = hydrated.filter((comment) => {
+      const hay = `${comment.body} ${comment.displayName} ${comment.username ?? ""}`.toLowerCase();
+      return hay.includes(needle);
+    });
+    return matched.slice(0, limit);
+  },
+});
+
 /** Direct replies under a parent comment. */
 export const listCommentReplies = query({
   args: {

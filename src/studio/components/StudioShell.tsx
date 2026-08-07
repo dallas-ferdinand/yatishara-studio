@@ -20003,6 +20003,9 @@ export function StudioShell({
           padding: 0;
           overflow: hidden;
         }
+        .studio-cn-book-sidebar-body.is-comments-fill .profile-comments-search {
+          flex: 0 0 auto;
+        }
         .studio-cn-book-sidebar-body.is-comments-fill .profile-comments-list {
           flex: 1 1 auto;
           min-height: 0;

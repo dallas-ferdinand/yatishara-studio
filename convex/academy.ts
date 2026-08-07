@@ -1504,7 +1504,7 @@ async function requirePublishedCourseForUser(
 }
 
 async function requireCourseAccessForComments(
-  ctx: MutationCtx,
+  ctx: QueryCtx | MutationCtx,
   courseId: Id<"academyCourses">,
   viewer: Doc<"users">,
 ): Promise<Doc<"academyCourses">> {
@@ -1717,6 +1717,79 @@ export const listComments = authedQuery({
       ctx.user._id,
       expiresUnix,
     );
+  },
+});
+
+/** Search lesson/course comments and replies (body + author). Requires purchase. */
+export const searchComments = authedQuery({
+  args: {
+    courseId: v.id("academyCourses"),
+    lessonId: v.optional(v.id("academyLessons")),
+    query: v.string(),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(academyCommentReturn),
+  handler: async (ctx, args) => {
+    const needle = args.query.trim().toLowerCase();
+    if (needle.length < 1) return [];
+    try {
+      await requireCourseAccessForComments(ctx, args.courseId, ctx.user);
+    } catch {
+      return [];
+    }
+    if (args.lessonId) {
+      const lesson = await ctx.db.get("academyLessons", args.lessonId);
+      if (!lesson || lesson.courseId !== args.courseId) return [];
+    }
+    const limit = Math.min(Math.max(args.limit ?? 40, 1), 80);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + COMMENT_URL_TTL_SEC;
+
+    let rows: Doc<"academyComments">[];
+    if (args.lessonId) {
+      rows = await ctx.db
+        .query("academyComments")
+        .withIndex("by_lesson_and_created", (q) =>
+          q.eq("lessonId", args.lessonId!),
+        )
+        .order("desc")
+        .take(500);
+    } else {
+      rows = await ctx.db
+        .query("academyComments")
+        .withIndex("by_course_and_created", (q) => q.eq("courseId", args.courseId))
+        .order("desc")
+        .take(500);
+    }
+
+    const candidates: Doc<"academyComments">[] = [];
+    for (const row of rows) {
+      if (row.deletedAt) continue;
+      if (args.lessonId) {
+        if (row.lessonId !== args.lessonId) continue;
+      } else if (row.lessonId) {
+        continue;
+      }
+      if (row.body.toLowerCase().includes(needle)) {
+        candidates.push(row);
+        if (candidates.length >= limit * 2) break;
+      }
+    }
+
+    const course = await ctx.db.get("academyCourses", args.courseId);
+    const hydrated = await hydrateAcademyComments(
+      ctx,
+      candidates,
+      course?.createdByAdminId,
+      ctx.user._id,
+      expiresUnix,
+    );
+    const matched = hydrated.filter((comment) => {
+      const hay = `${comment.body} ${comment.displayName} ${comment.username ?? ""}`.toLowerCase();
+      return hay.includes(needle);
+    });
+    return matched.slice(0, limit);
   },
 });
 
