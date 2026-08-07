@@ -32720,6 +32720,10 @@ function SettingsWorkspacePane({
                           <dd>{formatTtdShort(paywiseFeeCents)}</dd>
                         </div>
                       ) : null}
+                      <div className="studio-academy-checkout-row is-total">
+                        <dt>Total</dt>
+                        <dd>{formatTtdCents(paywiseTotalCents)}</dd>
+                      </div>
                     </dl>
                   ) : null}
                   <button
