@@ -216,6 +216,15 @@ function OwnedLessonRail({
   if (!academy) return null;
 
   const lessons = academy.filterLessons(detail?.lessons ?? []);
+  const courseBanner = detail?.coverUrl;
+  const introActive = academy.lessonId === null;
+  const introCount = detail?.commentCount ?? 0;
+  const q = academy.lessonSearch.trim().toLowerCase();
+  const showIntro =
+    !q ||
+    `${detail?.title ?? ""} ${detail?.blurb ?? ""} intro`.toLowerCase().includes(
+      q,
+    );
 
   return (
     <div className="studio-cn-sidebar-body">
@@ -230,10 +239,46 @@ function OwnedLessonRail({
       <div className="studio-cn-rail-scroll public-offers-rail-body">
         {!detail ? (
           <p className="studio-cn-list-empty">Loading lessons…</p>
-        ) : lessons.length === 0 ? (
+        ) : !showIntro && lessons.length === 0 ? (
           <p className="studio-cn-list-empty">No lessons match</p>
         ) : (
           <ul className="studio-academy-lesson-list">
+            {showIntro ? (
+              <li>
+                <button
+                  type="button"
+                  className={`studio-academy-lesson-row${introActive ? " is-active" : ""}`}
+                  onClick={() => academy.setLessonId(null)}
+                >
+                  <span
+                    className="studio-academy-lesson-thumb"
+                    aria-hidden="true"
+                  >
+                    {courseBanner ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={courseBanner} alt="" />
+                    ) : (
+                      <span className="studio-academy-lesson-num">0</span>
+                    )}
+                  </span>
+                  <span className="studio-academy-lesson-meta">
+                    <strong>{detail.title}</strong>
+                    <small>Intro</small>
+                  </span>
+                  <span
+                    className="studio-academy-lesson-comments"
+                    aria-label={`${formatCommentCount(introCount)} comments`}
+                  >
+                    <MessageCircle
+                      aria-hidden="true"
+                      fill="currentColor"
+                      strokeWidth={0}
+                    />
+                    <span>{formatCommentCount(introCount)}</span>
+                  </span>
+                </button>
+              </li>
+            ) : null}
             {lessons.map((lesson, index) => {
               const active = academy.lessonId === lesson._id;
               const count = lesson.commentCount ?? 0;
@@ -292,13 +337,44 @@ function UnownedOutlineRail({
   const detail = useQuery(api.academy.getCourse, { courseId });
   if (!academy) return null;
 
+  const courseBanner = detail?.coverUrl;
+  const introCount = detail?.commentCount ?? 0;
+
   return (
     <div className="studio-cn-sidebar-body">
       <div className="studio-cn-rail-scroll public-offers-rail-body">
-        <p className="studio-cn-list-empty" style={{ marginBottom: 8 }}>
-          Lessons unlock after checkout
-        </p>
         <ul className="studio-academy-lesson-list">
+          <li>
+            <button
+              type="button"
+              className="studio-academy-lesson-row is-active"
+              onClick={() => academy.setLessonId(null)}
+            >
+              <span className="studio-academy-lesson-thumb" aria-hidden="true">
+                {courseBanner ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={courseBanner} alt="" />
+                ) : (
+                  <span className="studio-academy-lesson-num">0</span>
+                )}
+              </span>
+              <span className="studio-academy-lesson-meta">
+                <strong>{detail?.title ?? "Course"}</strong>
+                <small>Intro · free</small>
+              </span>
+              <span
+                className="studio-academy-lesson-comments"
+                aria-label={`${formatCommentCount(introCount)} comments`}
+              >
+                <MessageCircle
+                  aria-hidden="true"
+                  fill="currentColor"
+                  strokeWidth={0}
+                />
+                <span>{formatCommentCount(introCount)}</span>
+              </span>
+            </button>
+          </li>
           {(detail?.lessons ?? []).map((lesson, index) => (
             <li key={lesson._id}>
               <div className="studio-academy-lesson-row is-locked">
@@ -317,12 +393,15 @@ function UnownedOutlineRail({
                 </span>
                 <span className="studio-academy-lesson-meta">
                   <strong>{lesson.title}</strong>
-                  <small>{lesson.blurb}</small>
+                  <small>{lesson.blurb || "Locked"}</small>
                 </span>
               </div>
             </li>
           ))}
         </ul>
+        <p className="studio-cn-list-empty" style={{ marginTop: 8 }}>
+          Lessons unlock after checkout
+        </p>
       </div>
     </div>
   );

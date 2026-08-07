@@ -6,7 +6,6 @@ import {
   GraduationCap,
   Library,
   Loader2,
-  Lock,
   MessageCircle,
   ShoppingBag,
   Zap,
@@ -193,13 +192,10 @@ export function StudioAcademyPane({
 
   useEffect(() => {
     setLessonEmbed(null);
+    if (academy.lessonId) {
+      setIntroEmbed(null);
+    }
   }, [academy.lessonId]);
-
-  useEffect(() => {
-    if (!detail?.owned || !detail.lessons.length) return;
-    if (academy.lessonId) return;
-    academy.setLessonId(detail.lessons[0]._id);
-  }, [detail, academy.lessonId, academy.setLessonId]);
 
   const listSource =
     academy.listTab === "mine"
@@ -210,10 +206,9 @@ export function StudioAcademyPane({
     academy.listTab === "mine" ? mine === undefined : catalog === undefined;
   const detailOpen = Boolean(academy.courseId);
   const owned = Boolean(detail?.owned);
-  const selectedLesson =
-    detail?.lessons.find((l) => l._id === academy.lessonId) ??
-    detail?.lessons[0] ??
-    null;
+  const selectedLesson = academy.lessonId
+    ? (detail?.lessons.find((l) => l._id === academy.lessonId) ?? null)
+    : null;
   const commentsLessonId =
     owned && academy.lessonId ? academy.lessonId : undefined;
   const commentsSidebarTitle =
@@ -447,34 +442,20 @@ export function StudioAcademyPane({
               <div>
                 <h1 className="studio-academy-detail-title">{detail.title}</h1>
                 <p className="studio-academy-detail-sub">
-                  {detail.hasIntroVideo
-                    ? "Free intro · buy for full lessons"
-                    : "Course overview"}
+                  {owned
+                    ? "Intro"
+                    : detail.hasIntroVideo
+                      ? "Free intro · buy for full lessons"
+                      : "Course overview"}
                 </p>
               </div>
-              <span className="public-offers-card-price">{priceLabel}</span>
+              {!owned ? (
+                <span className="public-offers-card-price">{priceLabel}</span>
+              ) : null}
             </div>
             <div className="studio-academy-body">
               <StudioChatMarkdown text={detail.descriptionMarkdown} />
             </div>
-            {detail.lessons.length ? (
-              <section className="studio-academy-lesson-teasers">
-                <h2>Lessons</h2>
-                <ul>
-                  {detail.lessons.map((lesson, index) => (
-                    <li key={lesson._id}>
-                      <Lock aria-hidden="true" />
-                      <span>
-                        <strong>
-                          {index + 1}. {lesson.title}
-                        </strong>
-                        <small>{lesson.blurb}</small>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
           </div>
         </main>
       </div>
