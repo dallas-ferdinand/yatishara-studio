@@ -1488,30 +1488,34 @@ export function ProfileCommentsPanel({
         .join("");
       return (
         <aside className="studio-cn-book-sidebar" aria-label="Comments">
-          <div className="studio-cn-book-sidebar-head cursor-panel-head cursor-sidebar-head shrink-0 studio-academy-comments-head">
-            <span className="studio-academy-comments-avatar" aria-hidden="true">
-              {sidebarAvatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={sidebarAvatarUrl} alt="" />
-              ) : (
-                <span>{headInitials || "A"}</span>
-              )}
-            </span>
-            <strong className="studio-academy-comments-head-title">
-              {headLabel}
-            </strong>
-            <span
-              className="studio-academy-comments-meta"
-              aria-label={`${formatCount(commentCount)} comments`}
-            >
-              <MessageCircle
-                aria-hidden="true"
-                fill="currentColor"
-                strokeWidth={0}
+          <header className="profile-comments-head is-thread studio-academy-comments-head">
+            <div className="profile-comments-thread-head">
+              <StudioProfileAvatar
+                className="profile-comments-thread-avatar"
+                size="sm"
+                src={sidebarAvatarUrl}
+                initials={headInitials || "A"}
+                displayName={headLabel}
               />
-              <span>{formatCount(commentCount)}</span>
-            </span>
-          </div>
+              <div className="profile-comments-thread-preview">
+                <strong>{headLabel}</strong>
+                <span className="studio-academy-comments-sub">Comments</span>
+              </div>
+            </div>
+            <div className="profile-comments-post-actions">
+              <span
+                className="profile-comments-post-action"
+                aria-label={`${formatCount(commentCount)} comments`}
+              >
+                <MessageCircle
+                  aria-hidden="true"
+                  fill="currentColor"
+                  strokeWidth={0}
+                />
+                <span>{formatCount(commentCount)}</span>
+              </span>
+            </div>
+          </header>
           <div className="studio-cn-book-sidebar-body is-comments-fill">
             {descriptionPanel ?? commentsBody}
           </div>
