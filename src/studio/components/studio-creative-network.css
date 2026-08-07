@@ -850,6 +850,13 @@
   height: 14px;
 }
 
+.studio-cn-filters-toggle > .icon-inline {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
 .studio-cn-filters-toggle > em {
   font-style: normal;
   min-width: 18px;
