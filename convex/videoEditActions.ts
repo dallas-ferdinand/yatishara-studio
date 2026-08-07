@@ -1898,6 +1898,21 @@ export const pullFrameForApi = internalAction({
   },
 });
 
+type SampleAssetFramesResult = {
+  sourceAssetId: Id<"assets">;
+  durationSec: number;
+  frames: Array<{
+    timeSec: number;
+    assetId: Id<"assets">;
+    name: string;
+    url: string;
+    thumbnailUrl: string;
+    preferredViewUrl: string;
+  }>;
+  expiresUnix: number;
+  viewHint: string;
+};
+
 /** Sample stills from a source video for agent QC (no edit project required). */
 export const sampleAssetFramesForApi = internalAction({
   args: {
@@ -1922,7 +1937,7 @@ export const sampleAssetFramesForApi = internalAction({
     expiresUnix: v.number(),
     viewHint: v.string(),
   }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<SampleAssetFramesResult> => {
     try {
       await execFileAsync("ffmpeg", ["-version"]);
     } catch {
@@ -1931,7 +1946,13 @@ export const sampleAssetFramesForApi = internalAction({
       );
     }
 
-    const source = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+    const source: {
+      bunnyPath?: string;
+      name: string;
+      folderId: Id<"folders">;
+      kind: string;
+      durationSeconds?: number;
+    } | null = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
       userId: args.userId,
       assetId: args.assetId,
     });
@@ -1947,7 +1968,7 @@ export const sampleAssetFramesForApi = internalAction({
       const sourcePath = join(tempDir, "source.bin");
       await downloadToFile(signedSource, sourcePath);
       const probed = await probeMediaDurationSeconds(sourcePath);
-      const durationSec =
+      const durationSec: number =
         typeof source.durationSeconds === "number" && source.durationSeconds > 0.05
           ? source.durationSeconds
           : probed;
