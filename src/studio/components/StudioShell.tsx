@@ -11853,9 +11853,14 @@ export function StudioShell({
         }
         /* Narrow settings rail: tighten card chrome instead of squishing copy. */
         @container (max-width: 340px) {
-          .studio-settings-workspace .studio-settings-plans,
           .studio-settings-workspace .studio-settings-storage-card {
             padding: 14px 14px 10px !important;
+          }
+          .studio-settings-workspace .studio-settings-plans .studio-settings-custom-amount {
+            padding: 10px 12px 10px;
+          }
+          .studio-settings-billing-hero {
+            padding: 10px 12px 8px;
           }
           .studio-settings-stat-row {
             gap: 10px;
@@ -12025,6 +12030,73 @@ export function StudioShell({
         .studio-settings-workspace .studio-settings-plans,
         .studio-settings-workspace .studio-settings-storage-card {
           padding: 16px 18px 12px !important;
+        }
+        .studio-settings-workspace .studio-settings-plans {
+          padding: 0 !important;
+          border-radius: 12px;
+          background: var(--mos-page, var(--color-cursor-bg));
+        }
+        .studio-settings-billing-hero {
+          position: relative;
+          display: grid;
+          gap: 0;
+          padding: 12px 14px 10px;
+          overflow: hidden;
+          background:
+            radial-gradient(
+              circle at 88% 0%,
+              color-mix(in srgb, var(--cursor-accent) 22%, transparent),
+              transparent 52%
+            ),
+            radial-gradient(
+              circle at 8% 100%,
+              color-mix(in srgb, var(--cursor-accent) 10%, transparent),
+              transparent 44%
+            ),
+            var(--mos-plate, var(--cursor-surface));
+          border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        .studio-settings-billing-hero-icon {
+          position: absolute;
+          right: -10px;
+          top: 50%;
+          width: 92px;
+          height: 92px;
+          transform: translateY(-46%) rotate(-8deg);
+          color: var(--cursor-accent);
+          opacity: 0.18;
+          pointer-events: none;
+          z-index: 0;
+        }
+        .studio-settings-billing-hero-copy {
+          position: relative;
+          z-index: 1;
+          display: grid;
+          gap: 4px;
+          padding-right: 56px;
+          min-width: 0;
+        }
+        .studio-settings-billing-hero-copy span {
+          margin: 0;
+          color: var(--color-cursor-muted, var(--color-cursor-text-secondary));
+          font-size: 10px;
+          font-weight: 650;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+        .studio-settings-billing-hero-copy strong {
+          margin: 0;
+          color: var(--color-cursor-text-bright);
+          font-size: 22px;
+          font-weight: 700;
+          line-height: 1.05;
+          letter-spacing: -0.03em;
+          font-variant-numeric: tabular-nums;
+        }
+        .studio-settings-workspace .studio-settings-plans .studio-settings-custom-amount {
+          gap: 10px;
+          padding: 12px 14px 12px;
+          background: color-mix(in srgb, var(--mos-plate, var(--cursor-surface)) 55%, transparent);
         }
         .studio-settings-workspace .studio-settings-invoices-card {
           padding: 0 !important;
@@ -32561,12 +32633,21 @@ function SettingsWorkspacePane({
         {settingsSectionId === "billing" ? (
           <div className="studio-settings-stack">
               <section className="cursor-settings-section studio-settings-plans">
-                <div className="studio-settings-balance-pill" aria-label="Current balance">
-                  <span>Current balance</span>
-                  <strong>
-                    {formatTtdFromCredits(billingAccount?.creditBalance ?? 0, pricing?.creditPriceCents)}
-                  </strong>
-                </div>
+                <header className="studio-settings-billing-hero" aria-label="Current balance">
+                  <CreditCard
+                    className="studio-settings-billing-hero-icon"
+                    aria-hidden="true"
+                  />
+                  <div className="studio-settings-billing-hero-copy">
+                    <span>Current balance</span>
+                    <strong>
+                      {formatTtdFromCredits(
+                        billingAccount?.creditBalance ?? 0,
+                        pricing?.creditPriceCents,
+                      )}
+                    </strong>
+                  </div>
+                </header>
                 <div className="studio-settings-custom-amount">
                   <label className="studio-settings-custom-amount-input is-full is-emphasis">
                     {customAmountInput ? <span>$</span> : null}
