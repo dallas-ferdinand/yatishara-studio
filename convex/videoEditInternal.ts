@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { buildAssetPath } from "./lib/bunny";
 import { applyStorageBytesDelta } from "./lib/storageBilling";
@@ -185,7 +185,7 @@ export const ensurePulledFramesFolder = internalMutation({
       const parts: string[] = [];
       let currentId: Id<"folders"> | undefined = existing._id;
       for (let guard = 0; currentId && guard < 32; guard++) {
-        const folder = await ctx.db.get(currentId);
+        const folder: Doc<"folders"> | null = await ctx.db.get("folders", currentId);
         if (!folder || folder.ownerId !== args.userId || folder.deletedAt) break;
         parts.unshift(folder.name);
         currentId = folder.parentId;
@@ -205,7 +205,7 @@ export const ensurePulledFramesFolder = internalMutation({
     const parts: string[] = [];
     let currentId: Id<"folders"> | undefined = folderId;
     for (let guard = 0; currentId && guard < 32; guard++) {
-      const folder = await ctx.db.get(currentId);
+      const folder: Doc<"folders"> | null = await ctx.db.get("folders", currentId);
       if (!folder || folder.ownerId !== args.userId || folder.deletedAt) break;
       parts.unshift(folder.name);
       currentId = folder.parentId;

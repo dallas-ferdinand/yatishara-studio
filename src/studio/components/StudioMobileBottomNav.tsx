@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { Cloud, Folder, History, MessageCircle, PanelLeft, Sparkles, Store } from "lucide-react";
+import { Cloud, Folder, GraduationCap, History, MessageCircle, PanelLeft, Sparkles, Store } from "lucide-react";
 import { useRef } from "react";
 
 /** Optional context action — Files linked to Create (Generate) or Network (My Assets). */
@@ -88,7 +88,7 @@ function NavButton({
 }
 
 /**
- * Permanent sections: Feed | Network | Messages | Create.
+ * Permanent sections: Feed | Network | Academy | Messages | Create.
  * Generate: Create expands with Files + History.
  * Files dock open: Files + Extras (Places sidepanel sheet); History hidden.
  */
@@ -208,6 +208,17 @@ export function StudioMobileBottomNav({
             <Store aria-hidden="true" />
           </NavButton>
         )}
+
+        <NavButton
+          className={`studio-mobile-nav-btn${section === "academy" ? " is-active" : ""} is-icon-only`}
+          ariaCurrent={section === "academy" ? "page" : undefined}
+          ariaLabel="Academy"
+          title="Academy"
+          onActivate={() => onSelect("academy")}
+          onIntent={() => onPrefetch?.("academy")}
+        >
+          <GraduationCap aria-hidden="true" />
+        </NavButton>
 
         <NavButton
           className={`studio-mobile-nav-btn${section === "messages" ? " is-active" : ""} is-icon-only`}

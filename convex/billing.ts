@@ -53,6 +53,7 @@ const creditTransactionKind = v.union(
   v.literal("marketplace_escrow_refund"),
   v.literal("storage_charge"),
   v.literal("asset_purchase"),
+  v.literal("course_purchase"),
 );
 
 const settlePaywiseCallbackRef = makeFunctionReference<

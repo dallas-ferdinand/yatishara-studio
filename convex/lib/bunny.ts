@@ -54,6 +54,16 @@ export function buildSellerKycPath(args: {
   return `users/${args.userId}/marketplace-kyc/${kind}/${stamp}-${filename}`;
 }
 
+/** Academy course cover images (signed CDN reads). */
+export function buildAcademyCoverPath(args: {
+  courseId: string;
+  filename: string;
+}): string {
+  const filename = sanitizeSegment(args.filename) || "cover.bin";
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `academy/courses/${args.courseId}/cover/${stamp}-${filename}`;
+}
+
 /** Max signed CDN URL lifetime clients may request (24h). */
 export const MAX_SIGNED_URL_TTL_SEC = 60 * 60 * 24;
 

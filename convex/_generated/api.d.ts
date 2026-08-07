@@ -9,6 +9,8 @@
  */
 
 import type * as ResendOTP from "../ResendOTP.js";
+import type * as academy from "../academy.js";
+import type * as academyActions from "../academyActions.js";
 import type * as aiGatewayActions from "../aiGatewayActions.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as assetActions from "../assetActions.js";
@@ -47,6 +49,7 @@ import type * as lib_assistedAnalysis from "../lib/assistedAnalysis.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_authEmail from "../lib/authEmail.js";
 import type * as lib_bunny from "../lib/bunny.js";
+import type * as lib_bunnyStream from "../lib/bunnyStream.js";
 import type * as lib_composerScriptTypes from "../lib/composerScriptTypes.js";
 import type * as lib_creativeDirection from "../lib/creativeDirection.js";
 import type * as lib_customFunctions from "../lib/customFunctions.js";
@@ -144,6 +147,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   ResendOTP: typeof ResendOTP;
+  academy: typeof academy;
+  academyActions: typeof academyActions;
   aiGatewayActions: typeof aiGatewayActions;
   apiKeys: typeof apiKeys;
   assetActions: typeof assetActions;
@@ -182,6 +187,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/authEmail": typeof lib_authEmail;
   "lib/bunny": typeof lib_bunny;
+  "lib/bunnyStream": typeof lib_bunnyStream;
   "lib/composerScriptTypes": typeof lib_composerScriptTypes;
   "lib/creativeDirection": typeof lib_creativeDirection;
   "lib/customFunctions": typeof lib_customFunctions;

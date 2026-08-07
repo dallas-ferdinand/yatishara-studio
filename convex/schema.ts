@@ -147,6 +147,8 @@ export const creditTransactionKind = v.union(
   v.literal("storage_charge"),
   /** Creative Network stock audio (music/SFX) one-time purchase. */
   v.literal("asset_purchase"),
+  /** Studio Academy course one-time purchase (lifetime access). */
+  v.literal("course_purchase"),
 );
 
 /** Protected system folders in the explorer. */
@@ -820,6 +822,7 @@ export default defineSchema({
     generationJobId: v.optional(v.id("generationJobs")),
     marketplaceJobId: v.optional(v.id("marketplaceJobs")),
     assetPurchaseId: v.optional(v.id("assetPurchases")),
+    coursePurchaseId: v.optional(v.id("academyPurchases")),
     paymentId: v.optional(v.id("payments")),
     reversesTransactionId: v.optional(v.id("creditTransactions")),
     reason: v.optional(v.string()),
@@ -831,6 +834,7 @@ export default defineSchema({
     .index("by_generation_job", ["generationJobId"])
     .index("by_marketplace_job", ["marketplaceJobId"])
     .index("by_asset_purchase", ["assetPurchaseId"])
+    .index("by_course_purchase", ["coursePurchaseId"])
     .index("by_reversed_transaction", ["reversesTransactionId"]),
 
   /**
@@ -1685,4 +1689,38 @@ export default defineSchema({
     .index("by_buyer", ["buyerUserId"])
     .index("by_buyer_and_listing", ["buyerUserId", "listingId"])
     .index("by_seller", ["sellerUserId"]),
+
+  /**
+   * Studio Academy courses — one video + rich description, sold for credits.
+   */
+  academyCourses: defineTable({
+    title: v.string(),
+    slug: v.string(),
+    descriptionMarkdown: v.string(),
+    priceCredits: v.number(),
+    coverBunnyPath: v.optional(v.string()),
+    bunnyStreamVideoId: v.optional(v.string()),
+    status: v.union(v.literal("draft"), v.literal("published")),
+    sortOrder: v.number(),
+    purchaseCount: v.number(),
+    createdByAdminId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_status_and_sort", ["status", "sortOrder"])
+    .index("by_updated", ["updatedAt"]),
+
+  /** Lifetime course entitlement after credit purchase (or admin grant). */
+  academyPurchases: defineTable({
+    userId: v.id("users"),
+    courseId: v.id("academyCourses"),
+    priceCredits: v.number(),
+    creditTransactionId: v.optional(v.id("creditTransactions")),
+    grantedByAdminId: v.optional(v.id("users")),
+    purchasedAt: v.number(),
+  })
+    .index("by_user_and_course", ["userId", "courseId"])
+    .index("by_course", ["courseId"])
+    .index("by_user_and_purchased", ["userId", "purchasedAt"]),
 });

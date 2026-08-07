@@ -71,6 +71,7 @@ Storage, video, and push:
 - `BUNNY_CDN_SIGNING_KEY`
 - `BUNNY_STREAM_LIBRARY_ID`
 - `BUNNY_STREAM_ACCESS_KEY`
+- `BUNNY_STREAM_TOKEN_AUTH_KEY` — optional; Stream library Token Authentication key for signed embeds (Academy playback). Without it, embed URLs are still entitlement-gated but not token-signed.
 - `WEB_PUSH_VAPID_PUBLIC_KEY`
 - `WEB_PUSH_VAPID_PRIVATE_KEY`
 - `NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY`

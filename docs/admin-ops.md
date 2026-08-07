@@ -12,7 +12,8 @@ Design chrome still follows [`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md).
 5. Intervene in marketplace **jobs / escrow** (stuck, refund)
 6. Pay **Creative Network audio** seller payouts (same Payouts table; rows labeled `Audio: …`)
 7. Review **stock audio** submissions (Admin → Assets: listen, approve, reject with reason; remove / platform-owned ops)
-8. Rare: seed pricing / presets (launch tools)
+8. Manage **Academy** courses (Admin → Academy: create/edit, cover + Bunny Stream video, publish, grant/revoke access)
+9. Rare: seed pricing / presets (launch tools)
 
 ## Current surface map
 
@@ -21,6 +22,7 @@ Design chrome still follows [`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md).
 | Payments | [`StudioShell.tsx`](../src/studio/components/StudioShell.tsx) `AdminWorkspacePane` + `AdminPaymentSidebar` | `billing.adminListPayments`, `adminReviewPayment`, `paywiseActions.adminRefreshPaywisePayment` |
 | Customers | same file — search, detail sidebar, credit adjust | `users.adminListCustomers`, `billing.adminAdjustCredits` |
 | Marketplace | [`AdminMarketplacePane.tsx`](../src/studio/components/AdminMarketplacePane.tsx) sellers + offers + jobs + payouts + **assets** (stock-audio review) | `adminListJobs`, `adminListOffers` / `adminSetOfferStatus`, `adminRefundDeliveredJob`, `adminApproveSeller`, `adminMarkPayoutPaid`, KYC signed URLs; asset store: `adminListAssetSubmissions` / `adminApproveListing` / `adminRejectListing` / `adminRemoveListing`; payouts via `sellerPayouts.assetPurchaseId` |
+| Academy | [`AdminAcademyPane.tsx`](../src/studio/components/AdminAcademyPane.tsx) | `academy.adminListCourses`, `adminUpsertCourse`, `adminSetCourseStatus`, `adminListCoursePurchases`, `adminGrantCourse`, `adminRevokeCourse`; Stream upload via `academyActions.adminCreateStreamUpload` + cover `adminCommitCourseCover` |
 | Tools | Setup seeds + pricing cards + audit log | `stylePresets.adminSeedDefaults`, thumbnail action, `billing.adminSeedLaunchPricing`, `billing.adminListAuditEvents`; `billing.adminSetPricing` **unused** |
 
 Entry: header Gauge → always opens `admin:payments` (admin / super_admin only). Old `admin:setup` / `admin:pricing` deep links normalize to Tools.
