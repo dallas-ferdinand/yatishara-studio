@@ -236,9 +236,7 @@ export const getCourse = authedQuery({
         title: lesson.title,
         slug: lesson.slug,
         blurb: blurbFromMarkdown(lesson.descriptionMarkdown),
-        descriptionMarkdown: owned
-          ? lesson.descriptionMarkdown
-          : blurbFromMarkdown(lesson.descriptionMarkdown, 220),
+        descriptionMarkdown: lesson.descriptionMarkdown,
         coverUrl: await coverUrlFor(lesson.coverBunnyPath),
         hasVideo: Boolean(lesson.bunnyStreamVideoId) && owned,
         sortOrder: lesson.sortOrder,
@@ -974,11 +972,13 @@ const DEMO_COURSES = [
   {
     slug: "demo-seedance-hooks",
     title: "Seedance Hooks That Sell",
-    priceCredits: 120,
+    priceCredits: 20,
     sortOrder: 10,
     descriptionMarkdown: `## What you'll learn
 
 Build **3-second hooks** that stop the scroll — without looking like AI sludge.
+
+You will lock gaze and props, choose when to cut vs hold, and reuse three opening-beat formulas across ad formats.
 
 > Demo course for layout. Replace the intro and lessons in Admin → Academy.
 `,
@@ -987,22 +987,72 @@ Build **3-second hooks** that stop the scroll — without looking like AI sludge
         slug: "gaze-anchors",
         title: "Gaze and prop anchors",
         sortOrder: 10,
-        descriptionMarkdown:
-          "Lock the face and prop so Seedance does not drift mid-shot.",
+        descriptionMarkdown: `## Gaze and prop anchors
+
+Seedance drifts when the face or hero prop is soft in the first frame. This lesson locks both so the model stays on the sell.
+
+### What you lock
+- **Eyes** — clear catchlight, looking where the viewer should look next
+- **Prop / product** — one hero object in a fixed screen quadrant
+- **Hands** — if hands enter, they stay on the prop (no wandering)
+
+### Drill
+1. Pick one still with a hard face + product read.
+2. Write a one-line gaze lock (“eyes on product, product lower-right”).
+3. Generate a 3–4s hold. Reject anything that loses the face or product.
+
+### Done when
+A stranger can say what the product is and who is selling it in the first second.
+`,
       },
       {
         slug: "cut-vs-hold",
         title: "When to cut vs hold",
         sortOrder: 20,
-        descriptionMarkdown:
-          "Hold for tension, cut for product payoff. Timing patterns that convert.",
+        descriptionMarkdown: `## When to cut vs hold
+
+Hooks convert when tension and payoff are timed. Holding sells emotion; cutting sells the product.
+
+### Hold when
+- Face reaction is the story
+- Prop reveal needs one continuous motion
+- Sound / silence is doing the work
+
+### Cut when
+- You need a product insert or pack shot
+- The beat has already paid off and you are looping
+- AI mush starts (blur, morph, duplicate limbs)
+
+### Pattern
+**0.0–1.2s hold** → **hard cut to product** → **0.5–1.0s pack / CTA**.
+
+### Done when
+You can explain, for one ad, why each cut exists — not “because it looked cool.”
+`,
       },
       {
         slug: "hook-formulas",
         title: "Opening beat formulas",
         sortOrder: 30,
-        descriptionMarkdown:
-          "Three opening beats you can reuse across ad formats.",
+        descriptionMarkdown: `## Opening beat formulas
+
+Three reusable openings for Seedance ads. Swap product, keep structure.
+
+### 1. Problem stare
+Face registers pain → prop enters as fix → hold on relief.
+
+### 2. Product first
+Hero object fills frame → hands / face arrive late → cut to use.
+
+### 3. Motion interrupt
+Unexpected move in first 8 frames → settle on brand lock → CTA.
+
+### How to practice
+Run each formula once on the same SKU. Keep prompts short. Compare which stops the scroll for *your* niche.
+
+### Done when
+You have three saved prompt templates with locked gaze, prop, and cut points.
+`,
       },
     ],
   },
@@ -1022,13 +1072,42 @@ How Yatishara Studio credits map to image, video, and audio runs.
         slug: "price-map",
         title: "Credit price vs TTD top-ups",
         sortOrder: 10,
-        descriptionMarkdown: "Read the wallet like an operator, not a meter.",
+        descriptionMarkdown: `## Credit price vs TTD top-ups
+
+Studio spends **credits**. The wallet shows TTD so you can top up without doing mental math.
+
+### Mental model
+- 1 credit ≈ your configured TTD credit price (default TT$0.50)
+- Image / video / audio burns depend on model, resolution, and duration
+- Top-up tiers buy a credit balance, not a single render
+
+### Operator habit
+Before a batch, estimate credits for one good take × retries. Leave headroom for Assistance if you use it.
+
+### Done when
+You can glance at balance and know whether a 15s Seedance pass plus two retries fits.
+`,
       },
       {
         slug: "assistance-burn",
         title: "When Assistance burns balance",
         sortOrder: 20,
-        descriptionMarkdown: "Where Assistance spends and how to keep runs cheap.",
+        descriptionMarkdown: `## When Assistance burns balance
+
+Assistance is not free chat — tool calls that generate or edit media spend credits like you would.
+
+### What costs
+- Image / video / audio generation tools
+- Heavy edit / export paths that re-render
+- Retries when the agent re-runs a failed job
+
+### What is cheaper
+- Brief edits, folder moves, and planning without generate
+- Confirming model + resolution once before a batch
+
+### Done when
+You know which Assistance asks will touch the wallet — and you approve those on purpose.
+`,
       },
     ],
   },
@@ -1046,19 +1125,64 @@ From KYC to first delivered job — the operator path we use in Studio.
         slug: "seller-apply",
         title: "Seller application",
         sortOrder: 10,
-        descriptionMarkdown: "What admins look for before you go live.",
+        descriptionMarkdown: `## Seller application
+
+Admins approve sellers before offers go live. Your application is a trust packet, not a bio.
+
+### What to show
+- Clear samples that match the services you will sell
+- Honest delivery windows
+- KYC / payout details ready when asked
+
+### What kills trust
+- Stock-only portfolios with no process
+- Vague “I do everything” copy
+- Pricing that does not match your sample quality
+
+### Done when
+Your seller profile reads like a bookable operator, not a wishlist.
+`,
       },
       {
         slug: "offer-packages",
         title: "Offer packages that convert",
         sortOrder: 20,
-        descriptionMarkdown: "Package tiers, delivery windows, and copy that books.",
+        descriptionMarkdown: `## Offer packages that convert
+
+Buyers scan packages first. Three clear tiers beat a wall of options.
+
+### Package spine
+- **Basic** — one clear deliverable, short revisions
+- **Standard** — the job most buyers should pick
+- **Premium** — speed, extras, or commercial rights
+
+### Copy rules
+Lead with outcome, then delivery days, then revisions. No fluff paragraphs above the price.
+
+### Done when
+A stranger can pick Standard in under ten seconds without messaging you.
+`,
       },
       {
         slug: "escrow-handoff",
         title: "Escrow handoff without drama",
         sortOrder: 30,
-        descriptionMarkdown: "Deliver, revise, and release payment cleanly.",
+        descriptionMarkdown: `## Escrow handoff without drama
+
+Delivery and release is where reputation sticks. Keep a clean trail.
+
+### Flow
+1. Confirm scope in the job thread
+2. Deliver in-app with the files named clearly
+3. Invite revision once if the package includes it
+4. Ask for accept / release when scope is met
+
+### Avoid
+Silent uploads with no note, scope creep in DMs only, and arguing before documenting the brief.
+
+### Done when
+Buyer can accept without hunting files — and you get paid without a support ticket.
+`,
       },
     ],
   },
@@ -1076,13 +1200,41 @@ Prompt stacks for hero, lifestyle, and marketplace cards.
         slug: "lighting-locks",
         title: "Lighting locks",
         sortOrder: 10,
-        descriptionMarkdown: "Keep SKU lighting consistent across a set.",
+        descriptionMarkdown: `## Lighting locks
+
+One SKU across a set only works if lighting language stays fixed.
+
+### Lock language
+- Soft key / hard key
+- Shadow direction (left / right / overhead)
+- Background value (light plate vs dark plate)
+
+### Prompt habit
+Write the light lock once. Paste it into every shot in the set. Change only angle and crop.
+
+### Done when
+Hero and lifestyle frames look like the same shoot day.
+`,
       },
       {
         slug: "marketplace-cards",
         title: "Marketplace card angles",
         sortOrder: 20,
-        descriptionMarkdown: "Hero, secondary, and detail crops that list well.",
+        descriptionMarkdown: `## Marketplace card angles
+
+Listings need a main hero plus supporting crops — not five random pretty shots.
+
+### Set order
+1. **Main** — product fills frame, label readable
+2. **Secondary** — 3/4 or lifestyle context
+3. **Detail** — texture, seal, or feature callout
+
+### Prompt habit
+Same lighting lock; change camera distance and crop intent only.
+
+### Done when
+You can drop the set into a listing template without re-cropping for readability.
+`,
       },
     ],
   },
@@ -1100,13 +1252,37 @@ Tone, pacing, and follow-up patterns for Yatishara CS on WhatsApp.
         slug: "soft-accept",
         title: "Soft-accept examples",
         sortOrder: 10,
-        descriptionMarkdown: "Accept interest without quoting too early.",
+        descriptionMarkdown: `## Soft-accept examples
+
+Warm interest without locking a quote before you have the brief.
+
+### Pattern
+Acknowledge → one clarifying ask → soft next step. No price dump on message one.
+
+### Voice
+Short, human, Caribbean-friendly. No corporate paragraphs. Name yourself once when the SOP says to.
+
+### Done when
+You can soft-accept three different lead types without sounding like a script bot.
+`,
       },
       {
         slug: "deposit-nudges",
         title: "Deposit nudges",
         sortOrder: 20,
-        descriptionMarkdown: "Move from chat to deposit without pressure.",
+        descriptionMarkdown: `## Deposit nudges
+
+Move chat to deposit without pressure or endless follow-ups.
+
+### Pattern
+Confirm scope → send clear deposit ask + bank block → one polite bump if silent.
+
+### Avoid
+Stacking three nudges in an hour, shaming, or changing the number mid-thread.
+
+### Done when
+A warm lead knows the amount, where to pay, and what happens after — in one clean thread.
+`,
       },
     ],
   },
