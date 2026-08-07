@@ -19815,29 +19815,76 @@ export function StudioShell({
           color: var(--color-cursor-muted);
           font-size: 11px;
         }
+        /* Same soft-bubble language as Messages chat-list (.studio-dm-row). */
         .studio-academy-lesson-list {
           list-style: none;
           margin: 0;
-          padding: 0;
-          display: grid;
-          gap: 6px;
+          padding: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
         }
         .studio-academy-lesson-row {
+          position: relative;
           display: flex;
           align-items: center;
           gap: 10px;
           width: 100%;
-          padding: 8px;
-          border: 1px solid transparent;
-          border-radius: 10px;
-          background: var(--mos-plate, transparent);
+          min-width: 0;
+          padding: 12px 14px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
+          border-radius: 16px;
+          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
+          box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 7%, transparent),
+            0 1px 2px color-mix(in srgb, #000 8%, transparent);
           color: inherit;
+          font: inherit;
           text-align: left;
           cursor: pointer;
+          transition:
+            background 120ms ease,
+            border-color 120ms ease,
+            box-shadow 120ms ease;
+        }
+        [data-appearance="light"] .studio-polish .studio-academy-lesson-row {
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.72),
+            0 1px 2px rgba(15, 23, 42, 0.05);
+        }
+        @media (hover: hover) {
+          .studio-academy-lesson-row:hover:not(.is-locked) {
+            background: color-mix(
+              in srgb,
+              var(--cursor-accent) 8%,
+              color-mix(in srgb, var(--mos-surface) 58%, transparent)
+            );
+            border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
+          }
+        }
+        .studio-academy-lesson-row:active:not(.is-locked) {
+          background: color-mix(
+            in srgb,
+            var(--cursor-accent) 8%,
+            color-mix(in srgb, var(--mos-surface) 58%, transparent)
+          );
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
         }
         .studio-academy-lesson-row.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
-          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-plate));
+          background: color-mix(
+            in srgb,
+            var(--cursor-accent) 12%,
+            color-mix(in srgb, var(--mos-surface) 58%, transparent)
+          );
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+          box-shadow:
+            inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 28%, transparent),
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 7%, transparent);
+        }
+        [data-appearance="light"] .studio-polish .studio-academy-lesson-row.is-active {
+          box-shadow:
+            inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 28%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.72);
         }
         .studio-academy-lesson-row.is-locked {
           cursor: default;
