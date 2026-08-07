@@ -198,9 +198,12 @@
 /* Unpaid: truncate description / comments with lock fade. */
 .studio-academy-body.is-locked {
   position: relative;
-  max-height: 12.5rem;
-  overflow: hidden;
+  /* Clip text via .studio-academy-body-clip only — keep overflow
+     visible here so the lock badge drop-shadow is not cut off. */
+  max-height: none;
+  overflow: visible;
   border-radius: 12px;
+  padding-bottom: 10px;
 }
 
 .studio-academy-buy-group {
@@ -232,8 +235,9 @@
 }
 
 .studio-academy-body.is-locked .studio-academy-body-clip {
-  max-height: inherit;
+  max-height: 12.5rem;
   overflow: hidden;
+  border-radius: 12px;
   -webkit-mask-image: linear-gradient(to bottom, #000 28%, transparent 92%);
   mask-image: linear-gradient(to bottom, #000 28%, transparent 92%);
 }
@@ -245,8 +249,9 @@
   display: grid;
   place-items: center;
   place-content: end center;
-  padding-bottom: 18px;
+  padding: 0 14px 20px;
   pointer-events: none;
+  overflow: visible;
   background: linear-gradient(
     to bottom,
     transparent 8%,
@@ -264,7 +269,7 @@
   color: var(--color-cursor-text, var(--mos-text));
   background: color-mix(in srgb, var(--mos-plate-strong, var(--cursor-surface-2)) 88%, transparent);
   border: 1px solid color-mix(in srgb, var(--cursor-accent, #5b8cff) 28%, var(--color-cursor-border-soft, transparent));
-  box-shadow: 0 8px 22px color-mix(in srgb, #000 28%, transparent);
+  box-shadow: 0 6px 18px color-mix(in srgb, #000 22%, transparent);
 }
 
 .studio-academy-lock-badge svg {
@@ -283,6 +288,7 @@
 
 .profile-comments-locked-shell.is-locked {
   flex: 1 1 auto;
+  overflow: visible;
 }
 
 .profile-comments-locked-shell.is-locked .profile-comments-list {
@@ -293,7 +299,8 @@
 
 .profile-comments-locked-shell.is-locked .studio-academy-lock-overlay {
   place-content: center;
-  padding-bottom: 0;
+  padding: 12px 14px 16px;
+  overflow: visible;
   background: linear-gradient(
     to bottom,
     transparent 0%,
