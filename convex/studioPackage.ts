@@ -1,9 +1,10 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import { internalQuery, type QueryCtx } from "./_generated/server";
 import { authedQuery, type StudioCtx } from "./lib/customFunctions";
 import { signBunnyFullUrl } from "./lib/bunny";
 import { parseEditorProject } from "./lib/editorProjectOps";
+import { isFolderInSandbox } from "./lib/studioApi/folderScope";
 import {
   STUDIO_PACKAGE_FORMAT,
   STUDIO_PACKAGE_FORMAT_VERSION,
@@ -29,13 +30,14 @@ export type PackageManifestFile = {
 type PackageCtx = QueryCtx & StudioCtx;
 
 async function buildVideoEditPackageFiles(
-  ctx: PackageCtx,
+  ctx: QueryCtx,
+  ownerId: Id<"users">,
   projectId: Id<"videoEditProjects">,
   expiresUnix: number,
   pathPrefix = "",
 ): Promise<{ packageName: string; files: PackageManifestFile[] } | null> {
   const project = await ctx.db.get("videoEditProjects", projectId);
-  if (!project || project.ownerId !== ctx.user._id || project.deletedAt) {
+  if (!project || project.ownerId !== ownerId || project.deletedAt) {
     return null;
   }
 
@@ -65,7 +67,7 @@ async function buildVideoEditPackageFiles(
     const asset = await ctx.db.get("assets", assetId as Id<"assets">);
     if (
       !asset ||
-      asset.ownerId !== ctx.user._id ||
+      asset.ownerId !== ownerId ||
       asset.deletedAt ||
       asset.purgedAt ||
       !asset.bunnyPath ||
@@ -165,12 +167,58 @@ export const packageManifest = authedQuery({
   handler: async (ctx, args) => {
     const built = await buildVideoEditPackageFiles(
       ctx,
+      ctx.user._id,
       args.projectId,
       args.expiresUnix,
       "",
     );
     if (!built) throw new Error("Video edit not found");
     return built;
+  },
+});
+
+/** API/MCP: portable `.studio` package manifest (signed media URLs + project JSON). */
+export const packageManifestForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      packageName: v.string(),
+      files: v.array(
+        v.object({
+          path: v.string(),
+          kind: v.union(v.literal("remote"), v.literal("text")),
+          url: v.optional(v.string()),
+          text: v.optional(v.string()),
+          byteSize: v.optional(v.number()),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get("videoEditProjects", args.projectId);
+    if (!project || project.ownerId !== args.userId || project.deletedAt) {
+      return null;
+    }
+    if (!(await isFolderInSandbox(ctx, project.folderId, args.sandboxFolderId))) {
+      return null;
+    }
+    const expiresUnix =
+      args.expiresUnix && Number.isFinite(args.expiresUnix)
+        ? Math.floor(args.expiresUnix)
+        : Math.floor(Date.now() / 1000) + 60 * 60;
+    return await buildVideoEditPackageFiles(
+      ctx,
+      args.userId,
+      args.projectId,
+      expiresUnix,
+      "",
+    );
   },
 });
 
@@ -189,7 +237,13 @@ export async function expandVideoEditPackageIntoFiles(
   const prefix = parentPath
     ? `${parentPath}/${packageDirName(project.name)}`
     : packageDirName(project.name);
-  const built = await buildVideoEditPackageFiles(ctx, projectId, expiresUnix, prefix);
+  const built = await buildVideoEditPackageFiles(
+    ctx,
+    ctx.user._id,
+    projectId,
+    expiresUnix,
+    prefix,
+  );
   if (!built) return false;
   for (const file of built.files) {
     if (files.length >= maxFiles) return true;

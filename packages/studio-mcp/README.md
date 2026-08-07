@@ -80,8 +80,12 @@ Tools marked **`[preferred]`** in descriptions are the default path. **`[depreca
 ### Video edits
 - `studio_create_edit`, `studio_list_edits`, `studio_get_edit`, `studio_update_edit` (full JSON escape hatch)
 - **Timeline ops (preferred):** `studio_edit_append_clips`, `studio_edit_update_clips`, `studio_edit_remove_clips`, `studio_edit_reorder_clips`, `studio_edit_split_clip`, `studio_edit_set_transition`
+- `studio_edit_add_text`, `studio_edit_duplicate_clip`, `studio_edit_detach_audio`, `studio_edit_set_track_muted`, `studio_edit_set_frame_ratio`
+- `studio_list_text_presets`, `studio_edit_apply_text_preset`
 - `studio_pull_frame` — ffmpeg still → image asset (then `studio_view_media`)
-- `studio_export_edit` — ffmpeg render → video asset
+- `studio_export_edit` — video or audio render → Studio asset (`exportKind`, `exportResolution`, `audioFormat`)
+- `studio_download_edit_package` — portable `.studio` package manifest (signed media + project JSON)
+- `studio_download_clip_segment` — trimmed Save as video/audio download URL
 
 ## VPS install
 

@@ -1215,6 +1215,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           characterCount?: number;
           hasReferenceInput?: boolean;
           referenceAssetIds?: Id<"assets">[];
+          videoModel?: string;
           maxRounds: number;
         }>;
         contingencyPercent?: number;
@@ -2132,8 +2133,16 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       const body = await readJsonBody<{
         name?: string;
         exportResolution?: "720p" | "1080p" | "4K";
+        exportKind?: "video" | "audio";
+        audioFormat?: "mp3" | "wav" | "m4a";
       }>(request).catch(
-        () => ({} as { name?: string; exportResolution?: "720p" | "1080p" | "4K" }),
+        () =>
+          ({} as {
+            name?: string;
+            exportResolution?: "720p" | "1080p" | "4K";
+            exportKind?: "video" | "audio";
+            audioFormat?: "mp3" | "wav" | "m4a";
+          }),
       );
       const result = await ctx.runAction(internal.videoEditActions.exportVideoForApi, {
         userId: auth.userId,
@@ -2141,7 +2150,75 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         projectId,
         name: body.name,
         exportResolution: body.exportResolution,
+        exportKind: body.exportKind,
+        audioFormat: body.audioFormat,
       });
+      return finish(jsonResponse(result));
+    }
+
+    const editPackageMatch = route.match(/^edits\/([^/]+)\/package$/);
+    if (
+      (request.method === "GET" || request.method === "POST") &&
+      editPackageMatch
+    ) {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editPackageMatch[1] as Id<"videoEditProjects">;
+      let expiresUnix: number | undefined;
+      if (request.method === "POST") {
+        const body = await readJsonBody<{ expiresUnix?: number }>(request).catch(
+          () => ({} as { expiresUnix?: number }),
+        );
+        expiresUnix = body.expiresUnix;
+      } else {
+        const url = new URL(request.url);
+        const raw = url.searchParams.get("expiresUnix");
+        if (raw) {
+          const parsed = Number(raw);
+          if (Number.isFinite(parsed)) expiresUnix = parsed;
+        }
+      }
+      const result = await ctx.runQuery(internal.studioPackage.packageManifestForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+        expiresUnix,
+      });
+      if (!result) {
+        return finish(errorResponse("Edit project not found", 404));
+      }
+      return finish(jsonResponse(result));
+    }
+
+    const editClipDownloadMatch = route.match(/^edits\/([^/]+)\/clips\/download$/);
+    if (request.method === "POST" && editClipDownloadMatch) {
+      const auth = await authFor("generate", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editClipDownloadMatch[1] as Id<"videoEditProjects">;
+      const body = await readJsonBody<{
+        clipId?: string;
+        assetId?: Id<"assets">;
+        trimIn?: number;
+        trimOut?: number;
+        mode?: "video" | "audio";
+        filename?: string;
+        speed?: number;
+      }>(request);
+      const result = await ctx.runAction(
+        internal.videoEditActions.downloadClipSegmentForApi,
+        {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          projectId,
+          clipId: body.clipId,
+          assetId: body.assetId,
+          trimIn: body.trimIn,
+          trimOut: body.trimOut,
+          mode: body.mode,
+          filename: body.filename,
+          speed: body.speed,
+        },
+      );
       return finish(jsonResponse(result));
     }
 

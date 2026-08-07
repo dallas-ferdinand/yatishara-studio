@@ -273,6 +273,7 @@ export const manifest = authedQuery({
           if (args.selections.length === 1) {
             const built = await buildVideoEditPackageFiles(
               ctx,
+              ctx.user._id,
               project._id,
               args.expiresUnix,
               "",

@@ -18,6 +18,24 @@ const clipSpec = z.object({
   duration: z.number().optional(),
 });
 
+const clipEffects = z
+  .object({
+    fadeIn: z.number().optional().describe("Picture edge fade-in seconds"),
+    fadeOut: z.number().optional().describe("Picture edge fade-out seconds"),
+    audioFadeIn: z.number().optional().describe("Audio edge fade-in seconds"),
+    audioFadeOut: z.number().optional().describe("Audio edge fade-out seconds"),
+    volume: z
+      .number()
+      .optional()
+      .describe("0–1 gain; set 0 to mute this clip (per-clip mute)"),
+    speed: z.number().optional().describe("Playback rate; timeline duration = trim / speed"),
+    scale: z.number().optional().describe("Canvas zoom; 1 = 100% cover"),
+    x: z.number().optional().describe("Horizontal pan as fraction of canvas width"),
+    y: z.number().optional().describe("Vertical pan as fraction of canvas height"),
+    rotation: z.number().optional().describe("Rotation degrees"),
+  })
+  .describe("ClipEffects — volume/fades/speed/transform");
+
 const clipPatch = z.object({
   clipId: z.string(),
   startTime: z.number().optional(),
@@ -25,7 +43,7 @@ const clipPatch = z.object({
   trimOut: z.number().optional(),
   trackId: z.string().optional(),
   label: z.string().optional(),
-  effects: z.record(z.unknown()).nullable().optional(),
+  effects: clipEffects.nullable().optional(),
   transitionOut: z
     .object({
       type: z.string(),
@@ -157,7 +175,7 @@ export function registerEditTools(server: McpServer) {
 
   server.tool(
     "studio_edit_update_clips",
-    "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects, transitionOut, text (text clips).",
+    "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects (volume/fades/speed/scale/x/y/rotation), transitionOut, text (text clips). Per-clip mute = effects.volume 0.",
     {
       projectId: z.string(),
       clips: z.array(clipPatch).min(1),
@@ -279,19 +297,86 @@ export function registerEditTools(server: McpServer) {
 
   server.tool(
     "studio_export_edit",
-    "Export a saved edit project to a video asset (ffmpeg). Requires generate scope. Returns { assetId }. Optional name overrides the export filename. Optional exportResolution: 720p | 1080p | 4K (default 1080p).",
+    "Export a saved edit to a Studio asset (ffmpeg). Requires generate scope. Returns { assetId }. exportKind=video (default) or audio. Video: exportResolution 720p|1080p|4K (default 1080p). Audio: audioFormat mp3|wav|m4a (default mp3). Optional name overrides filename.",
     {
       projectId: z.string(),
       name: z.string().optional(),
-      exportResolution: z.enum(["720p", "1080p", "4K"]).optional(),
+      exportKind: z
+        .enum(["video", "audio"])
+        .optional()
+        .describe("Default video — matches editor Export rail"),
+      exportResolution: z
+        .enum(["720p", "1080p", "4K"])
+        .optional()
+        .describe("Video only; default 1080p"),
+      audioFormat: z
+        .enum(["mp3", "wav", "m4a"])
+        .optional()
+        .describe("Audio export only; default mp3"),
     },
-    async ({ projectId, name, exportResolution }) =>
+    async ({ projectId, name, exportKind, exportResolution, audioFormat }) =>
       jsonResult(
         await studioFetch(`/edits/${encodeURIComponent(projectId)}/export`, {
           method: "POST",
-          body: JSON.stringify({ name, exportResolution }),
+          body: JSON.stringify({ name, exportKind, exportResolution, audioFormat }),
         }),
       ),
+  );
+
+  server.tool(
+    "studio_download_edit_package",
+    "[preferred] Portable .studio package manifest for a video edit (project.json + signed media URLs + icon). Same payload the Files/Export UI zips client-side. Optional expiresUnix (default ~1h).",
+    {
+      projectId: z.string(),
+      expiresUnix: z.number().optional(),
+    },
+    async ({ projectId, expiresUnix }) =>
+      jsonResult(
+        await studioFetch(`/edits/${encodeURIComponent(projectId)}/package`, {
+          method: "POST",
+          body: JSON.stringify({ expiresUnix }),
+        }),
+      ),
+  );
+
+  server.tool(
+    "studio_download_clip_segment",
+    "[preferred] Download a trimmed clip segment (Save as video/audio). Prefer clipId on a project; or pass assetId + trimIn + trimOut. Returns short-lived { url, filename, contentType }. Requires generate scope.",
+    {
+      projectId: z.string().optional(),
+      clipId: z.string().optional().describe("Preferred — resolve trim/speed from timeline"),
+      assetId: z.string().optional(),
+      trimIn: z.number().optional(),
+      trimOut: z.number().optional(),
+      mode: z.enum(["video", "audio"]).optional(),
+      filename: z.string().optional(),
+      speed: z.number().optional(),
+    },
+    async (args) => {
+      const projectId = args.projectId;
+      if (!projectId) {
+        return jsonResult({
+          error: "projectId is required (clip download is scoped to an edit project).",
+        });
+      }
+      return jsonResult(
+        await studioFetch(
+          `/edits/${encodeURIComponent(projectId)}/clips/download`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              clipId: args.clipId,
+              assetId: args.assetId,
+              trimIn: args.trimIn,
+              trimOut: args.trimOut,
+              mode: args.mode,
+              filename: args.filename,
+              speed: args.speed,
+            }),
+          },
+        ),
+      );
+    },
   );
 
 

@@ -6,7 +6,10 @@ const estimateSchema = {
   mode: z.enum(["image", "video", "script", "audio"]).optional(),
   resolution: z.string().optional(),
   durationSeconds: z.number().optional(),
-  audioEnabled: z.boolean().optional(),
+  audioEnabled: z
+    .boolean()
+    .optional()
+    .describe("UI: Synced audio — Seedance native audio bed with the video"),
   audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
   characterCount: z.number().optional(),
   prompt: z
@@ -73,7 +76,10 @@ const batchItemSchema = z.object({
   resolution: z.string().optional(),
   quality: z.enum(["low", "medium", "high"]).optional(),
   durationSeconds: z.number().optional(),
-  audioEnabled: z.boolean().optional(),
+  audioEnabled: z
+    .boolean()
+    .optional()
+    .describe("UI: Synced audio — Seedance native audio bed with the video"),
   audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
   elevenVoiceId: z.string().optional(),
   elevenVoiceName: z.string().optional(),
@@ -170,11 +176,20 @@ export function registerGenerationTools(server: McpServer) {
         mode: z.enum(["image", "video", "script", "audio"]),
         resolution: z.string().optional(),
         durationSeconds: z.number().optional(),
-        audioEnabled: z.boolean().optional(),
+        audioEnabled: z
+          .boolean()
+          .optional()
+          .describe("UI: Synced audio — Seedance native audio bed with the video"),
         audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
         characterCount: z.number().optional(),
         hasReferenceInput: z.boolean().optional(),
         referenceAssetIds: z.array(z.string()).optional(),
+        videoModel: z
+          .string()
+          .optional()
+          .describe(
+            "Video items only. Call studio_list_video_models first. Omit = seedance-2.0.",
+          ),
         maxRounds: z.number(),
       }),
     ),
@@ -191,6 +206,7 @@ export function registerGenerationTools(server: McpServer) {
       characterCount?: number;
       hasReferenceInput?: boolean;
       referenceAssetIds?: string[];
+      videoModel?: string;
       maxRounds: number;
     }>;
     contingencyPercent?: number;
@@ -463,7 +479,10 @@ Wait ≥65s between video calls (1 req/min gateway quota). For packs use studio_
       aspectRatio: z.string().optional(),
       resolution: z.string().optional().describe("1280x720 (720p) or 1920x1080 (1080p)"),
       durationSeconds: z.number().optional().describe("4-15 seconds"),
-      audioEnabled: z.boolean().optional(),
+      audioEnabled: z
+    .boolean()
+    .optional()
+    .describe("UI: Synced audio — Seedance native audio bed with the video"),
       referenceAssetIds: z.array(z.string()).optional(),
       referenceElementIds: z
         .array(z.string())

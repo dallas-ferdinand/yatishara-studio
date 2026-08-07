@@ -93,6 +93,7 @@ import type * as lib_studioApi_folderScope from "../lib/studioApi/folderScope.js
 import type * as lib_studioApi_httpHelpers from "../lib/studioApi/httpHelpers.js";
 import type * as lib_studioApi_openapi from "../lib/studioApi/openapi.js";
 import type * as lib_studioApi_scopes from "../lib/studioApi/scopes.js";
+import type * as lib_studioPackageEnvelope from "../lib/studioPackageEnvelope.js";
 import type * as lib_studioPackageFormat from "../lib/studioPackageFormat.js";
 import type * as lib_studioShareAccess from "../lib/studioShareAccess.js";
 import type * as lib_styleSheetGuides from "../lib/styleSheetGuides.js";
@@ -227,6 +228,7 @@ declare const fullApi: ApiFromModules<{
   "lib/studioApi/httpHelpers": typeof lib_studioApi_httpHelpers;
   "lib/studioApi/openapi": typeof lib_studioApi_openapi;
   "lib/studioApi/scopes": typeof lib_studioApi_scopes;
+  "lib/studioPackageEnvelope": typeof lib_studioPackageEnvelope;
   "lib/studioPackageFormat": typeof lib_studioPackageFormat;
   "lib/studioShareAccess": typeof lib_studioShareAccess;
   "lib/styleSheetGuides": typeof lib_styleSheetGuides;

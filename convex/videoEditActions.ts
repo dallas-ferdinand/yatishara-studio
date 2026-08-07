@@ -1110,6 +1110,8 @@ export const exportVideoForApi = internalAction({
     projectId: v.id("videoEditProjects"),
     name: v.optional(v.string()),
     exportResolution: v.optional(exportResolutionValidator),
+    exportKind: v.optional(exportKindValidator),
+    audioFormat: v.optional(audioFormatValidator),
   },
   returns: v.object({
     assetId: v.id("assets"),
@@ -1130,6 +1132,8 @@ export const exportVideoForApi = internalAction({
       name: exportName,
       project: row.project as EditorProject,
       exportResolution: args.exportResolution,
+      exportKind: args.exportKind,
+      audioFormat: args.audioFormat,
     });
   },
 });
@@ -1138,6 +1142,181 @@ export const exportVideoForApi = internalAction({
  * Cut a single asset to [trimIn, trimOut] and return a short-lived download URL.
  * Used by the editor clip context menu (Save as video / Save as audio).
  */
+async function runDownloadClipSegment(
+  ctx: ActionCtx,
+  userId: Id<"users">,
+  args: {
+    assetId: Id<"assets">;
+    trimIn: number;
+    trimOut: number;
+    mode: "video" | "audio";
+    filename?: string;
+    speed?: number;
+  },
+): Promise<{ url: string; filename: string; contentType: string }> {
+  try {
+    await execFileAsync("ffmpeg", ["-version"]);
+  } catch {
+    throw new Error(
+      "Clip download requires ffmpeg on the Convex action runtime.",
+    );
+  }
+
+  const trimIn = Math.max(0, args.trimIn);
+  const trimOut = Math.max(trimIn + 0.05, args.trimOut);
+  const sourceLen = Math.max(0.05, trimOut - trimIn);
+  const speed = clipSpeedFromEffects({ speed: args.speed });
+  const duration = Math.max(0.05, sourceLen / speed);
+  const naturalAf = buildNaturalSpeedAudioFilters(speed);
+  const speedPts = buildSpeedSetptsFilter(speed);
+
+  const source = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+    userId,
+    assetId: args.assetId,
+  });
+  if (!source?.bunnyPath) {
+    throw new Error("Source media not found.");
+  }
+
+  const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60;
+  const signedSource = await signBunnyCdnUrl(source.bunnyPath, expiresUnix);
+  const tempDir = await mkdtemp(join(tmpdir(), "studio-clip-dl-"));
+  try {
+    const sourcePath = join(tempDir, "source.bin");
+    await downloadToFile(signedSource, sourcePath);
+
+    const audioOnly = args.mode === "audio";
+    const baseName = (args.filename ?? source.name ?? "clip")
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^\w.\- ]+/g, " ")
+      .trim()
+      .slice(0, 80) || "clip";
+    const filename = audioOnly ? `${baseName}.wav` : `${baseName}.mp4`;
+    const contentType = audioOnly ? "audio/wav" : "video/mp4";
+    const outPath = join(tempDir, audioOnly ? "clip.wav" : "clip.mp4");
+
+    if (audioOnly) {
+      const afParts = [naturalAf, "aformat=sample_fmts=s16:channel_layouts=stereo"].filter(Boolean);
+      const audioArgs = [
+        "-y",
+        "-ss",
+        String(trimIn),
+        "-t",
+        String(sourceLen),
+        "-i",
+        sourcePath,
+        "-t",
+        String(duration),
+        "-vn",
+      ];
+      if (afParts.length) {
+        audioArgs.push("-af", afParts.join(","));
+      }
+      audioArgs.push(
+        "-acodec",
+        "pcm_s16le",
+        "-ar",
+        "44100",
+        "-ac",
+        "2",
+        outPath,
+      );
+      await execFileAsync("ffmpeg", audioArgs);
+    } else if (await hasAudioStream(sourcePath)) {
+      const vf = speedPts || "null";
+      const af = naturalAf || "anull";
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-ss",
+        String(trimIn),
+        "-t",
+        String(sourceLen),
+        "-i",
+        sourcePath,
+        "-t",
+        String(duration),
+        "-vf",
+        vf,
+        "-af",
+        af,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "22",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-ar",
+        "44100",
+        "-ac",
+        "2",
+        "-movflags",
+        "+faststart",
+        outPath,
+      ]);
+    } else {
+      const vfSilent = speedPts || "null";
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-ss",
+        String(trimIn),
+        "-t",
+        String(sourceLen),
+        "-i",
+        sourcePath,
+        "-f",
+        "lavfi",
+        "-i",
+        "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-t",
+        String(duration),
+        "-vf",
+        vfSilent,
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "22",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-ar",
+        "44100",
+        "-ac",
+        "2",
+        "-shortest",
+        "-movflags",
+        "+faststart",
+        outPath,
+      ]);
+    }
+
+    const body = await readFile(outPath);
+    if (body.byteLength < 64) {
+      throw new Error("Clipped media is empty.");
+    }
+    const bunnyPath = `users/${userId}/clip-downloads/${Date.now()}-${Math.random().toString(36).slice(2, 10)}/${filename}`;
+    await putObject({
+      path: bunnyPath,
+      body,
+      contentType,
+    });
+    const url = await signBunnyCdnUrl(bunnyPath, expiresUnix);
+    return { url, filename, contentType };
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 export const downloadClipSegment = action({
   args: {
     assetId: v.id("assets"),
@@ -1160,170 +1339,77 @@ export const downloadClipSegment = action({
     if (!userId) {
       throw new Error("Sign in to download.");
     }
-    try {
-      await execFileAsync("ffmpeg", ["-version"]);
-    } catch {
-      throw new Error(
-        "Clip download requires ffmpeg on the Convex action runtime.",
-      );
-    }
-
-    const trimIn = Math.max(0, args.trimIn);
-    const trimOut = Math.max(trimIn + 0.05, args.trimOut);
-    const sourceLen = Math.max(0.05, trimOut - trimIn);
-    const speed = clipSpeedFromEffects({ speed: args.speed });
-    const duration = Math.max(0.05, sourceLen / speed);
-    const naturalAf = buildNaturalSpeedAudioFilters(speed);
-    const speedPts = buildSpeedSetptsFilter(speed);
-
-    const source = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
-      userId,
-      assetId: args.assetId,
-    });
-    if (!source?.bunnyPath) {
-      throw new Error("Source media not found.");
-    }
-
-    const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60;
-    const signedSource = await signBunnyCdnUrl(source.bunnyPath, expiresUnix);
-    const tempDir = await mkdtemp(join(tmpdir(), "studio-clip-dl-"));
-    try {
-      const sourcePath = join(tempDir, "source.bin");
-      await downloadToFile(signedSource, sourcePath);
-
-      const audioOnly = args.mode === "audio";
-      const baseName = (args.filename ?? source.name ?? "clip")
-        .replace(/\.[^.]+$/, "")
-        .replace(/[^\w.\- ]+/g, " ")
-        .trim()
-        .slice(0, 80) || "clip";
-      const filename = audioOnly ? `${baseName}.wav` : `${baseName}.mp4`;
-      const contentType = audioOnly ? "audio/wav" : "video/mp4";
-      const outPath = join(tempDir, audioOnly ? "clip.wav" : "clip.mp4");
-
-      if (audioOnly) {
-        const afParts = [naturalAf, "aformat=sample_fmts=s16:channel_layouts=stereo"].filter(Boolean);
-        const audioArgs = [
-          "-y",
-          "-ss",
-          String(trimIn),
-          "-t",
-          String(sourceLen),
-          "-i",
-          sourcePath,
-          "-t",
-          String(duration),
-          "-vn",
-        ];
-        if (afParts.length) {
-          audioArgs.push("-af", afParts.join(","));
-        }
-        audioArgs.push(
-          "-acodec",
-          "pcm_s16le",
-          "-ar",
-          "44100",
-          "-ac",
-          "2",
-          outPath,
-        );
-        await execFileAsync("ffmpeg", audioArgs);
-      } else if (await hasAudioStream(sourcePath)) {
-        const vf = speedPts || "null";
-        const af = naturalAf || "anull";
-        await execFileAsync("ffmpeg", [
-          "-y",
-          "-ss",
-          String(trimIn),
-          "-t",
-          String(sourceLen),
-          "-i",
-          sourcePath,
-          "-t",
-          String(duration),
-          "-vf",
-          vf,
-          "-af",
-          af,
-          "-c:v",
-          "libx264",
-          "-preset",
-          "fast",
-          "-crf",
-          "22",
-          "-pix_fmt",
-          "yuv420p",
-          "-c:a",
-          "aac",
-          "-ar",
-          "44100",
-          "-ac",
-          "2",
-          "-movflags",
-          "+faststart",
-          outPath,
-        ]);
-      } else {
-        const vfSilent = speedPts || "null";
-        await execFileAsync("ffmpeg", [
-          "-y",
-          "-ss",
-          String(trimIn),
-          "-t",
-          String(sourceLen),
-          "-i",
-          sourcePath,
-          "-f",
-          "lavfi",
-          "-i",
-          "anullsrc=channel_layout=stereo:sample_rate=44100",
-          "-t",
-          String(duration),
-          "-vf",
-          vfSilent,
-          "-map",
-          "0:v:0",
-          "-map",
-          "1:a:0",
-          "-c:v",
-          "libx264",
-          "-preset",
-          "fast",
-          "-crf",
-          "22",
-          "-pix_fmt",
-          "yuv420p",
-          "-c:a",
-          "aac",
-          "-ar",
-          "44100",
-          "-ac",
-          "2",
-          "-shortest",
-          "-movflags",
-          "+faststart",
-          outPath,
-        ]);
-      }
-
-      const body = await readFile(outPath);
-      if (body.byteLength < 64) {
-        throw new Error("Clipped media is empty.");
-      }
-      const bunnyPath = `users/${userId}/clip-downloads/${Date.now()}-${Math.random().toString(36).slice(2, 10)}/${filename}`;
-      await putObject({
-        path: bunnyPath,
-        body,
-        contentType,
-      });
-      const url = await signBunnyCdnUrl(bunnyPath, expiresUnix);
-      return { url, filename, contentType };
-    } finally {
-      await rm(tempDir, { recursive: true, force: true });
-    }
+    return await runDownloadClipSegment(ctx, userId, args);
   },
 });
 
+/** API/MCP: trimmed clip download (prefer projectId+clipId; or assetId+trim). */
+export const downloadClipSegmentForApi = internalAction({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.optional(v.id("videoEditProjects")),
+    clipId: v.optional(v.string()),
+    assetId: v.optional(v.id("assets")),
+    trimIn: v.optional(v.number()),
+    trimOut: v.optional(v.number()),
+    mode: v.optional(v.union(v.literal("video"), v.literal("audio"))),
+    filename: v.optional(v.string()),
+    speed: v.optional(v.number()),
+  },
+  returns: v.object({
+    url: v.string(),
+    filename: v.string(),
+    contentType: v.string(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ url: string; filename: string; contentType: string }> => {
+    let assetId = args.assetId;
+    let trimIn = args.trimIn;
+    let trimOut = args.trimOut;
+    let speed = args.speed;
+    let mode = args.mode ?? "video";
+    let filename = args.filename;
+
+    if (args.projectId && args.clipId) {
+      const row = await ctx.runQuery(internal.videoEdits.getForApi, {
+        userId: args.userId,
+        sandboxFolderId: args.sandboxFolderId,
+        projectId: args.projectId,
+      });
+      if (!row) throw new Error("Edit project not found.");
+      const project = row.project as EditorProject;
+      const clip = project.clips?.find((item) => item.id === args.clipId);
+      if (!clip) throw new Error(`Clip not found: ${args.clipId}`);
+      if (clip.kind === "text" || !clip.assetId) {
+        throw new Error("Only video/audio clips can be downloaded.");
+      }
+      assetId = clip.assetId as Id<"assets">;
+      trimIn = clip.trimIn;
+      trimOut = clip.trimOut;
+      speed = clip.effects?.speed;
+      mode =
+        args.mode ??
+        (clip.kind === "audio" ? "audio" : "video");
+      filename = args.filename ?? clip.label;
+    }
+
+    if (!assetId || trimIn == null || trimOut == null) {
+      throw new Error("Provide clipId (with project) or assetId + trimIn + trimOut.");
+    }
+
+    return await runDownloadClipSegment(ctx, args.userId, {
+      assetId,
+      trimIn,
+      trimOut,
+      mode,
+      filename,
+      speed,
+    });
+  },
+});
 
 /**
  * Process-on-demand clip speed: bake trim+speed into a new folder asset.

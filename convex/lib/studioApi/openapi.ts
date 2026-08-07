@@ -124,7 +124,23 @@ export const STUDIO_API_OPENAPI = {
       put: { summary: "Save full project JSON" },
       patch: { summary: "Rename or move edit" },
     },
-    "/edits/{id}/export": { post: { summary: "Export edit to a video asset", description: "Optional body: name, exportResolution (720p | 1080p | 4K; default 1080p)." } },
+    "/edits/{id}/export": {
+      post: {
+        summary: "Export edit to a video or audio asset",
+        description:
+          "Optional body: name, exportKind (video|audio), exportResolution (720p|1080p|4K; video default 1080p), audioFormat (mp3|wav|m4a; audio default mp3).",
+      },
+    },
+    "/edits/{id}/package": {
+      get: { summary: "Portable .studio package manifest" },
+      post: { summary: "Portable .studio package manifest (optional expiresUnix)" },
+    },
+    "/edits/{id}/clips/download": {
+      post: {
+        summary: "Download trimmed clip segment",
+        description: "Body: clipId preferred, or assetId+trimIn+trimOut; mode video|audio.",
+      },
+    },
     "/edits/{id}/text": { post: { summary: "Add text/title overlay clip" } },
     "/edits/{id}/clips/duplicate": { post: { summary: "Duplicate a clip" } },
     "/edits/{id}/clips/detach-audio": { post: { summary: "Detach audio bed from video clip" } },
@@ -141,6 +157,13 @@ export const STUDIO_API_OPENAPI = {
       post: { summary: "Send text message" },
     },
     "/messages/conversations/{id}/images": { post: { summary: "Send image message (assetId)" } },
+    "/messages/conversations/{id}/voice": { post: { summary: "Send voice note (assetId + durationSec)" } },
+    "/messages/conversations/{id}/media": {
+      post: {
+        summary:
+          "Send Studio media (UI Choose/Share). Default delivery=file → peer Messages + image/video bubbles",
+      },
+    },
     "/messages/conversations/{id}/share": { post: { summary: "Share feed post/comment into DM" } },
     "/messages/conversations/{id}/read": { post: { summary: "Mark conversation read" } },
     "/messages/labels": {
@@ -314,11 +337,15 @@ export const STUDIO_API_ROOT = {
     "GET|POST /edits",
     "GET|PUT|PATCH /edits/:id",
     "POST /edits/:id/export",
+    "GET|POST /edits/:id/package",
+    "POST /edits/:id/clips/download",
     "GET|POST /messages/conversations",
     "GET /messages/search",
     "GET /messages/unread-count",
     "GET|POST /messages/conversations/:id/messages",
     "POST /messages/conversations/:id/images",
+    "POST /messages/conversations/:id/voice",
+    "POST /messages/conversations/:id/media",
     "POST /messages/conversations/:id/share",
     "POST /messages/conversations/:id/read",
     "GET|POST /messages/labels",

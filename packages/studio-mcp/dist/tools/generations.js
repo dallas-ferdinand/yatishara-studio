@@ -4,7 +4,7 @@ const estimateSchema = {
   mode: z.enum(["image", "video", "script", "audio"]).optional(),
   resolution: z.string().optional(),
   durationSeconds: z.number().optional(),
-  audioEnabled: z.boolean().optional(),
+  audioEnabled: z.boolean().optional().describe("UI: Synced audio \u2014 Seedance native audio bed with the video"),
   audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
   characterCount: z.number().optional(),
   prompt: z.string().optional().describe("For mode=audio voiceover: character count is taken from prompt length when characterCount is omitted"),
@@ -46,7 +46,7 @@ const batchItemSchema = z.object({
   resolution: z.string().optional(),
   quality: z.enum(["low", "medium", "high"]).optional(),
   durationSeconds: z.number().optional(),
-  audioEnabled: z.boolean().optional(),
+  audioEnabled: z.boolean().optional().describe("UI: Synced audio \u2014 Seedance native audio bed with the video"),
   audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
   elevenVoiceId: z.string().optional(),
   elevenVoiceName: z.string().optional(),
@@ -134,11 +134,14 @@ function registerGenerationTools(server) {
         mode: z.enum(["image", "video", "script", "audio"]),
         resolution: z.string().optional(),
         durationSeconds: z.number().optional(),
-        audioEnabled: z.boolean().optional(),
+        audioEnabled: z.boolean().optional().describe("UI: Synced audio \u2014 Seedance native audio bed with the video"),
         audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
         characterCount: z.number().optional(),
         hasReferenceInput: z.boolean().optional(),
         referenceAssetIds: z.array(z.string()).optional(),
+        videoModel: z.string().optional().describe(
+          "Video items only. Call studio_list_video_models first. Omit = seedance-2.0."
+        ),
         maxRounds: z.number()
       })
     ),
@@ -362,7 +365,7 @@ Wait \u226565s between video calls (1 req/min gateway quota). For packs use stud
       aspectRatio: z.string().optional(),
       resolution: z.string().optional().describe("1280x720 (720p) or 1920x1080 (1080p)"),
       durationSeconds: z.number().optional().describe("4-15 seconds"),
-      audioEnabled: z.boolean().optional(),
+      audioEnabled: z.boolean().optional().describe("UI: Synced audio \u2014 Seedance native audio bed with the video"),
       referenceAssetIds: z.array(z.string()).optional(),
       referenceElementIds: z.array(z.string()).optional().describe("Prop + location element IDs for [Image N] refs"),
       startFrameAssetId: z.string().optional().describe("Storyboard asset ID \u2014 first_frame I2V. Required when people appear on camera."),

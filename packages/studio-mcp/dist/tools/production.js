@@ -4,7 +4,7 @@ import { validateProductionGates } from "../lib/productionGates.js";
 function registerProductionTools(server) {
   server.tool(
     "studio_validate_production_gates",
-    `Pre-flight gate check for @cartoon-ad-production before studio_generate_* calls. Pass production-state.json as productionState. Returns canProceed, blockers, warnings. REQUIRED before Phase D/E generate per gate-validation.md.`,
+    `Optional pre-flight gate check before studio_generate_* when using production-state.json (from archived cartoon-ad-production). Returns canProceed, blockers, warnings. Not required for Studio Assistance / direct gen.`,
     {
       targetPhase: z.enum(["D", "C", "E5", "E", "generate"]).describe("Phase about to execute generation for"),
       productionState: z.record(z.unknown()).describe("Full production-state.json object"),

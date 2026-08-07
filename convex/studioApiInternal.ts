@@ -825,6 +825,7 @@ export const estimateBatchProduction = internalQuery({
         characterCount: v.optional(v.number()),
         hasReferenceInput: v.optional(v.boolean()),
         referenceAssetIds: v.optional(v.array(v.id("assets"))),
+        videoModel: v.optional(v.string()),
         maxRounds: v.number(),
       }),
     ),
@@ -905,6 +906,14 @@ export const estimateBatchProduction = internalQuery({
           resolution,
           durationSeconds: item.durationSeconds,
           audioEnabled: item.audioEnabled,
+          videoModel:
+            item.mode === "video"
+              ? ((item.videoModel as
+                  | "seedance-2.0"
+                  | "google-omni-flash"
+                  | "kling-3.0-i2v"
+                  | undefined) ?? "seedance-2.0")
+              : undefined,
           ...referenceFlags,
         });
       }
