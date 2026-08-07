@@ -31,7 +31,7 @@ const estimateSchema = {
     .string()
     .optional()
     .describe(
-      'Explicit video model choice. Call studio_list_video_models first. Omit = seedance-2.5 (Studio default). MCP-only: seedance-2.0, kling-3.0-i2v, google-omni-flash.',
+      'Video model: seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s). MCP-only: kling-3.0-i2v, google-omni-flash. Call studio_list_video_models for caps.',
     ),
 };
 
@@ -188,7 +188,7 @@ export function registerGenerationTools(server: McpServer) {
           .string()
           .optional()
           .describe(
-            "Video items only. Call studio_list_video_models first. Omit = seedance-2.5.",
+            "Video items only. seedance-2.5 (default) or seedance-2.0. Call studio_list_video_models for caps.",
           ),
         maxRounds: z.number(),
       }),
@@ -501,7 +501,7 @@ Wait ≥65s between video calls (1 req/min gateway quota). For packs use studio_
         .string()
         .optional()
         .describe(
-          'Explicit model slug from studio_list_video_models. Omit = seedance-2.5 (Studio default).',
+          'seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s). MCP-only: kling-3.0-i2v, google-omni-flash.',
         ),
       compact: z.boolean().optional(),
     },

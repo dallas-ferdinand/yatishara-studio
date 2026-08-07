@@ -301,10 +301,10 @@ export async function generateVideo(
   const multimodalProviderRefs =
     seedance && hasStartFrame && (hasReferenceVideos || hasReferenceAudio);
 
-  // Seedance 2.5 (Vercel catalog): only "480p" / "720p".
-  // WxH (1280x720) fails — normalizeSeedanceResolution maps to p-labels.
+  // Seedance: gateway wants p-labels / "4k", not WxH.
+  // 2.5 → 480p/720p; 2.0 → 480p/720p/1080p/4k (see normalizeSeedanceResolution).
   const resolution = seedance
-    ? normalizeSeedanceResolution(input.resolution)
+    ? normalizeSeedanceResolution(input.resolution, model)
     : normalizeSize(input.resolution);
   const aspectRatio = seedance
     ? normalizeSeedanceAspectRatio(input.aspectRatio)

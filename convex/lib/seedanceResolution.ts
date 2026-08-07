@@ -1,15 +1,15 @@
 /**
- * Seedance gateway parameter alignment (default: Seedance 2.5).
+ * Seedance gateway parameter alignment.
  *
- * Vercel AI Gateway catalog for `bytedance/seedance-2.5`:
- *   Resolutions: `480p` / `720p` only (not WxH, not 1080p/4K).
- *   Aspect ratios: 16:9, 9:16, 1:1, 4:3, 3:4, 21:9.
- *   Duration: 4–30s.
+ * Vercel AI Gateway:
+ * - `bytedance/seedance-2.5`: Resolutions `480p` / `720p`; duration 4–30s.
+ * - `bytedance/seedance-2.0`: Resolutions `480p` / `720p` / `1080p` / `4k`; duration 4–15s.
  *
  * Studio may store WxH for pricing/UI; convert at the gateway boundary.
- * 1080p / 4K requests are clamped to 720p (2.5 does not list those tiers).
+ * For 2.5, unsupported tiers (1080p / 4K) clamp to 720p.
+ * For 2.0, all four gateway labels are passed through.
  */
-export type SeedanceResolutionLabel = "480p" | "720p";
+export type SeedanceResolutionLabel = "480p" | "720p" | "1080p" | "4k";
 
 const SEEDANCE_ASPECT_RATIOS = new Set([
   "16:9",
@@ -20,11 +20,19 @@ const SEEDANCE_ASPECT_RATIOS = new Set([
   "21:9",
 ]);
 
+function isSeedance20Model(videoModel?: string | null): boolean {
+  if (!videoModel?.trim()) return false;
+  const key = videoModel.trim().toLowerCase();
+  return key === "seedance-2.0" || key.includes("seedance-2.0");
+}
+
 export function normalizeSeedanceResolution(
   resolution: string | undefined,
+  videoModel?: string | null,
 ): SeedanceResolutionLabel {
   if (!resolution?.trim()) return "720p";
   const key = resolution.trim().toLowerCase().replace(/×/g, "x");
+  const allowHd = isSeedance20Model(videoModel);
 
   if (
     key === "480p" ||
@@ -37,8 +45,36 @@ export function normalizeSeedanceResolution(
     return "480p";
   }
 
-  // 1080p / 4K / FHD → 720p (Seedance 2.5 catalog has no 1080p).
-  // Everything else (including 720p / image tiers) → 720p.
+  if (
+    key === "3840x2160" ||
+    key === "2160x3840" ||
+    key === "4k" ||
+    key === "2160p"
+  ) {
+    return allowHd ? "4k" : "720p";
+  }
+
+  if (
+    key === "1920x1080" ||
+    key === "1080x1920" ||
+    key === "1080p" ||
+    key === "1080" ||
+    key === "fhd"
+  ) {
+    return allowHd ? "1080p" : "720p";
+  }
+
+  if (
+    key === "720p" ||
+    key === "720" ||
+    key === "1280x720" ||
+    key === "720x1280" ||
+    key === "hd"
+  ) {
+    return "720p";
+  }
+
+  // Image tiers / unknown → 720p.
   return "720p";
 }
 
@@ -67,9 +103,9 @@ export function isImageResolutionTier(resolution: string | undefined): boolean {
 /** True when a resolution looks like a video WxH / p-label. */
 export function isVideoResolutionValue(resolution: string | undefined): boolean {
   if (!resolution?.trim()) return false;
-  const key = resolution.trim().toLowerCase();
+  const key = resolution.trim().toLowerCase().replace(/×/g, "x");
   return (
-    /^(480p|720p|1080p|480|720|1080|hd|fhd)$/.test(key) ||
-    /^\d+x\d+$/.test(key.replace(/×/g, "x"))
+    /^(480p|720p|1080p|2160p|4k|480|720|1080|hd|fhd)$/.test(key) ||
+    /^\d+x\d+$/.test(key)
   );
 }

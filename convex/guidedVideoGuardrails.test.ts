@@ -923,7 +923,7 @@ describe("Assistance guardrails", () => {
       production: {
         videoType: "hypermotion_ad",
         durationSeconds: 8,
-        resolution: "1920x1080",
+        resolution: "1280x720",
         aspectRatio: "9:16",
         audioEnabled: true,
       },
@@ -931,7 +931,7 @@ describe("Assistance guardrails", () => {
 
     expect(updated.videoType).toBe("hypermotion_ad");
     expect(updated.payload.production.durationSeconds).toBe(8);
-    expect(updated.payload.production.resolution).toBe("1920x1080");
+    expect(updated.payload.production.resolution).toBe("1280x720");
     expect(updated.payload.audio.music).toBe("include");
     expect(updated.status).toBe("review_ready");
     expect(updated.estimatedCredits).toBeGreaterThan(0);
@@ -950,7 +950,7 @@ describe("Assistance guardrails", () => {
       asUser.mutation(api.guidedVideo.patchBriefProduction, {
         briefId,
         expectedRevision: 1,
-        production: { durationSeconds: 30 },
+        production: { durationSeconds: 31 },
       }),
     ).rejects.toThrow(/duration/i);
 
@@ -960,6 +960,6 @@ describe("Assistance guardrails", () => {
         expectedRevision: 1,
         production: { resolution: "4K" },
       }),
-    ).rejects.toThrow(/720p|1080p|resolution/i);
+    ).rejects.toThrow(/resolution/i);
   });
 });

@@ -73,11 +73,34 @@ describe("validateVideoModelCapabilities", () => {
     ).toThrow("not available in Studio");
   });
 
-  it("advertises duration capabilities to API clients", () => {
-    const omni = listVideoModelsForMcp().find(
-      (model) => model.slug === "google-omni-flash",
-    );
+  it("allows Seedance 2.0 in Studio with 4K and rejects 4K on 2.5", () => {
+    expect(
+      validateVideoModelCapabilities("seedance-2.0", {
+        durationSeconds: 8,
+        resolution: "3840x2160",
+        surface: "studio",
+      }).slug,
+    ).toBe("seedance-2.0");
+
+    expect(() =>
+      validateVideoModelCapabilities("seedance-2.5", {
+        durationSeconds: 8,
+        resolution: "3840x2160",
+        surface: "studio",
+      }),
+    ).toThrow("does not support that resolution");
+  });
+
+  it("advertises duration and resolution capabilities to API clients", () => {
+    const models = listVideoModelsForMcp();
+    const omni = models.find((model) => model.slug === "google-omni-flash");
     expect(omni?.maxDurationSeconds).toBe(10);
+    const seedance20 = models.find((model) => model.slug === "seedance-2.0");
+    expect(seedance20?.mcpOnly).toBe(false);
+    expect(seedance20?.resolutions).toEqual(["480p", "720p", "1080p", "4k"]);
+    const seedance25 = models.find((model) => model.slug === "seedance-2.5");
+    expect(seedance25?.resolutions).toEqual(["480p", "720p"]);
+    expect(seedance25?.maxDurationSeconds).toBe(30);
   });
 });
 

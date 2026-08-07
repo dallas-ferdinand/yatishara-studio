@@ -686,23 +686,23 @@ export const canGenerate = authedQuery({
       .query("billingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
       .unique();
-    if (args.tier === "pro_video" && args.resolution === "3840x2160") {
-      return {
-        canGenerate: false,
-        creditBalance: account?.creditBalance ?? 0,
-        cost: 0,
-        hasActiveSubscription: false,
-        reason: "4K video isn't available yet. Try 720p or 480p for now.",
-      };
-    }
-    if (args.tier === "pro_video" && !isSupportedVideoDuration(args.durationSeconds)) {
-      return {
-        canGenerate: false,
-        creditBalance: account?.creditBalance ?? 0,
-        cost: 0,
-        hasActiveSubscription: false,
-        reason: "Video duration must be between 4 and 15 seconds.",
-      };
+    if (args.tier === "pro_video") {
+      try {
+        validateVideoModelCapabilities(args.videoModel, {
+          durationSeconds: args.durationSeconds,
+          resolution: args.resolution,
+          surface: "studio",
+        });
+      } catch (error) {
+        return {
+          canGenerate: false,
+          creditBalance: account?.creditBalance ?? 0,
+          cost: 0,
+          hasActiveSubscription: false,
+          reason:
+            error instanceof Error ? error.message : "Invalid video settings.",
+        };
+      }
     }
     const cost = generationCreditCost({
       tier: args.tier,
@@ -773,15 +773,10 @@ export const createQueuedJob = authedMutation({
     const thread = await requireThreadOwner(ctx, args.threadId);
     const saveFolderId = args.folderId ?? thread.linkedFolderId;
     await requireFolderOwner(ctx, saveFolderId);
-    if (args.mode === "video" && args.resolution === "3840x2160") {
-      throw new Error("4K video is not available yet. Video generation supports up to 720p.");
-    }
-    if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
-      throw new Error("Video duration must be between 4 and 15 seconds");
-    }
     if (args.mode === "video") {
       validateVideoModelCapabilities(args.resolvedModel, {
         durationSeconds: args.durationSeconds,
+        resolution: args.resolution,
         hasStartFrame: args.hasStartFrame,
         hasMultimodalReferences:
           args.hasVideoReferenceInput || args.hasNonVideoReferenceInput,
@@ -1022,15 +1017,13 @@ export const approveAssistedMedia = internalMutation({
     if (plan.mode === "video") {
       validateVideoModelCapabilities(plan.settings.resolvedModel, {
         durationSeconds: plan.settings.durationSeconds,
+        resolution: plan.settings.resolution,
         hasStartFrame,
         referenceKinds: referenceKinds.filter(
           (kind, index, all) => all.indexOf(kind) === index,
         ),
         surface: "studio",
       });
-    }
-    if (plan.mode === "video" && plan.settings.resolution === "3840x2160") {
-      throw new Error("4K video is not available yet.");
     }
 
     const tier = billingTierForMode(plan.mode);
@@ -1197,15 +1190,10 @@ export const internalCreateQueuedJob = internalMutation({
   handler: async (ctx, args) => {
     const thread = await requireThreadForUser(ctx, args.userId, args.threadId);
     await requireFolderForUser(ctx, args.userId, thread.linkedFolderId);
-    if (args.mode === "video" && args.resolution === "3840x2160") {
-      throw new Error("4K video is not available yet. Video generation supports up to 720p.");
-    }
-    if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
-      throw new Error("Video duration must be between 4 and 15 seconds");
-    }
     if (args.mode === "video") {
       validateVideoModelCapabilities(args.resolvedModel, {
         durationSeconds: args.durationSeconds,
+        resolution: args.resolution,
         hasStartFrame: args.hasStartFrame,
         hasMultimodalReferences:
           args.hasVideoReferenceInput || args.hasNonVideoReferenceInput,
@@ -1302,15 +1290,10 @@ export const prepareApiGeneration = internalMutation({
   }),
   handler: async (ctx, args) => {
     await requireFolderForUser(ctx, args.userId, args.folderId);
-    if (args.mode === "video" && args.resolution === "3840x2160") {
-      throw new Error("4K video is not available yet. Video generation supports up to 720p.");
-    }
-    if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
-      throw new Error("Video duration must be between 4 and 15 seconds");
-    }
     if (args.mode === "video") {
       validateVideoModelCapabilities(args.resolvedModel, {
         durationSeconds: args.durationSeconds,
+        resolution: args.resolution,
         hasStartFrame: args.hasStartFrame,
         hasMultimodalReferences:
           args.hasVideoReferenceInput || args.hasNonVideoReferenceInput,
@@ -2504,11 +2487,6 @@ export const refundTextGeneration = authedMutation({
     return null;
   },
 });
-
-function isSupportedVideoDuration(durationSeconds?: number): boolean {
-  const duration = Number(durationSeconds ?? 4);
-  return Number.isFinite(duration) && duration >= 4 && duration <= 15;
-}
 
 async function hasActiveSubscriptionForUser(
   ctx: QueryCtx | MutationCtx,

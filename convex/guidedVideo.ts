@@ -1117,9 +1117,17 @@ async function patchBriefProductionHandler(
         }
         payload.production.resolution = compact;
       } else if (mode === "video") {
+        const videoModel = resolveVideoModel();
         const lower = raw.toLowerCase();
         let next: string | null = null;
         if (
+          lower === "480p" ||
+          lower === "480" ||
+          lower === "854x480" ||
+          lower === "864x480"
+        ) {
+          next = "854x480";
+        } else if (
           lower === "720p" ||
           lower === "720" ||
           lower === "hd" ||
@@ -1133,9 +1141,18 @@ async function patchBriefProductionHandler(
           lower === "1920x1080"
         ) {
           next = "1920x1080";
+        } else if (
+          lower === "4k" ||
+          lower === "2160p" ||
+          lower === "3840x2160"
+        ) {
+          next = "3840x2160";
         }
-        if (!next) {
-          throw new Error("Video resolution must be 720p or 1080p.");
+        if (!next || !videoModel.resolutionOptions.some((opt) => opt.value === next)) {
+          const allowed = videoModel.resolutionOptions.map((opt) => opt.label).join(", ");
+          throw new Error(
+            `Video resolution must be one of: ${allowed} (${videoModel.label}).`,
+          );
         }
         payload.production.resolution = next;
       } else {
@@ -1161,8 +1178,9 @@ async function patchBriefProductionHandler(
         throw new Error("Duration is only editable for video jobs.");
       }
       const duration = Math.round(Number(args.production.durationSeconds));
-      if (!Number.isFinite(duration) || duration < 4 || duration > 15) {
-        throw new Error("Video duration must be between 4 and 15 seconds.");
+      const maxDuration = resolveVideoModel().maxDurationSeconds;
+      if (!Number.isFinite(duration) || duration < 4 || duration > maxDuration) {
+        throw new Error(`Video duration must be between 4 and ${maxDuration} seconds.`);
       }
       const previousDuration = payload.production.durationSeconds;
       payload.production.durationSeconds = duration;

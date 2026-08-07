@@ -465,6 +465,7 @@ export const runFlow = action({
       args.mode === "video"
         ? validateVideoModelCapabilities(args.videoModel, {
             durationSeconds: args.durationSeconds,
+            resolution: args.resolution,
             hasStartFrame: false,
             referenceKinds: referenceInputs.map((input) => input.kind),
             surface: "studio",
@@ -870,6 +871,7 @@ export const runGenerationForApi = internalAction({
       args.mode === "video"
         ? validateVideoModelCapabilities(args.videoModel, {
             durationSeconds: args.durationSeconds,
+            resolution: args.resolution,
             hasStartFrame: false,
             referenceKinds: referenceInputs.map((input) => input.kind),
             surface: "api",

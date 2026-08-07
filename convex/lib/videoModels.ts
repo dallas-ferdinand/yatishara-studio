@@ -4,12 +4,18 @@ export type VideoModelSlug =
   | "google-omni-flash"
   | "kling-3.0-i2v";
 
-/** MCP/API explicit picks — hidden from Studio UI composer and public catalog. */
+/** MCP/API-only models — hidden from Studio UI composer. */
 export const MCP_EXPLICIT_VIDEO_MODEL_SLUGS: VideoModelSlug[] = [
-  "seedance-2.0",
   "kling-3.0-i2v",
   "google-omni-flash",
 ];
+
+export type VideoResolutionOption = {
+  value: string;
+  label: string;
+  meta: string;
+  gatewayLabel: "480p" | "720p" | "1080p" | "4k";
+};
 
 export type VideoModelDef = {
   slug: VideoModelSlug;
@@ -19,7 +25,11 @@ export type VideoModelDef = {
   requiresStartFrame: boolean;
   supportsMultimodalRefs: boolean;
   /** Max output seconds supported by the provider. */
-  maxDurationSeconds?: number;
+  maxDurationSeconds: number;
+  /** Composer/API resolution chips (Studio WxH values). */
+  resolutionOptions: VideoResolutionOption[];
+  /** Duration preset chips for the composer. */
+  durationPresets: number[];
   /** When false, model stays API/MCP-wired but hidden from Studio composer UI. */
   uiVisible?: boolean;
 };
@@ -33,28 +43,45 @@ export type VideoCapabilityRequest = {
   /** Use when the caller has already reduced references to a presence flag. */
   hasMultimodalReferences?: boolean;
   surface?: "studio" | "api" | "internal";
+  resolution?: string;
 };
+
+const SEEDANCE_25_RESOLUTIONS: VideoResolutionOption[] = [
+  { value: "854x480", label: "480p", meta: "Draft", gatewayLabel: "480p" },
+  { value: "1280x720", label: "720p", meta: "Max", gatewayLabel: "720p" },
+];
+
+const SEEDANCE_20_RESOLUTIONS: VideoResolutionOption[] = [
+  { value: "854x480", label: "480p", meta: "Draft", gatewayLabel: "480p" },
+  { value: "1280x720", label: "720p", meta: "Standard", gatewayLabel: "720p" },
+  { value: "1920x1080", label: "1080p", meta: "HD", gatewayLabel: "1080p" },
+  { value: "3840x2160", label: "4K", meta: "Max", gatewayLabel: "4k" },
+];
 
 export const VIDEO_MODELS: VideoModelDef[] = [
   {
     slug: "seedance-2.5",
-    label: "Seedance",
+    label: "Seedance 2.5",
     gatewayModelId: "bytedance/seedance-2.5",
-    description: "Seedance 2.5 — default Studio video (up to 30s, 480p/720p)",
+    description: "Default — up to 30s, 480p/720p",
     requiresStartFrame: false,
     supportsMultimodalRefs: true,
     maxDurationSeconds: 30,
+    resolutionOptions: SEEDANCE_25_RESOLUTIONS,
+    durationPresets: [4, 8, 15, 30],
     uiVisible: true,
   },
   {
     slug: "seedance-2.0",
     label: "Seedance 2.0",
     gatewayModelId: "bytedance/seedance-2.0",
-    description: "Seedance 2.0 — legacy (MCP/API explicit)",
+    description: "Up to 15s — 480p/720p/1080p/4K",
     requiresStartFrame: false,
     supportsMultimodalRefs: true,
     maxDurationSeconds: 15,
-    uiVisible: false,
+    resolutionOptions: SEEDANCE_20_RESOLUTIONS,
+    durationPresets: [4, 8, 12, 15],
+    uiVisible: true,
   },
   {
     slug: "google-omni-flash",
@@ -64,6 +91,8 @@ export const VIDEO_MODELS: VideoModelDef[] = [
     requiresStartFrame: false,
     supportsMultimodalRefs: true,
     maxDurationSeconds: 10,
+    resolutionOptions: SEEDANCE_25_RESOLUTIONS,
+    durationPresets: [4, 6, 8, 10],
     uiVisible: false,
   },
   {
@@ -74,6 +103,11 @@ export const VIDEO_MODELS: VideoModelDef[] = [
     requiresStartFrame: true,
     supportsMultimodalRefs: false,
     maxDurationSeconds: 15,
+    resolutionOptions: [
+      { value: "1280x720", label: "720p", meta: "Standard", gatewayLabel: "720p" },
+      { value: "1920x1080", label: "1080p", meta: "HD", gatewayLabel: "1080p" },
+    ],
+    durationPresets: [4, 8, 12, 15],
     uiVisible: false,
   },
 ];
@@ -103,25 +137,38 @@ export function resolveVideoModel(slug?: string | null): VideoModelDef {
 /** Public API / MCP — uiVisible models by default; MCP explicit slugs when caller passes videoModel. */
 export function resolvePublicVideoModel(slug?: string | null): VideoModelDef {
   const normalized = slug?.trim() as VideoModelSlug | undefined;
-  if (
-    normalized &&
-    MCP_EXPLICIT_VIDEO_MODEL_SLUGS.includes(normalized)
-  ) {
+  if (normalized && MCP_EXPLICIT_VIDEO_MODEL_SLUGS.includes(normalized)) {
     return resolveVideoModel(normalized);
   }
   const model = resolveVideoModel(slug);
   if (model.uiVisible === false) {
     throw new Error(
-      `${model.label} is not available. Video generation uses the default Studio model.`,
+      `${model.label} is not available. Pass seedance-2.5 or seedance-2.0, or use an MCP-only model explicitly.`,
     );
   }
   return model;
 }
 
+export function isResolutionAllowedForModel(
+  model: VideoModelDef,
+  resolution?: string,
+): boolean {
+  if (!resolution?.trim()) return true;
+  const key = resolution.trim().toLowerCase().replace(/×/g, "x");
+  return model.resolutionOptions.some((opt) => {
+    const v = opt.value.toLowerCase();
+    const g = opt.gatewayLabel.toLowerCase();
+    return (
+      key === v ||
+      key === g ||
+      key === `${g}p` ||
+      (g === "4k" && (key === "4k" || key === "2160p" || key.includes("3840")))
+    );
+  });
+}
+
 /**
  * Resolve and validate provider constraints before credits are reserved.
- * A start frame is a distinct model input and is not considered a multimodal
- * reference for models such as Kling I2V.
  */
 export function validateVideoModelCapabilities(
   slugOrGatewayId: string | null | undefined,
@@ -129,7 +176,7 @@ export function validateVideoModelCapabilities(
 ): VideoModelDef {
   const model = resolveVideoModel(slugOrGatewayId);
   const duration = Number(request.durationSeconds ?? 4);
-  const maxDuration = model.maxDurationSeconds ?? 30;
+  const maxDuration = model.maxDurationSeconds;
 
   if (!Number.isFinite(duration) || duration < 4 || duration > maxDuration) {
     throw new Error(
@@ -138,6 +185,12 @@ export function validateVideoModelCapabilities(
   }
   if (model.requiresStartFrame && !request.hasStartFrame) {
     throw new Error(`${model.label} requires a start frame.`);
+  }
+  if (request.resolution && !isResolutionAllowedForModel(model, request.resolution)) {
+    const allowed = model.resolutionOptions.map((o) => o.label).join(", ");
+    throw new Error(
+      `${model.label} does not support that resolution. Use ${allowed}.`,
+    );
   }
 
   const hasMultimodalReferences =
@@ -195,8 +248,8 @@ export function videoPricingModelFromGatewayId(gatewayModelId: string): VideoMod
   if (isSeedance25GatewayModel(gatewayModelId)) {
     return "seedance-2.5";
   }
-  if (gatewayModelId.includes("seedance-2.0") || gatewayModelId.includes("seedance")) {
-    return gatewayModelId.includes("2.5") ? "seedance-2.5" : "seedance-2.0";
+  if (gatewayModelId.includes("seedance-2.0")) {
+    return "seedance-2.0";
   }
   return "seedance-2.5";
 }
@@ -211,7 +264,8 @@ export function listVideoModelsForMcp(): Array<{
   description: string;
   requiresStartFrame: boolean;
   supportsMultimodalRefs: boolean;
-  maxDurationSeconds?: number;
+  maxDurationSeconds: number;
+  resolutions: string[];
   isDefault: boolean;
   mcpOnly: boolean;
 }> {
@@ -223,6 +277,7 @@ export function listVideoModelsForMcp(): Array<{
     requiresStartFrame: model.requiresStartFrame,
     supportsMultimodalRefs: model.supportsMultimodalRefs,
     maxDurationSeconds: model.maxDurationSeconds,
+    resolutions: model.resolutionOptions.map((o) => o.gatewayLabel),
     isDefault: model.slug === defaultSlug,
     mcpOnly: model.uiVisible === false,
   }));
@@ -235,7 +290,9 @@ export function listVideoModelsPublic(options?: { uiOnly?: boolean }): Array<{
   requiresStartFrame: boolean;
   supportsMultimodalRefs: boolean;
   isDefault: boolean;
-  maxDurationSeconds?: number;
+  maxDurationSeconds: number;
+  resolutionOptions: VideoResolutionOption[];
+  durationPresets: number[];
 }> {
   const defaultSlug = defaultVideoModelSlug();
   const models = options?.uiOnly
@@ -249,5 +306,7 @@ export function listVideoModelsPublic(options?: { uiOnly?: boolean }): Array<{
     supportsMultimodalRefs: model.supportsMultimodalRefs,
     isDefault: model.slug === defaultSlug,
     maxDurationSeconds: model.maxDurationSeconds,
+    resolutionOptions: model.resolutionOptions,
+    durationPresets: model.durationPresets,
   }));
 }

@@ -1965,7 +1965,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
 
     set_production_settings: tool({
       description:
-        "Update production settings for the current mode (aspect ratio, resolution, quality, duration, script/element type). When the user asks to change resolution/quality/format, ALWAYS call this with source=user_explicit. Image resolution must be exactly 1K, 2K, or 4K. Video resolution must be 854x480 (480p) or 1280x720 (720p) — Seedance 2.5 on Vercel AI Gateway (1080p clamps to 720p). Image quality must be low, medium, or high. Video aspect ratio must be one of 16:9, 9:16, 1:1, 4:3, 3:4, 21:9. Duration 4–30s.",
+        "Update production settings for the current mode (aspect ratio, resolution, quality, duration, script/element type). When the user asks to change resolution/quality/format, ALWAYS call this with source=user_explicit. Image resolution must be exactly 1K, 2K, or 4K. Video resolution depends on the active Seedance model: seedance-2.5 → 854x480 or 1280x720 (max 30s); seedance-2.0 → also 1920x1080 and 3840x2160 (max 15s). Image quality must be low, medium, or high. Video aspect ratio must be one of 16:9, 9:16, 1:1, 4:3, 3:4, 21:9.",
       inputSchema: jsonSchema<object>({
         type: "object",
         properties: {
@@ -1988,10 +1988,14 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
       execute: async (input) => mutateSession(session, async () => {
         const raw = input as Record<string, unknown>;
         const inferred = raw.source !== "user_explicit";
+        const videoModel =
+          session.mode === "video" ? resolveVideoModel() : undefined;
         const allowedResolutions =
           session.mode === "image"
             ? new Set(["1K", "2K", "4K"])
-            : new Set(["854x480", "1280x720"]);
+            : new Set(
+                (videoModel?.resolutionOptions ?? []).map((opt) => opt.value),
+              );
         const normalizeResolution = (value: string): string | null => {
           const compact = value.trim().toUpperCase().replace(/\s+/g, "");
           if (session.mode === "image") {
@@ -2002,26 +2006,36 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
             return null;
           }
           const lower = value.trim().toLowerCase();
-          // Seedance 2.5 (Vercel catalog): 480p / 720p only. 1080p clamps to 720p.
           if (
             lower === "480p" ||
             lower === "480" ||
             lower === "854x480" ||
             lower === "864x480"
           ) {
-            return "854x480";
+            return allowedResolutions.has("854x480") ? "854x480" : null;
           }
           if (
             lower === "720p" ||
             lower === "720" ||
             lower === "hd" ||
-            lower === "1280x720" ||
+            lower === "1280x720"
+          ) {
+            return allowedResolutions.has("1280x720") ? "1280x720" : null;
+          }
+          if (
             lower === "1080p" ||
             lower === "1080" ||
             lower === "fhd" ||
             lower === "1920x1080"
           ) {
-            return "1280x720";
+            return allowedResolutions.has("1920x1080") ? "1920x1080" : null;
+          }
+          if (
+            lower === "4k" ||
+            lower === "2160p" ||
+            lower === "3840x2160"
+          ) {
+            return allowedResolutions.has("3840x2160") ? "3840x2160" : null;
           }
           if (allowedResolutions.has(value.trim())) return value.trim();
           return null;

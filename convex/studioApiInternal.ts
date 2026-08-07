@@ -29,6 +29,7 @@ import {
 import { compactElementPromptLine } from "./lib/klingGatewayPrompt";
 import { applyStorageBytesDelta, assertUploadsAllowed } from "./lib/storageBilling";
 import { normalizeScopes } from "./lib/studioApi/crypto";
+import { validateVideoModelCapabilities } from "./lib/videoModels";
 
 /** Admin/CLI helper: grant scopes on an API key (e.g. add messages for MCP DMs). */
 export const adminSetApiKeyScopes = internalMutation({
@@ -740,29 +741,26 @@ export const estimateGenerationCost = internalQuery({
       args.resolution ?? (args.mode === "image" ? "2K" : "1280x720");
     const tier = args.mode === "video" ? ("pro_video" as const) : ("image" as const);
 
-    if (args.mode === "video" && resolution === "3840x2160") {
-      return {
-        mode: args.mode,
-        resolution,
-        durationSeconds: args.durationSeconds,
-        cost: 0,
-        creditBalance,
-        canGenerate: false,
-        hasActiveSubscription,
-        reason: "4K video is not available yet. Video generation supports up to 720p.",
-      };
-    }
-    if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
-      return {
-        mode: args.mode,
-        resolution,
-        durationSeconds: args.durationSeconds,
-        cost: 0,
-        creditBalance,
-        canGenerate: false,
-        hasActiveSubscription,
-        reason: "Video duration must be between 4 and 15 seconds.",
-      };
+    if (args.mode === "video") {
+      try {
+        validateVideoModelCapabilities(args.videoModel, {
+          durationSeconds: args.durationSeconds,
+          resolution,
+          surface: "api",
+        });
+      } catch (error) {
+        return {
+          mode: args.mode,
+          resolution,
+          durationSeconds: args.durationSeconds,
+          cost: 0,
+          creditBalance,
+          canGenerate: false,
+          hasActiveSubscription,
+          reason:
+            error instanceof Error ? error.message : "Invalid video settings.",
+        };
+      }
     }
 
     const referenceFlags = await referenceFlagsForAssets(
@@ -2243,11 +2241,6 @@ async function requireFolderForUser(
     throw new Error("Folder not found");
   }
   return folder;
-}
-
-function isSupportedVideoDuration(durationSeconds?: number): boolean {
-  const duration = Number(durationSeconds ?? 4);
-  return Number.isFinite(duration) && duration >= 4 && duration <= 15;
 }
 
 async function hasActiveSubscriptionForUser(

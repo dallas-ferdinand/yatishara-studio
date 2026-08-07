@@ -14,7 +14,7 @@ const estimateSchema = {
     "Storyboard / opening still for video (first_frame I2V). Required when people are on camera. Generate via studio_generate_image first."
   ),
   videoModel: z.string().optional().describe(
-    "Explicit video model choice. Call studio_list_video_models first. Omit = seedance-2.5 (Studio default). MCP-only: seedance-2.0, kling-3.0-i2v, google-omni-flash."
+    "Video model: seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s). MCP-only: kling-3.0-i2v, google-omni-flash. Call studio_list_video_models for caps."
   )
 };
 const directHandoffHint = "Direct handoff: omit styleSheetElementId (prompt reaches the model verbatim). Pass styleSheetElementId to run the enhancement sticking layer (style + script/elements).";
@@ -140,7 +140,7 @@ function registerGenerationTools(server) {
         hasReferenceInput: z.boolean().optional(),
         referenceAssetIds: z.array(z.string()).optional(),
         videoModel: z.string().optional().describe(
-          "Video items only. Call studio_list_video_models first. Omit = seedance-2.5."
+          "Video items only. seedance-2.5 (default) or seedance-2.0. Call studio_list_video_models for caps."
         ),
         maxRounds: z.number()
       })
@@ -372,7 +372,7 @@ Wait \u226565s between video calls (1 req/min gateway quota). For packs use stud
       skipPromptEnhancement: z.boolean().optional().describe("Override. Default: true for Direct, false when styleSheetElementId is set."),
       referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc),
       videoModel: z.string().optional().describe(
-        "Explicit model slug from studio_list_video_models. Omit = seedance-2.5 (Studio default)."
+        "seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s). MCP-only: kling-3.0-i2v, google-omni-flash."
       ),
       compact: z.boolean().optional()
     },

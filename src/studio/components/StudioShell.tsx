@@ -37,6 +37,7 @@ import {
   FileUp,
   Folder,
   Gauge,
+  GraduationCap,
   History,
   Copy,
   Trash2,
@@ -304,6 +305,7 @@ import {
   TEXT_GENERATION_BASE_CREDITS,
   textCreditCost,
 } from "../../../convex/lib/generationPricing";
+import { resolveVideoModel } from "../../../convex/lib/videoModels";
 import {
   orbSeedForVoice,
   StudioOrbAvatar,
@@ -373,6 +375,14 @@ const AdminMarketplacePane = dynamic(
   () => import("./AdminMarketplacePane").then((m) => m.AdminMarketplacePane),
   { ssr: false },
 );
+const AdminAcademyPane = dynamic(
+  () => import("./AdminAcademyPane").then((m) => m.AdminAcademyPane),
+  { ssr: false },
+);
+const StudioAcademyPane = dynamic(
+  () => import("./StudioAcademyPane").then((m) => m.StudioAcademyPane),
+  { ssr: false },
+);
 const ThemeSettings = dynamic(
   () => import("@/desk/components/ThemeSettings").then((m) => m.ThemeSettings),
   { ssr: false },
@@ -427,6 +437,8 @@ function prefetchStudioSurface(surface: string) {
       void import("./PublicProfileView");
     } else if (surface === "network") {
       void import("./StudioCreativeNetworkPane");
+    } else if (surface === "academy") {
+      void import("./StudioAcademyPane");
     } else if (surface === "history") {
       void import("./StudioHistoryPanel");
     } else if (surface === "messages") {
@@ -456,6 +468,8 @@ const MESSAGES_TAB = "messages:main";
 const FILES_TAB = "files:main";
 /** Creative Network marketplace + seller manage (replaces offers:). */
 const NETWORK_TAB = "network:home";
+/** Studio Academy — paid courses (credits, lifetime). */
+const ACADEMY_TAB = "academy:home";
 const TRASH_FOLDER_ID = "__trash__";
 const RECENTS_FOLDER_ID = "__recents__";
 /** Newest-N live chat window — always visible; older turns via "Load earlier". */
@@ -541,6 +555,7 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
   const tab = String(activeTab ?? "");
   if (tab.startsWith("feed:")) return "feed";
   if (tab.startsWith("network:") || tab.startsWith("offers:")) return "network";
+  if (tab.startsWith("academy:")) return "academy";
   if (tab.startsWith("messages:")) return "messages";
   if (tab.startsWith("profile:") || tab.startsWith("profilePost:")) return null;
   if (
@@ -552,6 +567,7 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
     return "composer";
   }
   if (mobileSection === "feed") return "feed";
+  if (mobileSection === "academy") return "academy";
   if (mobileSection === "messages") return "messages";
   if (mobileSection === "composer" || mobileSection === "files") return "composer";
   return mobileSection || null;
@@ -610,6 +626,7 @@ function serializeComposerContextsForStorage(contexts) {
       imageResolution: ctx.imageResolution,
       imageQuality: ctx.imageQuality,
       resolution: ctx.resolution,
+      videoModel: ctx.videoModel,
       durationSeconds: ctx.durationSeconds,
       audioEnabled: ctx.audioEnabled,
       selectedStylePresetId: ctx.selectedStylePresetId ?? null,
@@ -665,6 +682,7 @@ function snapshotComposerContextFields({
   imageResolution,
   imageQuality,
   resolution,
+  videoModel,
   durationSeconds,
   audioEnabled,
   selectedStylePresetId,
@@ -693,6 +711,7 @@ function snapshotComposerContextFields({
     imageResolution,
     imageQuality,
     resolution,
+    videoModel,
     durationSeconds,
     audioEnabled,
     selectedStylePresetId,
@@ -724,6 +743,7 @@ const PERSISTABLE_TAB_PREFIXES = [
   "billing:",
   "offers:",
   "network:",
+  "academy:",
   "create:",
   "post:",
   "listAsset:",
@@ -1248,12 +1268,35 @@ export function StudioShell({
   const [resolution, setResolution] = useState(
     () => initialComposerCtx.resolution ?? "1280x720",
   );
+  const [videoModel, setVideoModel] = useState(
+    () => initialComposerCtx.videoModel ?? "seedance-2.5",
+  );
   const [durationSeconds, setDurationSeconds] = useState(
     () => initialComposerCtx.durationSeconds ?? "4",
   );
   const [audioEnabled, setAudioEnabled] = useState(
     () => initialComposerCtx.audioEnabled ?? false,
   );
+  useEffect(() => {
+    if (mode !== "video") return;
+    let model;
+    try {
+      model = resolveVideoModel(videoModel);
+    } catch {
+      setVideoModel("seedance-2.5");
+      return;
+    }
+    const allowed = model.resolutionOptions.map((item) => item.value);
+    if (!allowed.includes(resolution)) {
+      setResolution(allowed.includes("1280x720") ? "1280x720" : allowed[0]);
+    }
+    const nextDuration = String(
+      Math.max(4, Math.min(model.maxDurationSeconds, Number(durationSeconds) || 4)),
+    );
+    if (String(durationSeconds) !== nextDuration) {
+      setDurationSeconds(nextDuration);
+    }
+  }, [mode, videoModel, resolution, durationSeconds]);
   const [elementType, setElementType] = useState("character");
   useEffect(() => {
     if (elementType === "style_sheet") setElementType("character");
@@ -1591,6 +1634,7 @@ export function StudioShell({
         !activeTab.startsWith("profilePost:") &&
         !activeTab.startsWith("network:") &&
         !activeTab.startsWith("offers:") &&
+        !activeTab.startsWith("academy:") &&
         !activeTab.startsWith("admin:")));
   const needsComposerCatalog =
     isGenerateSurface || Boolean(activeTab?.startsWith("thread:"));
@@ -1618,7 +1662,8 @@ export function StudioShell({
             activeTab.startsWith("profilePost:") ||
             ((activeTab.startsWith("network:") ||
               activeTab.startsWith("offers:")) &&
-              cnMode !== "my-assets"))
+              cnMode !== "my-assets") ||
+            activeTab.startsWith("academy:"))
         ));
   const mySellerStatus = useQuery(
     api.marketplace.getMySellerStatus,
@@ -3106,6 +3151,7 @@ export function StudioShell({
           hasVideoReferenceInput: mode === "video" ? hasVideoReferenceInput : undefined,
           hasNonVideoReferenceInput: mode === "video" ? hasNonVideoReferenceInput : undefined,
           audioEnabled: mode === "video" ? audioEnabled : undefined,
+          videoModel: mode === "video" ? videoModel : undefined,
           audioType: mode === "audio" ? audioType : undefined,
           characterCount:
             mode === "audio" && audioType === "voiceover"
@@ -3150,6 +3196,7 @@ export function StudioShell({
       imageResolution,
       imageQuality,
       resolution,
+      videoModel,
       durationSeconds,
       audioEnabled,
       selectedStylePresetId,
@@ -3179,6 +3226,7 @@ export function StudioShell({
     imageResolution,
     imageQuality,
     resolution,
+    videoModel,
     durationSeconds,
     audioEnabled,
     selectedStylePresetId,
@@ -3212,6 +3260,7 @@ export function StudioShell({
       imageResolution,
       imageQuality,
       resolution,
+      videoModel,
       durationSeconds,
       audioEnabled,
       selectedStylePresetId,
@@ -3237,6 +3286,7 @@ export function StudioShell({
     setImageResolution(next.imageResolution ?? "2K");
     setImageQuality(next.imageQuality ?? "medium");
     setResolution(next.resolution ?? "1280x720");
+    setVideoModel(next.videoModel ?? "seedance-2.5");
     setDurationSeconds(next.durationSeconds ?? "4");
     setAudioEnabled(next.audioEnabled ?? false);
     setSelectedStylePresetId(next.selectedStylePresetId ?? null);
@@ -4763,6 +4813,17 @@ export function StudioShell({
     }
   }
 
+  function openAcademyTab(opts = {}) {
+    void import("./StudioAcademyPane");
+    setSettingsOpen(false);
+    if (isMobile) setMobileSection("academy");
+    if (opts.courseId) {
+      openTab(`academy:course:${opts.courseId}`);
+    } else {
+      openTab(ACADEMY_TAB);
+    }
+  }
+
   /** @deprecated Use openNetworkTab — kept for call-site compatibility. */
   function openOffersTab(_section = "home") {
     openNetworkTab();
@@ -4783,8 +4844,19 @@ export function StudioShell({
     }
     const networkParam = params.get("network");
     const offersParam = params.get("offers");
+    const academyParam = params.get("academy");
     const slugParam = params.get("slug");
     const sellerParam = params.get("u");
+    const courseParam = params.get("course");
+    if (academyParam === "1") {
+      openAcademyTab({ courseId: courseParam || undefined });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("academy");
+      url.searchParams.delete("course");
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, "", next || "/");
+      return;
+    }
     if (networkParam === "1" || offersParam === "1") {
       openNetworkTab({
         slug: slugParam || undefined,
@@ -4992,6 +5064,18 @@ export function StudioShell({
       setHistoryOpen(false);
       setMobileAppMenuOpen(false);
       openNetworkTab();
+      return;
+    }
+    if (section === "academy") {
+      filesDockRestoreAfterKeyboardRef.current = false;
+      filesDockOpenGenRef.current += 1;
+      paintMobileFilesDock(false);
+      mobileBackStack.release("files-dock");
+      setMobileSection("composer");
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      openAcademyTab();
       return;
     }
     if (section === "files" && isMobile) {
@@ -7958,6 +8042,7 @@ export function StudioShell({
         resolution: genMode === "image" ? normalizeImageResolution(imageResolution) : resolution,
         quality: genMode === "image" ? imageQuality : undefined,
         durationSeconds: genMode === "video" ? Number(durationSeconds) : undefined,
+        videoModel: genMode === "video" ? videoModel : undefined,
         folderId: generationSaveFolderId(threadId),
         referenceUrls: genMode === "image"
           ? [
@@ -19440,6 +19525,132 @@ export function StudioShell({
           opacity: 0;
           pointer-events: none;
         }
+        .studio-academy-pane {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          flex: 1 1 0;
+          overflow: auto;
+          padding: 16px 18px 28px;
+          gap: 14px;
+        }
+        .studio-academy-head {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .studio-academy-title {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          margin: 0;
+          font-size: 1.15rem;
+          font-weight: 650;
+        }
+        .studio-academy-tabs {
+          display: inline-flex;
+          gap: 4px;
+        }
+        .studio-academy-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+          gap: 12px;
+        }
+        .studio-academy-card {
+          display: flex;
+          flex-direction: column;
+          text-align: left;
+          border: 1px solid color-mix(in srgb, var(--mos-border, #333) 70%, transparent);
+          background: var(--mos-plate, var(--mos-panel));
+          border-radius: 12px;
+          overflow: hidden;
+          cursor: pointer;
+          color: inherit;
+          padding: 0;
+        }
+        .studio-academy-card img,
+        .studio-academy-card-fallback {
+          width: 100%;
+          aspect-ratio: 16 / 9;
+          object-fit: cover;
+          background: color-mix(in srgb, var(--mos-plate-strong, #222) 80%, transparent);
+        }
+        .studio-academy-card-fallback {
+          display: grid;
+          place-items: center;
+          opacity: 0.55;
+        }
+        .studio-academy-card-body {
+          display: grid;
+          gap: 4px;
+          padding: 10px 12px 12px;
+        }
+        .studio-academy-card-body p {
+          margin: 0;
+          font-size: 12px;
+          opacity: 0.75;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .studio-academy-card-body span {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--cursor-accent);
+        }
+        .studio-academy-detail {
+          display: grid;
+          gap: 14px;
+          max-width: 820px;
+        }
+        .studio-academy-cover {
+          width: 100%;
+          max-height: 280px;
+          object-fit: cover;
+          border-radius: 12px;
+        }
+        .studio-academy-player {
+          width: 100%;
+          aspect-ratio: 16 / 9;
+          border-radius: 12px;
+          overflow: hidden;
+          background: #000;
+        }
+        .studio-academy-player iframe {
+          width: 100%;
+          height: 100%;
+          border: 0;
+        }
+        .studio-academy-play-cta {
+          width: 100%;
+          height: 100%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          background: color-mix(in srgb, var(--mos-plate-strong) 70%, #000);
+          color: inherit;
+          border: 0;
+          cursor: pointer;
+          font-weight: 600;
+        }
+        .studio-academy-buy-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px;
+        }
+        .studio-academy-owned {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--cursor-accent);
+        }
+        .studio-academy-body {
+          min-width: 0;
+        }
         .studio-history-floating-panel {
           width: 100%;
           background: var(--mos-plate, var(--mos-panel));
@@ -22314,6 +22525,8 @@ export function StudioShell({
             setImageQuality={setImageQuality}
             resolution={resolution}
             setResolution={setResolution}
+            videoModel={videoModel}
+            setVideoModel={setVideoModel}
             durationSeconds={durationSeconds}
             setDurationSeconds={setDurationSeconds}
             audioEnabled={audioEnabled}
@@ -22916,6 +23129,10 @@ export function StudioShell({
             setMobileAppMenuOpen(false);
             openNetworkTab();
           }}
+          onOpenAcademy={() => {
+            setMobileAppMenuOpen(false);
+            openAcademyTab();
+          }}
           onOpenMessages={() => {
             setMobileAppMenuOpen(false);
             openMessages();
@@ -23319,6 +23536,8 @@ function StudioComposer({
   setImageQuality,
   resolution,
   setResolution,
+  videoModel = "seedance-2.5",
+  setVideoModel,
   durationSeconds,
   setDurationSeconds,
   audioEnabled,
@@ -23719,6 +23938,7 @@ function StudioComposer({
     imageQuality,
     aspectRatio,
     durationSeconds,
+    videoModel,
     hasReferenceInput: hasComposerReferences,
     hasVideoReferenceInput,
     hasNonVideoReferenceInput,
@@ -23885,6 +24105,8 @@ function StudioComposer({
       setImageQuality={setImageQuality}
       resolution={resolution}
       setResolution={setResolution}
+      videoModel={videoModel}
+      setVideoModel={setVideoModel}
       durationSeconds={durationSeconds}
       setDurationSeconds={setDurationSeconds}
       audioEnabled={audioEnabled}
@@ -24549,6 +24771,8 @@ function StudioComposerControlStrip({
   setImageQuality,
   resolution,
   setResolution,
+  videoModel = "seedance-2.5",
+  setVideoModel,
   durationSeconds,
   setDurationSeconds,
   audioEnabled,
@@ -24716,6 +24940,8 @@ function StudioComposerControlStrip({
                 setImageQuality={setImageQuality}
                 resolution={resolution}
                 setResolution={setResolution}
+                videoModel={videoModel}
+                setVideoModel={setVideoModel}
                 durationSeconds={durationSeconds}
                 setDurationSeconds={setDurationSeconds}
                 audioEnabled={audioEnabled}
@@ -25043,6 +25269,8 @@ function StudioComposerInlineSettings({
   setImageQuality,
   resolution,
   setResolution,
+  videoModel = "seedance-2.5",
+  setVideoModel,
   durationSeconds,
   setDurationSeconds,
   audioEnabled,
@@ -25050,7 +25278,14 @@ function StudioComposerInlineSettings({
   showLabels = false,
   panelLayout = false,
 }) {
-  const maxVideoDuration = 30;
+  const activeVideoModel = (() => {
+    try {
+      return resolveVideoModel(videoModel);
+    } catch {
+      return resolveVideoModel("seedance-2.5");
+    }
+  })();
+  const maxVideoDuration = activeVideoModel.maxDurationSeconds;
   const [localDurationSeconds, setLocalDurationSeconds] = useState(String(durationSeconds));
   useEffect(() => {
     const next = String(Math.max(4, Math.min(maxVideoDuration, Number(durationSeconds) || 4)));
@@ -25058,7 +25293,7 @@ function StudioComposerInlineSettings({
     if (mode === "video" && String(durationSeconds) !== next) {
       setDurationSeconds(next);
     }
-  }, [durationSeconds, mode, setDurationSeconds]);
+  }, [durationSeconds, maxVideoDuration, mode, setDurationSeconds]);
   const aspectItems = [
     { value: "16:9", label: "16:9", meta: "YouTube / TV" },
     { value: "9:16", label: "9:16", meta: "TikTok / Shorts" },
@@ -25078,14 +25313,21 @@ function StudioComposerInlineSettings({
     { value: "medium", label: "Medium", meta: "Balanced" },
     { value: "high", label: "High", meta: "Best detail" },
   ];
-  // Seedance 2.5 (Vercel Gateway catalog): 480p / 720p only.
-  const resolutionItems = [
-    { value: "854x480", label: "480p", meta: "Draft" },
-    { value: "1280x720", label: "720p", meta: "Max" },
+  const videoModelItems = [
+    { value: "seedance-2.5", label: "Seedance 2.5", meta: "Up to 30s · 480p/720p" },
+    { value: "seedance-2.0", label: "Seedance 2.0", meta: "Up to 15s · 1080p/4K" },
   ];
+  const resolutionItems = activeVideoModel.resolutionOptions.map((item) => ({
+    value: item.value,
+    label: item.label,
+    meta: item.meta,
+  }));
+  const durationPresets = activeVideoModel.durationPresets.map(String);
   const activeVideoResolution = resolutionItems.some((item) => item.value === resolution)
     ? resolution
-    : "1280x720";
+    : resolutionItems.find((item) => item.value === "1280x720")?.value ??
+      resolutionItems[0]?.value ??
+      "1280x720";
   const durationProgress = `${((Number(localDurationSeconds) - 4) / (maxVideoDuration - 4)) * 100}%`;
   const commitDuration = (seconds = localDurationSeconds) => {
     const next = String(Math.max(4, Math.min(maxVideoDuration, Number(seconds) || 4)));
@@ -25098,12 +25340,15 @@ function StudioComposerInlineSettings({
   const activeImageQuality = imageQualityItems.some((item) => item.value === imageQuality)
     ? imageQuality
     : imageQualityItems[1].value;
+  const activeVideoModelValue = videoModelItems.some((item) => item.value === videoModel)
+    ? videoModel
+    : "seedance-2.5";
 
   const durationPanel = (
     <div className="studio-inline-settings-range-panel">
       <div className="studio-duration-readout">
         <strong>{localDurationSeconds}s</strong>
-        <span>4-30s</span>
+        <span>4-{maxVideoDuration}s</span>
       </div>
       <input
         className="studio-settings-range"
@@ -25121,11 +25366,11 @@ function StudioComposerInlineSettings({
       />
       <div className="studio-duration-ticks" aria-hidden="true">
         <span>4s</span>
-        <span>15s</span>
-        <span>30s</span>
+        <span>{Math.round((4 + maxVideoDuration) / 2)}s</span>
+        <span>{maxVideoDuration}s</span>
       </div>
       <div className="studio-settings-chip-grid studio-duration-presets is-two" role="group" aria-label="Video duration presets">
-        {["4", "8", "15", "30"].map((seconds) => (
+        {durationPresets.map((seconds) => (
           <button
             key={seconds}
             type="button"
@@ -25143,6 +25388,16 @@ function StudioComposerInlineSettings({
   if (panelLayout) {
     return (
       <>
+        {mode === "video" ? (
+          <StudioInlineSettingChipGroup
+            label="Model"
+            value={activeVideoModelValue}
+            items={videoModelItems}
+            onChange={(next) => {
+              if (typeof setVideoModel === "function") setVideoModel(next);
+            }}
+          />
+        ) : null}
         <StudioInlineSettingChipGroup
           label="Ratio"
           value={aspectRatio}
@@ -25228,6 +25483,16 @@ function StudioComposerInlineSettings({
 
   return (
     <div className="studio-composer-inline-settings" aria-label="Composer settings">
+      <StudioInlineSettingSelect
+        icon={Sparkles}
+        label="Model"
+        value={activeVideoModelValue}
+        items={videoModelItems}
+        onChange={(next) => {
+          if (typeof setVideoModel === "function") setVideoModel(next);
+        }}
+        hideLabel={!showLabels}
+      />
       <StudioInlineSettingSelect
         icon={RectangleHorizontal}
         label="Aspect ratio"
@@ -25506,6 +25771,7 @@ function StudioMobileAppMenu({
   onViewProfile,
   onEditProfile,
   onOpenOffers,
+  onOpenAcademy,
   onOpenMessages,
   onOpenSection,
   onOpenSettings,
@@ -25784,6 +26050,15 @@ function StudioMobileAppMenu({
       onClick: () => {
         onClose?.();
         onOpenOffers?.();
+      },
+    },
+    {
+      label: "Academy",
+      ariaLabel: "Academy",
+      Icon: GraduationCap,
+      onClick: () => {
+        onClose?.();
+        onOpenAcademy?.();
       },
     },
     { label: "Files", Icon: Folder, onClick: () => onOpenSection?.("files") },
@@ -28775,6 +29050,17 @@ function ActivePane({
     // Stay mounted in networkKeepalive — no remount on tab switch.
     return wrapPane(null);
   }
+  if (typeof activeTab === "string" && activeTab.startsWith("academy:")) {
+    const courseId = activeTab.startsWith("academy:course:")
+      ? activeTab.slice("academy:course:".length).trim() || null
+      : null;
+    return wrapPane(
+      <StudioAcademyPane
+        onOpenCredits={onOpenCredits ?? onOpenSettings}
+        initialCourseId={courseId}
+      />,
+    );
+  }
   if (billingTab) {
     return wrapPane(
       <BillingWorkspacePane
@@ -29437,6 +29723,7 @@ function AdminWorkspacePane({
     { id: "offers", label: "Offers" },
     { id: "jobs", label: "Jobs", Icon: Award },
     { id: "assets", label: "Assets" },
+    { id: "academy", label: "Academy", Icon: GraduationCap },
     { id: "payouts", label: "Payouts" },
     { id: "tools", label: "Tools" },
   ];
@@ -29688,6 +29975,8 @@ function AdminWorkspacePane({
               onOpenAdminTab("jobs");
             }}
           />
+        ) : adminSection === "academy" ? (
+          <AdminAcademyPane />
         ) : (
           <div className="studio-admin-stack">
             <section className="studio-admin-section">
@@ -31917,6 +32206,7 @@ const LEDGER_KIND_LABELS = {
   marketplace_escrow_release: "Marketplace delivered",
   marketplace_escrow_refund: "Marketplace refund",
   asset_purchase: "Creative Network audio",
+  course_purchase: "Academy course",
   storage_charge: "Storage",
 };
 
@@ -32549,6 +32839,7 @@ function composerCreditCost({
   imageQuality,
   aspectRatio,
   durationSeconds,
+  videoModel = "seedance-2.5",
   hasReferenceInput,
   hasVideoReferenceInput,
   hasNonVideoReferenceInput,
@@ -32601,6 +32892,7 @@ function composerCreditCost({
     hasVideoReferenceInput,
     hasNonVideoReferenceInput,
     audioEnabled,
+    videoModel: mode === "video" ? videoModel : undefined,
   });
 }
 
@@ -33427,12 +33719,17 @@ function tabDescriptor({
                 ? "Jobs"
                 : kind === "assets"
                   ? "Assets"
+                  : kind === "academy"
+                    ? "Academy"
                   : kind === "payouts"
                     ? "Payouts"
                     : kind === "tools" || kind === "setup" || kind === "pricing"
                       ? "Tools"
                       : "Admin";
     return { key, kind: "settings", title, status: "ready" };
+  }
+  if (key.startsWith("academy:")) {
+    return { key, kind: "settings", title: "Academy", status: "ready" };
   }
   if (key.startsWith("network:") || key.startsWith("offers:")) {
     return { key, kind: "settings", title: "Creative Network", status: "ready" };

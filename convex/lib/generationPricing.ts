@@ -6,11 +6,13 @@
  * No platform fee on top of the 2× markup.
  *
  * Seedance 2.5 (`bytedance/seedance-2.5`): $10.70/M tokens (no video input) /
- * $6.40/M (with video input). Customer quotes use the no-video rate (same pattern
- * as 2.0). tokens ≈ (height × width × 24fps × seconds) / 1024. Audio included.
+ * $6.40/M (with video input). Customer quotes use the no-video rate.
+ * tokens ≈ (height × width × 24fps × seconds) / 1024. Audio included.
  * Resolutions 480p/720p; max 30s.
  *
- * Seedance 2.0 (MCP legacy): $7/M / $4.30/M; max 15s; 720p/1080p historically.
+ * Seedance 2.0 (`bytedance/seedance-2.0`): no-video rates by tier —
+ * 480p/720p $7/M, 1080p $7.7/M, 4k $4/M; with-video $4.30/M (not used for quotes).
+ * Resolutions 480p/720p/1080p/4k; max 15s.
  *
  * Omni Flash (`google/gemini-omni-flash-preview`): $0.10/s output (Veo Fast-aligned). Max 10s.
  *
@@ -67,8 +69,10 @@ export const IMAGE_REFERENCE_SURCHARGE = 2;
 export const SEEDANCE_USD_PER_M_TOKENS_NO_VIDEO = 10.7;
 /** Gateway pass-through when video is in the input — not used for customer quotes. */
 export const SEEDANCE_USD_PER_M_TOKENS_WITH_VIDEO = 6.4;
-/** Legacy Seedance 2.0 rates (MCP explicit). */
+/** Seedance 2.0 no-video rates by resolution tier (Vercel AI Gateway catalog). */
 export const SEEDANCE_20_USD_PER_M_TOKENS_NO_VIDEO = 7;
+export const SEEDANCE_20_USD_PER_M_TOKENS_1080P = 7.7;
+export const SEEDANCE_20_USD_PER_M_TOKENS_4K = 4;
 export const SEEDANCE_20_USD_PER_M_TOKENS_WITH_VIDEO = 4.3;
 export const SEEDANCE_FPS = 24;
 export const SEEDANCE_25_MAX_DURATION_SECONDS = 30;
@@ -102,6 +106,9 @@ const VIDEO_RESOLUTION_WH: Record<string, { width: number; height: number }> = {
   "720p": { width: 1280, height: 720 },
   "1920x1080": { width: 1920, height: 1080 },
   "1080p": { width: 1920, height: 1080 },
+  "3840x2160": { width: 3840, height: 2160 },
+  "4k": { width: 3840, height: 2160 },
+  "2160p": { width: 3840, height: 2160 },
 };
 
 /** @deprecated Fixed block tables replaced by 2× gateway COGS — use videoCreditCost. */
@@ -267,13 +274,24 @@ export function videoDurationBlocks(durationSeconds?: number): number {
 
 export function normalizeVideoResolutionKey(
   resolution: string | undefined,
-): "854x480" | "1280x720" | "1920x1080" {
-  const raw = (resolution ?? "1280x720").toLowerCase();
+): "854x480" | "1280x720" | "1920x1080" | "3840x2160" {
+  const raw = (resolution ?? "1280x720").toLowerCase().replace(/×/g, "x");
+  if (
+    raw === "3840x2160" ||
+    raw === "2160x3840" ||
+    raw === "4k" ||
+    raw === "2160p" ||
+    raw.includes("3840") ||
+    raw.includes("2160")
+  ) {
+    return "3840x2160";
+  }
   if (
     raw === "854x480" ||
     raw === "864x480" ||
     raw === "480p" ||
-    raw.includes("480")
+    raw === "480" ||
+    (raw.includes("480") && !raw.includes("1480"))
   ) {
     return "854x480";
   }
@@ -283,16 +301,24 @@ export function normalizeVideoResolutionKey(
   return "1280x720";
 }
 
+function seedance20UsdPerMTokens(
+  resolutionKey: ReturnType<typeof normalizeVideoResolutionKey>,
+): number {
+  if (resolutionKey === "1920x1080") return SEEDANCE_20_USD_PER_M_TOKENS_1080P;
+  if (resolutionKey === "3840x2160") return SEEDANCE_20_USD_PER_M_TOKENS_4K;
+  return SEEDANCE_20_USD_PER_M_TOKENS_NO_VIDEO;
+}
+
 export function seedanceOutputTokens(args: {
   resolution?: string;
   durationSeconds?: number;
   videoModel?: VideoPricingModel;
 }): number {
   let key = normalizeVideoResolutionKey(args.resolution);
-  // Seedance 2.5 has no 1080p tier — price/clamp as 720p.
+  // Seedance 2.5 has no 1080p/4K tier — price/clamp as 720p.
   if (
     (args.videoModel === "seedance-2.5" || args.videoModel == null) &&
-    key === "1920x1080"
+    (key === "1920x1080" || key === "3840x2160")
   ) {
     key = "1280x720";
   }
@@ -332,9 +358,16 @@ export function estimateVideoModelUsd(args: {
     durationSeconds: args.durationSeconds,
     videoModel,
   });
+  let pricedKey = normalizeVideoResolutionKey(args.resolution);
+  if (
+    videoModel === "seedance-2.5" &&
+    (pricedKey === "1920x1080" || pricedKey === "3840x2160")
+  ) {
+    pricedKey = "1280x720";
+  }
   const usdPerM =
     videoModel === "seedance-2.0"
-      ? SEEDANCE_20_USD_PER_M_TOKENS_NO_VIDEO
+      ? seedance20UsdPerMTokens(pricedKey)
       : SEEDANCE_USD_PER_M_TOKENS_NO_VIDEO;
   return (tokens * usdPerM) / 1_000_000;
 }
