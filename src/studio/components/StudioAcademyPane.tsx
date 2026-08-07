@@ -86,7 +86,7 @@ function CheckoutDock({
             {confirming ? (
               <button
                 type="button"
-                className="public-offers-btn is-quiet studio-academy-buy-cancel"
+                className="public-offers-btn is-icon studio-academy-buy-cancel"
                 disabled={busy}
                 onClick={onCancelConfirm}
                 aria-label="Cancel purchase"
