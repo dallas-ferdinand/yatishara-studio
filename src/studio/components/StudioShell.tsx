@@ -19682,16 +19682,23 @@ export function StudioShell({
           color: var(--color-cursor-muted);
         }
         .studio-academy-player {
-          width: 100%;
+          /* Cap height so 16:9 never fills past the pane; width shrinks with it. */
+          --studio-academy-media-max-h: min(48dvh, calc(100dvh - 14rem));
+          width: min(100%, calc(var(--studio-academy-media-max-h) * 16 / 9));
+          max-width: 100%;
           aspect-ratio: 16 / 9;
+          max-height: var(--studio-academy-media-max-h);
+          height: auto;
           border-radius: 12px;
           overflow: hidden;
           background: #000;
         }
         .studio-academy-player iframe {
+          display: block;
           width: 100%;
           height: 100%;
           border: 0;
+          max-height: 100%;
         }
         .studio-academy-play-cta {
           width: 100%;
