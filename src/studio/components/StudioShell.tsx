@@ -20048,12 +20048,11 @@ export function StudioShell({
         }
         .studio-academy-checkout-strip {
           flex: 0 0 auto;
-          max-height: 42%;
-          overflow: auto;
+          overflow: visible;
           border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
         .studio-academy-checkout-strip .public-offers-rail-detail {
-          padding: 10px 8px 12px;
+          padding: 8px 8px 8px;
         }
         .studio-academy-comments-host {
           flex: 1 1 auto;
