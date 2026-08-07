@@ -328,6 +328,54 @@
   overflow: hidden;
 }
 
+/* Right rail (book / comments) aligns with left shell sidebar — full pane height
+   beside the secondary head, not tucked under it. */
+.studio-cn-pane.is-with-right-rail {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.studio-cn-pane-split {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+}
+
+.studio-cn-main-col {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.studio-cn-main-col > .studio-cn-head {
+  flex: 0 0 auto;
+}
+
+.studio-cn-main-col > .studio-cn-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.studio-cn-right-rail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
+  border-left: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+.studio-cn-right-rail .studio-cn-book-sidebar {
+  border-left: 0;
+  height: 100%;
+}
+
 .studio-cn-head {
   display: flex;
   align-items: center;

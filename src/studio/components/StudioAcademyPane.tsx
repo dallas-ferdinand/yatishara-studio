@@ -8,7 +8,6 @@ import {
   Loader2,
   Lock,
   MessageCircle,
-  Play,
   ShoppingBag,
   Zap,
 } from "lucide-react";
@@ -134,28 +133,21 @@ function BannerStage({
   }
 
   return (
-    <div className="studio-academy-banner-stage">
-      {bannerUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={bannerUrl} alt="" className="studio-academy-banner-img" />
-      ) : (
-        <div className="studio-academy-banner-fallback">
-          <GraduationCap aria-hidden="true" />
-        </div>
-      )}
-      <button
-        type="button"
-        className="studio-academy-banner-play"
-        onClick={onPlay}
-        disabled={loading}
-        aria-label={playLabel}
-      >
-        {loading ? (
-          <Loader2 className="animate-spin" aria-hidden="true" />
-        ) : (
-          <Play aria-hidden="true" fill="currentColor" />
-        )}
-      </button>
+    <div className="studio-academy-player">
+      {/* Placeholder until Bunny Stream intros/lessons are live. */}
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      <video
+        className="studio-academy-player-video"
+        controls
+        playsInline
+        preload="metadata"
+        poster={bannerUrl}
+        src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
+        title={playLabel}
+        onPlay={() => {
+          if (!loading) onPlay();
+        }}
+      />
     </div>
   );
 }
@@ -497,151 +489,162 @@ export function StudioAcademyPane({
 
   let body = catalogMain;
   if (detailOpen) {
-    if (isMobile) {
-      body = courseMain;
-    } else {
-      body = (
+    body = courseMain;
+  }
+
+  const head = (
+    <header className="studio-cn-head">
+      <nav
+        ref={headTabsScrollRef}
+        className="studio-cn-head-tabs"
+        aria-label="Academy"
+      >
+        <button
+          type="button"
+          className={`studio-cn-head-tab${academy.listTab === "catalog" && !detailOpen ? " is-active" : ""}`}
+          onClick={() => {
+            if (detailOpen) {
+              academy.backToCatalog();
+              return;
+            }
+            academy.setListTab("catalog");
+          }}
+        >
+          {detailOpen ? (
+            <ArrowLeft aria-hidden="true" />
+          ) : (
+            <GraduationCap aria-hidden="true" />
+          )}
+          {detailOpen ? "Back to Academy" : "Courses"}
+        </button>
+        <button
+          type="button"
+          className={`studio-cn-head-tab${academy.listTab === "mine" && !detailOpen ? " is-active" : ""}`}
+          onClick={() => {
+            academy.setListTab("mine");
+            academy.backToCatalog();
+          }}
+        >
+          <Library aria-hidden="true" />
+          My courses
+        </button>
+      </nav>
+    </header>
+  );
+
+  const mobileExtras =
+    isMobile && detailOpen && detail ? (
+      <>
+        {commentsDock}
+        <nav
+          className="public-offers-mobile-book-nav studio-cn-book-bar"
+          aria-label={owned ? "Course actions" : "Buy this course"}
+        >
+          {!owned ? (
+            <span className="studio-cn-book-bar-price">{priceLabel}</span>
+          ) : (
+            <span className="studio-cn-book-bar-price">Discussion</span>
+          )}
+          <div className="studio-cn-book-bar-actions">
+            <button
+              type="button"
+              className="studio-cn-book-bar-msg"
+              aria-label={
+                commentCount
+                  ? `Comments, ${commentCount}`
+                  : "Open comments"
+              }
+              onClick={() => setCommentsOpen(true)}
+            >
+              <MessageCircle aria-hidden="true" />
+            </button>
+            {!owned ? (
+              <button
+                type="button"
+                className="public-offers-btn is-primary studio-cn-book-bar-cta"
+                onClick={() => setCheckoutSheetOpen(true)}
+              >
+                <Zap aria-hidden="true" />
+                Buy now
+              </button>
+            ) : null}
+          </div>
+        </nav>
+        {!owned && checkoutSheetOpen ? (
+          <div
+            className="studio-cn-book-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Course checkout"
+          >
+            <button
+              type="button"
+              className="studio-cn-book-sheet-backdrop"
+              aria-label="Close checkout"
+              onClick={() => setCheckoutSheetOpen(false)}
+            />
+            <div className="studio-cn-book-sheet-panel">
+              <div className="studio-cn-book-sheet-handle" aria-hidden="true">
+                <span className="studio-cn-book-sheet-grab" />
+              </div>
+              <div className="studio-cn-book-sheet-body">
+                <CheckoutDock
+                  showHead={false}
+                  onBuy={() => void buy()}
+                  busy={busy}
+                  owned={owned}
+                  priceLabel={priceLabel}
+                  lessonCount={detail.lessonCount}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </>
+    ) : null;
+
+  if (detailOpen && !isMobile) {
+    return (
+      <div className="studio-cn-pane studio-academy-pane is-with-right-rail">
         <PanelGroup
           direction="horizontal"
-          autoSaveId="studio-academy-comments-h"
-          className="studio-cn-offer-panels h-full min-h-0 min-w-0 overflow-hidden"
+          autoSaveId="studio-academy-comments-pane-h"
+          className="studio-cn-pane-split studio-cn-offer-panels h-full min-h-0 min-w-0 overflow-hidden"
         >
           <Panel
-            id="studio-academy-main"
+            id="studio-academy-main-col"
             order={1}
             defaultSize={72}
             minSize={52}
             className="min-h-0 min-w-0"
           >
-            {courseMain}
+            <div className="studio-cn-main-col">
+              {head}
+              <div className="studio-cn-body is-catalog">{courseMain}</div>
+            </div>
           </Panel>
           <PanelResizeHandle className="cursor-resize" />
           <Panel
-            id="studio-academy-comments"
+            id="studio-academy-comments-rail"
             order={2}
             defaultSize={28}
             minSize={20}
             maxSize={36}
-            className="studio-cn-book-panel studio-academy-comments-panel min-h-0 min-w-0 h-full overflow-hidden"
+            className="studio-cn-book-panel studio-academy-comments-panel studio-cn-right-rail min-h-0 min-w-0 h-full overflow-hidden"
           >
             {commentsDock}
           </Panel>
         </PanelGroup>
-      );
-    }
+      </div>
+    );
   }
 
   return (
     <div className="studio-cn-pane studio-academy-pane">
-      <header className="studio-cn-head">
-        <nav
-          ref={headTabsScrollRef}
-          className="studio-cn-head-tabs"
-          aria-label="Academy"
-        >
-          <button
-            type="button"
-            className={`studio-cn-head-tab${academy.listTab === "catalog" && !detailOpen ? " is-active" : ""}`}
-            onClick={() => {
-              if (detailOpen) {
-                academy.backToCatalog();
-                return;
-              }
-              academy.setListTab("catalog");
-            }}
-          >
-            {detailOpen ? (
-              <ArrowLeft aria-hidden="true" />
-            ) : (
-              <GraduationCap aria-hidden="true" />
-            )}
-            {detailOpen ? "Back to Academy" : "Courses"}
-          </button>
-          <button
-            type="button"
-            className={`studio-cn-head-tab${academy.listTab === "mine" && !detailOpen ? " is-active" : ""}`}
-            onClick={() => {
-              academy.setListTab("mine");
-              academy.backToCatalog();
-            }}
-          >
-            <Library aria-hidden="true" />
-            My courses
-          </button>
-        </nav>
-      </header>
-
+      {head}
       <div className="studio-cn-body is-catalog">
         {body}
-        {isMobile && detailOpen ? commentsDock : null}
-        {isMobile && detailOpen && detail ? (
-          <>
-            <nav
-              className="public-offers-mobile-book-nav studio-cn-book-bar"
-              aria-label={owned ? "Course actions" : "Buy this course"}
-            >
-              {!owned ? (
-                <span className="studio-cn-book-bar-price">{priceLabel}</span>
-              ) : (
-                <span className="studio-cn-book-bar-price">Discussion</span>
-              )}
-              <div className="studio-cn-book-bar-actions">
-                <button
-                  type="button"
-                  className="studio-cn-book-bar-msg"
-                  aria-label={
-                    commentCount
-                      ? `Comments, ${commentCount}`
-                      : "Open comments"
-                  }
-                  onClick={() => setCommentsOpen(true)}
-                >
-                  <MessageCircle aria-hidden="true" />
-                </button>
-                {!owned ? (
-                  <button
-                    type="button"
-                    className="public-offers-btn is-primary studio-cn-book-bar-cta"
-                    onClick={() => setCheckoutSheetOpen(true)}
-                  >
-                    <Zap aria-hidden="true" />
-                    Buy now
-                  </button>
-                ) : null}
-              </div>
-            </nav>
-            {!owned && checkoutSheetOpen ? (
-              <div
-                className="studio-cn-book-sheet"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Course checkout"
-              >
-                <button
-                  type="button"
-                  className="studio-cn-book-sheet-backdrop"
-                  aria-label="Close checkout"
-                  onClick={() => setCheckoutSheetOpen(false)}
-                />
-                <div className="studio-cn-book-sheet-panel">
-                  <div className="studio-cn-book-sheet-handle" aria-hidden="true">
-                    <span className="studio-cn-book-sheet-grab" />
-                  </div>
-                  <div className="studio-cn-book-sheet-body">
-                    <CheckoutDock
-                      showHead={false}
-                      onBuy={() => void buy()}
-                      busy={busy}
-                      owned={owned}
-                      priceLabel={priceLabel}
-                      lessonCount={detail.lessonCount}
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </>
-        ) : null}
+        {mobileExtras}
       </div>
     </div>
   );

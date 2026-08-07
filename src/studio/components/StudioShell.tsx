@@ -19692,12 +19692,15 @@ export function StudioShell({
           overflow: hidden;
           background: #000;
         }
-        .studio-academy-player iframe {
+        .studio-academy-player iframe,
+        .studio-academy-player-video {
           display: block;
           width: 100%;
           height: 100%;
           border: 0;
           max-height: 100%;
+          object-fit: contain;
+          background: #000;
         }
         .studio-academy-play-cta {
           width: 100%;
@@ -19886,7 +19889,6 @@ export function StudioShell({
           min-height: 0;
           min-width: 0;
           background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
-          border-left: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
         .studio-academy-checkout-strip {
           flex: 0 0 auto;

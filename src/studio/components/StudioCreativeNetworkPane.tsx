@@ -19,8 +19,10 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { formatTtdCents } from "@/studio/lib/money";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { MarketplaceOffersPane } from "./MarketplaceOffersPane";
@@ -367,11 +369,13 @@ export function StudioCreativeNetworkPane({
   onStartChat,
 }: StudioCreativeNetworkPaneProps) {
   const cn = useCreativeNetwork();
+  const { isMobile } = useMobileLayout();
   const [applyBusy, setApplyBusy] = useState(false);
   const headTabsScrollRef = useRef<HTMLElement | null>(null);
   useHorizontalWheelScroll(headTabsScrollRef);
   useHorizontalScrollFade(headTabsScrollRef);
   const offerOpen = cn.mode === "network" && Boolean(cn.browseSlug);
+  const desktopOfferSplit = offerOpen && !isMobile;
 
   const sellerCtaLabel = cn.hasSellerDraft
     ? "Continue seller registration"
@@ -392,120 +396,176 @@ export function StudioCreativeNetworkPane({
     cn.setMode("network");
   }
 
-  return (
-    <div className="studio-cn-pane">
-      <header className="studio-cn-head">
-        {cn.isSellerApproved ? (
-          <nav
-            ref={headTabsScrollRef}
-            className="studio-cn-head-tabs"
-            aria-label="Creative Network"
+  const head = (
+    <header className="studio-cn-head">
+      {cn.isSellerApproved ? (
+        <nav
+          ref={headTabsScrollRef}
+          className="studio-cn-head-tabs"
+          aria-label="Creative Network"
+        >
+          <button
+            type="button"
+            className={`studio-cn-head-tab${cn.mode === "network" && !offerOpen ? " is-active" : ""}`}
+            onClick={goNetworkTab}
           >
-            <button
-              type="button"
-              className={`studio-cn-head-tab${cn.mode === "network" && !offerOpen ? " is-active" : ""}`}
-              onClick={goNetworkTab}
-            >
-              {offerOpen ? (
-                <ArrowLeft aria-hidden="true" />
-              ) : (
-                <Store aria-hidden="true" />
-              )}
-              {offerOpen ? "Back to Network" : "Network"}
-            </button>
-            <button
-              type="button"
-              className={`studio-cn-head-tab${cn.mode === "my-offers" ? " is-active" : ""}`}
-              onClick={() => cn.setMode("my-offers")}
-            >
-              <Package aria-hidden="true" />
-              My offers
-            </button>
-            <button
-              type="button"
-              className={`studio-cn-head-tab${cn.mode === "my-jobs" ? " is-active" : ""}`}
-              onClick={() => cn.setMode("my-jobs")}
-            >
-              <Award aria-hidden="true" />
-              My jobs
-            </button>
-            <button
-              type="button"
-              className={`studio-cn-head-tab${cn.mode === "my-assets" ? " is-active" : ""}`}
-              onClick={() => cn.setMode("my-assets")}
-            >
-              <AudioLines aria-hidden="true" />
-              My assets
-            </button>
-          </nav>
-        ) : (
-          <nav
-            ref={headTabsScrollRef}
-            className="studio-cn-head-tabs"
-            aria-label="Creative Network"
+            {offerOpen ? (
+              <ArrowLeft aria-hidden="true" />
+            ) : (
+              <Store aria-hidden="true" />
+            )}
+            {offerOpen ? "Back to Network" : "Network"}
+          </button>
+          <button
+            type="button"
+            className={`studio-cn-head-tab${cn.mode === "my-offers" ? " is-active" : ""}`}
+            onClick={() => cn.setMode("my-offers")}
           >
-            <button
-              type="button"
-              className={`studio-cn-head-tab${cn.mode !== "seller-apply" && !offerOpen ? " is-active" : ""}`}
-              onClick={goNetworkTab}
-            >
-              {offerOpen ? (
-                <ArrowLeft aria-hidden="true" />
-              ) : (
-                <Store aria-hidden="true" />
-              )}
-              {offerOpen ? "Back to Network" : "Network"}
-            </button>
-          </nav>
-        )}
-        {!cn.isSellerApproved && !cn.sellerLoading ? (
-          <div className="studio-cn-head-action">
-            <button
-              type="button"
-              className="studio-cn-seller-cta"
-              disabled={cn.sellerPending && !cn.hasSellerDraft}
-              onClick={() => cn.setMode("seller-apply")}
-            >
-              {sellerCtaLabel}
-            </button>
-          </div>
-        ) : null}
-      </header>
+            <Package aria-hidden="true" />
+            My offers
+          </button>
+          <button
+            type="button"
+            className={`studio-cn-head-tab${cn.mode === "my-jobs" ? " is-active" : ""}`}
+            onClick={() => cn.setMode("my-jobs")}
+          >
+            <Award aria-hidden="true" />
+            My jobs
+          </button>
+          <button
+            type="button"
+            className={`studio-cn-head-tab${cn.mode === "my-assets" ? " is-active" : ""}`}
+            onClick={() => cn.setMode("my-assets")}
+          >
+            <AudioLines aria-hidden="true" />
+            My assets
+          </button>
+        </nav>
+      ) : (
+        <nav
+          ref={headTabsScrollRef}
+          className="studio-cn-head-tabs"
+          aria-label="Creative Network"
+        >
+          <button
+            type="button"
+            className={`studio-cn-head-tab${cn.mode !== "seller-apply" && !offerOpen ? " is-active" : ""}`}
+            onClick={goNetworkTab}
+          >
+            {offerOpen ? (
+              <ArrowLeft aria-hidden="true" />
+            ) : (
+              <Store aria-hidden="true" />
+            )}
+            {offerOpen ? "Back to Network" : "Network"}
+          </button>
+        </nav>
+      )}
+      {!cn.isSellerApproved && !cn.sellerLoading ? (
+        <div className="studio-cn-head-action">
+          <button
+            type="button"
+            className="studio-cn-seller-cta"
+            disabled={cn.sellerPending && !cn.hasSellerDraft}
+            onClick={() => cn.setMode("seller-apply")}
+          >
+            {sellerCtaLabel}
+          </button>
+        </div>
+      ) : null}
+    </header>
+  );
 
-      <div className={bodyClass}>
-        {cn.mode === "seller-apply" ? (
-          <div className="public-offers-main studio-cn-catalog">
-            <div className="public-offers-main-scroll">
-              <div className="public-offers-body is-narrow">
-                <SellerAccessApplicationForm
-                  busy={applyBusy}
-                  setBusy={setApplyBusy}
+  const catalogBody =
+    cn.mode === "seller-apply" ? (
+      <div className="public-offers-main studio-cn-catalog">
+        <div className="public-offers-main-scroll">
+          <div className="public-offers-body is-narrow">
+            <SellerAccessApplicationForm
+              busy={applyBusy}
+              setBusy={setApplyBusy}
+            />
+          </div>
+        </div>
+      </div>
+    ) : cn.mode === "my-assets" ? (
+      <StudioAssetStoreManagePane />
+    ) : cn.mode === "my-offers" || cn.mode === "my-jobs" ? (
+      <MarketplaceOffersPane
+        onOpenCredits={onOpenCredits}
+        creditPriceCents={creditPriceCents}
+        embedInNetwork
+        homeTab={cn.mode === "my-jobs" ? "jobs" : "offers"}
+        hideHomeTabs
+        externalOfferId={cn.selectedOfferId}
+        externalJobId={cn.selectedJobId}
+        onOfferSelect={(id: Id<"marketplaceOffers"> | null) =>
+          cn.setSelectedOfferId(id)
+        }
+        onJobSelect={(id: Id<"marketplaceJobs"> | null) =>
+          cn.setSelectedJobId(id)
+        }
+      />
+    ) : offerOpen && cn.browseSlug ? (
+      <StudioOfferDetailEmbed
+        slug={cn.browseSlug}
+        onStartChat={onStartChat}
+        chrome={desktopOfferSplit ? "main" : "auto"}
+      />
+    ) : (
+      <NetworkBrowse onStartChat={onStartChat} />
+    );
+
+  if (desktopOfferSplit && cn.browseSlug) {
+    return (
+      <div className="studio-cn-pane is-with-right-rail">
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId="studio-cn-offer-pane-h"
+          className="studio-cn-pane-split studio-cn-offer-panels h-full min-h-0 min-w-0 overflow-hidden"
+        >
+          <Panel
+            id="studio-cn-offer-main-col"
+            order={1}
+            defaultSize={72}
+            minSize={48}
+            className="min-h-0 min-w-0"
+          >
+            <div className="studio-cn-main-col">
+              {head}
+              <div className={bodyClass}>
+                <StudioOfferDetailEmbed
+                  slug={cn.browseSlug}
+                  onStartChat={onStartChat}
+                  chrome="main"
                 />
               </div>
             </div>
-          </div>
-        ) : cn.mode === "my-assets" ? (
-          <StudioAssetStoreManagePane />
-        ) : cn.mode === "my-offers" || cn.mode === "my-jobs" ? (
-          <MarketplaceOffersPane
-            onOpenCredits={onOpenCredits}
-            creditPriceCents={creditPriceCents}
-            embedInNetwork
-            homeTab={cn.mode === "my-jobs" ? "jobs" : "offers"}
-            hideHomeTabs
-            externalOfferId={cn.selectedOfferId}
-            externalJobId={cn.selectedJobId}
-            onOfferSelect={(id: Id<"marketplaceOffers"> | null) =>
-              cn.setSelectedOfferId(id)
-            }
-            onJobSelect={(id: Id<"marketplaceJobs"> | null) =>
-              cn.setSelectedJobId(id)
-            }
-          />
-        ) : (
-          <NetworkBrowse onStartChat={onStartChat} />
-        )}
+          </Panel>
+          <PanelResizeHandle className="cursor-resize" />
+          <Panel
+            id="studio-cn-offer-book-rail"
+            order={2}
+            defaultSize={28}
+            minSize={20}
+            maxSize={38}
+            className="studio-cn-book-panel studio-cn-right-rail min-h-0 min-w-0 h-full overflow-hidden"
+          >
+            <StudioOfferDetailEmbed
+              slug={cn.browseSlug}
+              onStartChat={onStartChat}
+              chrome="book"
+            />
+          </Panel>
+        </PanelGroup>
       </div>
+    );
+  }
+
+  return (
+    <div className="studio-cn-pane">
+      {head}
+      <div className={bodyClass}>{catalogBody}</div>
     </div>
   );
 }

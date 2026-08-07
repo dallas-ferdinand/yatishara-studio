@@ -1773,13 +1773,16 @@ function StudioCnOfferBookSidebar({
 /**
  * Offer detail for the in-Studio Creative Network tab — left filters stay in the
  * shell rail; packages + booking dock in a right sidebar (mobile: bottom sheet).
+ * `chrome="main"|"book"` lets the parent pane own a full-height split beside the head.
  */
 export function StudioOfferDetailEmbed({
   slug,
   onStartChat,
+  chrome = "auto",
 }: {
   slug: string;
   onStartChat?: (username: string) => void;
+  chrome?: "auto" | "main" | "book";
 }) {
   const { isMobile } = useMobileLayout();
   const mediaExpiresUnix = useStickySignedUrlExpiry();
@@ -1924,6 +1927,18 @@ export function StudioOfferDetailEmbed({
       </aside>
     );
 
+  if (chrome === "book") {
+    return bookSidebar;
+  }
+
+  if (chrome === "main") {
+    return (
+      <div className="public-offers-main studio-cn-catalog studio-cn-offer-detail h-full min-h-0">
+        {mainColumn}
+      </div>
+    );
+  }
+
   if (isMobile) {
     const priceLabel = `${hasPackages && packages.length > 1 ? "From " : ""}${formatTtdCents(activePkg?.priceCents ?? offer?.priceCents ?? 0)}`;
     return (
@@ -2011,6 +2026,7 @@ export function StudioOfferDetailEmbed({
     );
   }
 
+  /* Desktop auto: legacy in-body split (prefer pane-level chrome=main|book). */
   return (
     <div className="public-offers-main studio-cn-catalog studio-cn-offer-detail is-split">
       <PanelGroup
