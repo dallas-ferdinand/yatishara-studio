@@ -19558,12 +19558,85 @@ export function StudioShell({
         .studio-academy-card-fallback {
           display: grid;
           place-items: center;
+          width: 100%;
+          height: 100%;
           color: var(--color-cursor-muted);
           opacity: 0.55;
         }
         .studio-academy-card-fallback > svg {
           width: 28px;
           height: 28px;
+        }
+        .studio-academy-card.public-offers-card {
+          gap: 0;
+          padding: 0;
+          overflow: hidden;
+        }
+        .studio-academy-card-media.public-offers-card-media {
+          position: relative;
+          margin: 0;
+          aspect-ratio: 16 / 10;
+          border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        .studio-academy-card-media img {
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          object-position: center;
+        }
+        .studio-academy-card-owned {
+          position: absolute;
+          top: 8px;
+          left: 8px;
+          padding: 2px 8px;
+          border-radius: 999px;
+          font-size: 10px;
+          font-weight: 650;
+          line-height: 1.4;
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          background: color-mix(in srgb, var(--mos-page, #f5f5f7) 88%, transparent);
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        .studio-academy-card-body {
+          display: grid;
+          gap: 6px;
+          padding: 12px 14px 14px;
+          min-width: 0;
+        }
+        .studio-academy-card .public-offers-card-title {
+          font-size: 13px;
+          font-weight: 650;
+          line-height: 1.35;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          line-clamp: 2;
+          overflow: hidden;
+        }
+        .studio-academy-card .public-offers-card-desc {
+          -webkit-line-clamp: 2;
+          line-clamp: 2;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .studio-academy-card-foot {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 10px;
+          margin-top: 4px;
+          min-width: 0;
+        }
+        .studio-academy-card-foot .public-offers-card-price {
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .studio-academy-card-foot > span:last-child {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--color-cursor-muted, var(--mos-muted));
+          white-space: nowrap;
         }
         .studio-academy-detail {
           display: grid;
