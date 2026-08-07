@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
+import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { DEFAULT_CREDIT_PRICE_CENTS, formatTtdFromCredits } from "@/studio/lib/money";
@@ -66,6 +68,8 @@ export function StudioAcademyPane({
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [loadingPlay, setLoadingPlay] = useState(false);
   const headTabsScrollRef = useRef<HTMLElement | null>(null);
+  useHorizontalWheelScroll(headTabsScrollRef);
+  useHorizontalScrollFade(headTabsScrollRef);
 
   const detail = useQuery(
     api.academy.getCourse,
@@ -154,41 +158,37 @@ export function StudioAcademyPane({
           className="studio-cn-head-tabs"
           aria-label="Academy"
         >
-          {detailOpen ? (
-            <button
-              type="button"
-              className="studio-cn-head-tab is-active"
-              onClick={backToList}
-            >
+          <button
+            type="button"
+            className={`studio-cn-head-tab${listTab === "catalog" && !detailOpen ? " is-active" : ""}`}
+            onClick={() => {
+              if (detailOpen) {
+                backToList();
+                return;
+              }
+              setView("catalog");
+              setCourseId(null);
+            }}
+          >
+            {detailOpen ? (
               <ArrowLeft aria-hidden="true" />
-              Back to Academy
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                className={`studio-cn-head-tab${listTab === "catalog" ? " is-active" : ""}`}
-                onClick={() => {
-                  setView("catalog");
-                  setCourseId(null);
-                }}
-              >
-                <GraduationCap aria-hidden="true" />
-                Courses
-              </button>
-              <button
-                type="button"
-                className={`studio-cn-head-tab${listTab === "mine" ? " is-active" : ""}`}
-                onClick={() => {
-                  setView("mine");
-                  setCourseId(null);
-                }}
-              >
-                <Library aria-hidden="true" />
-                My courses
-              </button>
-            </>
-          )}
+            ) : (
+              <GraduationCap aria-hidden="true" />
+            )}
+            {detailOpen ? "Back to Academy" : "Courses"}
+          </button>
+          <button
+            type="button"
+            className={`studio-cn-head-tab${listTab === "mine" && !detailOpen ? " is-active" : ""}`}
+            onClick={() => {
+              setView("mine");
+              setCourseId(null);
+              setEmbedUrl(null);
+            }}
+          >
+            <Library aria-hidden="true" />
+            My courses
+          </button>
         </nav>
       </header>
 
