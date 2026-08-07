@@ -19685,6 +19685,37 @@ export function StudioShell({
           object-fit: cover;
           background: #000;
         }
+        .studio-academy-banner {
+          width: 100%;
+          aspect-ratio: 16 / 8;
+          overflow: hidden;
+          border-radius: var(--cursor-radius-lg, 10px);
+          background: var(--mos-plate-strong, var(--cursor-surface-raised));
+        }
+        .studio-academy-banner img {
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .studio-academy-detail-top {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 0 16px;
+        }
+        .studio-academy-detail-title {
+          margin: 0;
+          font-size: 1.25rem;
+          font-weight: 650;
+          line-height: 1.25;
+        }
+        .studio-academy-detail-sub {
+          margin: 4px 0 0;
+          font-size: 12px;
+          color: var(--color-cursor-muted);
+        }
         .studio-academy-play-cta {
           width: 100%;
           height: 100%;
@@ -19706,6 +19737,10 @@ export function StudioShell({
         }
         .studio-academy-body {
           min-width: 0;
+          padding: 0 16px;
+        }
+        .studio-academy-detail > .studio-academy-lesson-teasers {
+          padding: 0 16px;
         }
         .studio-academy-banner-stage {
           position: relative;
