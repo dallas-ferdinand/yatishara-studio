@@ -9,7 +9,6 @@ import {
   Lock,
   MessageCircle,
   ShoppingBag,
-  X,
   Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
