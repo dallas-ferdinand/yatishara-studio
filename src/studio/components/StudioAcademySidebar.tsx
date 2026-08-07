@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { ArrowDown, MessageCircle } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
@@ -14,13 +14,6 @@ import {
 import "./public-offers.css";
 import "./studio-creative-network.css";
 
-function formatCommentCount(value: number): string {
-  if (value >= 1_000_000)
-    return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (value >= 1_000)
-    return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
-  return String(value);
-}
 const SORT_OPTIONS: Array<{ value: AcademySortKey; label: string }> = [
   { value: "newest", label: "Newest" },
   { value: "price-asc", label: "Price: low to high" },
@@ -218,7 +211,6 @@ function LessonRail({
   const lessons = academy.filterLessons(detail?.lessons ?? []);
   const courseBanner = detail?.coverUrl;
   const introActive = academy.lessonId === null;
-  const introCount = detail?.commentCount ?? 0;
   const q = academy.lessonSearch.trim().toLowerCase();
   const showIntro =
     !q ||
@@ -265,23 +257,11 @@ function LessonRail({
                     <strong>{detail.title}</strong>
                     <small>Intro</small>
                   </span>
-                  <span
-                    className="studio-academy-lesson-comments"
-                    aria-label={`${formatCommentCount(introCount)} comments`}
-                  >
-                    <MessageCircle
-                      aria-hidden="true"
-                      fill="currentColor"
-                      strokeWidth={0}
-                    />
-                    <span>{formatCommentCount(introCount)}</span>
-                  </span>
                 </button>
               </li>
             ) : null}
             {lessons.map((lesson, index) => {
               const active = academy.lessonId === lesson._id;
-              const count = lesson.commentCount ?? 0;
               return (
                 <li key={lesson._id}>
                   <button
@@ -305,17 +285,6 @@ function LessonRail({
                     <span className="studio-academy-lesson-meta">
                       <strong>{lesson.title}</strong>
                       <small>{lesson.blurb || "Lesson"}</small>
-                    </span>
-                    <span
-                      className="studio-academy-lesson-comments"
-                      aria-label={`${formatCommentCount(count)} comments`}
-                    >
-                      <MessageCircle
-                        aria-hidden="true"
-                        fill="currentColor"
-                        strokeWidth={0}
-                      />
-                      <span>{formatCommentCount(count)}</span>
                     </span>
                   </button>
                 </li>
