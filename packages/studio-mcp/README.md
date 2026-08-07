@@ -28,19 +28,37 @@ stdio MCP server for [Yatishara Studio](https://studio.yatishara.com). Browse fo
 
 ## Agent start here
 
-1. **`studio_bootstrap`** — credits + folder tree + start-here hints (optional `path` / `folderId`)
-2. **`studio_ensure_path`** — create nested folders in one call
-3. **`studio_estimate_generation`** / **`studio_estimate_batch`** then **`studio_generate_*`** / **`studio_generate_batch`**
-4. **`studio_view_media`** — inspect image outputs; for **video stills** use **`studio_pull_frames`** (`startSec`/`endSec`/`count`) then Cursor Read the stills (see MCP resource `studio://guides/pull-frames`)
-5. **Edit timeline:** pull frames → `studio_create_edit` → `studio_edit_append_clips` / trims → `studio_pull_frame` to verify → `studio_export_edit` (keep source audio unless asked to mute; open editor live-syncs MCP writes)
+1. **MCP resource `studio://guides/index`** — then the lane guide for the job (avoid spelunking every tool)
+2. **`studio_bootstrap`** — credits + folder tree + start-here hints (optional `path` / `folderId`)
+3. **`studio_ensure_path`** — create nested folders in one call
+4. **`studio_estimate_generation`** / **`studio_estimate_batch`** then **`studio_generate_*`** / **`studio_generate_batch`**
+5. **Inspect:** images → `studio_view_media`; video → `studio_pull_frames` (`studio://guides/pull-frames`)
+6. **Edit:** `studio://guides/editing`
 
 Prefer `studio_workspace_tree` / `studio_search` / `studio_project_context` over blind `studio_list_folders` BFS.
 
 Tools marked **`[preferred]`** in descriptions are the default path. **`[deprecated]`** = keep for compatibility only (`studio_list_presets`, `studio_sample_video_frames`). Nothing else was removed — list/get CRUD tools are still valid, just not the first choice.
 
-## Resources
+## Resources (read before exploring tools)
 
-- `studio://guides/pull-frames` — how to pull N stills between two times; lands in sibling **Pulled Frames** folder
+Agents should open **`studio://guides/index`** first, then the lane guide for the job. Bootstrap also lists these under `AGENT_START_HERE.guides`.
+
+| URI | Lane |
+|-----|------|
+| `studio://guides/index` | Catalog |
+| `studio://guides/start` | Session start |
+| `studio://guides/workspace` | Folders / search / paths |
+| `studio://guides/generation` | Direct image/video/script/audio |
+| `studio://guides/elements` | Sheets + style sheets |
+| `studio://guides/editing` | Timeline + export |
+| `studio://guides/pull-frames` | N stills between times → Pulled Frames |
+| `studio://guides/assistance` | Assistance UI briefs (optional) |
+| `studio://guides/media` | Assets / upload / docs / trash |
+| `studio://guides/voices` | Voice library |
+| `studio://guides/messages` | DMs |
+| `studio://guides/social` | Feed / profiles |
+| `studio://guides/network` | Creative Network |
+| `studio://guides/account` | Credits / health |
 
 ## Tools
 

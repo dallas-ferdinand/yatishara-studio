@@ -252,6 +252,24 @@ export function jsonResult(data: unknown, compact?: boolean) {
 
 /** Static agent orientation — returned by studio_bootstrap. */
 export const AGENT_START_HERE = {
+  readGuidesFirst:
+    "Open MCP resources under studio://guides/* before exploring tools. Start: studio://guides/index",
+  guides: [
+    "studio://guides/index",
+    "studio://guides/start",
+    "studio://guides/workspace",
+    "studio://guides/generation",
+    "studio://guides/elements",
+    "studio://guides/editing",
+    "studio://guides/pull-frames",
+    "studio://guides/assistance",
+    "studio://guides/media",
+    "studio://guides/voices",
+    "studio://guides/messages",
+    "studio://guides/social",
+    "studio://guides/network",
+    "studio://guides/account",
+  ],
   preferred: [
     "studio_bootstrap — start of every session / project",
     "studio_ensure_path — create nested folders in one call",
@@ -263,11 +281,14 @@ export const AGENT_START_HERE = {
     "studio_pull_frames → Cursor Read frame URLs → studio_create_edit → trim windows → studio_pull_frame → studio_export_edit",
   ],
   lanes: {
-    direct: "studio_generate_image|video|script|audio — agent-owned prompts (default for production skills)",
+    direct:
+      "studio://guides/generation — studio_generate_image|video|script|audio (default for production skills)",
     assisted:
-      "studio_ensure_brief → … → studio_approve_brief — Studio Assistance UI lane; use only when user wants assisted briefs",
+      "studio://guides/assistance — studio_ensure_brief → … → studio_approve_brief; only when user wants assisted briefs",
     editing:
-      "studio_pull_frames (startSec/endSec/count; Read stills in Pulled Frames) → create_edit → append/update trims → pull_frame to verify → export. Keep audio unless asked to mute. Open editor live-syncs MCP writes; use studio_update_edit full replace if timeline stuck. Do not shell-ffmpeg when these tools exist. Guide: studio://guides/pull-frames",
+      "studio://guides/editing + studio://guides/pull-frames — pull frames → create_edit → trims → pull_frame → export. Keep audio unless mute. Open editor live-syncs MCP; full studio_update_edit if stuck.",
+    workspace: "studio://guides/workspace — ensure_path / tree / search / project_context",
+    elements: "studio://guides/elements — production_guide + sheets + style sheets",
   },
   avoidBlindBfs: "Prefer studio_workspace_tree / studio_search over repeated studio_list_folders.",
   stillUsefulNotDuplicates: [

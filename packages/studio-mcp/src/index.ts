@@ -24,7 +24,7 @@ requireConfig();
 
 const server = new McpServer({
   name: "yatishara-studio",
-  version: "0.8.2",
+  version: "0.8.3",
 });
 
 registerGuideResources(server);

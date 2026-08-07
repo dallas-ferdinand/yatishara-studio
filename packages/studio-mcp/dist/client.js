@@ -207,6 +207,23 @@ function jsonResult(data, compact) {
   return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
 }
 const AGENT_START_HERE = {
+  readGuidesFirst: "Open MCP resources under studio://guides/* before exploring tools. Start: studio://guides/index",
+  guides: [
+    "studio://guides/index",
+    "studio://guides/start",
+    "studio://guides/workspace",
+    "studio://guides/generation",
+    "studio://guides/elements",
+    "studio://guides/editing",
+    "studio://guides/pull-frames",
+    "studio://guides/assistance",
+    "studio://guides/media",
+    "studio://guides/voices",
+    "studio://guides/messages",
+    "studio://guides/social",
+    "studio://guides/network",
+    "studio://guides/account"
+  ],
   preferred: [
     "studio_bootstrap \u2014 start of every session / project",
     "studio_ensure_path \u2014 create nested folders in one call",
@@ -218,9 +235,11 @@ const AGENT_START_HERE = {
     "studio_pull_frames \u2192 Cursor Read frame URLs \u2192 studio_create_edit \u2192 trim windows \u2192 studio_pull_frame \u2192 studio_export_edit"
   ],
   lanes: {
-    direct: "studio_generate_image|video|script|audio \u2014 agent-owned prompts (default for production skills)",
-    assisted: "studio_ensure_brief \u2192 \u2026 \u2192 studio_approve_brief \u2014 Studio Assistance UI lane; use only when user wants assisted briefs",
-    editing: "studio_pull_frames (startSec/endSec/count; Read stills in Pulled Frames) \u2192 create_edit \u2192 append/update trims \u2192 pull_frame to verify \u2192 export. Keep audio unless asked to mute. Open editor live-syncs MCP writes; use studio_update_edit full replace if timeline stuck. Do not shell-ffmpeg when these tools exist. Guide: studio://guides/pull-frames"
+    direct: "studio://guides/generation \u2014 studio_generate_image|video|script|audio (default for production skills)",
+    assisted: "studio://guides/assistance \u2014 studio_ensure_brief \u2192 \u2026 \u2192 studio_approve_brief; only when user wants assisted briefs",
+    editing: "studio://guides/editing + studio://guides/pull-frames \u2014 pull frames \u2192 create_edit \u2192 trims \u2192 pull_frame \u2192 export. Keep audio unless mute. Open editor live-syncs MCP; full studio_update_edit if stuck.",
+    workspace: "studio://guides/workspace \u2014 ensure_path / tree / search / project_context",
+    elements: "studio://guides/elements \u2014 production_guide + sheets + style sheets"
   },
   avoidBlindBfs: "Prefer studio_workspace_tree / studio_search over repeated studio_list_folders.",
   stillUsefulNotDuplicates: [
