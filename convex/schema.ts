@@ -1707,6 +1707,8 @@ export default defineSchema({
     status: v.union(v.literal("draft"), v.literal("published")),
     sortOrder: v.number(),
     purchaseCount: v.number(),
+    /** Top-level + reply comments on the course discussion. */
+    commentCount: v.optional(v.number()),
     createdByAdminId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1744,4 +1746,28 @@ export default defineSchema({
     .index("by_user_and_course", ["userId", "courseId"])
     .index("by_course", ["courseId"])
     .index("by_user_and_purchased", ["userId", "purchasedAt"]),
+
+  /** Course discussion — same shape as profileComments (text, image, replies, likes). */
+  academyComments: defineTable({
+    courseId: v.id("academyCourses"),
+    userId: v.id("users"),
+    body: v.string(),
+    createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    parentId: v.optional(v.id("academyComments")),
+    likeCount: v.optional(v.number()),
+    replyCount: v.optional(v.number()),
+    imageAssetId: v.optional(v.id("assets")),
+  })
+    .index("by_course_and_created", ["courseId", "createdAt"])
+    .index("by_parent_and_created", ["parentId", "createdAt"])
+    .index("by_user", ["userId"]),
+
+  academyCommentLikes: defineTable({
+    userId: v.id("users"),
+    commentId: v.id("academyComments"),
+    createdAt: v.number(),
+  })
+    .index("by_user_and_comment", ["userId", "commentId"])
+    .index("by_comment", ["commentId"]),
 });

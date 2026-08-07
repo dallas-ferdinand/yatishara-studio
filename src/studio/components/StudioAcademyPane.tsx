@@ -7,6 +7,7 @@ import {
   Library,
   Loader2,
   Lock,
+  MessageCircle,
   Play,
   ShoppingBag,
   Zap,
@@ -25,9 +26,11 @@ import {
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { useStudioAcademy } from "./StudioAcademyContext";
+import { ProfileCommentsPanel } from "./ProfileCommentsPanel";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import "./studio-creative-network.css";
 import "./public-offers.css";
+import "./profile-post-viewer.css";
 
 function demoCoverUrl(slug: string): string | undefined {
   if (!slug.startsWith("demo-")) return undefined;
@@ -178,6 +181,8 @@ export function StudioAcademyPane({
   const [lessonEmbed, setLessonEmbed] = useState<string | null>(null);
   const [loadingPlay, setLoadingPlay] = useState(false);
   const [checkoutSheetOpen, setCheckoutSheetOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentCount, setCommentCount] = useState(0);
   const headTabsScrollRef = useRef<HTMLElement | null>(null);
   useHorizontalWheelScroll(headTabsScrollRef);
   useHorizontalScrollFade(headTabsScrollRef);
@@ -191,7 +196,14 @@ export function StudioAcademyPane({
     setIntroEmbed(null);
     setLessonEmbed(null);
     setCheckoutSheetOpen(false);
+    setCommentsOpen(false);
   }, [academy.courseId]);
+
+  useEffect(() => {
+    if (detail?.commentCount != null) {
+      setCommentCount(detail.commentCount);
+    }
+  }, [detail?.commentCount, academy.courseId]);
 
   useEffect(() => {
     setLessonEmbed(null);
@@ -455,47 +467,67 @@ export function StudioAcademyPane({
     </div>
   );
 
-  const checkoutSidebar = detail ? (
-    <CheckoutDock
-      showHead
-      onBuy={() => void buy()}
-      busy={busy}
-      owned={owned}
-      priceLabel={priceLabel}
-      lessonCount={detail.lessonCount}
-    />
-  ) : null;
+  const commentsDock =
+    detailOpen && detail ? (
+      <div className="studio-academy-right-dock">
+        {!owned && !isMobile ? (
+          <div className="studio-academy-checkout-strip">
+            <CheckoutDock
+              showHead={false}
+              onBuy={() => void buy()}
+              busy={busy}
+              owned={owned}
+              priceLabel={priceLabel}
+              lessonCount={detail.lessonCount}
+            />
+          </div>
+        ) : null}
+        <div className="studio-academy-comments-host">
+          <ProfileCommentsPanel
+            courseId={detail._id}
+            open={isMobile ? commentsOpen : true}
+            onClose={() => setCommentsOpen(false)}
+            commentCount={commentCount}
+            onCommentCountChange={setCommentCount}
+            postAuthor={{
+              displayName: detail.title,
+              publishedAt: detail.updatedAt,
+            }}
+          />
+        </div>
+      </div>
+    ) : null;
 
   let body = catalogMain;
   if (detailOpen) {
-    if (owned || isMobile) {
+    if (isMobile) {
       body = courseMain;
     } else {
       body = (
         <PanelGroup
           direction="horizontal"
-          autoSaveId="studio-academy-checkout-h"
+          autoSaveId="studio-academy-comments-h"
           className="studio-cn-offer-panels h-full min-h-0 min-w-0 overflow-hidden"
         >
           <Panel
             id="studio-academy-main"
             order={1}
-            defaultSize={68}
-            minSize={48}
+            defaultSize={66}
+            minSize={45}
             className="min-h-0 min-w-0"
           >
             {courseMain}
           </Panel>
           <PanelResizeHandle className="cursor-resize" />
           <Panel
-            id="studio-academy-checkout"
+            id="studio-academy-comments"
             order={2}
-            defaultSize={32}
-            minSize={22}
-            maxSize={42}
-            className="studio-cn-book-panel min-h-0 min-w-0 h-full overflow-hidden"
+            defaultSize={34}
+            minSize={24}
+            maxSize={44}
+            className="studio-cn-book-panel studio-academy-comments-panel min-h-0 min-w-0 h-full overflow-hidden"
           >
-            {checkoutSidebar}
+            {commentsDock}
           </Panel>
         </PanelGroup>
       );
@@ -539,11 +571,28 @@ export function StudioAcademyPane({
             <Library aria-hidden="true" />
             My courses
           </button>
+          {detailOpen ? (
+            <button
+              type="button"
+              className={`studio-cn-head-tab${commentsOpen ? " is-active" : ""}`}
+              onClick={() => setCommentsOpen(true)}
+              aria-label={
+                commentCount
+                  ? `Comments, ${commentCount}`
+                  : "Open comments"
+              }
+            >
+              <MessageCircle aria-hidden="true" />
+              Comments
+              {commentCount > 0 ? <em>{commentCount}</em> : null}
+            </button>
+          ) : null}
         </nav>
       </header>
 
       <div className="studio-cn-body is-catalog">
         {body}
+        {isMobile && detailOpen ? commentsDock : null}
         {isMobile && detailOpen && detail && !owned ? (
           <>
             <nav

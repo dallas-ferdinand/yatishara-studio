@@ -19724,8 +19724,12 @@ export function StudioShell({
         }
         .studio-academy-banner-stage {
           position: relative;
-          width: 100%;
+          --studio-academy-media-max-h: min(48dvh, calc(100dvh - 14rem));
+          width: min(100%, calc(var(--studio-academy-media-max-h) * 16 / 9));
+          max-width: 100%;
           aspect-ratio: 16 / 9;
+          max-height: var(--studio-academy-media-max-h);
+          height: auto;
           overflow: hidden;
           border-radius: var(--cursor-radius-lg, 10px);
           background: var(--mos-plate-strong, var(--cursor-surface-raised));
@@ -19812,23 +19816,6 @@ export function StudioShell({
           color: var(--color-cursor-muted);
           font-size: 11px;
         }
-        .studio-academy-lesson-rail-head {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex: 0 0 auto;
-          min-height: var(--cursor-head-h, 32px);
-          padding: 0 8px;
-          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
-        }
-        .studio-academy-lesson-rail-title {
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          font-size: 12px;
-          font-weight: 650;
-        }
         .studio-academy-lesson-list {
           list-style: none;
           margin: 0;
@@ -19893,6 +19880,49 @@ export function StudioShell({
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .studio-academy-right-dock {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 0;
+          min-width: 0;
+          background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
+        }
+        .studio-academy-checkout-strip {
+          flex: 0 0 auto;
+          max-height: 42%;
+          overflow: auto;
+          border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        .studio-academy-checkout-strip .public-offers-rail-detail {
+          padding: 10px 8px 12px;
+        }
+        .studio-academy-comments-host {
+          flex: 1 1 auto;
+          min-height: 0;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        .studio-academy-comments-host .profile-comments-dock {
+          display: flex !important;
+          flex: 1 1 auto;
+          width: 100% !important;
+          max-width: none !important;
+          min-width: 0 !important;
+          height: 100%;
+          border-left: 0;
+        }
+        .studio-academy-comments-panel {
+          background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
+        }
+        .studio-cn-head-tab em {
+          margin-left: 4px;
+          font-style: normal;
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--color-cursor-muted, var(--mos-muted));
         }
         .studio-history-floating-panel {
           width: 100%;

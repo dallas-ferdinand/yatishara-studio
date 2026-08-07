@@ -8,9 +8,18 @@ import {
   authedMutation,
   authedQuery,
 } from "./lib/customFunctions";
-import { isAdminRole } from "./lib/auth";
-import { signBunnyFullUrl } from "./lib/bunny";
+import { getMarketplaceSellerForUser, isAdminRole } from "./lib/auth";
+import {
+  assetThumbnailPath,
+  signBunnyCdnUrls,
+  signBunnyFullUrl,
+  THUMB_TRANSFORM,
+} from "./lib/bunny";
 import { getCreditPriceCents } from "./lib/marketplaceEscrow";
+import {
+  accountNameFromUser,
+  resolvePublicDisplayName,
+} from "./lib/profileEnsure";
 
 const COVER_URL_TTL_SEC = 60 * 60 * 6;
 
@@ -120,6 +129,7 @@ const courseDetailReturn = v.object({
   hasIntroVideo: v.boolean(),
   lessonCount: v.number(),
   lessons: v.array(lessonSummaryReturn),
+  commentCount: v.number(),
   status: v.union(v.literal("draft"), v.literal("published")),
   sortOrder: v.number(),
   updatedAt: v.number(),
@@ -246,6 +256,7 @@ export const getCourse = authedQuery({
       hasIntroVideo: Boolean(courseIntroVideoId(course)),
       lessonCount: lessonDocs.filter((l) => l.status === "published").length,
       lessons,
+      commentCount: course.commentCount ?? 0,
       status: course.status,
       sortOrder: course.sortOrder,
       updatedAt: course.updatedAt,
@@ -550,6 +561,7 @@ export const adminUpsertCourse = adminMutation({
       status: "draft",
       sortOrder: args.sortOrder ?? 100,
       purchaseCount: 0,
+      commentCount: 0,
       createdByAdminId: ctx.user._id,
       createdAt: now,
       updatedAt: now,
@@ -1158,6 +1170,7 @@ export const internalSeedDemoCourses = internalMutation({
         courseId = await ctx.db.insert("academyCourses", {
           ...fields,
           purchaseCount: 0,
+          commentCount: 0,
           createdByAdminId: admin._id,
           createdAt: now,
         });
@@ -1195,5 +1208,388 @@ export const internalSeedDemoCourses = internalMutation({
     }
 
     return { created, updated, lessonsCreated, lessonsUpdated };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Course comments (same capabilities as feed post comments)
+// ---------------------------------------------------------------------------
+
+const COMMENT_URL_TTL_SEC = 60 * 60;
+const MAX_COMMENT_LEN = 500;
+
+function sanitizeCommentBody(
+  raw: string,
+  { allowEmpty }: { allowEmpty: boolean },
+): string {
+  const body = raw.replace(/\s+/g, " ").trim();
+  if (!body) {
+    if (allowEmpty) return "";
+    throw new Error("Comment cannot be empty");
+  }
+  if (body.length > MAX_COMMENT_LEN) {
+    throw new Error(`Comment must be ${MAX_COMMENT_LEN} characters or fewer`);
+  }
+  return body;
+}
+
+async function requirePublishedCourseForUser(
+  ctx: QueryCtx | MutationCtx,
+  courseId: Id<"academyCourses">,
+  viewer: Doc<"users">,
+): Promise<Doc<"academyCourses">> {
+  const course = await ctx.db.get("academyCourses", courseId);
+  if (!course) throw new Error("Course not found");
+  if (course.status !== "published" && !isAdminRole(viewer.role)) {
+    throw new Error("Course not found");
+  }
+  return course;
+}
+
+const academyCommentReturn = v.object({
+  _id: v.id("academyComments"),
+  body: v.string(),
+  createdAt: v.number(),
+  userId: v.id("users"),
+  displayName: v.string(),
+  username: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+  isOwner: v.boolean(),
+  isMine: v.boolean(),
+  parentId: v.optional(v.id("academyComments")),
+  likeCount: v.number(),
+  replyCount: v.number(),
+  likedByMe: v.boolean(),
+  imageUrl: v.optional(v.string()),
+});
+
+async function signCommentAvatarUrl(
+  asset: Doc<"assets"> | null,
+  expiresUnix: number,
+): Promise<string | undefined> {
+  if (!asset || asset.deletedAt || !asset.bunnyPath) return undefined;
+  const thumbPath = assetThumbnailPath(asset) ?? asset.bunnyPath;
+  if (!thumbPath) return undefined;
+  try {
+    const signed = await signBunnyCdnUrls(
+      [thumbPath],
+      expiresUnix,
+      THUMB_TRANSFORM,
+    );
+    return signed.get(thumbPath);
+  } catch {
+    return undefined;
+  }
+}
+
+async function hydrateAcademyComments(
+  ctx: QueryCtx,
+  rows: Doc<"academyComments">[],
+  courseOwnerId: Id<"users"> | undefined,
+  viewerId: Id<"users">,
+  expiresUnix: number,
+) {
+  const prepared: Array<{
+    _id: Id<"academyComments">;
+    body: string;
+    createdAt: number;
+    userId: Id<"users">;
+    displayName: string;
+    username?: string;
+    isOwner: boolean;
+    isMine: boolean;
+    parentId?: Id<"academyComments">;
+    likeCount: number;
+    replyCount: number;
+    likedByMe: boolean;
+    avatarAssetId?: Id<"assets">;
+    imageAssetId?: Id<"assets">;
+  }> = [];
+
+  for (const row of rows) {
+    if (row.deletedAt) continue;
+    const user = await ctx.db.get("users", row.userId);
+    if (!user) continue;
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", row.userId))
+      .unique();
+    const seller = await getMarketplaceSellerForUser(ctx, row.userId);
+    const displayName = profile
+      ? resolvePublicDisplayName({
+          username: profile.username,
+          useSellerDisplayName: profile.useSellerDisplayName,
+          user,
+          seller,
+        })
+      : accountNameFromUser(user) || "User";
+    const like = await ctx.db
+      .query("academyCommentLikes")
+      .withIndex("by_user_and_comment", (q) =>
+        q.eq("userId", viewerId).eq("commentId", row._id),
+      )
+      .unique();
+    prepared.push({
+      _id: row._id,
+      body: row.body,
+      createdAt: row.createdAt,
+      userId: row.userId,
+      displayName,
+      username: profile?.username,
+      isOwner: courseOwnerId ? row.userId === courseOwnerId : false,
+      isMine: viewerId === row.userId,
+      parentId: row.parentId,
+      likeCount: row.likeCount ?? 0,
+      replyCount: row.replyCount ?? 0,
+      likedByMe: Boolean(like),
+      avatarAssetId: profile?.avatarAssetId,
+      imageAssetId: row.imageAssetId,
+    });
+  }
+
+  const avatarAssets = await Promise.all(
+    prepared.map((c) =>
+      c.avatarAssetId ? ctx.db.get("assets", c.avatarAssetId) : null,
+    ),
+  );
+  const avatarUrls = await Promise.all(
+    avatarAssets.map((asset) => signCommentAvatarUrl(asset, expiresUnix)),
+  );
+  const imageAssets = await Promise.all(
+    prepared.map((c) =>
+      c.imageAssetId ? ctx.db.get("assets", c.imageAssetId) : null,
+    ),
+  );
+  const imageUrls = await Promise.all(
+    imageAssets.map(async (asset) => {
+      if (!asset || asset.deletedAt || !asset.bunnyPath || asset.kind !== "image") {
+        return undefined;
+      }
+      return signBunnyFullUrl(asset.bunnyPath, expiresUnix);
+    }),
+  );
+
+  return prepared.map((comment, index) => ({
+    _id: comment._id,
+    body: comment.body,
+    createdAt: comment.createdAt,
+    userId: comment.userId,
+    displayName: comment.displayName,
+    username: comment.username,
+    avatarUrl: avatarUrls[index],
+    isOwner: comment.isOwner,
+    isMine: comment.isMine,
+    parentId: comment.parentId,
+    likeCount: comment.likeCount,
+    replyCount: comment.replyCount,
+    likedByMe: comment.likedByMe,
+    imageUrl: imageUrls[index],
+  }));
+}
+
+export const listComments = authedQuery({
+  args: {
+    courseId: v.id("academyCourses"),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(academyCommentReturn),
+  handler: async (ctx, args) => {
+    try {
+      await requirePublishedCourseForUser(ctx, args.courseId, ctx.user);
+    } catch {
+      return [];
+    }
+    const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + COMMENT_URL_TTL_SEC;
+    const rows = await ctx.db
+      .query("academyComments")
+      .withIndex("by_course_and_created", (q) => q.eq("courseId", args.courseId))
+      .order("desc")
+      .take(limit * 3 + 40);
+    const course = await ctx.db.get("academyCourses", args.courseId);
+    const topLevel: Doc<"academyComments">[] = [];
+    for (const row of rows) {
+      if (row.deletedAt || row.parentId) continue;
+      topLevel.push(row);
+      if (topLevel.length >= limit) break;
+    }
+    topLevel.reverse();
+    return hydrateAcademyComments(
+      ctx,
+      topLevel,
+      course?.createdByAdminId,
+      ctx.user._id,
+      expiresUnix,
+    );
+  },
+});
+
+export const listCommentReplies = authedQuery({
+  args: {
+    parentId: v.id("academyComments"),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(academyCommentReturn),
+  handler: async (ctx, args) => {
+    const parent = await ctx.db.get("academyComments", args.parentId);
+    if (!parent || parent.deletedAt) return [];
+    try {
+      await requirePublishedCourseForUser(ctx, parent.courseId, ctx.user);
+    } catch {
+      return [];
+    }
+    const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + COMMENT_URL_TTL_SEC;
+    const rows = await ctx.db
+      .query("academyComments")
+      .withIndex("by_parent_and_created", (q) => q.eq("parentId", args.parentId))
+      .order("asc")
+      .take(limit + 20);
+    const course = await ctx.db.get("academyCourses", parent.courseId);
+    const alive = rows.filter((row) => !row.deletedAt).slice(0, limit);
+    return hydrateAcademyComments(
+      ctx,
+      alive,
+      course?.createdByAdminId,
+      ctx.user._id,
+      expiresUnix,
+    );
+  },
+});
+
+export const addComment = authedMutation({
+  args: {
+    courseId: v.id("academyCourses"),
+    body: v.string(),
+    parentId: v.optional(v.id("academyComments")),
+    imageAssetId: v.optional(v.id("assets")),
+  },
+  returns: v.object({
+    commentId: v.id("academyComments"),
+    commentCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const course = await requirePublishedCourseForUser(
+      ctx,
+      args.courseId,
+      ctx.user,
+    );
+    const body = sanitizeCommentBody(args.body, {
+      allowEmpty: Boolean(args.imageAssetId),
+    });
+    let imageAssetId: Id<"assets"> | undefined;
+    if (args.imageAssetId) {
+      const asset = await ctx.db.get("assets", args.imageAssetId);
+      if (
+        !asset ||
+        asset.ownerId !== ctx.user._id ||
+        asset.deletedAt ||
+        asset.kind !== "image" ||
+        !asset.bunnyPath
+      ) {
+        throw new Error("Image not found");
+      }
+      imageAssetId = asset._id;
+    }
+    if (!body && !imageAssetId) {
+      throw new Error("Comment cannot be empty");
+    }
+    let parent: Doc<"academyComments"> | null = null;
+    if (args.parentId) {
+      parent = await ctx.db.get("academyComments", args.parentId);
+      if (!parent || parent.deletedAt || parent.courseId !== args.courseId) {
+        throw new Error("Comment not found");
+      }
+    }
+    const commentId = await ctx.db.insert("academyComments", {
+      courseId: args.courseId,
+      userId: ctx.user._id,
+      body,
+      createdAt: Date.now(),
+      parentId: parent?._id,
+      likeCount: 0,
+      replyCount: 0,
+      imageAssetId,
+    });
+    if (parent) {
+      await ctx.db.patch(parent._id, {
+        replyCount: (parent.replyCount ?? 0) + 1,
+      });
+    }
+    const commentCount = (course.commentCount ?? 0) + 1;
+    await ctx.db.patch(course._id, { commentCount });
+    return { commentId, commentCount };
+  },
+});
+
+export const toggleCommentLike = authedMutation({
+  args: { commentId: v.id("academyComments") },
+  returns: v.object({
+    liked: v.boolean(),
+    likeCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const comment = await ctx.db.get("academyComments", args.commentId);
+    if (!comment || comment.deletedAt) {
+      throw new Error("Comment not found");
+    }
+    await requirePublishedCourseForUser(ctx, comment.courseId, ctx.user);
+    const existing = await ctx.db
+      .query("academyCommentLikes")
+      .withIndex("by_user_and_comment", (q) =>
+        q.eq("userId", ctx.user._id).eq("commentId", comment._id),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.delete(existing._id);
+      const likeCount = Math.max(0, (comment.likeCount ?? 1) - 1);
+      await ctx.db.patch(comment._id, { likeCount });
+      return { liked: false, likeCount };
+    }
+    await ctx.db.insert("academyCommentLikes", {
+      userId: ctx.user._id,
+      commentId: comment._id,
+      createdAt: Date.now(),
+    });
+    const likeCount = (comment.likeCount ?? 0) + 1;
+    await ctx.db.patch(comment._id, { likeCount });
+    return { liked: true, likeCount };
+  },
+});
+
+export const deleteComment = authedMutation({
+  args: { commentId: v.id("academyComments") },
+  returns: v.object({
+    commentCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const comment = await ctx.db.get("academyComments", args.commentId);
+    if (!comment || comment.deletedAt) {
+      return { commentCount: 0 };
+    }
+    const course = await ctx.db.get("academyCourses", comment.courseId);
+    const isAuthor = comment.userId === ctx.user._id;
+    const isCourseAdmin =
+      course?.createdByAdminId === ctx.user._id || isAdminRole(ctx.user.role);
+    if (!isAuthor && !isCourseAdmin) {
+      throw new Error("You cannot delete this comment");
+    }
+    await ctx.db.patch(comment._id, { deletedAt: Date.now() });
+    if (comment.parentId) {
+      const parent = await ctx.db.get("academyComments", comment.parentId);
+      if (parent && !parent.deletedAt) {
+        await ctx.db.patch(parent._id, {
+          replyCount: Math.max(0, (parent.replyCount ?? 1) - 1),
+        });
+      }
+    }
+    if (!course) return { commentCount: 0 };
+    const commentCount = Math.max(0, (course.commentCount ?? 1) - 1);
+    await ctx.db.patch(course._id, { commentCount });
+    return { commentCount };
   },
 });

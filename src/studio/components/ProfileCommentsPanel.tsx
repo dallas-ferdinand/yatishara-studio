@@ -31,7 +31,7 @@ import { useMobileLayout } from "@/hooks/use-mobile-layout";
 const MAX_POST_CAPTION = 2200;
 
 type CommentRow = {
-  _id: Id<"profileComments">;
+  _id: Id<"profileComments"> | Id<"academyComments">;
   body: string;
   createdAt: number;
   userId: Id<"users">;
@@ -40,7 +40,7 @@ type CommentRow = {
   avatarUrl?: string;
   isOwner: boolean;
   isMine: boolean;
-  parentId?: Id<"profileComments">;
+  parentId?: Id<"profileComments"> | Id<"academyComments">;
   likeCount: number;
   replyCount: number;
   likedByMe: boolean;
@@ -48,7 +48,7 @@ type CommentRow = {
 };
 
 type ThreadFrame = {
-  parentId: Id<"profileComments"> | null;
+  parentId: Id<"profileComments"> | Id<"academyComments"> | null;
   parentPreview: CommentRow | null;
   scrollTop: number;
 };
@@ -129,6 +129,7 @@ function postAuthorLabel(author: PostAuthorInfo): string {
 
 function CommentsBody({
   postId,
+  courseId,
   commentCount,
   onCommentCountChange,
   showRootHeader,
@@ -139,7 +140,8 @@ function CommentsBody({
   postActions,
   onEditDescription,
 }: {
-  postId: Id<"profilePosts">;
+  postId?: Id<"profilePosts">;
+  courseId?: Id<"academyCourses">;
   commentCount: number;
   onCommentCountChange?: (count: number) => void;
   showRootHeader: boolean;
@@ -151,6 +153,7 @@ function CommentsBody({
   onEditDescription?: () => void;
 }) {
   const auth = useConvexAuth();
+  const isCourse = Boolean(courseId);
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const [stack, setStack] = useState<ThreadFrame[]>([
     { parentId: null, parentPreview: null, scrollTop: 0 },
@@ -160,19 +163,52 @@ function CommentsBody({
   const listRef = useRef<HTMLDivElement>(null);
   const restoreScrollRef = useRef<number | null>(null);
 
-  const rootComments = useQuery(
+  const rootPostComments = useQuery(
     api.profiles.listComments,
-    parentId === null ? { postId, expiresUnix, limit: 50 } : "skip",
+    !isCourse && postId && parentId === null
+      ? { postId, expiresUnix, limit: 50 }
+      : "skip",
   );
-  const replyComments = useQuery(
+  const replyPostComments = useQuery(
     api.profiles.listCommentReplies,
-    parentId !== null ? { parentId, expiresUnix, limit: 50 } : "skip",
+    !isCourse && parentId !== null
+      ? {
+          parentId: parentId as Id<"profileComments">,
+          expiresUnix,
+          limit: 50,
+        }
+      : "skip",
   );
-  const comments = parentId === null ? rootComments : replyComments;
+  const rootCourseComments = useQuery(
+    api.academy.listComments,
+    isCourse && courseId && parentId === null
+      ? { courseId, expiresUnix, limit: 50 }
+      : "skip",
+  );
+  const replyCourseComments = useQuery(
+    api.academy.listCommentReplies,
+    isCourse && parentId !== null
+      ? {
+          parentId: parentId as Id<"academyComments">,
+          expiresUnix,
+          limit: 50,
+        }
+      : "skip",
+  );
+  const comments = isCourse
+    ? parentId === null
+      ? rootCourseComments
+      : replyCourseComments
+    : parentId === null
+      ? rootPostComments
+      : replyPostComments;
 
-  const addComment = useMutation(api.profiles.addComment);
-  const deleteComment = useMutation(api.profiles.deleteComment);
-  const toggleCommentLike = useMutation(api.profiles.toggleCommentLike);
+  const addPostComment = useMutation(api.profiles.addComment);
+  const deletePostComment = useMutation(api.profiles.deleteComment);
+  const togglePostCommentLike = useMutation(api.profiles.toggleCommentLike);
+  const addCourseComment = useMutation(api.academy.addComment);
+  const deleteCourseComment = useMutation(api.academy.deleteComment);
+  const toggleCourseCommentLike = useMutation(api.academy.toggleCommentLike);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const ensureStudioDefaults = useMutation(api.users.ensureStudioDefaults);
@@ -210,7 +246,7 @@ function CommentsBody({
     setImagePreviewUrl(null);
     setLikeLocal({});
     setStack([{ parentId: null, parentPreview: null, scrollTop: 0 }]);
-  }, [postId]);
+  }, [postId, courseId]);
 
   useEffect(() => {
     return () => {
@@ -319,12 +355,19 @@ function CommentsBody({
       if (pendingImage) {
         imageAssetId = await uploadCommentImage(pendingImage.file);
       }
-      const result = await addComment({
-        postId,
-        body,
-        parentId: parentId ?? undefined,
-        imageAssetId,
-      });
+      const result = isCourse && courseId
+        ? await addCourseComment({
+            courseId,
+            body,
+            parentId: (parentId as Id<"academyComments"> | null) ?? undefined,
+            imageAssetId,
+          })
+        : await addPostComment({
+            postId: postId!,
+            body,
+            parentId: (parentId as Id<"profileComments"> | null) ?? undefined,
+            imageAssetId,
+          });
       setDraft("");
       clearPendingImage();
       onCommentCountChange?.(result.commentCount);
@@ -352,12 +395,20 @@ function CommentsBody({
     }
   }
 
-  async function remove(commentId: Id<"profileComments">) {
+  async function remove(
+    commentId: Id<"profileComments"> | Id<"academyComments">,
+  ) {
     setBusy(true);
     setError("");
     playUiSound("pop");
     try {
-      const result = await deleteComment({ commentId });
+      const result = isCourse
+        ? await deleteCourseComment({
+            commentId: commentId as Id<"academyComments">,
+          })
+        : await deletePostComment({
+            commentId: commentId as Id<"profileComments">,
+          });
       onCommentCountChange?.(result.commentCount);
     } catch (err) {
       playUiSound("error");
@@ -386,7 +437,13 @@ function CommentsBody({
       },
     }));
     try {
-      const result = await toggleCommentLike({ commentId: comment._id });
+      const result = isCourse
+        ? await toggleCourseCommentLike({
+            commentId: comment._id as Id<"academyComments">,
+          })
+        : await togglePostCommentLike({
+            commentId: comment._id as Id<"profileComments">,
+          });
       setLikeLocal((state) => ({
         ...state,
         [comment._id]: { liked: result.liked, likeCount: result.likeCount },
@@ -478,24 +535,36 @@ function CommentsBody({
       <article
         key={comment._id}
         className="profile-comment-row"
-        draggable
-        title="Drag into a chat to share this comment"
-        onDragStart={(event) => {
-          const target = event.target as HTMLElement | null;
-          if (target?.closest("button, a, input, textarea, [contenteditable='true']")) {
-            event.preventDefault();
-            return;
-          }
-          setFeedShareDataTransfer(event.dataTransfer, {
-            type: "comment",
-            postId,
-            commentId: comment._id,
-            username: comment.username,
-            displayName: comment.displayName,
-            body: comment.body,
-            thumbnailUrl: postAuthor?.thumbnailUrl,
-          });
-        }}
+        draggable={!isCourse && Boolean(postId)}
+        title={
+          !isCourse && postId
+            ? "Drag into a chat to share this comment"
+            : undefined
+        }
+        onDragStart={
+          !isCourse && postId
+            ? (event) => {
+                const target = event.target as HTMLElement | null;
+                if (
+                  target?.closest(
+                    "button, a, input, textarea, [contenteditable='true']",
+                  )
+                ) {
+                  event.preventDefault();
+                  return;
+                }
+                setFeedShareDataTransfer(event.dataTransfer, {
+                  type: "comment",
+                  postId,
+                  commentId: comment._id as Id<"profileComments">,
+                  username: comment.username,
+                  displayName: comment.displayName,
+                  body: comment.body,
+                  thumbnailUrl: postAuthor?.thumbnailUrl,
+                });
+              }
+            : undefined
+        }
       >
         <StudioProfileAvatar
           className="profile-comment-avatar"
@@ -632,17 +701,25 @@ function CommentsBody({
           ) : postAuthor ? (
             <div
               className="profile-comments-thread-head"
-              draggable
-              title="Drag into a chat to share this post"
-              onDragStart={(event) => {
-                setFeedShareDataTransfer(event.dataTransfer, {
-                  type: "post",
-                  postId,
-                  username: postAuthor.username,
-                  displayName: postAuthor.displayName,
-                  thumbnailUrl: postAuthor.thumbnailUrl,
-                });
-              }}
+              draggable={!isCourse && Boolean(postId)}
+              title={
+                !isCourse && postId
+                  ? "Drag into a chat to share this post"
+                  : undefined
+              }
+              onDragStart={
+                !isCourse && postId
+                  ? (event) => {
+                      setFeedShareDataTransfer(event.dataTransfer, {
+                        type: "post",
+                        postId,
+                        username: postAuthor.username,
+                        displayName: postAuthor.displayName,
+                        thumbnailUrl: postAuthor.thumbnailUrl,
+                      });
+                    }
+                  : undefined
+              }
             >
               <StudioProfileAvatar
                 className="profile-comments-thread-avatar"
@@ -1273,9 +1350,12 @@ function DescriptionBody({
  * Desktop: real right column beside the post (feed shrinks to make room).
  * Mobile: glass bottom sheet when `open`.
  * `mode="description"` swaps the column/sheet into the full post description.
+ * Pass `courseId` (Academy) instead of `postId` for course discussion — same
+ * composer features (text, image, replies, likes); feed drag-share stays post-only.
  */
 export function ProfileCommentsPanel({
   postId,
+  courseId,
   open,
   onClose,
   commentCount,
@@ -1286,7 +1366,8 @@ export function ProfileCommentsPanel({
   onModeChange,
   description,
 }: {
-  postId: Id<"profilePosts">;
+  postId?: Id<"profilePosts">;
+  courseId?: Id<"academyCourses">;
   open: boolean;
   onClose: () => void;
   commentCount: number;
@@ -1300,7 +1381,7 @@ export function ProfileCommentsPanel({
   const { isMobile } = useMobileLayout();
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const [startEditingDescription, setStartEditingDescription] = useState(false);
-  const showingDescription = mode === "description";
+  const showingDescription = Boolean(postId) && mode === "description";
 
   useEffect(() => {
     // Mount under the studio shell so the bottom nav (z-index 60) stays above the sheet.
@@ -1344,7 +1425,7 @@ export function ProfileCommentsPanel({
   }
 
   const descriptionPanel =
-    showingDescription && description ? (
+    showingDescription && description && postId ? (
       <DescriptionBody
         postId={postId}
         description={description}
@@ -1356,27 +1437,33 @@ export function ProfileCommentsPanel({
       />
     ) : null;
 
+  const commentsBody = (
+    <CommentsBody
+      postId={postId}
+      courseId={courseId}
+      commentCount={commentCount}
+      onCommentCountChange={onCommentCountChange}
+      showRootHeader={isMobile}
+      showClose={isMobile}
+      onClose={onClose}
+      variant={isMobile ? "sheet" : "dock"}
+      postAuthor={postAuthor}
+      postActions={postId ? postActions : undefined}
+      onEditDescription={
+        postId && postAuthor?.isOwner && description
+          ? openDescriptionEditor
+          : undefined
+      }
+    />
+  );
+
   if (!isMobile) {
     return (
       <aside
         className="profile-comments-dock"
         aria-label={showingDescription ? "Description" : "Comments"}
       >
-        {descriptionPanel ?? (
-          <CommentsBody
-            postId={postId}
-            commentCount={commentCount}
-            onCommentCountChange={onCommentCountChange}
-            showRootHeader={false}
-            showClose={false}
-            variant="dock"
-            postAuthor={postAuthor}
-            postActions={postActions}
-            onEditDescription={
-              postAuthor?.isOwner && description ? openDescriptionEditor : undefined
-            }
-          />
-        )}
+        {descriptionPanel ?? commentsBody}
       </aside>
     );
   }
@@ -1397,22 +1484,7 @@ export function ProfileCommentsPanel({
         onClick={dismissSheet}
       />
       <aside className="profile-comments-panel is-sheet">
-        {descriptionPanel ?? (
-          <CommentsBody
-            postId={postId}
-            commentCount={commentCount}
-            onCommentCountChange={onCommentCountChange}
-            showRootHeader
-            showClose
-            onClose={onClose}
-            variant="sheet"
-            postAuthor={postAuthor}
-            postActions={postActions}
-            onEditDescription={
-              postAuthor?.isOwner && description ? openDescriptionEditor : undefined
-            }
-          />
-        )}
+        {descriptionPanel ?? commentsBody}
       </aside>
     </div>,
     portalRoot,
