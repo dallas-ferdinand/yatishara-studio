@@ -23,6 +23,36 @@
   padding: 0;
 }
 
+/* Academy lesson/course body: chat markdown greys are unreadable on light plates. */
+.studio-academy-body .studio-chat-markdown,
+.studio-academy-body .studio-chat-markdown.mos-md,
+.studio-academy-body .studio-chat-markdown.md-prose {
+  --chat-text-color: var(--color-cursor-text-bright, #0f172a);
+  --chat-text-muted: var(--color-cursor-muted, #64748b);
+  --text: var(--color-cursor-text-bright, #0f172a);
+  --text-muted: var(--color-cursor-muted, #64748b);
+  --mos-text: var(--color-cursor-text-bright, #0f172a);
+  --mos-muted: var(--color-cursor-muted, #64748b);
+  color: var(--color-cursor-text-bright, #0f172a) !important;
+}
+
+.studio-academy-body .studio-chat-markdown :is(h1, h2, h3, p, li, strong, blockquote, td, th) {
+  color: var(--color-cursor-text-bright, #0f172a) !important;
+}
+
+.studio-academy-body .studio-chat-markdown :is(h4, em) {
+  color: var(--color-cursor-muted, #64748b) !important;
+}
+
+[data-appearance="light"] .studio-academy-body .studio-chat-markdown,
+[data-appearance="light"] .studio-academy-body .studio-chat-markdown :is(h1, h2, h3, p, li, strong, blockquote) {
+  color: #0f172a !important;
+}
+
+[data-appearance="light"] .studio-academy-body .studio-chat-markdown :is(h4, em) {
+  color: #64748b !important;
+}
+
 /* Match Messages rail: no stacked top border on search. */
 .studio-polish .studio-cn-sidebar .cursor-panel-search,
 .studio-cn-sidebar .cursor-panel-search {
