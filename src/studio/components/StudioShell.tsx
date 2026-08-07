@@ -19722,6 +19722,20 @@ export function StudioShell({
         .studio-academy-body {
           min-width: 0;
         }
+        /* StudioChatMarkdown uses chat/dark --mos-text defaults; force Studio theme ink. */
+        .studio-academy-body .studio-chat-markdown.mos-md,
+        .studio-academy-body .studio-chat-markdown.md-prose {
+          --mos-text: var(--color-cursor-text-bright, var(--color-cursor-text, #0f172a));
+          --mos-muted: var(--color-cursor-muted, #64748b);
+          --mos-accent: var(--cursor-accent, var(--color-cursor-accent, #c45c5c));
+          color: var(--mos-text);
+        }
+        .studio-academy-body .studio-chat-markdown :where(h1, h2, h3, h4, p, li, strong) {
+          color: inherit;
+        }
+        .studio-academy-body .studio-chat-markdown :where(h4, em) {
+          color: var(--mos-muted);
+        }
         .studio-academy-banner-stage {
           position: relative;
           width: 100%;
