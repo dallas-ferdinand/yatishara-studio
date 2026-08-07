@@ -2713,9 +2713,24 @@
   display: none;
 }
 
-/* Messages chat filter — share Files type-filter chrome; keep ListFilter size. */
+/* Messages chat filter — share Files type-filter chrome; short hairline like search↔filter. */
 .studio-dm-chat-filter.desk-explorer-type-filter {
+  position: relative;
   flex: 0 0 auto;
+  margin-left: 2px;
+  padding-left: 8px;
+}
+
+.studio-dm-chat-filter.desk-explorer-type-filter::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 14px;
+  transform: translateY(-50%);
+  background: var(--color-cursor-border, var(--studio-chrome-divider));
+  pointer-events: none;
 }
 
 .studio-dm-chat-filter .desk-explorer-type-filter-trigger > svg:first-child {
