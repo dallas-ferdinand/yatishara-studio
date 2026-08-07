@@ -1352,6 +1352,7 @@ function DescriptionBody({
  * `mode="description"` swaps the column/sheet into the full post description.
  * Pass `courseId` (Academy) instead of `postId` for course discussion — same
  * composer features (text, image, replies, likes); feed drag-share stays post-only.
+ * `chrome="sidebar"` uses CN book-sidebar border/head (Academy / secondary rails).
  */
 export function ProfileCommentsPanel({
   postId,
@@ -1365,6 +1366,7 @@ export function ProfileCommentsPanel({
   mode = "comments",
   onModeChange,
   description,
+  chrome = "feed",
 }: {
   postId?: Id<"profilePosts">;
   courseId?: Id<"academyCourses">;
@@ -1377,11 +1379,13 @@ export function ProfileCommentsPanel({
   mode?: CommentsPanelMode;
   onModeChange?: (mode: CommentsPanelMode) => void;
   description?: DescriptionInfo;
+  chrome?: "feed" | "sidebar";
 }) {
   const { isMobile } = useMobileLayout();
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const [startEditingDescription, setStartEditingDescription] = useState(false);
   const showingDescription = Boolean(postId) && mode === "description";
+  const useSidebarChrome = chrome === "sidebar" && !isMobile;
 
   useEffect(() => {
     // Mount under the studio shell so the bottom nav (z-index 60) stays above the sheet.
@@ -1447,7 +1451,7 @@ export function ProfileCommentsPanel({
       showClose={isMobile}
       onClose={onClose}
       variant={isMobile ? "sheet" : "dock"}
-      postAuthor={postAuthor}
+      postAuthor={useSidebarChrome ? undefined : postAuthor}
       postActions={postId ? postActions : undefined}
       onEditDescription={
         postId && postAuthor?.isOwner && description
@@ -1458,6 +1462,26 @@ export function ProfileCommentsPanel({
   );
 
   if (!isMobile) {
+    if (useSidebarChrome) {
+      return (
+        <aside className="studio-cn-book-sidebar" aria-label="Comments">
+          <div className="studio-cn-book-sidebar-head cursor-panel-head cursor-sidebar-head shrink-0">
+            <strong>
+              Comments
+              {commentCount > 0 ? (
+                <span className="studio-academy-comments-count">
+                  {" "}
+                  · {commentCount}
+                </span>
+              ) : null}
+            </strong>
+          </div>
+          <div className="studio-cn-book-sidebar-body is-comments-fill">
+            {descriptionPanel ?? commentsBody}
+          </div>
+        </aside>
+      );
+    }
     return (
       <aside
         className="profile-comments-dock"

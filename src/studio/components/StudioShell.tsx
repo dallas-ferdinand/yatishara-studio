@@ -19682,12 +19682,11 @@ export function StudioShell({
           color: var(--color-cursor-muted);
         }
         .studio-academy-player {
-          /* Cap height so 16:9 never fills past the pane; width shrinks with it. */
-          --studio-academy-media-max-h: min(48dvh, calc(100dvh - 14rem));
-          width: min(100%, calc(var(--studio-academy-media-max-h) * 16 / 9));
+          /* Full width of main pane; height capped so it never eats the viewport. */
+          width: 100%;
           max-width: 100%;
           aspect-ratio: 16 / 9;
-          max-height: var(--studio-academy-media-max-h);
+          max-height: min(48dvh, calc(100dvh - 14rem));
           height: auto;
           border-radius: 12px;
           overflow: hidden;
@@ -19724,11 +19723,10 @@ export function StudioShell({
         }
         .studio-academy-banner-stage {
           position: relative;
-          --studio-academy-media-max-h: min(48dvh, calc(100dvh - 14rem));
-          width: min(100%, calc(var(--studio-academy-media-max-h) * 16 / 9));
+          width: 100%;
           max-width: 100%;
           aspect-ratio: 16 / 9;
-          max-height: var(--studio-academy-media-max-h);
+          max-height: min(48dvh, calc(100dvh - 14rem));
           height: auto;
           overflow: hidden;
           border-radius: var(--cursor-radius-lg, 10px);
@@ -19888,6 +19886,7 @@ export function StudioShell({
           min-height: 0;
           min-width: 0;
           background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
+          border-left: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
         .studio-academy-checkout-strip {
           flex: 0 0 auto;
@@ -19905,24 +19904,33 @@ export function StudioShell({
           display: flex;
           flex-direction: column;
         }
-        .studio-academy-comments-host .profile-comments-dock {
-          display: flex !important;
+        .studio-academy-comments-host .studio-cn-book-sidebar {
           flex: 1 1 auto;
-          width: 100% !important;
-          max-width: none !important;
-          min-width: 0 !important;
           height: 100%;
           border-left: 0;
         }
+        .studio-cn-book-sidebar-body.is-comments-fill {
+          display: flex;
+          flex-direction: column;
+          padding: 0;
+          overflow: hidden;
+        }
+        .studio-cn-book-sidebar-body.is-comments-fill .profile-comments-list {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow-x: hidden;
+          overflow-y: auto;
+        }
+        .studio-cn-book-sidebar-body.is-comments-fill .profile-comments-composer {
+          flex: 0 0 auto;
+          border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        .studio-academy-comments-count {
+          font-weight: 600;
+          color: var(--color-cursor-muted, var(--mos-muted));
+        }
         .studio-academy-comments-panel {
           background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
-        }
-        .studio-cn-head-tab em {
-          margin-left: 4px;
-          font-style: normal;
-          font-size: 10px;
-          font-weight: 700;
-          color: var(--color-cursor-muted, var(--mos-muted));
         }
         .studio-history-floating-panel {
           width: 100%;

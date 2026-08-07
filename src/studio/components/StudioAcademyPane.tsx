@@ -485,14 +485,11 @@ export function StudioAcademyPane({
         <div className="studio-academy-comments-host">
           <ProfileCommentsPanel
             courseId={detail._id}
+            chrome="sidebar"
             open={isMobile ? commentsOpen : true}
             onClose={() => setCommentsOpen(false)}
             commentCount={commentCount}
             onCommentCountChange={setCommentCount}
-            postAuthor={{
-              displayName: detail.title,
-              publishedAt: detail.updatedAt,
-            }}
           />
         </div>
       </div>
@@ -512,8 +509,8 @@ export function StudioAcademyPane({
           <Panel
             id="studio-academy-main"
             order={1}
-            defaultSize={66}
-            minSize={45}
+            defaultSize={72}
+            minSize={52}
             className="min-h-0 min-w-0"
           >
             {courseMain}
@@ -522,9 +519,9 @@ export function StudioAcademyPane({
           <Panel
             id="studio-academy-comments"
             order={2}
-            defaultSize={34}
-            minSize={24}
-            maxSize={44}
+            defaultSize={28}
+            minSize={20}
+            maxSize={36}
             className="studio-cn-book-panel studio-academy-comments-panel min-h-0 min-w-0 h-full overflow-hidden"
           >
             {commentsDock}
@@ -571,47 +568,49 @@ export function StudioAcademyPane({
             <Library aria-hidden="true" />
             My courses
           </button>
-          {detailOpen ? (
-            <button
-              type="button"
-              className={`studio-cn-head-tab${commentsOpen ? " is-active" : ""}`}
-              onClick={() => setCommentsOpen(true)}
-              aria-label={
-                commentCount
-                  ? `Comments, ${commentCount}`
-                  : "Open comments"
-              }
-            >
-              <MessageCircle aria-hidden="true" />
-              Comments
-              {commentCount > 0 ? <em>{commentCount}</em> : null}
-            </button>
-          ) : null}
         </nav>
       </header>
 
       <div className="studio-cn-body is-catalog">
         {body}
         {isMobile && detailOpen ? commentsDock : null}
-        {isMobile && detailOpen && detail && !owned ? (
+        {isMobile && detailOpen && detail ? (
           <>
             <nav
               className="public-offers-mobile-book-nav studio-cn-book-bar"
-              aria-label="Buy this course"
+              aria-label={owned ? "Course actions" : "Buy this course"}
             >
-              <span className="studio-cn-book-bar-price">{priceLabel}</span>
+              {!owned ? (
+                <span className="studio-cn-book-bar-price">{priceLabel}</span>
+              ) : (
+                <span className="studio-cn-book-bar-price">Discussion</span>
+              )}
               <div className="studio-cn-book-bar-actions">
                 <button
                   type="button"
-                  className="public-offers-btn is-primary studio-cn-book-bar-cta"
-                  onClick={() => setCheckoutSheetOpen(true)}
+                  className="studio-cn-book-bar-msg"
+                  aria-label={
+                    commentCount
+                      ? `Comments, ${commentCount}`
+                      : "Open comments"
+                  }
+                  onClick={() => setCommentsOpen(true)}
                 >
-                  <Zap aria-hidden="true" />
-                  Buy now
+                  <MessageCircle aria-hidden="true" />
                 </button>
+                {!owned ? (
+                  <button
+                    type="button"
+                    className="public-offers-btn is-primary studio-cn-book-bar-cta"
+                    onClick={() => setCheckoutSheetOpen(true)}
+                  >
+                    <Zap aria-hidden="true" />
+                    Buy now
+                  </button>
+                ) : null}
               </div>
             </nav>
-            {checkoutSheetOpen ? (
+            {!owned && checkoutSheetOpen ? (
               <div
                 className="studio-cn-book-sheet"
                 role="dialog"
