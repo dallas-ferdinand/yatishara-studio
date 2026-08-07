@@ -304,43 +304,39 @@ export function StudioAcademyPane({
                 </p>
               </div>
             ) : (
-              <ul className="public-offers-grid">
+              <ul className="public-offers-grid studio-academy-grid">
                 {list.map((course) => {
                   const banner = courseBannerUrl(course);
                   return (
                     <li key={course._id}>
                       <button
                         type="button"
-                        className="public-offers-card"
+                        className="public-offers-card studio-academy-card"
                         onClick={() => academy.openCourse(course._id)}
                       >
-                        {banner ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            className="public-offers-card-media"
-                            src={banner}
-                            alt=""
-                          />
-                        ) : (
-                          <div className="public-offers-card-media studio-academy-card-fallback">
-                            <GraduationCap aria-hidden="true" />
-                          </div>
-                        )}
-                        <div className="public-offers-card-body">
-                          <div className="public-offers-card-top">
-                            <strong className="public-offers-card-title">
-                              {course.title}
-                            </strong>
-                            <span className="public-offers-card-price">
-                              {formatTtdFromCredits(course.priceCredits, price)}
-                            </span>
-                          </div>
+                        <div className="public-offers-card-media studio-academy-card-media">
+                          {banner ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={banner} alt="" loading="lazy" />
+                          ) : (
+                            <div className="studio-academy-card-fallback">
+                              <GraduationCap aria-hidden="true" />
+                            </div>
+                          )}
+                          {course.owned ? (
+                            <span className="studio-academy-card-owned">Owned</span>
+                          ) : null}
+                        </div>
+                        <div className="public-offers-card-body studio-academy-card-body">
+                          <strong className="public-offers-card-title">
+                            {course.title}
+                          </strong>
                           <p className="public-offers-card-desc">
                             {course.blurb}
                           </p>
-                          <div className="public-offers-card-meta">
-                            <span>
-                              {course.owned ? "Owned" : "Yatishara Academy"}
+                          <div className="studio-academy-card-foot">
+                            <span className="public-offers-card-price">
+                              {formatTtdFromCredits(course.priceCredits, price)}
                             </span>
                             <span>
                               {course.lessonCount} lesson
