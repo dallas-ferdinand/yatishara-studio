@@ -294,8 +294,8 @@ export function StudioAcademyPane({
                     <h1>{listTab === "mine" ? "My courses" : "Academy"}</h1>
                     <p>
                       {listTab === "mine"
-                        ? "Courses you own — lifetime access, ready when you are."
-                        : "Learn production skills inside Studio. Pay once, keep forever."}
+                        ? "Your courses — open them anytime from here."
+                        : "Production courses live here in Studio — built for how you create."}
                     </p>
                   </div>
                 </section>
@@ -316,7 +316,7 @@ export function StudioAcademyPane({
                       </strong>
                       <p>
                         {listTab === "mine"
-                          ? "Buy a course from Academy to unlock lifetime access."
+                          ? "Browse Academy when you’re ready to pick one up."
                           : "New courses are on the way. Check back soon."}
                       </p>
                     </div>
