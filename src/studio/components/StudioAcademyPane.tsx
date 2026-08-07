@@ -399,7 +399,7 @@ export function StudioAcademyPane({
         </main>
       </div>
     </div>
-  ) : owned && selectedLesson ? (
+  ) : selectedLesson ? (
     <div className="public-offers-main studio-cn-catalog">
       <div className="public-offers-main-scroll">
         <main className="public-offers-body">
@@ -412,9 +412,15 @@ export function StudioAcademyPane({
                   coverUrl: detail.coverUrl,
                 })
               }
-              embedUrl={lessonEmbed}
+              embedUrl={owned ? lessonEmbed : null}
               loading={loadingPlay}
-              onPlay={() => void playLesson()}
+              onPlay={() => {
+                if (!owned) {
+                  toast.message("Buy the course to watch this lesson");
+                  return;
+                }
+                void playLesson();
+              }}
               playLabel={`Play ${selectedLesson.title}`}
             />
             <div className="studio-academy-detail-top">
@@ -423,15 +429,29 @@ export function StudioAcademyPane({
                   {selectedLesson.title}
                 </h1>
                 <p className="studio-academy-detail-sub">
-                  {detail.title} · Lesson
+                  {owned
+                    ? `${detail.title} · Lesson`
+                    : `${detail.title} · Buy to unlock`}
                 </p>
               </div>
+              {!owned ? (
+                <span className="public-offers-card-price">{priceLabel}</span>
+              ) : null}
             </div>
-            <div className="studio-academy-body">
-              <StudioChatMarkdown
-                className="studio-academy-md"
-                text={selectedLesson.descriptionMarkdown}
-              />
+            <div className={`studio-academy-body${!owned ? " is-locked" : ""}`}>
+              <div className="studio-academy-body-clip">
+                <StudioChatMarkdown
+                  className="studio-academy-md"
+                  text={selectedLesson.descriptionMarkdown}
+                />
+              </div>
+              {!owned ? (
+                <div className="studio-academy-lock-overlay" aria-hidden="true">
+                  <span className="studio-academy-lock-badge">
+                    <Lock aria-hidden="true" />
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
         </main>

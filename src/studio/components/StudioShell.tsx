@@ -19815,14 +19815,14 @@ export function StudioShell({
           color: var(--color-cursor-muted);
           font-size: 11px;
         }
-        /* Same soft-bubble language as Messages chat-list (.studio-dm-row). */
+        /* Soft bubbles like DM chat-list, tighter pad than Messages rows. */
         .studio-academy-lesson-list {
           list-style: none;
           margin: 0;
           padding: 0;
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          gap: 6px;
         }
         .studio-academy-lesson-row {
           position: relative;
@@ -19831,9 +19831,9 @@ export function StudioShell({
           gap: 10px;
           width: 100%;
           min-width: 0;
-          padding: 12px 14px;
+          padding: 8px 10px;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
-          border-radius: 16px;
+          border-radius: 14px;
           background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
           box-shadow:
             inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 7%, transparent),
@@ -19853,7 +19853,7 @@ export function StudioShell({
             0 1px 2px rgba(15, 23, 42, 0.05);
         }
         @media (hover: hover) {
-          .studio-academy-lesson-row:hover:not(.is-locked) {
+          .studio-academy-lesson-row:hover {
             background: color-mix(
               in srgb,
               var(--cursor-accent) 8%,
@@ -19862,7 +19862,7 @@ export function StudioShell({
             border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
           }
         }
-        .studio-academy-lesson-row:active:not(.is-locked) {
+        .studio-academy-lesson-row:active {
           background: color-mix(
             in srgb,
             var(--cursor-accent) 8%,
@@ -19885,10 +19885,6 @@ export function StudioShell({
           box-shadow:
             inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 28%, transparent),
             inset 0 1px 0 rgba(255, 255, 255, 0.72);
-        }
-        .studio-academy-lesson-row.is-locked {
-          cursor: default;
-          opacity: 0.85;
         }
         .studio-academy-lesson-num {
           width: 100%;

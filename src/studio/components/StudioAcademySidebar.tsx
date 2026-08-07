@@ -205,7 +205,7 @@ function CatalogFilters() {
   );
 }
 
-function OwnedLessonRail({
+function LessonRail({
   courseId,
 }: {
   courseId: Id<"academyCourses">;
@@ -328,95 +328,12 @@ function OwnedLessonRail({
   );
 }
 
-function UnownedOutlineRail({
-  courseId,
-}: {
-  courseId: Id<"academyCourses">;
-}) {
-  const academy = useStudioAcademyOptional();
-  const detail = useQuery(api.academy.getCourse, { courseId });
-  if (!academy) return null;
-
-  const courseBanner = detail?.coverUrl;
-  const introCount = detail?.commentCount ?? 0;
-
-  return (
-    <div className="studio-cn-sidebar-body">
-      <div className="studio-cn-rail-scroll public-offers-rail-body">
-        <ul className="studio-academy-lesson-list">
-          <li>
-            <button
-              type="button"
-              className="studio-academy-lesson-row is-active"
-              onClick={() => academy.setLessonId(null)}
-            >
-              <span className="studio-academy-lesson-thumb" aria-hidden="true">
-                {courseBanner ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={courseBanner} alt="" />
-                ) : (
-                  <span className="studio-academy-lesson-num">0</span>
-                )}
-              </span>
-              <span className="studio-academy-lesson-meta">
-                <strong>{detail?.title ?? "Course"}</strong>
-                <small>Intro · free</small>
-              </span>
-              <span
-                className="studio-academy-lesson-comments"
-                aria-label={`${formatCommentCount(introCount)} comments`}
-              >
-                <MessageCircle
-                  aria-hidden="true"
-                  fill="currentColor"
-                  strokeWidth={0}
-                />
-                <span>{formatCommentCount(introCount)}</span>
-              </span>
-            </button>
-          </li>
-          {(detail?.lessons ?? []).map((lesson, index) => (
-            <li key={lesson._id}>
-              <div className="studio-academy-lesson-row is-locked">
-                <span
-                  className="studio-academy-lesson-thumb"
-                  aria-hidden="true"
-                >
-                  {lesson.coverUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={lesson.coverUrl} alt="" />
-                  ) : (
-                    <span className="studio-academy-lesson-num">
-                      {index + 1}
-                    </span>
-                  )}
-                </span>
-                <span className="studio-academy-lesson-meta">
-                  <strong>{lesson.title}</strong>
-                  <small>{lesson.blurb || "Locked"}</small>
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <p className="studio-cn-list-empty" style={{ marginTop: 8 }}>
-          Lessons unlock after checkout
-        </p>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Left rail for Academy — same shell as CN: one studio-cn-sidebar, no nested
  * public-offers-rail (that class is a full page column, not an in-shell rail).
  */
 export function StudioAcademySidebar() {
   const academy = useStudioAcademyOptional();
-  const detail = useQuery(
-    api.academy.getCourse,
-    academy?.courseId ? { courseId: academy.courseId } : "skip",
-  );
 
   let body: React.ReactNode;
   if (!academy) {
@@ -427,10 +344,8 @@ export function StudioAcademySidebar() {
         </div>
       </div>
     );
-  } else if (academy.courseId && detail?.owned) {
-    body = <OwnedLessonRail courseId={academy.courseId} />;
   } else if (academy.courseId) {
-    body = <UnownedOutlineRail courseId={academy.courseId} />;
+    body = <LessonRail courseId={academy.courseId} />;
   } else {
     body = <CatalogFilters />;
   }
