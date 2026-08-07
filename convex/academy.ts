@@ -223,7 +223,9 @@ export const getCourse = authedQuery({
 
     const admin = isAdminRole(ctx.user.role);
     const purchase = await findPurchase(ctx, ctx.user._id, course._id);
-    const owned = Boolean(purchase) || admin;
+    // Learner entitlement = purchase only. Admins see the same unpaid lock UI
+    // unless they buy / are granted the course (admin tools stay separate).
+    const owned = Boolean(purchase);
     if (course.status !== "published" && !admin) return null;
 
     const lessonDocs = await listLessonsForCourse(ctx, course._id, {
@@ -252,7 +254,7 @@ export const getCourse = authedQuery({
       descriptionMarkdown: course.descriptionMarkdown,
       priceCredits: course.priceCredits,
       coverUrl: await coverUrlFor(course.coverBunnyPath),
-      owned: Boolean(purchase) || admin,
+      owned,
       hasIntroVideo: Boolean(courseIntroVideoId(course)),
       lessonCount: lessonDocs.filter((l) => l.status === "published").length,
       lessons,
@@ -304,10 +306,12 @@ export const getLessonPlaybackAccess = authedQuery({
     const course = await ctx.db.get("academyCourses", lesson.courseId);
     if (!course) return { allowed: false as const };
     const admin = isAdminRole(ctx.user.role);
-    if (!admin) {
-      if (course.status !== "published" || lesson.status !== "published") {
-        return { allowed: false as const };
-      }
+    const published =
+      course.status === "published" && lesson.status === "published";
+    if (!published) {
+      // Draft/unpublished: admins may still preview via admin tooling path.
+      if (!admin) return { allowed: false as const };
+    } else {
       const purchase = await findPurchase(ctx, ctx.user._id, course._id);
       if (!purchase) return { allowed: false as const };
     }
@@ -1430,7 +1434,6 @@ async function requireCourseAccessForComments(
   viewer: Doc<"users">,
 ): Promise<Doc<"academyCourses">> {
   const course = await requirePublishedCourseForUser(ctx, courseId, viewer);
-  if (isAdminRole(viewer.role)) return course;
   const purchase = await findPurchase(ctx, viewer._id, courseId);
   if (!purchase) {
     throw new Error("Purchase this course to join the discussion");
