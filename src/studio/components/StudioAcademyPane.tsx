@@ -294,8 +294,8 @@ export function StudioAcademyPane({
                     <h1>{listTab === "mine" ? "My courses" : "Academy"}</h1>
                     <p>
                       {listTab === "mine"
-                        ? "Your courses — open them anytime from here."
-                        : "Production courses live here in Studio — built for how you create."}
+                        ? "Your courses. Open them anytime from here."
+                        : "Learn the skills you need to create professional ads with AI in Studio."}
                     </p>
                   </div>
                 </section>
