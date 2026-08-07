@@ -1371,6 +1371,7 @@ export function StudioShell({
   const [optimisticByThread, setOptimisticByThread] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("general");
+  const [billingTopUpPrefillCents, setBillingTopUpPrefillCents] = useState(null);
   /** PayWise return celebration — full-screen above all chrome. */
   const [paymentCelebration, setPaymentCelebration] = useState(null);
   /** Full-screen handoff while creating checkout + leaving for PayWise. */
@@ -4724,10 +4725,19 @@ export function StudioShell({
     onActivityOpenBilling: () => {
       openSettingsTab("billing");
     },
+    topUpPrefillCents: billingTopUpPrefillCents,
+    onTopUpPrefillConsumed: () => setBillingTopUpPrefillCents(null),
   };
 
-  const openCreditsPane = useCallback(() => {
-    if (settingsOpen && settingsSection === "billing" && !isMobile) {
+  const openCreditsPane = useCallback((opts) => {
+    const amountCents =
+      opts && typeof opts === "object" && Number.isFinite(opts.amountCents)
+        ? Math.max(0, Math.round(opts.amountCents))
+        : null;
+    if (amountCents != null && amountCents > 0) {
+      setBillingTopUpPrefillCents(amountCents);
+    }
+    if (settingsOpen && settingsSection === "billing" && !isMobile && amountCents == null) {
       setSettingsOpen(false);
       return;
     }
@@ -29465,6 +29475,7 @@ function ActivePane({
       <StudioAcademyPane
         onOpenCredits={onOpenCredits ?? onOpenSettings}
         creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
+        creditBalance={billingAccount?.creditBalance}
       />,
     );
   }
@@ -31878,6 +31889,8 @@ function SettingsSidePanel({
   onActivityOpenMessages,
   onActivityOpenPost,
   onActivityOpenBilling,
+  topUpPrefillCents,
+  onTopUpPrefillConsumed,
   isMobile = false,
 }) {
   useEffect(() => {
@@ -31907,6 +31920,8 @@ function SettingsSidePanel({
       onActivityOpenMessages={onActivityOpenMessages}
       onActivityOpenPost={onActivityOpenPost}
       onActivityOpenBilling={onActivityOpenBilling}
+      topUpPrefillCents={topUpPrefillCents}
+      onTopUpPrefillConsumed={onTopUpPrefillConsumed}
     />
   );
 
@@ -32209,6 +32224,8 @@ function SettingsWorkspacePane({
   onActivityOpenMessages,
   onActivityOpenPost,
   onActivityOpenBilling,
+  topUpPrefillCents,
+  onTopUpPrefillConsumed,
 }) {
   const [section, setSection] = useState(tab === "top-up" ? "billing" : tab || "general");
   const [selectedPlanKey, setSelectedPlanKey] = useState("custom");
@@ -32256,6 +32273,24 @@ function SettingsWorkspacePane({
     const next = tab === "top-up" ? "billing" : tab || "general";
     setSection(next);
   }, [tab]);
+
+  useEffect(() => {
+    if (topUpPrefillCents == null) return;
+    const cents = Math.max(minAmountCents, Math.round(Number(topUpPrefillCents) || 0));
+    if (!Number.isFinite(cents) || cents <= 0) {
+      onTopUpPrefillConsumed?.();
+      return;
+    }
+    setSection("billing");
+    const matched = plans.find((plan) => plan.amountCents === cents);
+    setSelectedPlanKey(matched?.key ?? "custom");
+    setCustomAmountInput(amountInputFromCents(cents));
+    setCustomAmountError("");
+    setPaymentStatus("");
+    clientRequestIdRef.current = null;
+    onTopUpPrefillConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once per prefill handoff
+  }, [topUpPrefillCents, minAmountCents]);
 
   useEffect(() => {
     if (typeof window === "undefined" || paymentReturnHandledRef.current) return;

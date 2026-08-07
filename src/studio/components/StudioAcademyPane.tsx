@@ -22,7 +22,9 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
+  creditsToCents,
   formatTtdFromCredits,
+  topUpMinAmountCents,
 } from "@/studio/lib/money";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
@@ -184,9 +186,11 @@ function BannerStage({
 export function StudioAcademyPane({
   onOpenCredits,
   creditPriceCents,
+  creditBalance,
 }: {
-  onOpenCredits?: () => void;
+  onOpenCredits?: (opts?: { amountCents?: number }) => void;
   creditPriceCents?: number;
+  creditBalance?: number;
 }) {
   const price = creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
   const academy = useStudioAcademy();
@@ -273,8 +277,22 @@ export function StudioAcademyPane({
     selectedLesson?._id,
   ]);
 
+  function openBillingForShortfall(shortfallCredits: number) {
+    const neededCents = creditsToCents(Math.max(0, shortfallCredits), price);
+    const amountCents = Math.max(topUpMinAmountCents(price), neededCents);
+    setBuyArmed(false);
+    onOpenCredits?.({ amountCents });
+  }
+
   async function buy() {
-    if (!academy.courseId) return;
+    if (!academy.courseId || !detail) return;
+    const balance = Number(creditBalance ?? 0);
+    const priceCredits = detail.priceCredits;
+    if (Number.isFinite(balance) && balance < priceCredits) {
+      openBillingForShortfall(priceCredits - balance);
+      toast.message("Top up to unlock this course");
+      return;
+    }
     setBusy(true);
     try {
       await purchase({ courseId: academy.courseId });
@@ -285,8 +303,8 @@ export function StudioAcademyPane({
       const message = friendlyConvexError(error, "Purchase failed");
       toast.error(message);
       if (/not enough balance|top up/i.test(message)) {
-        setBuyArmed(false);
-        onOpenCredits?.();
+        const shortfall = Math.max(0, priceCredits - Number(creditBalance ?? 0));
+        openBillingForShortfall(shortfall || priceCredits);
       }
     } finally {
       setBusy(false);
@@ -294,7 +312,14 @@ export function StudioAcademyPane({
   }
 
   function handleBuyClick() {
-    if (!academy.courseId || owned || busy) return;
+    if (!academy.courseId || owned || busy || !detail) return;
+    const balance = Number(creditBalance ?? 0);
+    const priceCredits = detail.priceCredits;
+    if (Number.isFinite(balance) && balance < priceCredits) {
+      openBillingForShortfall(priceCredits - balance);
+      toast.message("Top up to unlock this course");
+      return;
+    }
     if (buyArmed) {
       void buy();
       return;

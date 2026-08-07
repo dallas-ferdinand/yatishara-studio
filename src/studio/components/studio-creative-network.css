@@ -217,11 +217,13 @@
 
 .studio-academy-buy-cancel {
   flex: 0 0 auto;
-  align-self: stretch;
-  width: 34px;
-  min-width: 34px;
-  height: auto;
-  min-height: 34px;
+  align-self: center;
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
 }
 
 .studio-academy-buy-group .public-offers-btn.is-primary.is-confirm {
