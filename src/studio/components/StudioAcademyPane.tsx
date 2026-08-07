@@ -67,6 +67,7 @@ function CheckoutDock({
   busy,
   confirming,
   owned,
+  courseTitle,
   priceLabel,
   lessonCount,
   needsTopUp,
@@ -81,6 +82,7 @@ function CheckoutDock({
   busy: boolean;
   confirming: boolean;
   owned: boolean;
+  courseTitle: string;
   priceLabel: string;
   lessonCount: number;
   needsTopUp: boolean;
@@ -89,100 +91,135 @@ function CheckoutDock({
   totalDueCents: number;
 }) {
   const paywiseTotalShort = formatTtdShort(totalDueCents);
+  const totalDueLabel = formatTtdCents(totalDueCents);
+  const feeLabel = formatTtdShort(feeCents);
+  const lessonMeta =
+    lessonCount === 1 ? "1 lesson" : `${lessonCount} lessons`;
   const body = (
     <div className="public-offers-rail-detail">
       <section className="studio-academy-checkout" aria-label="Course checkout">
-        <p className="studio-academy-checkout-kicker">Checkout</p>
-        <p className="studio-academy-checkout-amount">{priceLabel}</p>
-        <dl className="studio-academy-checkout-rows">
-          <div className="studio-academy-checkout-row">
-            <dt>Access</dt>
-            <dd>Lifetime</dd>
-          </div>
-          <div className="studio-academy-checkout-row">
-            <dt>Lessons</dt>
-            <dd>{lessonCount}</dd>
-          </div>
-          {needsTopUp ? (
-            <div className="studio-academy-checkout-row">
-              <dt>Top up</dt>
-              <dd>{topUpLabel}</dd>
-            </div>
+        <header className="studio-academy-checkout-hero">
+          <span className="studio-academy-checkout-kicker">
+            {needsTopUp && !owned ? "Due today" : "Checkout"}
+          </span>
+          <strong className="studio-academy-checkout-amount">
+            {needsTopUp && !owned ? totalDueLabel : priceLabel}
+          </strong>
+          {courseTitle ? (
+            <span className="studio-academy-checkout-course" title={courseTitle}>
+              {courseTitle}
+            </span>
           ) : null}
-        </dl>
+          <ul className="studio-academy-checkout-chips" aria-label="Course access">
+            <li>Lifetime</li>
+            <li>{lessonMeta}</li>
+          </ul>
+        </header>
+
         {owned ? (
           <p className="studio-academy-checkout-note">You own this course.</p>
         ) : needsTopUp ? (
-          <div className="studio-academy-checkout-paywise">
-            {feeCents > 0 ? (
-              <p className="studio-settings-topup-fee">
-                Includes transaction fee · PayWise{" "}
-                <strong>{formatTtdShort(feeCents)}</strong>
-              </p>
-            ) : null}
-            <button
-              type="button"
-              className={`studio-settings-topup-pay${busy ? " is-loading" : ""}`}
-              disabled={busy}
-              onClick={onPaywiseClick}
-              aria-busy={busy}
-              aria-label={
-                busy
-                  ? "Opening PayWise"
-                  : `Pay ${paywiseTotalShort} with PayWise to unlock course`
-              }
-            >
-              {busy ? (
-                <Loader2 className="studio-settings-topup-pay-spin" aria-hidden="true" />
+          <>
+            <dl className="studio-academy-checkout-receipt">
+              <div className="studio-academy-checkout-row">
+                <dt>Course</dt>
+                <dd>{priceLabel}</dd>
+              </div>
+              <div className="studio-academy-checkout-row">
+                <dt>Top up</dt>
+                <dd>{topUpLabel}</dd>
+              </div>
+              {feeCents > 0 ? (
+                <div className="studio-academy-checkout-row is-muted">
+                  <dt>PayWise fee</dt>
+                  <dd>{feeLabel}</dd>
+                </div>
               ) : null}
-              <span className="studio-settings-topup-pay-label">
-                {busy
-                  ? "Opening PayWise…"
-                  : `Pay ${paywiseTotalShort} with PayWise`}
-              </span>
-            </button>
-            <p className="studio-settings-topup-secure">
-              <Lock aria-hidden="true" />
-              <span>secure checkout</span>
-            </p>
-          </div>
-        ) : (
-          <div className="studio-academy-buy-group">
-            {confirming ? (
+              <div className="studio-academy-checkout-row is-total">
+                <dt>Total</dt>
+                <dd>{totalDueLabel}</dd>
+              </div>
+            </dl>
+            <div className="studio-academy-checkout-paywise">
               <button
                 type="button"
-                className="public-offers-btn is-icon studio-academy-buy-cancel"
+                className={`studio-settings-topup-pay${busy ? " is-loading" : ""}`}
                 disabled={busy}
-                onClick={onCancelConfirm}
-                aria-label="Cancel purchase"
-                title="Cancel"
+                onClick={onPaywiseClick}
+                aria-busy={busy}
+                aria-label={
+                  busy
+                    ? "Opening PayWise"
+                    : `Pay ${paywiseTotalShort} with PayWise to unlock course`
+                }
               >
-                <X aria-hidden="true" />
+                {busy ? (
+                  <Loader2
+                    className="studio-settings-topup-pay-spin"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span className="studio-settings-topup-pay-label">
+                  {busy
+                    ? "Opening PayWise…"
+                    : `Pay ${paywiseTotalShort} with PayWise`}
+                </span>
               </button>
-            ) : null}
-            <button
-              type="button"
-              className={`public-offers-btn is-primary is-block${confirming ? " is-confirm" : ""}`}
-              disabled={busy}
-              onClick={onBuyClick}
-              aria-label={
-                busy
-                  ? "Buying"
+              <p className="studio-settings-topup-secure">
+                <Lock aria-hidden="true" />
+                <span>secure checkout · unlocks after payment</span>
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <dl className="studio-academy-checkout-receipt">
+              <div className="studio-academy-checkout-row is-total">
+                <dt>Course</dt>
+                <dd>{priceLabel}</dd>
+              </div>
+            </dl>
+            <div className="studio-academy-buy-group">
+              {confirming ? (
+                <button
+                  type="button"
+                  className="public-offers-btn is-icon studio-academy-buy-cancel"
+                  disabled={busy}
+                  onClick={onCancelConfirm}
+                  aria-label="Cancel purchase"
+                  title="Cancel"
+                >
+                  <X aria-hidden="true" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={`public-offers-btn is-primary is-block${confirming ? " is-confirm" : ""}`}
+                disabled={busy}
+                onClick={onBuyClick}
+                aria-label={
+                  busy
+                    ? "Buying"
+                    : confirming
+                      ? `Confirm buy for ${priceLabel}`
+                      : `Buy course for ${priceLabel}`
+                }
+              >
+                {busy ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : confirming ? (
+                  <Check aria-hidden="true" />
+                ) : (
+                  <ShoppingBag aria-hidden="true" />
+                )}
+                {busy
+                  ? "Buying…"
                   : confirming
-                    ? `Confirm buy for ${priceLabel}`
-                    : `Buy course for ${priceLabel}`
-              }
-            >
-              {busy ? (
-                <Loader2 className="animate-spin" aria-hidden="true" />
-              ) : confirming ? (
-                <Check aria-hidden="true" />
-              ) : (
-                <ShoppingBag aria-hidden="true" />
-              )}
-              {busy ? "Buying…" : confirming ? `Confirm · ${priceLabel}` : "Buy course"}
-            </button>
-          </div>
+                    ? `Confirm · ${priceLabel}`
+                    : "Buy course"}
+              </button>
+            </div>
+          </>
         )}
       </section>
     </div>
@@ -437,6 +474,7 @@ export function StudioAcademyPane({
     busy,
     confirming: buyArmed,
     owned,
+    courseTitle: detail?.title ?? "",
     priceLabel,
     lessonCount: detail?.lessonCount ?? 0,
     needsTopUp,
