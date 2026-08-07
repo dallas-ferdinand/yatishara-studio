@@ -870,29 +870,32 @@ button.studio-cn-card-btn.public-offers-card {
   min-width: 0;
 }
 
-/* Circle plate like header icon buttons (not a quiet ghost icon). */
+/* Match Studio header chrome circles (24px, mos-page + soft ring). */
 .studio-cn-book-bar-msg,
 .studio-cn-book-sidebar-head .public-offers-btn.is-icon {
-  width: 28px !important;
-  min-width: 28px !important;
-  height: 28px !important;
-  min-height: 28px !important;
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
   padding: 0 !important;
   border-radius: 999px !important;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
-  background: var(--mos-plate-strong, var(--cursor-surface-raised)) !important;
-  color: var(--color-cursor-text, var(--mos-text)) !important;
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7)) !important;
+  color: var(--color-cursor-muted, var(--mos-muted)) !important;
+  box-shadow: none !important;
 }
 
 .studio-cn-book-bar-msg:hover:not(:disabled),
 .studio-cn-book-sidebar-head .public-offers-btn.is-icon:hover:not(:disabled) {
-  background: var(--mos-active, var(--color-cursor-active)) !important;
+  background: var(--mos-hover, var(--color-cursor-hover)) !important;
+  color: var(--color-cursor-text, var(--mos-text)) !important;
 }
 
 .studio-cn-book-bar-msg svg,
 .studio-cn-book-sidebar-head .public-offers-btn.is-icon svg {
-  width: 15px;
-  height: 15px;
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
 }
 
 .studio-cn-offer-detail.is-mobile .studio-cn-book-bar .public-offers-btn {
