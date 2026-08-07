@@ -1379,7 +1379,7 @@
 .profile-comments-thread-preview strong {
   font-size: 13px;
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.05;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1389,7 +1389,8 @@
   color: var(--color-cursor-muted, color-mix(in srgb, currentColor 55%, transparent));
   font-size: 11px;
   font-weight: 500;
-  line-height: 1.1;
+  line-height: 1;
+  margin-top: -1px;
 }
 
 .profile-comments-list {
