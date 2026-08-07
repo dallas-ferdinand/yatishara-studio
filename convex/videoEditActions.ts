@@ -1861,11 +1861,18 @@ export const pullFrameForApi = internalAction({
       const timeLabel = seekTime.toFixed(2).replace(".", "s");
       const safeEdit = (row.name || "edit").replace(/[^\w.-]+/g, " ").trim().slice(0, 40) || "Edit";
       const filename = `Frame · ${safeEdit} · ${timeLabel}.jpg`;
+      const dest: { folderId: Id<"folders">; folderPath: string } = await ctx.runMutation(
+        internal.videoEditInternal.ensurePulledFramesFolder,
+        {
+          userId: args.userId,
+          sourceFolderId: row.folderId,
+        },
+      );
       const prepared: { assetId: Id<"assets">; bunnyPath: string } = await ctx.runMutation(
         internal.videoEditInternal.createFrameAsset,
         {
           userId: args.userId,
-          folderId: row.folderId,
+          folderId: dest.folderId,
           name: filename,
         },
       );
@@ -1884,7 +1891,7 @@ export const pullFrameForApi = internalAction({
       return {
         assetId: prepared.assetId,
         name: filename,
-        folderId: row.folderId,
+        folderId: dest.folderId,
         timeSec: args.assetId ? seekTime : timelineTime,
         sourceAssetId,
         url,
@@ -1901,6 +1908,8 @@ export const pullFrameForApi = internalAction({
 type SampleAssetFramesResult = {
   sourceAssetId: Id<"assets">;
   durationSec: number;
+  folderId: Id<"folders">;
+  folderPath: string;
   frames: Array<{
     timeSec: number;
     assetId: Id<"assets">;
@@ -1913,17 +1922,33 @@ type SampleAssetFramesResult = {
   viewHint: string;
 };
 
-/** Sample stills from a source video for agent QC (no edit project required). */
+function sampleTimesInRange(startSec: number, endSec: number, count: number): number[] {
+  const n = Math.max(1, Math.min(12, Math.floor(count)));
+  if (n === 1) {
+    return [(startSec + endSec) / 2];
+  }
+  const times: number[] = [];
+  for (let i = 0; i < n; i++) {
+    times.push(startSec + (i * (endSec - startSec)) / (n - 1));
+  }
+  return times;
+}
+
+/** Pull stills from a source video for agents (no edit project required). */
 export const sampleAssetFramesForApi = internalAction({
   args: {
     userId: v.id("users"),
     assetId: v.id("assets"),
     timesSec: v.optional(v.array(v.number())),
     count: v.optional(v.number()),
+    startSec: v.optional(v.number()),
+    endSec: v.optional(v.number()),
   },
   returns: v.object({
     sourceAssetId: v.id("assets"),
     durationSec: v.number(),
+    folderId: v.id("folders"),
+    folderPath: v.string(),
     frames: v.array(
       v.object({
         timeSec: v.number(),
@@ -1942,7 +1967,7 @@ export const sampleAssetFramesForApi = internalAction({
       await execFileAsync("ffmpeg", ["-version"]);
     } catch {
       throw new Error(
-        "Frame sample requires ffmpeg on the Convex action runtime. Install ffmpeg on the action host, then retry.",
+        "Frame pull requires ffmpeg on the Convex action runtime. Install ffmpeg on the action host, then retry.",
       );
     }
 
@@ -1958,7 +1983,7 @@ export const sampleAssetFramesForApi = internalAction({
     });
     if (!source?.bunnyPath) throw new Error("Source media not found.");
     if (source.kind !== "video") {
-      throw new Error("studio_sample_video_frames only works on video assets.");
+      throw new Error("studio_pull_frames only works on video assets.");
     }
 
     const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60;
@@ -1973,22 +1998,32 @@ export const sampleAssetFramesForApi = internalAction({
           ? source.durationSeconds
           : probed;
 
+      const maxT = Math.max(0, durationSec - 0.05);
       let times: number[] = [];
       if (Array.isArray(args.timesSec) && args.timesSec.length > 0) {
-        times = args.timesSec.map((t) => Math.max(0, Math.min(durationSec - 0.05, Number(t) || 0)));
+        times = args.timesSec.map((t) => Math.max(0, Math.min(maxT, Number(t) || 0)));
       } else {
-        const n = Math.max(1, Math.min(6, Math.floor(args.count ?? 3)));
-        if (n === 1) {
-          times = [Math.max(0, durationSec * 0.5)];
-        } else {
-          for (let i = 0; i < n; i++) {
-            const frac = (i + 0.5) / n;
-            times.push(Math.max(0, Math.min(durationSec - 0.05, durationSec * frac)));
-          }
+        const startRaw = typeof args.startSec === "number" ? args.startSec : 0;
+        const endRaw = typeof args.endSec === "number" ? args.endSec : durationSec;
+        let startSec = Math.max(0, Math.min(maxT, startRaw));
+        let endSec = Math.max(0, Math.min(maxT, endRaw));
+        if (endSec < startSec) {
+          const swap = startSec;
+          startSec = endSec;
+          endSec = swap;
         }
+        times = sampleTimesInRange(startSec, endSec, args.count ?? 3);
       }
       // de-dupe + cap
-      times = [...new Set(times.map((t) => Math.round(t * 100) / 100))].slice(0, 6);
+      times = [...new Set(times.map((t) => Math.round(t * 100) / 100))].slice(0, 12);
+
+      const dest: { folderId: Id<"folders">; folderPath: string } = await ctx.runMutation(
+        internal.videoEditInternal.ensurePulledFramesFolder,
+        {
+          userId: args.userId,
+          sourceFolderId: source.folderId,
+        },
+      );
 
       const safeBase = (source.name || "clip").replace(/[^\w.-]+/g, " ").trim().slice(0, 36) || "clip";
       const frames: Array<{
@@ -2016,12 +2051,12 @@ export const sampleAssetFramesForApi = internalAction({
         ]);
         const body = await readFile(framePath);
         const timeLabel = seekTime.toFixed(2).replace(".", "s");
-        const filename = `QC · ${safeBase} · ${timeLabel}.jpg`;
+        const filename = `Frame · ${safeBase} · ${timeLabel}.jpg`;
         const prepared: { assetId: Id<"assets">; bunnyPath: string } = await ctx.runMutation(
           internal.videoEditInternal.createFrameAsset,
           {
             userId: args.userId,
-            folderId: source.folderId,
+            folderId: dest.folderId,
             name: filename,
           },
         );
@@ -2048,10 +2083,12 @@ export const sampleAssetFramesForApi = internalAction({
       return {
         sourceAssetId: args.assetId,
         durationSec,
+        folderId: dest.folderId,
+        folderPath: dest.folderPath,
         frames,
         expiresUnix,
         viewHint:
-          "Cursor Read preferredViewUrl on each frame to visually QC artifacts before trimming. Prefer timesSec for suspected error windows; default count=3 samples mid thirds.",
+          "Cursor Read preferredViewUrl on each frame. Prefer startSec+endSec+count for a window, or timesSec for exact hits. Stills land in Pulled Frames (sibling folder). See MCP resource studio://guides/pull-frames.",
       };
     } finally {
       await rm(tempDir, { recursive: true, force: true });

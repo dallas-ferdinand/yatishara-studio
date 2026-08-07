@@ -151,6 +151,72 @@ export const createFrameAsset = internalMutation({
   },
 });
 
+const PULLED_FRAMES_FOLDER_NAME = "Pulled Frames";
+
+/**
+ * Sibling of the source folder under the same parent: `…/Pulled Frames`.
+ * When the source has no parent (workspace root), create/reuse a root sibling.
+ */
+export const ensurePulledFramesFolder = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sourceFolderId: v.id("folders"),
+  },
+  returns: v.object({
+    folderId: v.id("folders"),
+    folderPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const source = await ctx.db.get(args.sourceFolderId);
+    if (!source || source.ownerId !== args.userId || source.deletedAt) {
+      throw new Error("Source folder not found.");
+    }
+    const parentId = source.parentId;
+    const siblings = await ctx.db
+      .query("folders")
+      .withIndex("by_owner_and_parent", (q) =>
+        q.eq("ownerId", args.userId).eq("parentId", parentId),
+      )
+      .collect();
+    const existing = siblings.find(
+      (f) => !f.deletedAt && f.name === PULLED_FRAMES_FOLDER_NAME,
+    );
+    if (existing) {
+      const parts: string[] = [];
+      let currentId: Id<"folders"> | undefined = existing._id;
+      for (let guard = 0; currentId && guard < 32; guard++) {
+        const folder = await ctx.db.get(currentId);
+        if (!folder || folder.ownerId !== args.userId || folder.deletedAt) break;
+        parts.unshift(folder.name);
+        currentId = folder.parentId;
+      }
+      return { folderId: existing._id, folderPath: parts.join("/") || PULLED_FRAMES_FOLDER_NAME };
+    }
+    const now = Date.now();
+    const folderId = await ctx.db.insert("folders", {
+      ownerId: args.userId,
+      parentId,
+      name: PULLED_FRAMES_FOLDER_NAME,
+      icon: "Images",
+      sortOrder: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const parts: string[] = [];
+    let currentId: Id<"folders"> | undefined = folderId;
+    for (let guard = 0; currentId && guard < 32; guard++) {
+      const folder = await ctx.db.get(currentId);
+      if (!folder || folder.ownerId !== args.userId || folder.deletedAt) break;
+      parts.unshift(folder.name);
+      currentId = folder.parentId;
+    }
+    return {
+      folderId,
+      folderPath: parts.join("/") || PULLED_FRAMES_FOLDER_NAME,
+    };
+  },
+});
+
 export const finalizeExportAsset = internalMutation({
   args: {
     assetId: v.id("assets"),

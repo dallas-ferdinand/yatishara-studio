@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { requireConfig } from "./client.js";
+import { registerGuideResources } from "./resources/guides.js";
 import { registerAccountTools } from "./tools/account.js";
 import { registerAccountExtraTools } from "./tools/accountExtra.js";
 import { registerAssistanceTools } from "./tools/assistance.js";
@@ -20,8 +21,9 @@ import { registerVoiceTools } from "./tools/voices.js";
 requireConfig();
 const server = new McpServer({
   name: "yatishara-studio",
-  version: "0.7.6"
+  version: "0.8.2"
 });
+registerGuideResources(server);
 registerAccountTools(server);
 registerAccountExtraTools(server);
 registerContextTools(server);

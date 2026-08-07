@@ -13,33 +13,66 @@ export function registerAssetTools(server: McpServer) {
 
   server.tool(
     "studio_view_media",
-    "Return signed media URLs for the host client to view (e.g. Cursor Read on preferredViewUrl). Does NOT call Studio AI and uses no generation credits. Prefer thumbnailUrl/preferredViewUrl for images. For VIDEO QC before editing, use studio_sample_video_frames (Cursor cannot scrub MP4 via Read).",
+    "Return signed media URLs for the host client to view (e.g. Cursor Read on preferredViewUrl). Does NOT call Studio AI and uses no generation credits. Prefer thumbnailUrl/preferredViewUrl for images. For VIDEO stills before editing, use studio_pull_frames (Cursor cannot scrub MP4 via Read).",
     { assetId: z.string() },
     async ({ assetId }) =>
       jsonResult(await studioFetch(`/assets/${encodeURIComponent(assetId)}/media`)),
   );
 
+  const pullFramesSchema = {
+    assetId: z.string(),
+    startSec: z
+      .number()
+      .optional()
+      .describe("Window start in source seconds (default 0)"),
+    endSec: z
+      .number()
+      .optional()
+      .describe("Window end in source seconds (default = duration)"),
+    count: z
+      .number()
+      .optional()
+      .describe(
+        "Evenly spaced samples in [startSec, endSec], inclusive endpoints when count>=2 (default 3, max 12)",
+      ),
+    timesSec: z
+      .array(z.number())
+      .optional()
+      .describe("Exact source timestamps (overrides start/end/count when set)"),
+  };
+
+  const pullFramesHandler = async ({
+    assetId,
+    startSec,
+    endSec,
+    count,
+    timesSec,
+  }: {
+    assetId: string;
+    startSec?: number;
+    endSec?: number;
+    count?: number;
+    timesSec?: number[];
+  }) =>
+    jsonResult(
+      await studioFetch(`/assets/${encodeURIComponent(assetId)}/frames`, {
+        method: "POST",
+        body: JSON.stringify({ startSec, endSec, count, timesSec }),
+      }),
+    );
+
+  server.tool(
+    "studio_pull_frames",
+    "[preferred] Pull N stills from a source video between startSec and endSec (or exact timesSec). Saves Frame · *.jpg into a sibling Pulled Frames folder (not next to the clip). Returns preferredViewUrl per frame — Cursor Read those images. No edit project required. See MCP resource studio://guides/pull-frames. Uses generate+write scope.",
+    pullFramesSchema,
+    pullFramesHandler,
+  );
+
   server.tool(
     "studio_sample_video_frames",
-    "[preferred] QC a video before cutting: ffmpeg stills at timesSec[] or evenly spaced count (default 3, max 6). Saves QC · *.jpg next to the source; return preferredViewUrl per frame — Cursor Read those images to spot artifacts/glitches. No edit project required. Uses generate+write scope.",
-    {
-      assetId: z.string(),
-      timesSec: z
-        .array(z.number())
-        .optional()
-        .describe("Exact source timestamps to sample (preferred when you suspect a bad window)"),
-      count: z
-        .number()
-        .optional()
-        .describe("Evenly spaced samples across duration when timesSec omitted (default 3, max 6)"),
-    },
-    async ({ assetId, timesSec, count }) =>
-      jsonResult(
-        await studioFetch(`/assets/${encodeURIComponent(assetId)}/frames`, {
-          method: "POST",
-          body: JSON.stringify({ timesSec, count }),
-        }),
-      ),
+    "[deprecated] Alias of studio_pull_frames. Prefer studio_pull_frames (startSec/endSec/count → Pulled Frames folder).",
+    pullFramesSchema,
+    pullFramesHandler,
   );
 
   server.tool(

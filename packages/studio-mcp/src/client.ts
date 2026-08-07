@@ -259,15 +259,15 @@ export const AGENT_START_HERE = {
     "studio_project_context — pack for an existing project folder",
     "studio_estimate_generation → studio_generate_* (or studio_generate_batch)",
     "studio_production_guide — before element/character/prop sheets",
-    "studio_view_media — inspect image outputs; for VIDEO use studio_sample_video_frames first",
-    "studio_sample_video_frames → Cursor Read frame URLs → studio_create_edit → trim bad windows → studio_pull_frame → studio_export_edit",
+    "studio_view_media — inspect image outputs; for VIDEO use studio_pull_frames first",
+    "studio_pull_frames → Cursor Read frame URLs → studio_create_edit → trim windows → studio_pull_frame → studio_export_edit",
   ],
   lanes: {
     direct: "studio_generate_image|video|script|audio — agent-owned prompts (default for production skills)",
     assisted:
       "studio_ensure_brief → … → studio_approve_brief — Studio Assistance UI lane; use only when user wants assisted briefs",
     editing:
-      "QC with studio_sample_video_frames (Read stills) → create_edit → append/update trims → pull_frame to verify → export. Keep audio unless asked to mute. Open editor live-syncs MCP writes; use studio_update_edit full replace if timeline stuck. Do not shell-ffmpeg when these tools exist.",
+      "studio_pull_frames (startSec/endSec/count; Read stills in Pulled Frames) → create_edit → append/update trims → pull_frame to verify → export. Keep audio unless asked to mute. Open editor live-syncs MCP writes; use studio_update_edit full replace if timeline stuck. Do not shell-ffmpeg when these tools exist. Guide: studio://guides/pull-frames",
   },
   avoidBlindBfs: "Prefer studio_workspace_tree / studio_search over repeated studio_list_folders.",
   stillUsefulNotDuplicates: [

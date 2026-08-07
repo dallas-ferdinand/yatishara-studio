@@ -92,7 +92,7 @@ const clipPatch = z.object({
 export function registerEditTools(server: McpServer) {
   server.tool(
     "studio_create_edit",
-    "[preferred] Create a video edit project. Pass assetIds to seed sequential clips on the timeline (video/image on track-v1, audio on audio tracks). Before cutting: studio_sample_video_frames on each source to QC artifacts. Keep source audio unless user asks mute (do NOT set effects.volume 0 by default). Open editor live-syncs MCP writes — still prefer studio_get_edit after big replaces.",
+    "[preferred] Create a video edit project. Pass assetIds to seed sequential clips on the timeline (video/image on track-v1, audio on audio tracks). Before cutting: studio_pull_frames on each source (startSec/endSec/count). Keep source audio unless user asks mute (do NOT set effects.volume 0 by default). Open editor live-syncs MCP writes — still prefer studio_get_edit after big replaces.",
     {
       folderId: z.string().optional(),
       name: z.string().optional(),
@@ -279,7 +279,7 @@ export function registerEditTools(server: McpServer) {
 
   server.tool(
     "studio_pull_frame",
-    "[preferred] Extract one still from an open edit via ffmpeg (saved in the edit folder). Pass timeSec for timeline playhead, or assetId + localTimeSec for a source. Then Read preferredViewUrl. For pre-edit multi-frame QC of a source clip, use studio_sample_video_frames instead.",
+    "[preferred] Extract one still from an open edit via ffmpeg (saved in sibling Pulled Frames folder). Pass timeSec for timeline playhead, or assetId + localTimeSec for a source. Then Read preferredViewUrl. For multi-frame pulls on a source clip, use studio_pull_frames instead.",
     {
       projectId: z.string(),
       timeSec: z.number().optional().describe("Timeline playhead seconds (default 0)"),

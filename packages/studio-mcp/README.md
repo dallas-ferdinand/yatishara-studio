@@ -31,12 +31,16 @@ stdio MCP server for [Yatishara Studio](https://studio.yatishara.com). Browse fo
 1. **`studio_bootstrap`** — credits + folder tree + start-here hints (optional `path` / `folderId`)
 2. **`studio_ensure_path`** — create nested folders in one call
 3. **`studio_estimate_generation`** / **`studio_estimate_batch`** then **`studio_generate_*`** / **`studio_generate_batch`**
-4. **`studio_view_media`** — inspect image outputs; for **video QC** use **`studio_sample_video_frames`** then Cursor Read the stills
-5. **Edit timeline:** sample frames → `studio_create_edit` → `studio_edit_append_clips` / trims → `studio_pull_frame` to verify → `studio_export_edit` (keep source audio unless asked to mute; open editor live-syncs MCP writes)
+4. **`studio_view_media`** — inspect image outputs; for **video stills** use **`studio_pull_frames`** (`startSec`/`endSec`/`count`) then Cursor Read the stills (see MCP resource `studio://guides/pull-frames`)
+5. **Edit timeline:** pull frames → `studio_create_edit` → `studio_edit_append_clips` / trims → `studio_pull_frame` to verify → `studio_export_edit` (keep source audio unless asked to mute; open editor live-syncs MCP writes)
 
 Prefer `studio_workspace_tree` / `studio_search` / `studio_project_context` over blind `studio_list_folders` BFS.
 
-Tools marked **`[preferred]`** in descriptions are the default path. **`[deprecated]`** = keep for compatibility only (`studio_list_presets`). Nothing else was removed — list/get CRUD tools are still valid, just not the first choice.
+Tools marked **`[preferred]`** in descriptions are the default path. **`[deprecated]`** = keep for compatibility only (`studio_list_presets`, `studio_sample_video_frames`). Nothing else was removed — list/get CRUD tools are still valid, just not the first choice.
+
+## Resources
+
+- `studio://guides/pull-frames` — how to pull N stills between two times; lands in sibling **Pulled Frames** folder
 
 ## Tools
 
@@ -50,7 +54,7 @@ Tools marked **`[preferred]`** in descriptions are the default path. **`[depreca
 
 ### Folders & files
 - `studio_list_folders`, `studio_get_folder`, `studio_folder_contents`, `studio_create_folder`, `studio_update_folder`
-- `studio_get_asset`, `studio_view_media`, `studio_sample_video_frames` (video QC stills), `studio_upload_asset`, `studio_reserve_upload`, `studio_complete_upload`, `studio_update_asset`, `studio_duplicate_asset`
+- `studio_get_asset`, `studio_view_media`, `studio_pull_frames` (video stills → Pulled Frames), `studio_sample_video_frames` (deprecated alias), `studio_upload_asset`, `studio_reserve_upload`, `studio_complete_upload`, `studio_update_asset`, `studio_duplicate_asset`
 - `studio_get_document`, `studio_create_document`, `studio_update_document`
 - `studio_list_trash`, `studio_trash`, `studio_restore`
 
@@ -82,8 +86,9 @@ Tools marked **`[preferred]`** in descriptions are the default path. **`[depreca
 - **Timeline ops (preferred):** `studio_edit_append_clips`, `studio_edit_update_clips`, `studio_edit_remove_clips`, `studio_edit_reorder_clips`, `studio_edit_split_clip`, `studio_edit_set_transition`
 - `studio_edit_add_text`, `studio_edit_duplicate_clip`, `studio_edit_detach_audio`, `studio_edit_set_track_muted`, `studio_edit_set_frame_ratio`
 - `studio_list_text_presets`, `studio_edit_apply_text_preset`
-- `studio_sample_video_frames` — multi-still QC of a source video (no edit required); Cursor Read returned URLs
-- `studio_pull_frame` — one ffmpeg still from an open edit (then `studio_view_media` / Read)
+- `studio_pull_frames` — N stills from a source video (`startSec`/`endSec`/`count` or `timesSec`); saves into sibling **Pulled Frames**; Cursor Read returned URLs
+- `studio_sample_video_frames` — deprecated alias of `studio_pull_frames`
+- `studio_pull_frame` — one ffmpeg still from an open edit (also → Pulled Frames)
 - `studio_export_edit` — video or audio render → Studio asset (`exportKind`, `exportResolution`, `audioFormat`)
 - `studio_download_edit_package` — portable `.studio` package manifest (signed media + project JSON)
 - `studio_download_clip_segment` — trimmed Save as video/audio download URL

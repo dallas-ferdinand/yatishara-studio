@@ -496,12 +496,16 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       const body = await readJsonBody<{
         timesSec?: number[];
         count?: number;
+        startSec?: number;
+        endSec?: number;
       }>(request);
       const result = await ctx.runAction(internal.videoEditActions.sampleAssetFramesForApi, {
         userId: auth.userId,
         assetId,
         timesSec: body.timesSec,
         count: body.count,
+        startSec: body.startSec,
+        endSec: body.endSec,
       });
       return finish(jsonResponse(result));
     }
