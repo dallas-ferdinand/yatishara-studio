@@ -12099,6 +12099,17 @@ export function StudioShell({
           padding: 12px 14px 12px;
           background: color-mix(in srgb, var(--mos-plate, var(--cursor-surface)) 55%, transparent);
         }
+        .studio-settings-billing-receipt {
+          margin: 2px -14px 0;
+          padding: 2px 0 4px;
+          border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          background: var(--mos-page, var(--color-cursor-bg));
+        }
+        .studio-settings-billing-receipt .studio-academy-checkout-row {
+          padding-left: 14px;
+          padding-right: 14px;
+        }
         .studio-settings-workspace .studio-settings-invoices-card {
           padding: 0 !important;
         }
@@ -32689,11 +32700,34 @@ function SettingsWorkspacePane({
                       </button>
                     ))}
                   </div>
-                  {paywiseFeeCents > 0 ? (
-                    <p className="studio-settings-topup-fee">
-                      Includes transaction fee · PayWise{" "}
-                      <strong>{formatTtdShort(paywiseFeeCents)}</strong>
-                    </p>
+                  {Number.isFinite(customAmountCents) &&
+                  customAmountCents >= minAmountCents &&
+                  paywiseTotalCents > 0 ? (
+                    <dl className="studio-academy-checkout-receipt studio-settings-billing-receipt">
+                      <div className="studio-academy-checkout-row">
+                        <dt>Available balance</dt>
+                        <dd>
+                          {formatTtdFromCredits(
+                            billingAccount?.creditBalance ?? 0,
+                            pricing?.creditPriceCents,
+                          )}
+                        </dd>
+                      </div>
+                      <div className="studio-academy-checkout-row">
+                        <dt>Top up</dt>
+                        <dd>{formatTtdCents(customAmountCents)}</dd>
+                      </div>
+                      {paywiseFeeCents > 0 ? (
+                        <div className="studio-academy-checkout-row is-muted">
+                          <dt>PayWise fee</dt>
+                          <dd>{formatTtdShort(paywiseFeeCents)}</dd>
+                        </div>
+                      ) : null}
+                      <div className="studio-academy-checkout-row is-total">
+                        <dt>Total</dt>
+                        <dd>{formatTtdCents(paywiseTotalCents)}</dd>
+                      </div>
+                    </dl>
                   ) : null}
                   <button
                     type="button"
