@@ -6,115 +6,227 @@ import {
   GraduationCap,
   Library,
   Loader2,
+  Lock,
   Play,
+  ShoppingBag,
   Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { DEFAULT_CREDIT_PRICE_CENTS, formatTtdFromCredits } from "@/studio/lib/money";
+import {
+  DEFAULT_CREDIT_PRICE_CENTS,
+  formatTtdFromCredits,
+} from "@/studio/lib/money";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
+import { useStudioAcademy } from "./StudioAcademyContext";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import "./studio-creative-network.css";
 import "./public-offers.css";
 
-type CatalogCourse = {
-  _id: Id<"academyCourses">;
-  title: string;
-  slug: string;
-  blurb: string;
-  priceCredits: number;
-  coverUrl?: string;
-  owned: boolean;
-  sortOrder: number;
-  updatedAt: number;
-};
-
-/** Static demo banners under /public/academy/{slug}.webp */
 function demoCoverUrl(slug: string): string | undefined {
   if (!slug.startsWith("demo-")) return undefined;
   return `/academy/${slug}.webp`;
 }
 
-function courseBannerUrl(course: { slug: string; coverUrl?: string }): string | undefined {
+function courseBannerUrl(course: {
+  slug: string;
+  coverUrl?: string;
+}): string | undefined {
   return course.coverUrl || demoCoverUrl(course.slug);
+}
+
+function CheckoutDock({
+  showHead,
+  onBuy,
+  busy,
+  owned,
+  priceLabel,
+  lessonCount,
+}: {
+  showHead: boolean;
+  onBuy: () => void;
+  busy: boolean;
+  owned: boolean;
+  priceLabel: string;
+  lessonCount: number;
+}) {
+  const body = (
+    <div className="public-offers-rail-detail">
+      <section className="public-offers-panel">
+        <h2>Checkout</h2>
+        <p className="public-offers-price">{priceLabel}</p>
+        <dl className="public-offers-rows">
+          <div className="public-offers-row">
+            <dt>Access</dt>
+            <dd>Lifetime</dd>
+          </div>
+          <div className="public-offers-row">
+            <dt>Lessons</dt>
+            <dd>{lessonCount}</dd>
+          </div>
+        </dl>
+        {owned ? (
+          <p className="public-offers-note">You own this course.</p>
+        ) : (
+          <button
+            type="button"
+            className="public-offers-btn is-primary is-block"
+            disabled={busy}
+            onClick={onBuy}
+          >
+            {busy ? (
+              <Loader2 className="animate-spin" aria-hidden="true" />
+            ) : (
+              <ShoppingBag aria-hidden="true" />
+            )}
+            Buy course
+          </button>
+        )}
+      </section>
+    </div>
+  );
+
+  if (!showHead) return body;
+
+  return (
+    <aside className="studio-cn-book-sidebar" aria-label="Course checkout">
+      <div className="studio-cn-book-sidebar-head cursor-panel-head cursor-sidebar-head shrink-0">
+        <strong>Buy</strong>
+      </div>
+      <div className="studio-cn-book-sidebar-body">{body}</div>
+    </aside>
+  );
+}
+
+function BannerStage({
+  bannerUrl,
+  embedUrl,
+  loading,
+  onPlay,
+  playLabel,
+}: {
+  bannerUrl?: string;
+  embedUrl: string | null;
+  loading: boolean;
+  onPlay: () => void;
+  playLabel: string;
+}) {
+  if (embedUrl) {
+    return (
+      <div className="studio-academy-player">
+        <iframe
+          src={embedUrl}
+          title={playLabel}
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="studio-academy-banner-stage">
+      {bannerUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={bannerUrl} alt="" className="studio-academy-banner-img" />
+      ) : (
+        <div className="studio-academy-banner-fallback">
+          <GraduationCap aria-hidden="true" />
+        </div>
+      )}
+      <button
+        type="button"
+        className="studio-academy-banner-play"
+        onClick={onPlay}
+        disabled={loading}
+        aria-label={playLabel}
+      >
+        {loading ? (
+          <Loader2 className="animate-spin" aria-hidden="true" />
+        ) : (
+          <Play aria-hidden="true" fill="currentColor" />
+        )}
+      </button>
+    </div>
+  );
 }
 
 export function StudioAcademyPane({
   onOpenCredits,
   creditPriceCents,
-  initialCourseId,
-  initialSlug,
 }: {
   onOpenCredits?: () => void;
   creditPriceCents?: number;
-  initialCourseId?: string | null;
-  initialSlug?: string | null;
 }) {
   const price = creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
+  const academy = useStudioAcademy();
+  const { isMobile } = useMobileLayout();
   const catalog = useQuery(api.academy.listPublishedCourses, {});
   const mine = useQuery(api.academy.listMyCourses, {});
   const purchase = useMutation(api.academy.purchaseCourse);
-  const getPlayback = useAction(api.academyActions.getCoursePlayback);
+  const getIntroPlayback = useAction(api.academyActions.getIntroPlayback);
+  const getLessonPlayback = useAction(api.academyActions.getLessonPlayback);
 
-  const [view, setView] = useState<"catalog" | "mine" | "detail">("catalog");
-  const [courseId, setCourseId] = useState<Id<"academyCourses"> | null>(
-    (initialCourseId as Id<"academyCourses">) || null,
-  );
   const [busy, setBusy] = useState(false);
-  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
+  const [introEmbed, setIntroEmbed] = useState<string | null>(null);
+  const [lessonEmbed, setLessonEmbed] = useState<string | null>(null);
   const [loadingPlay, setLoadingPlay] = useState(false);
+  const [checkoutSheetOpen, setCheckoutSheetOpen] = useState(false);
   const headTabsScrollRef = useRef<HTMLElement | null>(null);
   useHorizontalWheelScroll(headTabsScrollRef);
   useHorizontalScrollFade(headTabsScrollRef);
 
   const detail = useQuery(
     api.academy.getCourse,
-    courseId
-      ? { courseId }
-      : initialSlug
-        ? { slug: initialSlug }
-        : "skip",
+    academy.courseId ? { courseId: academy.courseId } : "skip",
   );
 
   useEffect(() => {
-    if (initialCourseId) {
-      setCourseId(initialCourseId as Id<"academyCourses">);
-      setView("detail");
-    } else if (initialSlug) {
-      setView("detail");
-    }
-  }, [initialCourseId, initialSlug]);
+    setIntroEmbed(null);
+    setLessonEmbed(null);
+    setCheckoutSheetOpen(false);
+  }, [academy.courseId]);
 
   useEffect(() => {
-    if (detail?._id && !courseId) setCourseId(detail._id);
-  }, [detail, courseId]);
+    setLessonEmbed(null);
+  }, [academy.lessonId]);
 
   useEffect(() => {
-    setEmbedUrl(null);
-  }, [courseId]);
+    if (!detail?.owned || !detail.lessons.length) return;
+    if (academy.lessonId) return;
+    academy.setLessonId(detail.lessons[0]._id);
+  }, [detail, academy.lessonId, academy.setLessonId]);
 
-  function openCourse(id: Id<"academyCourses">) {
-    setCourseId(id);
-    setView("detail");
-    setEmbedUrl(null);
-  }
-
-  function backToList() {
-    setView("catalog");
-    setCourseId(null);
-    setEmbedUrl(null);
-  }
+  const listSource =
+    academy.listTab === "mine"
+      ? ((mine as typeof catalog) ?? [])
+      : ((catalog as typeof catalog) ?? []);
+  const list = academy.filterCourses(listSource ?? []);
+  const listLoading =
+    academy.listTab === "mine" ? mine === undefined : catalog === undefined;
+  const detailOpen = Boolean(academy.courseId);
+  const owned = Boolean(detail?.owned);
+  const selectedLesson =
+    detail?.lessons.find((l) => l._id === academy.lessonId) ??
+    detail?.lessons[0] ??
+    null;
+  const priceLabel = detail
+    ? formatTtdFromCredits(detail.priceCredits, price)
+    : "";
 
   async function buy() {
-    if (!courseId) return;
+    if (!academy.courseId) return;
     setBusy(true);
     try {
-      await purchase({ courseId });
-      toast.success("Course unlocked — lifetime access");
+      await purchase({ courseId: academy.courseId });
+      toast.success("Course unlocked");
+      setCheckoutSheetOpen(false);
     } catch (error) {
       const message = friendlyConvexError(error, "Purchase failed");
       toast.error(message);
@@ -126,29 +238,273 @@ export function StudioAcademyPane({
     }
   }
 
-  async function loadPlayer() {
-    if (!courseId) return;
+  async function playIntro() {
+    if (!academy.courseId) return;
     setLoadingPlay(true);
     try {
-      const playback = await getPlayback({ courseId });
-      setEmbedUrl(playback.embedUrl);
+      const playback = await getIntroPlayback({ courseId: academy.courseId });
+      setIntroEmbed(playback.embedUrl);
     } catch (error) {
-      toast.error(friendlyConvexError(error, "Could not load video"));
+      toast.error(friendlyConvexError(error, "Could not load intro"));
     } finally {
       setLoadingPlay(false);
     }
   }
 
-  const listTab = view === "mine" ? "mine" : "catalog";
-  const list: CatalogCourse[] =
-    listTab === "mine"
-      ? ((mine as CatalogCourse[] | undefined) ?? [])
-      : ((catalog as CatalogCourse[] | undefined) ?? []);
-  const listLoading = listTab === "mine" ? mine === undefined : catalog === undefined;
-  const detailOpen = view === "detail" && Boolean(courseId);
-  const detailBanner = detail
-    ? courseBannerUrl({ slug: detail.slug, coverUrl: detail.coverUrl })
-    : undefined;
+  async function playLesson() {
+    if (!selectedLesson) return;
+    setLoadingPlay(true);
+    try {
+      const playback = await getLessonPlayback({ lessonId: selectedLesson._id });
+      setLessonEmbed(playback.embedUrl);
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not load lesson"));
+    } finally {
+      setLoadingPlay(false);
+    }
+  }
+
+  const catalogMain = (
+    <div className="public-offers-main studio-cn-catalog">
+      <div className="public-offers-main-scroll">
+        <main className="public-offers-body">
+          <section className="public-offers-hero">
+            <div
+              className="public-offers-hero-bg studio-academy-hero-bg"
+              aria-hidden="true"
+            />
+            <div className="public-offers-hero-copy">
+              <h1>{academy.listTab === "mine" ? "My courses" : "Academy"}</h1>
+              <p>
+                {academy.listTab === "mine"
+                  ? "Your courses. Open them anytime from here."
+                  : "Learn the skills you need to make professional videos like a director, with AI in Studio."}
+              </p>
+            </div>
+          </section>
+
+          <div className="public-offers-results">
+            {listLoading ? (
+              <div className="public-offers-state">
+                <Loader2 className="animate-spin" aria-hidden="true" />
+                <strong>Loading courses…</strong>
+              </div>
+            ) : !list.length ? (
+              <div className="public-offers-state">
+                <GraduationCap aria-hidden="true" />
+                <strong>
+                  {academy.listTab === "mine"
+                    ? "No courses yet"
+                    : "No courses match"}
+                </strong>
+                <p>
+                  {academy.listTab === "mine"
+                    ? "Browse Academy when you’re ready to pick one up."
+                    : "Try clearing filters or check back soon."}
+                </p>
+              </div>
+            ) : (
+              <ul className="public-offers-grid">
+                {list.map((course) => {
+                  const banner = courseBannerUrl(course);
+                  return (
+                    <li key={course._id}>
+                      <button
+                        type="button"
+                        className="public-offers-card"
+                        onClick={() => academy.openCourse(course._id)}
+                      >
+                        {banner ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            className="public-offers-card-media"
+                            src={banner}
+                            alt=""
+                          />
+                        ) : (
+                          <div className="public-offers-card-media studio-academy-card-fallback">
+                            <GraduationCap aria-hidden="true" />
+                          </div>
+                        )}
+                        <div className="public-offers-card-body">
+                          <div className="public-offers-card-top">
+                            <strong className="public-offers-card-title">
+                              {course.title}
+                            </strong>
+                            <span className="public-offers-card-price">
+                              {formatTtdFromCredits(course.priceCredits, price)}
+                            </span>
+                          </div>
+                          <p className="public-offers-card-desc">
+                            {course.blurb}
+                          </p>
+                          <div className="public-offers-card-meta">
+                            <span>
+                              {course.owned ? "Owned" : "Yatishara Academy"}
+                            </span>
+                            <span>
+                              {course.lessonCount} lesson
+                              {course.lessonCount === 1 ? "" : "s"}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+
+  const courseMain = !detail ? (
+    <div className="public-offers-main studio-cn-catalog">
+      <div className="public-offers-main-scroll">
+        <main className="public-offers-body is-narrow">
+          <div className="public-offers-state">
+            <Loader2 className="animate-spin" aria-hidden="true" />
+            <strong>Loading course…</strong>
+          </div>
+        </main>
+      </div>
+    </div>
+  ) : owned && selectedLesson ? (
+    <div className="public-offers-main studio-cn-catalog">
+      <div className="public-offers-main-scroll">
+        <main className="public-offers-body is-narrow">
+          <div className="studio-academy-detail">
+            <BannerStage
+              bannerUrl={
+                selectedLesson.coverUrl ||
+                courseBannerUrl({
+                  slug: detail.slug,
+                  coverUrl: detail.coverUrl,
+                })
+              }
+              embedUrl={lessonEmbed}
+              loading={loadingPlay}
+              onPlay={() => void playLesson()}
+              playLabel={`Play ${selectedLesson.title}`}
+            />
+            <div className="studio-academy-detail-top">
+              <div>
+                <h1 className="studio-academy-detail-title">
+                  {selectedLesson.title}
+                </h1>
+                <p className="studio-academy-detail-sub">
+                  {detail.title} · Lesson
+                </p>
+              </div>
+            </div>
+            <div className="studio-academy-body">
+              <StudioChatMarkdown text={selectedLesson.descriptionMarkdown} />
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  ) : (
+    <div className="public-offers-main studio-cn-catalog">
+      <div className="public-offers-main-scroll">
+        <main className="public-offers-body is-narrow">
+          <div className="studio-academy-detail">
+            <BannerStage
+              bannerUrl={courseBannerUrl({
+                slug: detail.slug,
+                coverUrl: detail.coverUrl,
+              })}
+              embedUrl={introEmbed}
+              loading={loadingPlay}
+              onPlay={() => void playIntro()}
+              playLabel="Play course intro"
+            />
+            <div className="studio-academy-detail-top">
+              <div>
+                <h1 className="studio-academy-detail-title">{detail.title}</h1>
+                <p className="studio-academy-detail-sub">
+                  {detail.hasIntroVideo
+                    ? "Free intro · buy for full lessons"
+                    : "Course overview"}
+                </p>
+              </div>
+              <span className="public-offers-card-price">{priceLabel}</span>
+            </div>
+            <div className="studio-academy-body">
+              <StudioChatMarkdown text={detail.descriptionMarkdown} />
+            </div>
+            {detail.lessons.length ? (
+              <section className="studio-academy-lesson-teasers">
+                <h2>Lessons</h2>
+                <ul>
+                  {detail.lessons.map((lesson, index) => (
+                    <li key={lesson._id}>
+                      <Lock aria-hidden="true" />
+                      <span>
+                        <strong>
+                          {index + 1}. {lesson.title}
+                        </strong>
+                        <small>{lesson.blurb}</small>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+
+  const checkoutSidebar = detail ? (
+    <CheckoutDock
+      showHead
+      onBuy={() => void buy()}
+      busy={busy}
+      owned={owned}
+      priceLabel={priceLabel}
+      lessonCount={detail.lessonCount}
+    />
+  ) : null;
+
+  let body = catalogMain;
+  if (detailOpen) {
+    if (owned || isMobile) {
+      body = courseMain;
+    } else {
+      body = (
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId="studio-academy-checkout-h"
+          className="studio-cn-offer-panels h-full min-h-0 min-w-0 overflow-hidden"
+        >
+          <Panel
+            id="studio-academy-main"
+            order={1}
+            defaultSize={68}
+            minSize={48}
+            className="min-h-0 min-w-0"
+          >
+            {courseMain}
+          </Panel>
+          <PanelResizeHandle className="cursor-resize" />
+          <Panel
+            id="studio-academy-checkout"
+            order={2}
+            defaultSize={32}
+            minSize={22}
+            maxSize={42}
+            className="studio-cn-book-panel min-h-0 min-w-0 h-full overflow-hidden"
+          >
+            {checkoutSidebar}
+          </Panel>
+        </PanelGroup>
+      );
+    }
+  }
 
   return (
     <div className="studio-cn-pane studio-academy-pane">
@@ -160,14 +516,13 @@ export function StudioAcademyPane({
         >
           <button
             type="button"
-            className={`studio-cn-head-tab${listTab === "catalog" && !detailOpen ? " is-active" : ""}`}
+            className={`studio-cn-head-tab${academy.listTab === "catalog" && !detailOpen ? " is-active" : ""}`}
             onClick={() => {
               if (detailOpen) {
-                backToList();
+                academy.backToCatalog();
                 return;
               }
-              setView("catalog");
-              setCourseId(null);
+              academy.setListTab("catalog");
             }}
           >
             {detailOpen ? (
@@ -179,11 +534,10 @@ export function StudioAcademyPane({
           </button>
           <button
             type="button"
-            className={`studio-cn-head-tab${listTab === "mine" && !detailOpen ? " is-active" : ""}`}
+            className={`studio-cn-head-tab${academy.listTab === "mine" && !detailOpen ? " is-active" : ""}`}
             onClick={() => {
-              setView("mine");
-              setCourseId(null);
-              setEmbedUrl(null);
+              academy.setListTab("mine");
+              academy.backToCatalog();
             }}
           >
             <Library aria-hidden="true" />
@@ -193,198 +547,57 @@ export function StudioAcademyPane({
       </header>
 
       <div className="studio-cn-body is-catalog">
-        {detailOpen ? (
-          <div className="public-offers-main studio-cn-catalog">
-            <div className="public-offers-main-scroll">
-              <main className="public-offers-body is-narrow">
-                {!detail ? (
-                  <div className="public-offers-state">
-                    <Loader2 className="animate-spin" aria-hidden="true" />
-                    <strong>Loading course…</strong>
+        {body}
+        {isMobile && detailOpen && detail && !owned ? (
+          <>
+            <nav
+              className="public-offers-mobile-book-nav studio-cn-book-bar"
+              aria-label="Buy this course"
+            >
+              <span className="studio-cn-book-bar-price">{priceLabel}</span>
+              <div className="studio-cn-book-bar-actions">
+                <button
+                  type="button"
+                  className="public-offers-btn is-primary studio-cn-book-bar-cta"
+                  onClick={() => setCheckoutSheetOpen(true)}
+                >
+                  <Zap aria-hidden="true" />
+                  Buy now
+                </button>
+              </div>
+            </nav>
+            {checkoutSheetOpen ? (
+              <div
+                className="studio-cn-book-sheet"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Course checkout"
+              >
+                <button
+                  type="button"
+                  className="studio-cn-book-sheet-backdrop"
+                  aria-label="Close checkout"
+                  onClick={() => setCheckoutSheetOpen(false)}
+                />
+                <div className="studio-cn-book-sheet-panel">
+                  <div className="studio-cn-book-sheet-handle" aria-hidden="true">
+                    <span className="studio-cn-book-sheet-grab" />
                   </div>
-                ) : (
-                  <div className="studio-academy-detail">
-                    {detailBanner && !embedUrl ? (
-                      <div className="studio-academy-banner" aria-hidden="true">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={detailBanner} alt="" />
-                      </div>
-                    ) : null}
-
-                    <div className="studio-academy-detail-top">
-                      <div>
-                        <h1 className="studio-academy-detail-title">{detail.title}</h1>
-                        <p className="studio-academy-detail-sub">
-                          {detail.owned ? "Owned · lifetime access" : "Lifetime access"}
-                        </p>
-                      </div>
-                      <span className="public-offers-card-price">
-                        {formatTtdFromCredits(detail.priceCredits, price)}
-                      </span>
-                    </div>
-
-                    {detail.owned && detail.hasVideo ? (
-                      <div className="studio-academy-player">
-                        {embedUrl ? (
-                          <iframe
-                            src={embedUrl}
-                            title={detail.title}
-                            loading="lazy"
-                            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-                            allowFullScreen
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            className="studio-academy-play-cta"
-                            disabled={loadingPlay}
-                            onClick={() => void loadPlayer()}
-                          >
-                            {loadingPlay ? (
-                              <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-                            ) : (
-                              <Play className="h-5 w-5" aria-hidden />
-                            )}
-                            Watch course
-                          </button>
-                        )}
-                      </div>
-                    ) : null}
-
-                    {!detail.owned ? (
-                      <div className="studio-academy-buy-row">
-                        <button
-                          type="button"
-                          className="public-offers-btn"
-                          disabled={busy}
-                          onClick={() => void buy()}
-                        >
-                          {busy ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                          ) : (
-                            <Zap className="h-3.5 w-3.5" aria-hidden />
-                          )}
-                          Buy · {formatTtdFromCredits(detail.priceCredits, price)}
-                        </button>
-                        <button
-                          type="button"
-                          className="cursor-settings-action"
-                          onClick={() => onOpenCredits?.()}
-                        >
-                          Top up
-                        </button>
-                      </div>
-                    ) : null}
-
-                    <div className="studio-academy-body">
-                      <StudioChatMarkdown text={detail.descriptionMarkdown} />
-                    </div>
+                  <div className="studio-cn-book-sheet-body">
+                    <CheckoutDock
+                      showHead={false}
+                      onBuy={() => void buy()}
+                      busy={busy}
+                      owned={owned}
+                      priceLabel={priceLabel}
+                      lessonCount={detail.lessonCount}
+                    />
                   </div>
-                )}
-              </main>
-            </div>
-          </div>
-        ) : (
-          <div className="public-offers-main studio-cn-catalog">
-            <div className="public-offers-main-scroll">
-              <main className="public-offers-body">
-                <section className="public-offers-hero">
-                  <div className="public-offers-hero-bg studio-academy-hero-bg" aria-hidden="true" />
-                  <div className="public-offers-hero-copy">
-                    <h1>{listTab === "mine" ? "My courses" : "Academy"}</h1>
-                    <p>
-                      {listTab === "mine"
-                        ? "Your courses. Open them anytime from here."
-                        : "Learn the skills you need to make professional videos like a director, with AI in Studio."}
-                    </p>
-                  </div>
-                </section>
-
-                <div className="public-offers-results">
-                  {listLoading ? (
-                    <div className="public-offers-state">
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                      <strong>Loading courses…</strong>
-                    </div>
-                  ) : !list.length ? (
-                    <div className="public-offers-state">
-                      <GraduationCap aria-hidden="true" />
-                      <strong>
-                        {listTab === "mine"
-                          ? "No courses yet"
-                          : "No published courses yet"}
-                      </strong>
-                      <p>
-                        {listTab === "mine"
-                          ? "Browse Academy when you’re ready to pick one up."
-                          : "New courses are on the way. Check back soon."}
-                      </p>
-                    </div>
-                  ) : (
-                    <ul className="public-offers-grid">
-                      {list.map((course, index) => {
-                        const banner = courseBannerUrl(course);
-                        return (
-                          <li key={course._id}>
-                            <button
-                              type="button"
-                              className="public-offers-card studio-cn-card-btn"
-                              onClick={() => openCourse(course._id)}
-                            >
-                              {banner ? (
-                                <div
-                                  className="public-offers-card-media"
-                                  aria-hidden="true"
-                                >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={banner}
-                                    alt=""
-                                    loading={index < 8 ? "eager" : "lazy"}
-                                    fetchPriority={index < 4 ? "high" : "auto"}
-                                    decoding="async"
-                                  />
-                                </div>
-                              ) : (
-                                <div
-                                  className="public-offers-card-media studio-academy-card-fallback"
-                                  aria-hidden="true"
-                                >
-                                  <GraduationCap />
-                                </div>
-                              )}
-                              <div className="public-offers-card-top">
-                                <div>
-                                  <h3 className="public-offers-card-title">
-                                    {course.title}
-                                  </h3>
-                                  <p className="public-offers-card-seller">
-                                    {course.owned ? "Owned" : "Yatishara Academy"}
-                                  </p>
-                                </div>
-                                <span className="public-offers-card-price">
-                                  {formatTtdFromCredits(course.priceCredits, price)}
-                                </span>
-                              </div>
-                              {course.blurb.trim() ? (
-                                <p className="public-offers-card-desc">{course.blurb}</p>
-                              ) : null}
-                              <div className="public-offers-card-meta">
-                                <span className="public-offers-chip">
-                                  Lifetime access
-                                </span>
-                              </div>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
                 </div>
-              </main>
-            </div>
-          </div>
-        )}
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
     </div>
   );

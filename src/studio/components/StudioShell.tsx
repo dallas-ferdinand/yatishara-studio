@@ -223,6 +223,8 @@ import {
   useCreativeNetwork,
 } from "./StudioCreativeNetworkContext";
 import { StudioCreativeNetworkSidebar } from "./StudioCreativeNetworkSidebar";
+import { StudioAcademySidebar } from "./StudioAcademySidebar";
+import { StudioAcademyProvider } from "./StudioAcademyContext";
 import { StudioCreativeNetworkStore } from "./StudioCreativeNetworkStore";
 import { StudioOnlinePresence } from "./StudioOnlinePresence";
 import {
@@ -8101,6 +8103,9 @@ export function StudioShell({
     typeof activeTab === "string" &&
     (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
 
+  const isAcademyRail =
+    typeof activeTab === "string" && activeTab.startsWith("academy:");
+
   // Desktop pick-from-Files temporarily restores the owner file explorer in the
   // left rail even while Messages/Feed is the active pane.
   const pickingFromFiles = Boolean(assetPickRequest) && !isMobile;
@@ -8115,6 +8120,7 @@ export function StudioShell({
   const effectiveNetworkRail =
     isNetworkRail && !pickingFromFiles && cnMode !== "my-assets";
   const networkUsesFilesRail = isNetworkRail && cnMode === "my-assets";
+  const effectiveAcademyRail = isAcademyRail && !pickingFromFiles;
 
   // My Assets: keep left rail on Your files (not the CN store browse strip).
   useEffect(() => {
@@ -8252,6 +8258,16 @@ export function StudioShell({
   }, [isMobile]);
 
   return (
+    <StudioAcademyProvider
+      creditPriceCents={pricing?.creditPriceCents}
+      initialCourseId={
+        typeof activeTab === "string" && activeTab.startsWith("academy:course:")
+          ? activeTab.slice("academy:course:".length).trim() || null
+          : null
+      }
+      onNavigateCourse={(courseId) => openAcademyTab({ courseId })}
+      onNavigateCatalog={() => openAcademyTab()}
+    >
     <StudioCreativeNetworkProvider
       initialSlug={networkInitialSlug}
       initialSellerUsername={networkInitialSeller}
@@ -19619,6 +19635,186 @@ export function StudioShell({
         .studio-academy-body {
           min-width: 0;
         }
+        .studio-academy-banner-stage {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 16 / 9;
+          overflow: hidden;
+          border-radius: var(--cursor-radius-lg, 10px);
+          background: var(--mos-plate-strong, var(--cursor-surface-raised));
+        }
+        .studio-academy-banner-img {
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .studio-academy-banner-fallback {
+          display: grid;
+          place-items: center;
+          width: 100%;
+          height: 100%;
+          color: var(--color-cursor-muted);
+          opacity: 0.55;
+        }
+        .studio-academy-banner-fallback > svg {
+          width: 40px;
+          height: 40px;
+        }
+        .studio-academy-banner-play {
+          position: absolute;
+          inset: 0;
+          margin: auto;
+          width: 56px;
+          height: 56px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 0;
+          border-radius: 999px;
+          background: color-mix(in srgb, #000 55%, transparent);
+          color: #fff;
+          cursor: pointer;
+        }
+        .studio-academy-banner-play svg {
+          width: 22px;
+          height: 22px;
+        }
+        .studio-academy-banner-play:hover:not(:disabled) {
+          background: color-mix(in srgb, #000 68%, transparent);
+        }
+        .studio-academy-banner-play:disabled {
+          opacity: 0.7;
+          cursor: default;
+        }
+        .studio-academy-lesson-teasers h2 {
+          margin: 0 0 8px;
+          font-size: 13px;
+          font-weight: 650;
+        }
+        .studio-academy-lesson-teasers ul {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          gap: 8px;
+        }
+        .studio-academy-lesson-teasers li {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: var(--mos-plate, var(--cursor-surface));
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        .studio-academy-lesson-teasers li svg {
+          width: 14px;
+          height: 14px;
+          margin-top: 2px;
+          flex: 0 0 auto;
+          color: var(--color-cursor-muted);
+        }
+        .studio-academy-lesson-teasers strong {
+          display: block;
+          font-size: 12px;
+        }
+        .studio-academy-lesson-teasers small {
+          display: block;
+          margin-top: 2px;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+        }
+        .studio-academy-lesson-rail {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          height: 100%;
+        }
+        .studio-academy-lesson-rail-head {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex: 0 0 auto;
+          min-height: var(--cursor-head-h, 32px);
+          padding: 0 8px;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+        }
+        .studio-academy-lesson-rail-title {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 12px;
+          font-weight: 650;
+        }
+        .studio-academy-lesson-list {
+          list-style: none;
+          margin: 8px 0 0;
+          padding: 0;
+          display: grid;
+          gap: 6px;
+        }
+        .studio-academy-lesson-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          padding: 8px;
+          border: 1px solid transparent;
+          border-radius: 10px;
+          background: var(--mos-plate, transparent);
+          color: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .studio-academy-lesson-row.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-plate));
+        }
+        .studio-academy-lesson-row.is-locked {
+          cursor: default;
+          opacity: 0.85;
+        }
+        .studio-academy-lesson-row img,
+        .studio-academy-lesson-thumb {
+          width: 44px;
+          height: 28px;
+          border-radius: 6px;
+          object-fit: cover;
+          flex: 0 0 auto;
+          background: var(--mos-plate-strong);
+          display: grid;
+          place-items: center;
+          color: var(--color-cursor-muted);
+        }
+        .studio-academy-lesson-thumb svg {
+          width: 14px;
+          height: 14px;
+        }
+        .studio-academy-lesson-meta {
+          min-width: 0;
+          display: grid;
+          gap: 1px;
+        }
+        .studio-academy-lesson-meta em {
+          font-style: normal;
+          font-size: 10px;
+          color: var(--color-cursor-muted);
+        }
+        .studio-academy-lesson-meta strong {
+          font-size: 12px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-academy-lesson-meta small {
+          font-size: 11px;
+          color: var(--color-cursor-muted);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
         .studio-history-floating-panel {
           width: 100%;
           background: var(--mos-plate, var(--mos-panel));
@@ -21560,6 +21756,7 @@ export function StudioShell({
           {!effectiveSocialRail &&
           !effectiveMessagesRail &&
           !effectiveNetworkRail &&
+          !effectiveAcademyRail &&
           !effectiveFilesRail &&
           !sharingToPeople ? (
             <div className="flex items-center gap-1">
@@ -21608,6 +21805,8 @@ export function StudioShell({
             onOpenFeedPost={(postId) => openProfilePost("", postId)}
             onOpenOffersJobs={() => openNetworkTab()}
           />
+        ) : effectiveAcademyRail ? (
+          <StudioAcademySidebar />
         ) : effectiveSocialRail ? (
           <StudioSocialLeftRail
             expiresUnix={assetUrlExpiresUnix}
@@ -23000,7 +23199,7 @@ export function StudioShell({
           onPrefetch={prefetchStudioSurface}
           action={
             // Sheet dock on Generate / My Assets; full Files tab also highlights Folder.
-            (!isSocialRail && !isMessagesRail && !isNetworkRail) ||
+            (!isSocialRail && !isMessagesRail && !isNetworkRail && !isAcademyRail) ||
             networkUsesFilesRail ||
             isFilesTab
               ? {
@@ -23014,7 +23213,7 @@ export function StudioShell({
           extrasAction={
             // Places sidepanel — Files dock sheet OR full Files tab (no desktop sidebar on mobile).
             (mobileSection === "files" || isFilesTab) &&
-            ((!isSocialRail && !isMessagesRail && !isNetworkRail) ||
+            ((!isSocialRail && !isMessagesRail && !isNetworkRail && !isAcademyRail) ||
               networkUsesFilesRail ||
               isFilesTab)
               ? {
@@ -23478,6 +23677,7 @@ export function StudioShell({
       />
     </div>
     </StudioCreativeNetworkProvider>
+    </StudioAcademyProvider>
   );
 }
 
@@ -29019,14 +29219,10 @@ function ActivePane({
     return wrapPane(null);
   }
   if (typeof activeTab === "string" && activeTab.startsWith("academy:")) {
-    const courseId = activeTab.startsWith("academy:course:")
-      ? activeTab.slice("academy:course:".length).trim() || null
-      : null;
     return wrapPane(
       <StudioAcademyPane
         onOpenCredits={onOpenCredits ?? onOpenSettings}
         creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
-        initialCourseId={courseId}
       />,
     );
   }

@@ -45,6 +45,14 @@ async function coverUrlFor(
   return signBunnyFullUrl(path, expires, "image", 80);
 }
 
+function courseIntroVideoId(course: Doc<"academyCourses">): string | undefined {
+  return (
+    course.introBunnyStreamVideoId?.trim() ||
+    course.bunnyStreamVideoId?.trim() ||
+    undefined
+  );
+}
+
 async function findPurchase(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
@@ -60,6 +68,22 @@ async function findPurchase(
   );
 }
 
+async function listLessonsForCourse(
+  ctx: QueryCtx | MutationCtx,
+  courseId: Id<"academyCourses">,
+  opts?: { publishedOnly?: boolean },
+): Promise<Doc<"academyLessons">[]> {
+  const rows = await ctx.db
+    .query("academyLessons")
+    .withIndex("by_course_and_sort", (q) => q.eq("courseId", courseId))
+    .collect();
+  const filtered = opts?.publishedOnly
+    ? rows.filter((row) => row.status === "published")
+    : rows;
+  filtered.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
+  return filtered;
+}
+
 const catalogCourseReturn = v.object({
   _id: v.id("academyCourses"),
   title: v.string(),
@@ -68,8 +92,21 @@ const catalogCourseReturn = v.object({
   priceCredits: v.number(),
   coverUrl: v.optional(v.string()),
   owned: v.boolean(),
+  lessonCount: v.number(),
   sortOrder: v.number(),
   updatedAt: v.number(),
+});
+
+const lessonSummaryReturn = v.object({
+  _id: v.id("academyLessons"),
+  title: v.string(),
+  slug: v.string(),
+  blurb: v.string(),
+  descriptionMarkdown: v.string(),
+  coverUrl: v.optional(v.string()),
+  hasVideo: v.boolean(),
+  sortOrder: v.number(),
+  status: v.union(v.literal("draft"), v.literal("published")),
 });
 
 const courseDetailReturn = v.object({
@@ -80,7 +117,9 @@ const courseDetailReturn = v.object({
   priceCredits: v.number(),
   coverUrl: v.optional(v.string()),
   owned: v.boolean(),
-  hasVideo: v.boolean(),
+  hasIntroVideo: v.boolean(),
+  lessonCount: v.number(),
+  lessons: v.array(lessonSummaryReturn),
   status: v.union(v.literal("draft"), v.literal("published")),
   sortOrder: v.number(),
   updatedAt: v.number(),
@@ -99,6 +138,9 @@ export const listPublishedCourses = authedQuery({
     const out = [];
     for (const course of rows) {
       const purchase = await findPurchase(ctx, ctx.user._id, course._id);
+      const lessons = await listLessonsForCourse(ctx, course._id, {
+        publishedOnly: true,
+      });
       out.push({
         _id: course._id,
         title: course.title,
@@ -107,6 +149,7 @@ export const listPublishedCourses = authedQuery({
         priceCredits: course.priceCredits,
         coverUrl: await coverUrlFor(course.coverBunnyPath),
         owned: Boolean(purchase),
+        lessonCount: lessons.length,
         sortOrder: course.sortOrder,
         updatedAt: course.updatedAt,
       });
@@ -129,6 +172,9 @@ export const listMyCourses = authedQuery({
     for (const purchase of purchases) {
       const course = await ctx.db.get("academyCourses", purchase.courseId);
       if (!course || course.status !== "published") continue;
+      const lessons = await listLessonsForCourse(ctx, course._id, {
+        publishedOnly: true,
+      });
       out.push({
         _id: course._id,
         title: course.title,
@@ -137,6 +183,7 @@ export const listMyCourses = authedQuery({
         priceCredits: course.priceCredits,
         coverUrl: await coverUrlFor(course.coverBunnyPath),
         owned: true,
+        lessonCount: lessons.length,
         sortOrder: course.sortOrder,
         updatedAt: course.updatedAt,
       });
@@ -168,6 +215,26 @@ export const getCourse = authedQuery({
     const owned = Boolean(purchase) || admin;
     if (course.status !== "published" && !admin) return null;
 
+    const lessonDocs = await listLessonsForCourse(ctx, course._id, {
+      publishedOnly: !admin,
+    });
+    const lessons = [];
+    for (const lesson of lessonDocs) {
+      lessons.push({
+        _id: lesson._id,
+        title: lesson.title,
+        slug: lesson.slug,
+        blurb: blurbFromMarkdown(lesson.descriptionMarkdown),
+        descriptionMarkdown: owned
+          ? lesson.descriptionMarkdown
+          : blurbFromMarkdown(lesson.descriptionMarkdown, 220),
+        coverUrl: await coverUrlFor(lesson.coverBunnyPath),
+        hasVideo: Boolean(lesson.bunnyStreamVideoId) && owned,
+        sortOrder: lesson.sortOrder,
+        status: lesson.status,
+      });
+    }
+
     return {
       _id: course._id,
       title: course.title,
@@ -176,7 +243,9 @@ export const getCourse = authedQuery({
       priceCredits: course.priceCredits,
       coverUrl: await coverUrlFor(course.coverBunnyPath),
       owned: Boolean(purchase) || admin,
-      hasVideo: Boolean(course.bunnyStreamVideoId) && owned,
+      hasIntroVideo: Boolean(courseIntroVideoId(course)),
+      lessonCount: lessonDocs.filter((l) => l.status === "published").length,
+      lessons,
       status: course.status,
       sortOrder: course.sortOrder,
       updatedAt: course.updatedAt,
@@ -184,7 +253,62 @@ export const getCourse = authedQuery({
   },
 });
 
-/** Used by playback action — never returns stream id to unauthorized callers. */
+/** Free intro playback — published course, no purchase required. */
+export const getIntroPlaybackAccess = authedQuery({
+  args: { courseId: v.id("academyCourses") },
+  returns: v.union(
+    v.object({
+      allowed: v.literal(true),
+      bunnyStreamVideoId: v.string(),
+    }),
+    v.object({ allowed: v.literal(false) }),
+  ),
+  handler: async (ctx, args) => {
+    const course = await ctx.db.get("academyCourses", args.courseId);
+    if (!course) return { allowed: false as const };
+    const videoId = courseIntroVideoId(course);
+    if (!videoId) return { allowed: false as const };
+    const admin = isAdminRole(ctx.user.role);
+    if (!admin && course.status !== "published") {
+      return { allowed: false as const };
+    }
+    return { allowed: true as const, bunnyStreamVideoId: videoId };
+  },
+});
+
+/** Paid lesson playback — entitlement required. */
+export const getLessonPlaybackAccess = authedQuery({
+  args: { lessonId: v.id("academyLessons") },
+  returns: v.union(
+    v.object({
+      allowed: v.literal(true),
+      bunnyStreamVideoId: v.string(),
+      courseId: v.id("academyCourses"),
+    }),
+    v.object({ allowed: v.literal(false) }),
+  ),
+  handler: async (ctx, args) => {
+    const lesson = await ctx.db.get("academyLessons", args.lessonId);
+    if (!lesson?.bunnyStreamVideoId) return { allowed: false as const };
+    const course = await ctx.db.get("academyCourses", lesson.courseId);
+    if (!course) return { allowed: false as const };
+    const admin = isAdminRole(ctx.user.role);
+    if (!admin) {
+      if (course.status !== "published" || lesson.status !== "published") {
+        return { allowed: false as const };
+      }
+      const purchase = await findPurchase(ctx, ctx.user._id, course._id);
+      if (!purchase) return { allowed: false as const };
+    }
+    return {
+      allowed: true as const,
+      bunnyStreamVideoId: lesson.bunnyStreamVideoId,
+      courseId: course._id,
+    };
+  },
+});
+
+/** @deprecated Use getIntroPlaybackAccess / getLessonPlaybackAccess. */
 export const getCoursePlaybackAccess = authedQuery({
   args: { courseId: v.id("academyCourses") },
   returns: v.union(
@@ -196,17 +320,14 @@ export const getCoursePlaybackAccess = authedQuery({
   ),
   handler: async (ctx, args) => {
     const course = await ctx.db.get("academyCourses", args.courseId);
-    if (!course?.bunnyStreamVideoId) return { allowed: false as const };
+    if (!course) return { allowed: false as const };
+    const videoId = courseIntroVideoId(course);
+    if (!videoId) return { allowed: false as const };
     const admin = isAdminRole(ctx.user.role);
-    if (!admin) {
-      const purchase = await findPurchase(ctx, ctx.user._id, course._id);
-      if (!purchase) return { allowed: false as const };
-      if (course.status !== "published") return { allowed: false as const };
+    if (!admin && course.status !== "published") {
+      return { allowed: false as const };
     }
-    return {
-      allowed: true as const,
-      bunnyStreamVideoId: course.bunnyStreamVideoId,
-    };
+    return { allowed: true as const, bunnyStreamVideoId: videoId };
   },
 });
 
@@ -221,8 +342,11 @@ export const purchaseCourse = authedMutation({
     if (!course || course.status !== "published") {
       throw new Error("Course is not available");
     }
-    if (!course.bunnyStreamVideoId) {
-      throw new Error("Course video is not ready yet");
+    const publishedLessons = await listLessonsForCourse(ctx, course._id, {
+      publishedOnly: true,
+    });
+    if (publishedLessons.length < 1 && !courseIntroVideoId(course)) {
+      throw new Error("Course content is not ready yet");
     }
 
     const existing = await findPurchase(ctx, ctx.user._id, course._id);
@@ -295,10 +419,27 @@ const adminCourseReturn = v.object({
   priceCredits: v.number(),
   coverBunnyPath: v.optional(v.string()),
   coverUrl: v.optional(v.string()),
+  introBunnyStreamVideoId: v.optional(v.string()),
   bunnyStreamVideoId: v.optional(v.string()),
+  lessonCount: v.number(),
   status: v.union(v.literal("draft"), v.literal("published")),
   sortOrder: v.number(),
   purchaseCount: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+});
+
+const adminLessonReturn = v.object({
+  _id: v.id("academyLessons"),
+  courseId: v.id("academyCourses"),
+  title: v.string(),
+  slug: v.string(),
+  descriptionMarkdown: v.string(),
+  coverBunnyPath: v.optional(v.string()),
+  coverUrl: v.optional(v.string()),
+  bunnyStreamVideoId: v.optional(v.string()),
+  status: v.union(v.literal("draft"), v.literal("published")),
+  sortOrder: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
@@ -310,6 +451,7 @@ export const adminListCourses = adminQuery({
     const rows = await ctx.db.query("academyCourses").withIndex("by_updated").order("desc").collect();
     const out = [];
     for (const course of rows) {
+      const lessons = await listLessonsForCourse(ctx, course._id);
       out.push({
         _id: course._id,
         title: course.title,
@@ -318,12 +460,40 @@ export const adminListCourses = adminQuery({
         priceCredits: course.priceCredits,
         coverBunnyPath: course.coverBunnyPath,
         coverUrl: await coverUrlFor(course.coverBunnyPath),
+        introBunnyStreamVideoId: courseIntroVideoId(course),
         bunnyStreamVideoId: course.bunnyStreamVideoId,
+        lessonCount: lessons.length,
         status: course.status,
         sortOrder: course.sortOrder,
         purchaseCount: course.purchaseCount,
         createdAt: course.createdAt,
         updatedAt: course.updatedAt,
+      });
+    }
+    return out;
+  },
+});
+
+export const adminListLessons = adminQuery({
+  args: { courseId: v.id("academyCourses") },
+  returns: v.array(adminLessonReturn),
+  handler: async (ctx, args) => {
+    const rows = await listLessonsForCourse(ctx, args.courseId);
+    const out = [];
+    for (const lesson of rows) {
+      out.push({
+        _id: lesson._id,
+        courseId: lesson.courseId,
+        title: lesson.title,
+        slug: lesson.slug,
+        descriptionMarkdown: lesson.descriptionMarkdown,
+        coverBunnyPath: lesson.coverBunnyPath,
+        coverUrl: await coverUrlFor(lesson.coverBunnyPath),
+        bunnyStreamVideoId: lesson.bunnyStreamVideoId,
+        status: lesson.status,
+        sortOrder: lesson.sortOrder,
+        createdAt: lesson.createdAt,
+        updatedAt: lesson.updatedAt,
       });
     }
     return out;
@@ -387,6 +557,97 @@ export const adminUpsertCourse = adminMutation({
   },
 });
 
+export const adminUpsertLesson = adminMutation({
+  args: {
+    lessonId: v.optional(v.id("academyLessons")),
+    courseId: v.id("academyCourses"),
+    title: v.string(),
+    slug: v.optional(v.string()),
+    descriptionMarkdown: v.string(),
+    sortOrder: v.optional(v.number()),
+    status: v.optional(v.union(v.literal("draft"), v.literal("published"))),
+  },
+  returns: v.id("academyLessons"),
+  handler: async (ctx, args) => {
+    const course = await ctx.db.get("academyCourses", args.courseId);
+    if (!course) throw new Error("Course not found");
+    const title = args.title.trim();
+    if (!title) throw new Error("Lesson title is required");
+    let slug = slugify(args.slug?.trim() || title);
+    const now = Date.now();
+
+    const siblings = await listLessonsForCourse(ctx, args.courseId);
+    const clash = siblings.find(
+      (row) => row.slug === slug && row._id !== args.lessonId,
+    );
+    if (clash) {
+      slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
+    }
+
+    if (args.lessonId) {
+      const existing = await ctx.db.get("academyLessons", args.lessonId);
+      if (!existing || existing.courseId !== args.courseId) {
+        throw new Error("Lesson not found");
+      }
+      await ctx.db.patch(args.lessonId, {
+        title,
+        slug,
+        descriptionMarkdown: args.descriptionMarkdown,
+        sortOrder: args.sortOrder ?? existing.sortOrder,
+        status: args.status ?? existing.status,
+        updatedAt: now,
+      });
+      await ctx.db.patch(args.courseId, { updatedAt: now });
+      return args.lessonId;
+    }
+
+    const maxSort = siblings.reduce((m, row) => Math.max(m, row.sortOrder), 0);
+    const lessonId = await ctx.db.insert("academyLessons", {
+      courseId: args.courseId,
+      title,
+      slug,
+      descriptionMarkdown: args.descriptionMarkdown,
+      status: args.status ?? "draft",
+      sortOrder: args.sortOrder ?? maxSort + 10,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(args.courseId, { updatedAt: now });
+    return lessonId;
+  },
+});
+
+export const adminSetLessonStatus = adminMutation({
+  args: {
+    lessonId: v.id("academyLessons"),
+    status: v.union(v.literal("draft"), v.literal("published")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const lesson = await ctx.db.get("academyLessons", args.lessonId);
+    if (!lesson) throw new Error("Lesson not found");
+    if (args.status === "published" && !lesson.bunnyStreamVideoId) {
+      throw new Error("Attach a lesson video before publishing");
+    }
+    const now = Date.now();
+    await ctx.db.patch(args.lessonId, { status: args.status, updatedAt: now });
+    await ctx.db.patch(lesson.courseId, { updatedAt: now });
+    return null;
+  },
+});
+
+export const adminDeleteLesson = adminMutation({
+  args: { lessonId: v.id("academyLessons") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const lesson = await ctx.db.get("academyLessons", args.lessonId);
+    if (!lesson) return null;
+    await ctx.db.delete(args.lessonId);
+    await ctx.db.patch(lesson.courseId, { updatedAt: Date.now() });
+    return null;
+  },
+});
+
 export const adminSetCourseStatus = adminMutation({
   args: {
     courseId: v.id("academyCourses"),
@@ -397,11 +658,14 @@ export const adminSetCourseStatus = adminMutation({
     const course = await ctx.db.get("academyCourses", args.courseId);
     if (!course) throw new Error("Course not found");
     if (args.status === "published") {
-      if (!course.bunnyStreamVideoId) {
-        throw new Error("Attach a course video before publishing");
-      }
       if (!course.title.trim() || course.priceCredits < 1) {
         throw new Error("Title and price are required to publish");
+      }
+      const lessons = await listLessonsForCourse(ctx, course._id, {
+        publishedOnly: true,
+      });
+      if (lessons.length < 1 && !courseIntroVideoId(course)) {
+        throw new Error("Add an intro video or at least one published lesson");
       }
     }
     await ctx.db.patch(args.courseId, {
@@ -412,6 +676,26 @@ export const adminSetCourseStatus = adminMutation({
   },
 });
 
+export const adminAttachIntroStreamVideo = adminMutation({
+  args: {
+    courseId: v.id("academyCourses"),
+    bunnyStreamVideoId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const course = await ctx.db.get("academyCourses", args.courseId);
+    if (!course) throw new Error("Course not found");
+    const videoId = args.bunnyStreamVideoId.trim();
+    if (!videoId) throw new Error("Video id required");
+    await ctx.db.patch(args.courseId, {
+      introBunnyStreamVideoId: videoId,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** @deprecated Prefer adminAttachIntroStreamVideo. */
 export const adminAttachStreamVideo = adminMutation({
   args: {
     courseId: v.id("academyCourses"),
@@ -424,9 +708,31 @@ export const adminAttachStreamVideo = adminMutation({
     const videoId = args.bunnyStreamVideoId.trim();
     if (!videoId) throw new Error("Video id required");
     await ctx.db.patch(args.courseId, {
+      introBunnyStreamVideoId: videoId,
       bunnyStreamVideoId: videoId,
       updatedAt: Date.now(),
     });
+    return null;
+  },
+});
+
+export const adminAttachLessonStreamVideo = adminMutation({
+  args: {
+    lessonId: v.id("academyLessons"),
+    bunnyStreamVideoId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const lesson = await ctx.db.get("academyLessons", args.lessonId);
+    if (!lesson) throw new Error("Lesson not found");
+    const videoId = args.bunnyStreamVideoId.trim();
+    if (!videoId) throw new Error("Video id required");
+    const now = Date.now();
+    await ctx.db.patch(args.lessonId, {
+      bunnyStreamVideoId: videoId,
+      updatedAt: now,
+    });
+    await ctx.db.patch(lesson.courseId, { updatedAt: now });
     return null;
   },
 });
@@ -444,6 +750,25 @@ export const adminSetCourseCover = adminMutation({
       coverBunnyPath: args.coverBunnyPath,
       updatedAt: Date.now(),
     });
+    return null;
+  },
+});
+
+export const adminSetLessonCover = adminMutation({
+  args: {
+    lessonId: v.id("academyLessons"),
+    coverBunnyPath: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const lesson = await ctx.db.get("academyLessons", args.lessonId);
+    if (!lesson) throw new Error("Lesson not found");
+    const now = Date.now();
+    await ctx.db.patch(args.lessonId, {
+      coverBunnyPath: args.coverBunnyPath,
+      updatedAt: now,
+    });
+    await ctx.db.patch(lesson.courseId, { updatedAt: now });
     return null;
   },
 });
@@ -542,13 +867,13 @@ export const adminRevokeCourse = adminMutation({
   },
 });
 
-/** Internal lookup for actions (pre-codegen-safe via api after deploy). */
 export const adminGetCourseInternal = adminQuery({
   args: { courseId: v.id("academyCourses") },
   returns: v.union(
     v.object({
       _id: v.id("academyCourses"),
       title: v.string(),
+      introBunnyStreamVideoId: v.optional(v.string()),
       bunnyStreamVideoId: v.optional(v.string()),
       status: v.union(v.literal("draft"), v.literal("published")),
     }),
@@ -560,8 +885,34 @@ export const adminGetCourseInternal = adminQuery({
     return {
       _id: course._id,
       title: course.title,
+      introBunnyStreamVideoId: courseIntroVideoId(course),
       bunnyStreamVideoId: course.bunnyStreamVideoId,
       status: course.status,
+    };
+  },
+});
+
+export const adminGetLessonInternal = adminQuery({
+  args: { lessonId: v.id("academyLessons") },
+  returns: v.union(
+    v.object({
+      _id: v.id("academyLessons"),
+      courseId: v.id("academyCourses"),
+      title: v.string(),
+      bunnyStreamVideoId: v.optional(v.string()),
+      status: v.union(v.literal("draft"), v.literal("published")),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const lesson = await ctx.db.get("academyLessons", args.lessonId);
+    if (!lesson) return null;
+    return {
+      _id: lesson._id,
+      courseId: lesson.courseId,
+      title: lesson.title,
+      bunnyStreamVideoId: lesson.bunnyStreamVideoId,
+      status: lesson.status,
     };
   },
 });
@@ -572,6 +923,7 @@ export const internalGetCourse = internalQuery({
     v.object({
       _id: v.id("academyCourses"),
       title: v.string(),
+      introBunnyStreamVideoId: v.optional(v.string()),
       bunnyStreamVideoId: v.optional(v.string()),
     }),
     v.null(),
@@ -582,6 +934,7 @@ export const internalGetCourse = internalQuery({
     return {
       _id: course._id,
       title: course.title,
+      introBunnyStreamVideoId: courseIntroVideoId(course),
       bunnyStreamVideoId: course.bunnyStreamVideoId,
     };
   },
@@ -595,6 +948,7 @@ export const internalAttachStreamVideo = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.db.patch(args.courseId, {
+      introBunnyStreamVideoId: args.bunnyStreamVideoId,
       bunnyStreamVideoId: args.bunnyStreamVideoId,
       updatedAt: Date.now(),
     });
@@ -612,13 +966,31 @@ const DEMO_COURSES = [
 
 Build **3-second hooks** that stop the scroll — without looking like AI sludge.
 
-### Inside
-- Opening beat formulas for ads
-- Gaze + prop anchors that keep the face locked
-- When to cut vs hold
-
-> Demo course for layout. Replace the video in Admin → Academy.
+> Demo course for layout. Replace the intro and lessons in Admin → Academy.
 `,
+    lessons: [
+      {
+        slug: "gaze-anchors",
+        title: "Gaze and prop anchors",
+        sortOrder: 10,
+        descriptionMarkdown:
+          "Lock the face and prop so Seedance does not drift mid-shot.",
+      },
+      {
+        slug: "cut-vs-hold",
+        title: "When to cut vs hold",
+        sortOrder: 20,
+        descriptionMarkdown:
+          "Hold for tension, cut for product payoff. Timing patterns that convert.",
+      },
+      {
+        slug: "hook-formulas",
+        title: "Opening beat formulas",
+        sortOrder: 30,
+        descriptionMarkdown:
+          "Three opening beats you can reuse across ad formats.",
+      },
+    ],
   },
   {
     slug: "demo-studio-credits",
@@ -629,13 +1001,22 @@ Build **3-second hooks** that stop the scroll — without looking like AI sludge
 
 How Yatishara Studio credits map to image, video, and audio runs.
 
-### Topics
-- Credit price vs TTD top-ups
-- When Assistance burns balance
-- Batch vs one-shot generation
-
 *Demo content — safe to delete after you publish real courses.*
 `,
+    lessons: [
+      {
+        slug: "price-map",
+        title: "Credit price vs TTD top-ups",
+        sortOrder: 10,
+        descriptionMarkdown: "Read the wallet like an operator, not a meter.",
+      },
+      {
+        slug: "assistance-burn",
+        title: "When Assistance burns balance",
+        sortOrder: 20,
+        descriptionMarkdown: "Where Assistance spends and how to keep runs cheap.",
+      },
+    ],
   },
   {
     slug: "demo-creative-network",
@@ -645,13 +1026,27 @@ How Yatishara Studio credits map to image, video, and audio runs.
     descriptionMarkdown: `## Get hired on Creative Network
 
 From KYC to first delivered job — the operator path we use in Studio.
-
-1. Seller application
-2. Offer packages that convert
-3. Escrow handoff without drama
-
-Markdown rich description demo for the Academy detail pane.
 `,
+    lessons: [
+      {
+        slug: "seller-apply",
+        title: "Seller application",
+        sortOrder: 10,
+        descriptionMarkdown: "What admins look for before you go live.",
+      },
+      {
+        slug: "offer-packages",
+        title: "Offer packages that convert",
+        sortOrder: 20,
+        descriptionMarkdown: "Package tiers, delivery windows, and copy that books.",
+      },
+      {
+        slug: "escrow-handoff",
+        title: "Escrow handoff without drama",
+        sortOrder: 30,
+        descriptionMarkdown: "Deliver, revise, and release payment cleanly.",
+      },
+    ],
   },
   {
     slug: "demo-product-photoshoot",
@@ -661,13 +1056,21 @@ Markdown rich description demo for the Academy detail pane.
     descriptionMarkdown: `## Brand-ready stills from one SKU photo
 
 Prompt stacks for hero, lifestyle, and marketplace cards.
-
-- Lighting locks
-- Angle consistency
-- Text cleanup without mush
-
-Demo course — attach a real Bunny Stream video when ready.
 `,
+    lessons: [
+      {
+        slug: "lighting-locks",
+        title: "Lighting locks",
+        sortOrder: 10,
+        descriptionMarkdown: "Keep SKU lighting consistent across a set.",
+      },
+      {
+        slug: "marketplace-cards",
+        title: "Marketplace card angles",
+        sortOrder: 20,
+        descriptionMarkdown: "Hero, secondary, and detail crops that list well.",
+      },
+    ],
   },
   {
     slug: "demo-whatsapp-cs-voice",
@@ -677,26 +1080,35 @@ Demo course — attach a real Bunny Stream video when ready.
     descriptionMarkdown: `## Soft-accept without sounding robotic
 
 Tone, pacing, and follow-up patterns for Yatishara CS on WhatsApp.
-
-### Includes
-- Soft-accept examples
-- Deposit nudges
-- When to escalate to Jake
-
-Placeholder for Academy UI review.
 `,
+    lessons: [
+      {
+        slug: "soft-accept",
+        title: "Soft-accept examples",
+        sortOrder: 10,
+        descriptionMarkdown: "Accept interest without quoting too early.",
+      },
+      {
+        slug: "deposit-nudges",
+        title: "Deposit nudges",
+        sortOrder: 20,
+        descriptionMarkdown: "Move from chat to deposit without pressure.",
+      },
+    ],
   },
 ] as const;
 
 /**
  * Deploy-key bootstrap — `npx convex run academy:internalSeedDemoCourses`
- * Idempotent by slug. Published with placeholder Stream ids (catalog/layout only).
+ * Idempotent by course/lesson slug. Published with placeholder Stream ids.
  */
 export const internalSeedDemoCourses = internalMutation({
   args: {},
   returns: v.object({
     created: v.number(),
     updated: v.number(),
+    lessonsCreated: v.number(),
+    lessonsUpdated: v.number(),
   }),
   handler: async (ctx) => {
     const admin =
@@ -715,6 +1127,8 @@ export const internalSeedDemoCourses = internalMutation({
     const now = Date.now();
     let created = 0;
     let updated = 0;
+    let lessonsCreated = 0;
+    let lessonsUpdated = 0;
 
     for (const seed of DEMO_COURSES) {
       const existing = await ctx.db
@@ -722,22 +1136,26 @@ export const internalSeedDemoCourses = internalMutation({
         .withIndex("by_slug", (q) => q.eq("slug", seed.slug))
         .unique();
 
+      const introId = `demo-intro-${seed.slug}`;
       const fields = {
         title: seed.title,
         slug: seed.slug,
         descriptionMarkdown: seed.descriptionMarkdown,
         priceCredits: seed.priceCredits,
-        bunnyStreamVideoId: `demo-placeholder-${seed.slug}`,
+        introBunnyStreamVideoId: introId,
+        bunnyStreamVideoId: introId,
         status: "published" as const,
         sortOrder: seed.sortOrder,
         updatedAt: now,
       };
 
+      let courseId: Id<"academyCourses">;
       if (existing) {
         await ctx.db.patch(existing._id, fields);
+        courseId = existing._id;
         updated += 1;
       } else {
-        await ctx.db.insert("academyCourses", {
+        courseId = await ctx.db.insert("academyCourses", {
           ...fields,
           purchaseCount: 0,
           createdByAdminId: admin._id,
@@ -745,8 +1163,37 @@ export const internalSeedDemoCourses = internalMutation({
         });
         created += 1;
       }
+
+      for (const lessonSeed of seed.lessons) {
+        const siblings = await ctx.db
+          .query("academyLessons")
+          .withIndex("by_course_and_slug", (q) =>
+            q.eq("courseId", courseId).eq("slug", lessonSeed.slug),
+          )
+          .unique();
+        const lessonFields = {
+          title: lessonSeed.title,
+          slug: lessonSeed.slug,
+          descriptionMarkdown: lessonSeed.descriptionMarkdown,
+          bunnyStreamVideoId: `demo-lesson-${seed.slug}-${lessonSeed.slug}`,
+          status: "published" as const,
+          sortOrder: lessonSeed.sortOrder,
+          updatedAt: now,
+        };
+        if (siblings) {
+          await ctx.db.patch(siblings._id, lessonFields);
+          lessonsUpdated += 1;
+        } else {
+          await ctx.db.insert("academyLessons", {
+            courseId,
+            ...lessonFields,
+            createdAt: now,
+          });
+          lessonsCreated += 1;
+        }
+      }
     }
 
-    return { created, updated };
+    return { created, updated, lessonsCreated, lessonsUpdated };
   },
 });

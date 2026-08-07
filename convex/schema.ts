@@ -1691,7 +1691,8 @@ export default defineSchema({
     .index("by_seller", ["sellerUserId"]),
 
   /**
-   * Studio Academy courses — one video + rich description, sold for credits.
+   * Studio Academy courses — overview + free intro video + paid multi-lesson body.
+   * Wallet debit uses credits; buyer UI is TTD only.
    */
   academyCourses: defineTable({
     title: v.string(),
@@ -1699,6 +1700,9 @@ export default defineSchema({
     descriptionMarkdown: v.string(),
     priceCredits: v.number(),
     coverBunnyPath: v.optional(v.string()),
+    /** Free preview / intro Stream video (no purchase required). */
+    introBunnyStreamVideoId: v.optional(v.string()),
+    /** @deprecated Prefer introBunnyStreamVideoId (pre-multi-lesson). */
     bunnyStreamVideoId: v.optional(v.string()),
     status: v.union(v.literal("draft"), v.literal("published")),
     sortOrder: v.number(),
@@ -1709,6 +1713,23 @@ export default defineSchema({
   })
     .index("by_slug", ["slug"])
     .index("by_status_and_sort", ["status", "sortOrder"])
+    .index("by_updated", ["updatedAt"]),
+
+  /** Lessons inside an Academy course — each has banner, Stream video, description. */
+  academyLessons: defineTable({
+    courseId: v.id("academyCourses"),
+    title: v.string(),
+    slug: v.string(),
+    descriptionMarkdown: v.string(),
+    coverBunnyPath: v.optional(v.string()),
+    bunnyStreamVideoId: v.optional(v.string()),
+    status: v.union(v.literal("draft"), v.literal("published")),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_course_and_sort", ["courseId", "sortOrder"])
+    .index("by_course_and_slug", ["courseId", "slug"])
     .index("by_updated", ["updatedAt"]),
 
   /** Lifetime course entitlement after credit purchase (or admin grant). */

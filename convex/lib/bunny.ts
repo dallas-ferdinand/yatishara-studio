@@ -64,6 +64,17 @@ export function buildAcademyCoverPath(args: {
   return `academy/courses/${args.courseId}/cover/${stamp}-${filename}`;
 }
 
+/** Academy lesson cover / banner images. */
+export function buildAcademyLessonCoverPath(args: {
+  courseId: string;
+  lessonId: string;
+  filename: string;
+}): string {
+  const filename = sanitizeSegment(args.filename) || "cover.bin";
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `academy/courses/${args.courseId}/lessons/${args.lessonId}/cover/${stamp}-${filename}`;
+}
+
 /** Max signed CDN URL lifetime clients may request (24h). */
 export const MAX_SIGNED_URL_TTL_SEC = 60 * 60 * 24;
 

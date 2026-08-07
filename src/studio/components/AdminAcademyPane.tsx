@@ -7,6 +7,7 @@ import {
   Loader2,
   PauseCircle,
   Plus,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -24,14 +25,27 @@ type CourseRow = {
   descriptionMarkdown: string;
   priceCredits: number;
   coverUrl?: string;
+  introBunnyStreamVideoId?: string;
   bunnyStreamVideoId?: string;
+  lessonCount: number;
   status: "draft" | "published";
   sortOrder: number;
   purchaseCount: number;
   updatedAt: number;
 };
 
-const emptyForm = {
+type LessonRow = {
+  _id: Id<"academyLessons">;
+  title: string;
+  slug: string;
+  descriptionMarkdown: string;
+  coverUrl?: string;
+  bunnyStreamVideoId?: string;
+  status: "draft" | "published";
+  sortOrder: number;
+};
+
+const emptyCourseForm = {
   title: "",
   slug: "",
   descriptionMarkdown: "",
@@ -39,27 +53,60 @@ const emptyForm = {
   sortOrder: "100",
 };
 
+const emptyLessonForm = {
+  title: "",
+  slug: "",
+  descriptionMarkdown: "",
+  sortOrder: "10",
+};
+
 export function AdminAcademyPane() {
-  const courses = useQuery(api.academy.adminListCourses, {}) as CourseRow[] | undefined;
+  const courses = useQuery(api.academy.adminListCourses, {}) as
+    | CourseRow[]
+    | undefined;
   const upsert = useMutation(api.academy.adminUpsertCourse);
   const setStatus = useMutation(api.academy.adminSetCourseStatus);
   const prepareCover = useMutation(api.academy.adminPrepareCoverUpload);
   const commitCover = useAction(api.academyActions.adminCommitCourseCover);
   const createStreamUpload = useAction(api.academyActions.adminCreateStreamUpload);
+  const upsertLesson = useMutation(api.academy.adminUpsertLesson);
+  const setLessonStatus = useMutation(api.academy.adminSetLessonStatus);
+  const deleteLesson = useMutation(api.academy.adminDeleteLesson);
+  const commitLessonCover = useAction(api.academyActions.adminCommitLessonCover);
+  const createLessonStreamUpload = useAction(
+    api.academyActions.adminCreateLessonStreamUpload,
+  );
   const grantCourse = useMutation(api.academy.adminGrantCourse);
   const revokeCourse = useMutation(api.academy.adminRevokeCourse);
 
-  const [selectedId, setSelectedId] = useState<Id<"academyCourses"> | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [selectedId, setSelectedId] = useState<Id<"academyCourses"> | null>(
+    null,
+  );
+  const [selectedLessonId, setSelectedLessonId] =
+    useState<Id<"academyLessons"> | null>(null);
+  const [form, setForm] = useState(emptyCourseForm);
+  const [lessonForm, setLessonForm] = useState(emptyLessonForm);
   const [busy, setBusy] = useState("");
   const [grantUserId, setGrantUserId] = useState("");
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const lessonVideoInputRef = useRef<HTMLInputElement>(null);
+  const lessonCoverInputRef = useRef<HTMLInputElement>(null);
 
   const selected = useMemo(
     () => courses?.find((c) => c._id === selectedId) ?? null,
     [courses, selectedId],
+  );
+
+  const lessons = useQuery(
+    api.academy.adminListLessons,
+    selectedId ? { courseId: selectedId } : "skip",
+  ) as LessonRow[] | undefined;
+
+  const selectedLesson = useMemo(
+    () => lessons?.find((l) => l._id === selectedLessonId) ?? null,
+    [lessons, selectedLessonId],
   );
 
   const purchases = useQuery(
@@ -69,6 +116,8 @@ export function AdminAcademyPane() {
 
   function loadCourse(course: CourseRow) {
     setSelectedId(course._id);
+    setSelectedLessonId(null);
+    setLessonForm(emptyLessonForm);
     setForm({
       title: course.title,
       slug: course.slug,
@@ -80,11 +129,28 @@ export function AdminAcademyPane() {
     setUploadPct(null);
   }
 
+  function loadLesson(lesson: LessonRow) {
+    setSelectedLessonId(lesson._id);
+    setLessonForm({
+      title: lesson.title,
+      slug: lesson.slug,
+      descriptionMarkdown: lesson.descriptionMarkdown,
+      sortOrder: String(lesson.sortOrder),
+    });
+  }
+
   function startNew() {
     setSelectedId(null);
-    setForm(emptyForm);
+    setSelectedLessonId(null);
+    setForm(emptyCourseForm);
+    setLessonForm(emptyLessonForm);
     setGrantUserId("");
     setUploadPct(null);
+  }
+
+  function startNewLesson() {
+    setSelectedLessonId(null);
+    setLessonForm(emptyLessonForm);
   }
 
   async function saveCourse() {
@@ -107,6 +173,30 @@ export function AdminAcademyPane() {
     }
   }
 
+  async function saveLesson() {
+    if (!selectedId) {
+      toast.error("Save the course first");
+      return;
+    }
+    setBusy("Saving lesson…");
+    try {
+      const lessonId = await upsertLesson({
+        lessonId: selectedLessonId ?? undefined,
+        courseId: selectedId,
+        title: lessonForm.title,
+        slug: lessonForm.slug || undefined,
+        descriptionMarkdown: lessonForm.descriptionMarkdown,
+        sortOrder: Number(lessonForm.sortOrder) || 10,
+      });
+      setSelectedLessonId(lessonId);
+      toast.success(selectedLessonId ? "Lesson updated" : "Lesson created");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Lesson save failed"));
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function togglePublish() {
     if (!selected) return;
     const next = selected.status === "published" ? "draft" : "published";
@@ -116,6 +206,20 @@ export function AdminAcademyPane() {
       toast.success(next === "published" ? "Published" : "Moved to draft");
     } catch (error) {
       toast.error(friendlyConvexError(error, "Status change failed"));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function toggleLessonPublish() {
+    if (!selectedLesson) return;
+    const next = selectedLesson.status === "published" ? "draft" : "published";
+    setBusy(next === "published" ? "Publishing lesson…" : "Unpublishing lesson…");
+    try {
+      await setLessonStatus({ lessonId: selectedLesson._id, status: next });
+      toast.success(next === "published" ? "Lesson published" : "Lesson draft");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Lesson status failed"));
     } finally {
       setBusy("");
     }
@@ -152,9 +256,9 @@ export function AdminAcademyPane() {
     }
   }
 
-  async function onVideoPick(file: File | null) {
+  async function onIntroVideoPick(file: File | null) {
     if (!file || !selectedId) {
-      toast.error("Save the course first, then upload a video");
+      toast.error("Save the course first, then upload an intro video");
       return;
     }
     setBusy("Preparing Stream upload…");
@@ -162,9 +266,9 @@ export function AdminAcademyPane() {
     try {
       const creds = await createStreamUpload({
         courseId: selectedId,
-        title: form.title || undefined,
+        title: `${form.title || "Course"} intro`,
       });
-      setBusy("Uploading video…");
+      setBusy("Uploading intro…");
       await tusUploadFile({
         file,
         endpoint: creds.tusEndpoint,
@@ -176,13 +280,78 @@ export function AdminAcademyPane() {
         },
         onProgress: (ratio) => setUploadPct(Math.round(ratio * 100)),
       });
-      toast.success("Video uploaded — Bunny will finish processing shortly");
+      toast.success("Intro uploaded — Bunny will finish processing shortly");
     } catch (error) {
-      toast.error(friendlyConvexError(error, "Video upload failed"));
+      toast.error(friendlyConvexError(error, "Intro upload failed"));
     } finally {
       setBusy("");
       setUploadPct(null);
       if (videoInputRef.current) videoInputRef.current.value = "";
+    }
+  }
+
+  async function onLessonCoverPick(file: File | null) {
+    if (!file || !selectedLessonId) {
+      toast.error("Save the lesson first, then upload a banner");
+      return;
+    }
+    setBusy("Uploading lesson banner…");
+    try {
+      const uploadUrl = await prepareCover({});
+      const put = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type || "image/jpeg" },
+        body: file,
+      });
+      if (!put.ok) throw new Error("Banner staging failed");
+      const { storageId } = (await put.json()) as { storageId: string };
+      await commitLessonCover({
+        lessonId: selectedLessonId,
+        storageId: storageId as Id<"_storage">,
+        filename: file.name,
+        mimeType: file.type || "image/jpeg",
+        byteSize: file.size,
+      });
+      toast.success("Lesson banner uploaded");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Lesson banner failed"));
+    } finally {
+      setBusy("");
+      if (lessonCoverInputRef.current) lessonCoverInputRef.current.value = "";
+    }
+  }
+
+  async function onLessonVideoPick(file: File | null) {
+    if (!file || !selectedLessonId) {
+      toast.error("Save the lesson first, then upload a video");
+      return;
+    }
+    setBusy("Preparing lesson Stream upload…");
+    setUploadPct(0);
+    try {
+      const creds = await createLessonStreamUpload({
+        lessonId: selectedLessonId,
+        title: lessonForm.title || undefined,
+      });
+      setBusy("Uploading lesson video…");
+      await tusUploadFile({
+        file,
+        endpoint: creds.tusEndpoint,
+        headers: {
+          AuthorizationSignature: creds.signature,
+          AuthorizationExpire: String(creds.expirationTime),
+          VideoId: creds.videoId,
+          LibraryId: creds.libraryId,
+        },
+        onProgress: (ratio) => setUploadPct(Math.round(ratio * 100)),
+      });
+      toast.success("Lesson video uploaded");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Lesson video failed"));
+    } finally {
+      setBusy("");
+      setUploadPct(null);
+      if (lessonVideoInputRef.current) lessonVideoInputRef.current.value = "";
     }
   }
 
@@ -204,6 +373,9 @@ export function AdminAcademyPane() {
   }
 
   const rows = courses ?? [];
+  const lessonRows = lessons ?? [];
+  const introId =
+    selected?.introBunnyStreamVideoId || selected?.bunnyStreamVideoId;
 
   return (
     <div className="studio-admin-stack">
@@ -211,7 +383,11 @@ export function AdminAcademyPane() {
         <div className="studio-admin-section-head">
           <span className="studio-admin-section-title">Academy courses</span>
           <div className="studio-admin-section-extras">
-            <button type="button" className="cursor-settings-action" onClick={startNew}>
+            <button
+              type="button"
+              className="cursor-settings-action"
+              onClick={startNew}
+            >
               <Plus className="h-3.5 w-3.5" aria-hidden />
               New course
             </button>
@@ -223,15 +399,15 @@ export function AdminAcademyPane() {
           empty={courses !== undefined && !rows.length}
           emptyIcon={<GraduationCap />}
           emptyTitle="No courses yet"
-          emptyHint="Create a draft, upload a video, then publish."
+          emptyHint="Create a draft, add intro + lessons, then publish."
         >
           <thead>
             <tr>
               <th>Title</th>
               <th>Status</th>
               <th>Credits</th>
-              <th>Buys</th>
-              <th>Video</th>
+              <th>Lessons</th>
+              <th>Intro</th>
             </tr>
           </thead>
           <tbody>
@@ -248,8 +424,12 @@ export function AdminAcademyPane() {
                 </td>
                 <td>{course.status}</td>
                 <td>{course.priceCredits}</td>
-                <td>{course.purchaseCount}</td>
-                <td>{course.bunnyStreamVideoId ? "Ready" : "—"}</td>
+                <td>{course.lessonCount}</td>
+                <td>
+                  {course.introBunnyStreamVideoId || course.bunnyStreamVideoId
+                    ? "Ready"
+                    : "—"}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -263,7 +443,8 @@ export function AdminAcademyPane() {
           </span>
           {busy ? (
             <span className="studio-settings-empty" style={{ margin: 0 }}>
-              <Loader2 className="h-3.5 w-3.5 animate-spin inline" aria-hidden /> {busy}
+              <Loader2 className="h-3.5 w-3.5 animate-spin inline" aria-hidden />{" "}
+              {busy}
               {uploadPct != null ? ` ${uploadPct}%` : ""}
             </span>
           ) : null}
@@ -287,7 +468,9 @@ export function AdminAcademyPane() {
               onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
             />
           </label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}
+          >
             <label style={{ display: "grid", gap: 4 }}>
               <span>Price (credits)</span>
               <input
@@ -295,7 +478,9 @@ export function AdminAcademyPane() {
                 type="number"
                 min={1}
                 value={form.priceCredits}
-                onChange={(e) => setForm((f) => ({ ...f, priceCredits: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, priceCredits: e.target.value }))
+                }
               />
             </label>
             <label style={{ display: "grid", gap: 4 }}>
@@ -304,18 +489,23 @@ export function AdminAcademyPane() {
                 className="cursor-input"
                 type="number"
                 value={form.sortOrder}
-                onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, sortOrder: e.target.value }))
+                }
               />
             </label>
           </div>
           <label style={{ display: "grid", gap: 4 }}>
-            <span>Description (markdown)</span>
+            <span>Overview (markdown)</span>
             <textarea
               className="cursor-input"
-              rows={10}
+              rows={8}
               value={form.descriptionMarkdown}
               onChange={(e) =>
-                setForm((f) => ({ ...f, descriptionMarkdown: e.target.value }))
+                setForm((f) => ({
+                  ...f,
+                  descriptionMarkdown: e.target.value,
+                }))
               }
             />
           </label>
@@ -327,7 +517,7 @@ export function AdminAcademyPane() {
               onClick={() => void saveCourse()}
               disabled={Boolean(busy)}
             >
-              Save
+              Save course
             </button>
             {selected ? (
               <button
@@ -338,7 +528,8 @@ export function AdminAcademyPane() {
               >
                 {selected.status === "published" ? (
                   <>
-                    <PauseCircle className="h-3.5 w-3.5" aria-hidden /> Unpublish
+                    <PauseCircle className="h-3.5 w-3.5" aria-hidden />{" "}
+                    Unpublish
                   </>
                 ) : (
                   <>
@@ -371,7 +562,7 @@ export function AdminAcademyPane() {
                   onClick={() => coverInputRef.current?.click()}
                   disabled={Boolean(busy)}
                 >
-                  <Upload className="h-3.5 w-3.5" aria-hidden /> Cover image
+                  <Upload className="h-3.5 w-3.5" aria-hidden /> Course banner
                 </button>
                 <button
                   type="button"
@@ -379,7 +570,7 @@ export function AdminAcademyPane() {
                   onClick={() => videoInputRef.current?.click()}
                   disabled={Boolean(busy)}
                 >
-                  <Upload className="h-3.5 w-3.5" aria-hidden /> Course video
+                  <Upload className="h-3.5 w-3.5" aria-hidden /> Intro video
                 </button>
               </div>
               <input
@@ -394,19 +585,210 @@ export function AdminAcademyPane() {
                 type="file"
                 accept="video/*"
                 hidden
-                onChange={(e) => void onVideoPick(e.target.files?.[0] ?? null)}
+                onChange={(e) =>
+                  void onIntroVideoPick(e.target.files?.[0] ?? null)
+                }
               />
               <p className="studio-settings-empty" style={{ margin: 0 }}>
-                Stream id: {selected?.bunnyStreamVideoId || "not uploaded"}
+                Intro Stream id: {introId || "not uploaded"}
               </p>
             </div>
           ) : (
             <p className="studio-settings-empty">
-              Save the course once before uploading cover or video.
+              Save the course once before uploading banner or intro.
             </p>
           )}
         </div>
       </section>
+
+      {selectedId ? (
+        <section className="studio-admin-section">
+          <div className="studio-admin-section-head">
+            <span className="studio-admin-section-title">Lessons</span>
+            <div className="studio-admin-section-extras">
+              <button
+                type="button"
+                className="cursor-settings-action"
+                onClick={startNewLesson}
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                New lesson
+              </button>
+            </div>
+          </div>
+          <CursorTable
+            ariaLabel="Course lessons"
+            loading={lessons === undefined}
+            empty={lessons !== undefined && !lessonRows.length}
+            emptyIcon={<GraduationCap />}
+            emptyTitle="No lessons"
+            emptyHint="Add lessons with banner, video, and description."
+          >
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Sort</th>
+                <th>Video</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lessonRows.map((lesson) => (
+                <tr
+                  key={lesson._id}
+                  className={
+                    lesson._id === selectedLessonId ? "is-selected" : undefined
+                  }
+                  style={{ cursor: "pointer" }}
+                  onClick={() => loadLesson(lesson)}
+                >
+                  <td>
+                    <strong>{lesson.title}</strong>
+                    <span>{lesson.slug}</span>
+                  </td>
+                  <td>{lesson.status}</td>
+                  <td>{lesson.sortOrder}</td>
+                  <td>{lesson.bunnyStreamVideoId ? "Ready" : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </CursorTable>
+
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Lesson title</span>
+              <input
+                className="cursor-input"
+                value={lessonForm.title}
+                onChange={(e) =>
+                  setLessonForm((f) => ({ ...f, title: e.target.value }))
+                }
+              />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Lesson slug</span>
+              <input
+                className="cursor-input"
+                value={lessonForm.slug}
+                placeholder="auto from title"
+                onChange={(e) =>
+                  setLessonForm((f) => ({ ...f, slug: e.target.value }))
+                }
+              />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Sort order</span>
+              <input
+                className="cursor-input"
+                type="number"
+                value={lessonForm.sortOrder}
+                onChange={(e) =>
+                  setLessonForm((f) => ({ ...f, sortOrder: e.target.value }))
+                }
+              />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Lesson description (markdown)</span>
+              <textarea
+                className="cursor-input"
+                rows={6}
+                value={lessonForm.descriptionMarkdown}
+                onChange={(e) =>
+                  setLessonForm((f) => ({
+                    ...f,
+                    descriptionMarkdown: e.target.value,
+                  }))
+                }
+              />
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <button
+                type="button"
+                className="cursor-settings-action"
+                onClick={() => void saveLesson()}
+                disabled={Boolean(busy)}
+              >
+                Save lesson
+              </button>
+              {selectedLesson ? (
+                <>
+                  <button
+                    type="button"
+                    className="cursor-settings-action"
+                    onClick={() => void toggleLessonPublish()}
+                    disabled={Boolean(busy)}
+                  >
+                    {selectedLesson.status === "published"
+                      ? "Unpublish lesson"
+                      : "Publish lesson"}
+                  </button>
+                  <button
+                    type="button"
+                    className="cursor-settings-action"
+                    onClick={() => lessonCoverInputRef.current?.click()}
+                    disabled={Boolean(busy)}
+                  >
+                    <Upload className="h-3.5 w-3.5" aria-hidden /> Lesson banner
+                  </button>
+                  <button
+                    type="button"
+                    className="cursor-settings-action"
+                    onClick={() => lessonVideoInputRef.current?.click()}
+                    disabled={Boolean(busy)}
+                  >
+                    <Upload className="h-3.5 w-3.5" aria-hidden /> Lesson video
+                  </button>
+                  <button
+                    type="button"
+                    className="cursor-settings-action"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          await deleteLesson({ lessonId: selectedLesson._id });
+                          setSelectedLessonId(null);
+                          setLessonForm(emptyLessonForm);
+                          toast.success("Lesson deleted");
+                        } catch (error) {
+                          toast.error(
+                            friendlyConvexError(error, "Delete failed"),
+                          );
+                        }
+                      })();
+                    }}
+                    disabled={Boolean(busy)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden /> Delete
+                  </button>
+                </>
+              ) : null}
+            </div>
+            <input
+              ref={lessonCoverInputRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) =>
+                void onLessonCoverPick(e.target.files?.[0] ?? null)
+              }
+            />
+            <input
+              ref={lessonVideoInputRef}
+              type="file"
+              accept="video/*"
+              hidden
+              onChange={(e) =>
+                void onLessonVideoPick(e.target.files?.[0] ?? null)
+              }
+            />
+            {selectedLesson ? (
+              <p className="studio-settings-empty" style={{ margin: 0 }}>
+                Lesson Stream id:{" "}
+                {selectedLesson.bunnyStreamVideoId || "not uploaded"}
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {selectedId ? (
         <section className="studio-admin-section">
@@ -464,7 +846,9 @@ export function AdminAcademyPane() {
                             await revokeCourse({ purchaseId: row._id });
                             toast.success("Access revoked");
                           } catch (error) {
-                            toast.error(friendlyConvexError(error, "Revoke failed"));
+                            toast.error(
+                              friendlyConvexError(error, "Revoke failed"),
+                            );
                           }
                         })();
                       }}
