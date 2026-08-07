@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   Heart,
   Image as ImageIcon,
-  ListFilter,
   Loader2,
   Lock,
   MessageCircle,
@@ -21,7 +20,7 @@ import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from "
 import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { CursorSelect } from "@/desk/components/CursorSelect";
+import { ExplorerTypeFilter } from "@/desk/components/ExplorerTypeFilter";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { playUiSound } from "@/mos-app/sounds.js";
@@ -36,12 +35,12 @@ const MAX_POST_CAPTION = 2200;
 
 type CommentSort = "newest" | "oldest" | "liked" | "replies";
 
-const COMMENT_SORT_OPTIONS: { value: CommentSort; label: string }[] = [
-  { value: "newest", label: "Newest" },
-  { value: "oldest", label: "Oldest" },
-  { value: "liked", label: "Most liked" },
-  { value: "replies", label: "Most replies" },
-];
+const COMMENT_SORT_FILTERS = [
+  { id: "newest", label: "Newest", icon: "arrowUp" },
+  { id: "oldest", label: "Oldest", icon: "clock" },
+  { id: "liked", label: "Most liked", icon: "pin" },
+  { id: "replies", label: "Most replies", icon: "chats" },
+] as const;
 
 type CommentRow = {
   _id: Id<"profileComments"> | Id<"academyComments">;
@@ -932,25 +931,22 @@ function CommentsBody({
             placeholder="Search comments & replies"
             aria-label="Search comments and replies"
             end={
-              <div className="profile-comments-sort">
-                <ListFilter aria-hidden="true" />
-                <CursorSelect
-                  value={commentSort}
-                  options={COMMENT_SORT_OPTIONS}
-                  onChange={(next) => {
-                    if (
-                      next === "newest" ||
-                      next === "oldest" ||
-                      next === "liked" ||
-                      next === "replies"
-                    ) {
-                      setCommentSort(next);
-                    }
-                  }}
-                  ariaLabel="Sort comments"
-                  align="end"
-                />
-              </div>
+              <ExplorerTypeFilter
+                value={commentSort}
+                defaultId="newest"
+                options={[...COMMENT_SORT_FILTERS]}
+                onChange={(next) => {
+                  if (
+                    next === "newest" ||
+                    next === "oldest" ||
+                    next === "liked" ||
+                    next === "replies"
+                  ) {
+                    setCommentSort(next);
+                  }
+                }}
+                ariaLabel="Sort comments"
+              />
             }
           />
         </div>

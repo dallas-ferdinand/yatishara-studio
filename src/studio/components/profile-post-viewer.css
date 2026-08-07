@@ -1241,32 +1241,14 @@
   width: 100%;
 }
 
-.profile-comments-sort {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-  max-width: 9.5rem;
-  color: var(--color-cursor-muted, var(--mos-muted));
-}
-
-.profile-comments-sort > svg {
-  width: 13px;
-  height: 13px;
+.profile-comments-search .desk-explorer-type-filter {
   flex: 0 0 auto;
-  opacity: 0.9;
+  max-width: 11rem;
 }
 
-.profile-comments-sort .cursor-select-menu {
-  min-width: 0;
-  max-width: 100%;
-}
-
-.profile-comments-sort .cursor-select-trigger {
-  max-width: 100%;
-  padding-inline: 4px 2px;
-  font-size: 11px;
-  font-weight: 650;
+.profile-comments-search .desk-explorer-type-filter-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 [data-appearance="light"] .profile-comments-search {

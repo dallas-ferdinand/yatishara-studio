@@ -25,18 +25,20 @@ export const NETWORK_AUDIO_TYPE_FILTERS = [
 /**
  * Labeled filter dropdown with leading icons in the menu (shared CursorSelect language).
  * Pass `options` for alternate sets (e.g. network audio All / Music / SFX).
+ * `defaultId` is the clear/reset value (Files uses "all"; comments use "newest").
  */
 export function ExplorerTypeFilter({
   value = "all",
   onChange,
   options = EXPLORER_TYPE_FILTERS,
   ariaLabel = "Filter content",
+  defaultId = "all",
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const list = options?.length ? options : EXPLORER_TYPE_FILTERS;
   const active = list.find((opt) => opt.id === value) ?? list[0];
-  const filtered = value !== "all";
+  const filtered = value !== defaultId;
 
   useEffect(() => {
     if (!open) return;
@@ -78,7 +80,7 @@ export function ExplorerTypeFilter({
           aria-label="Clear filter"
           onClick={(e) => {
             e.stopPropagation();
-            onChange?.("all");
+            onChange?.(defaultId);
             setOpen(false);
           }}
         >
