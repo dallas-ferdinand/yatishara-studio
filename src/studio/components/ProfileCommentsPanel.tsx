@@ -930,7 +930,7 @@ function CommentsBody({
           <PanelSearchBar
             value={commentSearch}
             onChange={setCommentSearch}
-            placeholder="Search comments & replies"
+            placeholder="Search comments"
             aria-label="Search comments and replies"
             end={
               <ExplorerTypeFilter
