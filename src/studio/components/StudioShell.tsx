@@ -21971,9 +21971,29 @@ export function StudioShell({
                   )}
                 </button>
               </>
-            ) : isAdminUser ? (
-              <AdminQuickLinks onOpenAdminTab={openAdminTab} />
-            ) : null}
+            ) : (
+              <>
+                {isAdminUser ? (
+                  <AdminQuickLinks onOpenAdminTab={openAdminTab} />
+                ) : null}
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
+                  onClick={() => {
+                    void toggleBrowserFullscreen();
+                  }}
+                  aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
+                  title={browserFullscreen ? "Exit full screen" : "Full screen"}
+                  aria-pressed={browserFullscreen}
+                >
+                  {browserFullscreen ? (
+                    <Shrink className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <Expand className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                </button>
+              </>
+            )}
           </div>
         </header>
         <section className="relative flex min-h-0 flex-1 overflow-hidden">
@@ -22854,22 +22874,6 @@ export function StudioShell({
                 isProfileTabActive={activeTab.startsWith("profile:")}
                 onViewProfile={openOwnProfile}
               />
-              <button
-                type="button"
-                className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
-                onClick={() => {
-                  void toggleBrowserFullscreen();
-                }}
-                aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
-                title={browserFullscreen ? "Exit full screen" : "Full screen"}
-                aria-pressed={browserFullscreen}
-              >
-                {browserFullscreen ? (
-                  <Shrink className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <Expand className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
-              </button>
               <button
                 type="button"
                 className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
