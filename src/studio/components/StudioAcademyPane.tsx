@@ -71,6 +71,7 @@ function CheckoutDock({
   priceLabel,
   lessonCount,
   needsTopUp,
+  balanceLabel,
   topUpLabel,
   feeCents,
   totalDueCents,
@@ -86,6 +87,7 @@ function CheckoutDock({
   priceLabel: string;
   lessonCount: number;
   needsTopUp: boolean;
+  balanceLabel: string;
   topUpLabel: string;
   feeCents: number;
   totalDueCents: number;
@@ -122,8 +124,8 @@ function CheckoutDock({
           <>
             <dl className="studio-academy-checkout-receipt">
               <div className="studio-academy-checkout-row">
-                <dt>Course</dt>
-                <dd>{priceLabel}</dd>
+                <dt>Available balance</dt>
+                <dd>{balanceLabel}</dd>
               </div>
               <div className="studio-academy-checkout-row">
                 <dt>Top up</dt>
@@ -389,6 +391,7 @@ export function StudioAcademyPane({
     : 0;
   const topUpCredits = creditsFromAmountCents(topUpAmountCents, price);
   const topUpLabel = formatTtdCents(topUpAmountCents);
+  const balanceLabel = formatTtdFromCredits(balance, price);
   const feeCents = paywiseCardFeeCents(topUpAmountCents);
   const totalDueCents = paywiseCheckoutTotalCents(topUpAmountCents);
 
