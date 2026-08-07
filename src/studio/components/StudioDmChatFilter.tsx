@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  ChevronDown,
-  Circle,
-  Clock,
-  ListFilter,
-  Mail,
-  MailOpen,
-  MessagesSquare,
-} from "lucide-react";
+import { ArrowDown, Circle, Clock, ListFilter, Mail, MailOpen, MessagesSquare, X } from "lucide-react";
 import { createElement, useEffect, useRef, useState } from "react";
 import type { ComponentType } from "react";
 
@@ -22,7 +14,7 @@ export type StudioDmChatFilterId =
 type FilterOption = {
   id: StudioDmChatFilterId;
   label: string;
-  icon: ComponentType<{ "aria-hidden"?: boolean }>;
+  icon: ComponentType<{ "aria-hidden"?: boolean; className?: string }>;
 };
 
 export const STUDIO_DM_CHAT_FILTERS: FilterOption[] = [
@@ -33,7 +25,7 @@ export const STUDIO_DM_CHAT_FILTERS: FilterOption[] = [
   { id: "awaiting", label: "Awaiting reply", icon: Clock },
 ];
 
-/** Compact chat-list filter, mirroring the file-manager type dropdown. */
+/** Compact chat-list filter — same chrome as Files / comments type dropdown. */
 export function StudioDmChatFilter({
   value,
   onChange,
@@ -66,10 +58,10 @@ export function StudioDmChatFilter({
   }, [open]);
 
   return (
-    <div className="studio-dm-chat-filter" ref={wrapRef}>
+    <div className="desk-explorer-type-filter studio-dm-chat-filter" ref={wrapRef}>
       <button
         type="button"
-        className={`studio-dm-chat-filter-trigger${filtered ? " is-active" : ""}${open ? " is-open" : ""}`}
+        className={`desk-explorer-type-filter-trigger${filtered ? " is-active" : ""}${open ? " is-open" : ""}`}
         title={filtered ? `Filter: ${active.label}` : "Filter chats"}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -77,12 +69,27 @@ export function StudioDmChatFilter({
         onClick={() => setOpen((prev) => !prev)}
       >
         <ListFilter aria-hidden={true} />
-        <span>{filtered ? active.label : "Filter"}</span>
-        <ChevronDown className="cursor-select-arrow" aria-hidden={true} />
+        <span>{active.label}</span>
+        <ArrowDown className="cursor-select-arrow" aria-hidden={true} />
       </button>
+      {filtered ? (
+        <button
+          type="button"
+          className="desk-explorer-type-filter-clear"
+          title="Clear filter"
+          aria-label="Clear filter"
+          onClick={(event) => {
+            event.stopPropagation();
+            onChange("all");
+            setOpen(false);
+          }}
+        >
+          <X aria-hidden={true} />
+        </button>
+      ) : null}
       {open ? (
         <div
-          className="cursor-dropdown cursor-dropdown-down is-end studio-dm-chat-filter-menu"
+          className="cursor-dropdown cursor-dropdown-down is-end desk-explorer-type-filter-menu studio-dm-chat-filter-menu"
           role="menu"
         >
           {STUDIO_DM_CHAT_FILTERS.map((opt) => (

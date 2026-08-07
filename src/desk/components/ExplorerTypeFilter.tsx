@@ -26,6 +26,8 @@ export const NETWORK_AUDIO_TYPE_FILTERS = [
  * Labeled filter dropdown with leading icons in the menu (shared CursorSelect language).
  * Pass `options` for alternate sets (e.g. network audio All / Music / SFX).
  * `defaultId` is the clear/reset value (Files uses "all"; comments use "newest").
+ * `triggerIcon` — when set, always show that Icon on the closed button (e.g. "sliders"
+ * for a filter glyph) instead of the active option’s icon. Menu rows still use option icons.
  */
 export function ExplorerTypeFilter({
   value = "all",
@@ -33,12 +35,14 @@ export function ExplorerTypeFilter({
   options = EXPLORER_TYPE_FILTERS,
   ariaLabel = "Filter content",
   defaultId = "all",
+  triggerIcon = null,
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const list = options?.length ? options : EXPLORER_TYPE_FILTERS;
   const active = list.find((opt) => opt.id === value) ?? list[0];
   const filtered = value !== defaultId;
+  const closedIcon = triggerIcon || active.icon;
 
   useEffect(() => {
     if (!open) return;
@@ -68,7 +72,7 @@ export function ExplorerTypeFilter({
         aria-label={filtered ? `Filter: ${active.label}` : ariaLabel}
         onClick={() => setOpen((v) => !v)}
       >
-        <Icon name={active.icon} size={13} />
+        <Icon name={closedIcon} size={13} />
         <span>{active.label}</span>
         <ArrowDown className="cursor-select-arrow" aria-hidden="true" />
       </button>
