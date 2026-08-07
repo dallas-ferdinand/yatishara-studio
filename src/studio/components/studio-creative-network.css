@@ -20,7 +20,7 @@
 .studio-cn-sidebar-chrome {
   flex: 0 0 auto;
   z-index: 2;
-  padding: 0 2px;
+  padding: 0;
 }
 
 /* Match Messages rail: no stacked top border on search. */
