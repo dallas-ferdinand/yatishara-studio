@@ -234,6 +234,24 @@
   background: color-mix(in srgb, var(--cursor-accent) 22%, transparent);
 }
 
+.studio-academy-checkout-paywise {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.studio-academy-checkout-fee {
+  margin: 0;
+}
+
+.studio-academy-checkout-total {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--color-cursor-text-bright, var(--cursor-text-bright));
+}
+
 .studio-academy-body.is-locked .studio-academy-body-clip {
   max-height: 12.5rem;
   overflow: hidden;

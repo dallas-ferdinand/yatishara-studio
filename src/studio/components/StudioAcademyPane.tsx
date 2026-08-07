@@ -22,8 +22,12 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
+  creditsFromAmountCents,
   creditsToCents,
+  formatTtdCents,
   formatTtdFromCredits,
+  paywiseCardFeeCents,
+  paywiseCheckoutTotalCents,
   topUpMinAmountCents,
 } from "@/studio/lib/money";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
@@ -47,24 +51,41 @@ function courseBannerUrl(course: {
   return course.coverUrl || demoCoverUrl(course.slug);
 }
 
+function newClientRequestId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `academy-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function CheckoutDock({
   showHead,
   onBuyClick,
   onCancelConfirm,
+  onPaywiseClick,
   busy,
   confirming,
   owned,
   priceLabel,
   lessonCount,
+  needsTopUp,
+  topUpLabel,
+  feeLabel,
+  totalDueLabel,
 }: {
   showHead: boolean;
   onBuyClick: () => void;
   onCancelConfirm: () => void;
+  onPaywiseClick?: () => void;
   busy: boolean;
   confirming: boolean;
   owned: boolean;
   priceLabel: string;
   lessonCount: number;
+  needsTopUp: boolean;
+  topUpLabel: string;
+  feeLabel: string;
+  totalDueLabel: string;
 }) {
   const body = (
     <div className="public-offers-rail-detail">
@@ -80,9 +101,45 @@ function CheckoutDock({
             <dt>Lessons</dt>
             <dd>{lessonCount}</dd>
           </div>
+          {needsTopUp ? (
+            <div className="public-offers-row">
+              <dt>Top up</dt>
+              <dd>{topUpLabel}</dd>
+            </div>
+          ) : null}
         </dl>
         {owned ? (
           <p className="public-offers-note">You own this course.</p>
+        ) : needsTopUp ? (
+          <div className="studio-academy-checkout-paywise">
+            <p className="public-offers-note studio-academy-checkout-fee">
+              Includes transaction fee · PayWise {feeLabel}
+            </p>
+            <p className="studio-academy-checkout-total">
+              Pay {totalDueLabel} with PayWise
+            </p>
+            <button
+              type="button"
+              className="public-offers-btn is-primary is-block"
+              disabled={busy}
+              onClick={onPaywiseClick}
+              aria-label={
+                busy
+                  ? "Opening PayWise"
+                  : `Pay ${totalDueLabel} with PayWise to unlock course`
+              }
+            >
+              {busy ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Zap aria-hidden="true" />
+              )}
+              {busy ? "Opening PayWise…" : "Pay with PayWise"}
+            </button>
+            <p className="public-offers-note">
+              After payment, the course unlocks automatically.
+            </p>
+          </div>
         ) : (
           <div className="studio-academy-buy-group">
             {confirming ? (
@@ -185,10 +242,16 @@ function BannerStage({
 
 export function StudioAcademyPane({
   onOpenCredits,
+  onPaywiseHandoff,
   creditPriceCents,
   creditBalance,
 }: {
   onOpenCredits?: (opts?: { amountCents?: number }) => void;
+  onPaywiseHandoff?: (handoff: {
+    phase: "preparing" | "redirect";
+    amountCents: number;
+    checkoutUrl?: string;
+  } | null) => void;
   creditPriceCents?: number;
   creditBalance?: number;
 }) {
@@ -198,6 +261,7 @@ export function StudioAcademyPane({
   const catalog = useQuery(api.academy.listPublishedCourses, {});
   const mine = useQuery(api.academy.listMyCourses, {});
   const purchase = useMutation(api.academy.purchaseCourse);
+  const startPaywiseCheckout = useAction(api.paywiseActions.startCheckout);
   const getIntroPlayback = useAction(api.academyActions.getIntroPlayback);
   const getLessonPlayback = useAction(api.academyActions.getLessonPlayback);
 
@@ -209,6 +273,7 @@ export function StudioAcademyPane({
   const [checkoutSheetOpen, setCheckoutSheetOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
+  const clientRequestIdRef = useRef<string | null>(null);
   const headTabsScrollRef = useRef<HTMLElement | null>(null);
   useHorizontalWheelScroll(headTabsScrollRef);
   useHorizontalScrollFade(headTabsScrollRef);
@@ -224,6 +289,7 @@ export function StudioAcademyPane({
     setCheckoutSheetOpen(false);
     setBuyArmed(false);
     setCommentsOpen(false);
+    clientRequestIdRef.current = null;
   }, [academy.courseId]);
 
   useEffect(() => {
@@ -261,6 +327,30 @@ export function StudioAcademyPane({
     ? formatTtdFromCredits(detail.priceCredits, price)
     : "";
 
+  const balance = Number(creditBalance ?? 0);
+  const priceCredits = detail?.priceCredits ?? 0;
+  const needsTopUp =
+    Boolean(detail) &&
+    !owned &&
+    Number.isFinite(balance) &&
+    priceCredits > 0 &&
+    balance < priceCredits;
+  const shortfallCredits = needsTopUp
+    ? Math.max(0, priceCredits - balance)
+    : 0;
+  const topUpAmountCents = needsTopUp
+    ? Math.max(
+        topUpMinAmountCents(price),
+        creditsToCents(shortfallCredits, price),
+      )
+    : 0;
+  const topUpCredits = creditsFromAmountCents(topUpAmountCents, price);
+  const topUpLabel = formatTtdCents(topUpAmountCents);
+  const feeLabel = formatTtdCents(paywiseCardFeeCents(topUpAmountCents));
+  const totalDueLabel = formatTtdCents(
+    paywiseCheckoutTotalCents(topUpAmountCents),
+  );
+
   useEffect(() => {
     if (commentsLessonId && selectedLesson) {
       setCommentCount(selectedLesson.commentCount ?? 0);
@@ -277,22 +367,8 @@ export function StudioAcademyPane({
     selectedLesson?._id,
   ]);
 
-  function openBillingForShortfall(shortfallCredits: number) {
-    const neededCents = creditsToCents(Math.max(0, shortfallCredits), price);
-    const amountCents = Math.max(topUpMinAmountCents(price), neededCents);
-    setBuyArmed(false);
-    onOpenCredits?.({ amountCents });
-  }
-
   async function buy() {
-    if (!academy.courseId || !detail) return;
-    const balance = Number(creditBalance ?? 0);
-    const priceCredits = detail.priceCredits;
-    if (Number.isFinite(balance) && balance < priceCredits) {
-      openBillingForShortfall(priceCredits - balance);
-      toast.message("Top up to unlock this course");
-      return;
-    }
+    if (!academy.courseId || !detail || needsTopUp) return;
     setBusy(true);
     try {
       await purchase({ courseId: academy.courseId });
@@ -300,32 +376,70 @@ export function StudioAcademyPane({
       setBuyArmed(false);
       setCheckoutSheetOpen(false);
     } catch (error) {
-      const message = friendlyConvexError(error, "Purchase failed");
-      toast.error(message);
-      if (/not enough balance|top up/i.test(message)) {
-        const shortfall = Math.max(0, priceCredits - Number(creditBalance ?? 0));
-        openBillingForShortfall(shortfall || priceCredits);
-      }
+      toast.error(friendlyConvexError(error, "Purchase failed"));
     } finally {
       setBusy(false);
     }
   }
 
   function handleBuyClick() {
-    if (!academy.courseId || owned || busy || !detail) return;
-    const balance = Number(creditBalance ?? 0);
-    const priceCredits = detail.priceCredits;
-    if (Number.isFinite(balance) && balance < priceCredits) {
-      openBillingForShortfall(priceCredits - balance);
-      toast.message("Top up to unlock this course");
-      return;
-    }
+    if (!academy.courseId || owned || busy || !detail || needsTopUp) return;
     if (buyArmed) {
       void buy();
       return;
     }
     setBuyArmed(true);
   }
+
+  async function handlePaywiseCheckout() {
+    if (!academy.courseId || !detail || !needsTopUp || busy) return;
+    if (!clientRequestIdRef.current) {
+      clientRequestIdRef.current = newClientRequestId();
+    }
+    setBusy(true);
+    onPaywiseHandoff?.({
+      phase: "preparing",
+      amountCents: topUpAmountCents,
+    });
+    try {
+      const result = await startPaywiseCheckout({
+        clientRequestId: clientRequestIdRef.current,
+        amountCents: topUpAmountCents,
+        creditsRequested: topUpCredits,
+        reference: `Academy: ${detail.title.slice(0, 60)}`,
+        academyCourseId: academy.courseId,
+      });
+      onPaywiseHandoff?.({
+        phase: "redirect",
+        amountCents: topUpAmountCents,
+        checkoutUrl: result.checkoutUrl,
+      });
+    } catch (error) {
+      onPaywiseHandoff?.(null);
+      const message = friendlyConvexError(error, "PayWise checkout failed");
+      toast.error(message);
+      if (/phone|email|first and last name|account details/i.test(message)) {
+        onOpenCredits?.();
+      }
+      clientRequestIdRef.current = null;
+      setBusy(false);
+    }
+  }
+
+  const checkoutDockProps = {
+    onBuyClick: handleBuyClick,
+    onCancelConfirm: () => setBuyArmed(false),
+    onPaywiseClick: () => void handlePaywiseCheckout(),
+    busy,
+    confirming: buyArmed,
+    owned,
+    priceLabel,
+    lessonCount: detail?.lessonCount ?? 0,
+    needsTopUp,
+    topUpLabel,
+    feeLabel,
+    totalDueLabel,
+  };
 
   async function playIntro() {
     if (!academy.courseId) return;
@@ -572,13 +686,7 @@ export function StudioAcademyPane({
           <div className="studio-academy-checkout-strip">
             <CheckoutDock
               showHead={false}
-              onBuyClick={handleBuyClick}
-              onCancelConfirm={() => setBuyArmed(false)}
-              busy={busy}
-              confirming={buyArmed}
-              owned={owned}
-              priceLabel={priceLabel}
-              lessonCount={detail.lessonCount}
+              {...checkoutDockProps}
             />
           </div>
         ) : null}
@@ -687,7 +795,7 @@ export function StudioAcademyPane({
                 onClick={() => setCheckoutSheetOpen(true)}
               >
                 <Zap aria-hidden="true" />
-                Buy now
+                {needsTopUp ? "Pay with PayWise" : "Buy now"}
               </button>
             ) : null}
           </div>
@@ -710,16 +818,7 @@ export function StudioAcademyPane({
                 <span className="studio-cn-book-sheet-grab" />
               </div>
               <div className="studio-cn-book-sheet-body">
-                <CheckoutDock
-                  showHead={false}
-                  onBuyClick={handleBuyClick}
-                  onCancelConfirm={() => setBuyArmed(false)}
-                  busy={busy}
-                  confirming={buyArmed}
-                  owned={owned}
-                  priceLabel={priceLabel}
-                  lessonCount={detail.lessonCount}
-                />
+                <CheckoutDock showHead={false} {...checkoutDockProps} />
               </div>
             </div>
           </div>

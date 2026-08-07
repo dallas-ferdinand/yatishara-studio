@@ -15,7 +15,7 @@ import {
   signBunnyFullUrl,
   THUMB_TRANSFORM,
 } from "./lib/bunny";
-import { getCreditPriceCents } from "./lib/marketplaceEscrow";
+import { purchaseCourseForUser } from "./lib/academyPurchase";
 import {
   accountNameFromUser,
   resolvePublicDisplayName,
@@ -353,76 +353,22 @@ export const purchaseCourse = authedMutation({
     alreadyOwned: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const course = await ctx.db.get("academyCourses", args.courseId);
-    if (!course || course.status !== "published") {
-      throw new Error("Course is not available");
-    }
-    const publishedLessons = await listLessonsForCourse(ctx, course._id, {
-      publishedOnly: true,
-    });
-    if (publishedLessons.length < 1 && !courseIntroVideoId(course)) {
-      throw new Error("Course content is not ready yet");
-    }
+    return await purchaseCourseForUser(ctx, ctx.user._id, args.courseId);
+  },
+});
 
-    const existing = await findPurchase(ctx, ctx.user._id, course._id);
-    if (existing) {
-      return { purchaseId: existing._id, alreadyOwned: true };
-    }
-
-    const account = await ctx.db
-      .query("billingAccounts")
-      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
-      .unique();
-    if (!account) throw new Error("Billing account not found");
-
-    const priceCredits = course.priceCredits;
-    if (!Number.isFinite(priceCredits) || priceCredits < 1) {
-      throw new Error("Invalid course price");
-    }
-    if (account.creditBalance < priceCredits) {
-      const creditPriceCents = await getCreditPriceCents(ctx);
-      const needCents = Math.round(priceCredits * creditPriceCents);
-      const needTtd = (needCents / 100).toLocaleString(undefined, {
-        minimumFractionDigits: Number.isInteger(needCents / 100) ? 0 : 2,
-        maximumFractionDigits: 2,
-      });
-      throw new Error(
-        `Not enough balance. Top up at least $${needTtd} TTD to buy this course.`,
-      );
-    }
-
-    const now = Date.now();
-    const balanceAfter = account.creditBalance - priceCredits;
-    await ctx.db.patch(account._id, {
-      creditBalance: balanceAfter,
-      updatedAt: now,
-    });
-
-    const creditTransactionId = await ctx.db.insert("creditTransactions", {
-      userId: ctx.user._id,
-      billingAccountId: account._id,
-      kind: "course_purchase",
-      amount: -priceCredits,
-      balanceAfter,
-      reason: `Academy: ${course.title.slice(0, 80)}`,
-      createdAt: now,
-    });
-
-    const purchaseId = await ctx.db.insert("academyPurchases", {
-      userId: ctx.user._id,
-      courseId: course._id,
-      priceCredits,
-      creditTransactionId,
-      purchasedAt: now,
-    });
-
-    await ctx.db.patch(creditTransactionId, { coursePurchaseId: purchaseId });
-    await ctx.db.patch(course._id, {
-      purchaseCount: course.purchaseCount + 1,
-      updatedAt: now,
-    });
-
-    return { purchaseId, alreadyOwned: false };
+/** After PayWise shortfall top-up: debit wallet and unlock the course. */
+export const internalPurchaseCourseForUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    courseId: v.id("academyCourses"),
+  },
+  returns: v.object({
+    purchaseId: v.id("academyPurchases"),
+    alreadyOwned: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    return await purchaseCourseForUser(ctx, args.userId, args.courseId);
   },
 });
 

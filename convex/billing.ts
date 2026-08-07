@@ -23,6 +23,7 @@ import {
   textCreditCost,
   videoCreditCost,
 } from "./lib/generationPricing";
+import { purchaseCourseForUser } from "./lib/academyPurchase";
 import { PAYWISE_CURRENCY } from "./lib/paywise";
 import { settleOutstandingStorage } from "./lib/storageBilling";
 import { createNotificationAndPush } from "./lib/notify";
@@ -84,8 +85,8 @@ const pricingReturn = v.object({
 });
 
 const creditPriceCents = 50;
-/** Must match UI min in src/studio/lib/money.ts (100 credits = TT$50 at 0.50/credit). */
-const TOP_UP_MIN_CREDITS = 100;
+/** Must match UI min in src/studio/lib/money.ts (20 credits = TT$10 at 0.50/credit). */
+const TOP_UP_MIN_CREDITS = 20;
 const PAYWISE_INITIAL_CHECK_DELAY_MS = 30_000;
 const PAYWISE_MAX_STATUS_CHECKS = 48;
 const PAYWISE_REVIEW_CHECK_DELAY_MS = 24 * 60 * 60 * 1000;
@@ -110,6 +111,7 @@ const paymentReturnFields = {
   nextStatusCheckAt: v.optional(v.number()),
   statusCheckAttempts: v.optional(v.number()),
   reference: v.optional(v.string()),
+  academyCourseId: v.optional(v.id("academyCourses")),
   rejectionReason: v.optional(v.string()),
   reviewedBy: v.optional(v.id("users")),
   reviewedAt: v.optional(v.number()),
@@ -615,6 +617,7 @@ export const preparePaywiseCheckout = internalMutation({
     amountCents: v.number(),
     creditsRequested: v.optional(v.number()),
     reference: v.optional(v.string()),
+    academyCourseId: v.optional(v.id("academyCourses")),
   },
   returns: v.object({
     paymentId: v.id("payments"),
@@ -625,11 +628,18 @@ export const preparePaywiseCheckout = internalMutation({
     externalPaymentId: v.optional(v.string()),
     status: paymentStatus,
     alreadyReady: v.boolean(),
+    academyCourseId: v.optional(v.id("academyCourses")),
   }),
   handler: async (ctx, args) => {
     const clientRequestId = args.clientRequestId.trim();
     if (!clientRequestId || clientRequestId.length > 128) {
       throw new Error("Invalid checkout request id");
+    }
+    if (args.academyCourseId) {
+      const course = await ctx.db.get("academyCourses", args.academyCourseId);
+      if (!course || course.status !== "published") {
+        throw new Error("Course is not available");
+      }
     }
     const existing = await ctx.db
       .query("payments")
@@ -645,7 +655,9 @@ export const preparePaywiseCheckout = internalMutation({
       if (
         existing.amountCents !== args.amountCents ||
         (args.creditsRequested !== undefined &&
-          existing.creditsGranted !== args.creditsRequested)
+          existing.creditsGranted !== args.creditsRequested) ||
+        (args.academyCourseId &&
+          existing.academyCourseId !== args.academyCourseId)
       ) {
         throw new Error("Checkout request id was already used for a different top-up.");
       }
@@ -661,6 +673,7 @@ export const preparePaywiseCheckout = internalMutation({
         externalPaymentId: existing.externalPaymentId,
         status: existing.status,
         alreadyReady: Boolean(existing.checkoutUrl && existing.externalPaymentId),
+        academyCourseId: existing.academyCourseId,
       };
     }
 
@@ -685,6 +698,7 @@ export const preparePaywiseCheckout = internalMutation({
       clientRequestId,
       callbackToken,
       reference: args.reference,
+      academyCourseId: args.academyCourseId,
       statusCheckAttempts: 0,
       nextStatusCheckAt: now + PAYWISE_INITIAL_CHECK_DELAY_MS,
       createdAt: now,
@@ -699,6 +713,7 @@ export const preparePaywiseCheckout = internalMutation({
       externalPaymentId: undefined,
       status: "pending" as const,
       alreadyReady: false,
+      academyCourseId: args.academyCourseId,
     };
   },
 });
@@ -824,6 +839,7 @@ export const getPaywisePaymentForUser = internalQuery({
       externalPaymentId: v.optional(v.string()),
       checkoutUrl: v.optional(v.string()),
       lastStatusCheckedAt: v.optional(v.number()),
+      academyCourseId: v.optional(v.id("academyCourses")),
     }),
     v.null(),
   ),
@@ -840,6 +856,7 @@ export const getPaywisePaymentForUser = internalQuery({
       externalPaymentId: payment.externalPaymentId,
       checkoutUrl: payment.checkoutUrl,
       lastStatusCheckedAt: payment.lastStatusCheckedAt,
+      academyCourseId: payment.academyCourseId,
     };
   },
 });
@@ -1005,6 +1022,8 @@ export const applyPaywiseStatusCheck = internalMutation({
     reason: v.optional(v.string()),
     amountCents: v.optional(v.number()),
     creditsGranted: v.optional(v.number()),
+    academyCourseId: v.optional(v.id("academyCourses")),
+    academyUnlocked: v.optional(v.boolean()),
   }),
   handler: async (
     ctx,
@@ -1023,6 +1042,8 @@ export const applyPaywiseStatusCheck = internalMutation({
     reason?: string;
     amountCents?: number;
     creditsGranted?: number;
+    academyCourseId?: Id<"academyCourses">;
+    academyUnlocked?: boolean;
   }> => {
     const payment = await ctx.db.get(args.paymentId);
     if (!payment || payment.method !== "paywise") {
@@ -1030,12 +1051,15 @@ export const applyPaywiseStatusCheck = internalMutation({
     }
     const now = Date.now();
     if (payment.status === "payment_completed") {
+      const academyUnlock = await maybeUnlockAcademyCourseAfterTopUp(ctx, payment);
       return {
         status: payment.status,
         granted: false,
         reason: "already_completed",
         amountCents: payment.amountCents,
         creditsGranted: payment.creditsGranted,
+        academyCourseId: academyUnlock.academyCourseId ?? payment.academyCourseId,
+        academyUnlocked: academyUnlock.academyUnlocked,
       };
     }
     if (payment.status === "checkout_failed") {
@@ -1109,6 +1133,7 @@ export const applyPaywiseStatusCheck = internalMutation({
           reason: "PayWise top-up completed",
         });
       }
+      const academyUnlock = await maybeUnlockAcademyCourseAfterTopUp(ctx, payment);
       await ctx.db.patch(payment._id, {
         ...basePatch,
         status: "payment_completed",
@@ -1120,6 +1145,7 @@ export const applyPaywiseStatusCheck = internalMutation({
           userId: payment.userId,
           paymentId: payment._id,
           status: "payment_completed",
+          academyUnlocked: academyUnlock.academyUnlocked,
         });
       }
       return {
@@ -1127,6 +1153,8 @@ export const applyPaywiseStatusCheck = internalMutation({
         granted: !alreadyGranted,
         amountCents: payment.amountCents,
         creditsGranted: payment.creditsGranted,
+        academyCourseId: academyUnlock.academyCourseId,
+        academyUnlocked: academyUnlock.academyUnlocked,
       };
     }
 
@@ -1936,6 +1964,31 @@ async function hasTopUpForPayment(ctx: MutationCtx | QueryCtx, paymentId: Id<"pa
   return existingTx.some((tx) => tx.kind === "top_up" || tx.kind === "subscription_grant");
 }
 
+async function maybeUnlockAcademyCourseAfterTopUp(
+  ctx: MutationCtx,
+  payment: Doc<"payments">,
+): Promise<{
+  academyCourseId?: Id<"academyCourses">;
+  academyUnlocked: boolean;
+}> {
+  if (!payment.academyCourseId) {
+    return { academyUnlocked: false };
+  }
+  try {
+    await purchaseCourseForUser(ctx, payment.userId, payment.academyCourseId);
+    return {
+      academyCourseId: payment.academyCourseId,
+      academyUnlocked: true,
+    };
+  } catch {
+    // Credits already granted — learner can still buy from Academy checkout.
+    return {
+      academyCourseId: payment.academyCourseId,
+      academyUnlocked: false,
+    };
+  }
+}
+
 async function notifyPaymentStatus(
   ctx: MutationCtx,
   args: {
@@ -1943,11 +1996,14 @@ async function notifyPaymentStatus(
     paymentId: Id<"payments">;
     status: Doc<"payments">["status"];
     rejectionReason?: string;
+    academyUnlocked?: boolean;
   },
 ) {
   const title =
     args.status === "payment_completed"
-      ? "Payment confirmed"
+      ? args.academyUnlocked
+        ? "Course unlocked"
+        : "Payment confirmed"
       : args.status === "rejected"
         ? "Payment rejected"
         : args.status === "cancelled"
@@ -1957,7 +2013,9 @@ async function notifyPaymentStatus(
             : "Payment update";
   const body =
     args.status === "payment_completed"
-      ? "Your balance was topped up. You’re ready to create."
+      ? args.academyUnlocked
+        ? "Your top-up went through and the course is unlocked."
+        : "Your balance was topped up. You’re ready to create."
       : args.status === "rejected"
         ? args.rejectionReason ?? "Your payment was rejected."
         : args.status === "cancelled"

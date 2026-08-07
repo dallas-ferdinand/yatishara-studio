@@ -5,13 +5,13 @@ export const DEFAULT_CREDIT_PRICE_CENTS = 50;
 /**
  * Preset top-up packs (credits). At 0.50 TTD/credit:
  * $50 · $500 · $1,000 · $2,000 TTD.
- * Custom amounts allowed at or above the first tier ($50 TTD), unless a temp override is set.
+ * Custom amounts allowed at or above TT$10 (PayWise min), unless override is set.
  */
 export const TOP_UP_TIER_CREDITS = [100, 1000, 2000, 4000] as const;
 export const TOP_UP_TIER_LABELS = ["Starter", "Pro", "Studio", "Scale"] as const;
 
-/** Optional override for min top-up cents. `null` = first tier (TT$50 at default pricing). */
-export const TOP_UP_MIN_AMOUNT_CENTS_OVERRIDE: number | null = null;
+/** Min top-up = TT$10 (20 credits at default 0.50). Override only for ops tests. */
+export const TOP_UP_MIN_AMOUNT_CENTS_OVERRIDE: number | null = 1000;
 
 export function creditsToCents(
   credits: number,
@@ -20,14 +20,14 @@ export function creditsToCents(
   return Math.round(Number(credits || 0) * Number(creditPriceCents || DEFAULT_CREDIT_PRICE_CENTS));
 }
 
-/** Minimum custom / any top-up: temp override, else price of the first (cheapest) tier. */
+/** Minimum custom / any top-up: override, else TT$10 floor (not first chip tier). */
 export function topUpMinAmountCents(
   creditPriceCents: number = DEFAULT_CREDIT_PRICE_CENTS,
 ): number {
   if (TOP_UP_MIN_AMOUNT_CENTS_OVERRIDE != null) {
     return TOP_UP_MIN_AMOUNT_CENTS_OVERRIDE;
   }
-  return creditsToCents(TOP_UP_TIER_CREDITS[0], creditPriceCents);
+  return creditsToCents(20, creditPriceCents);
 }
 
 /** Whole credits purchasable for a paid amount (remainder below one credit is not granted). */

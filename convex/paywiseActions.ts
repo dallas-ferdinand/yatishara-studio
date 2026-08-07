@@ -33,6 +33,7 @@ type PreparedCheckout = {
   externalPaymentId?: string;
   status: string;
   alreadyReady: boolean;
+  academyCourseId?: Id<"academyCourses">;
 };
 
 type PaywisePaymentRow = {
@@ -48,6 +49,7 @@ type PaywisePaymentRow = {
   statusCheckAttempts?: number;
   nextStatusCheckAt?: number;
   lastStatusCheckedAt?: number;
+  academyCourseId?: Id<"academyCourses">;
 };
 
 type StatusApplyResult = {
@@ -56,6 +58,8 @@ type StatusApplyResult = {
   reason?: string;
   amountCents?: number;
   creditsGranted?: number;
+  academyCourseId?: Id<"academyCourses">;
+  academyUnlocked?: boolean;
 };
 
 const getCheckoutUserRef = makeFunctionReference<
@@ -72,6 +76,7 @@ const preparePaywiseCheckoutRef = makeFunctionReference<
     amountCents: number;
     creditsRequested?: number;
     reference?: string;
+    academyCourseId?: Id<"academyCourses">;
   },
   PreparedCheckout
 >("billing:preparePaywiseCheckout") as unknown as FunctionReference<
@@ -83,6 +88,7 @@ const preparePaywiseCheckoutRef = makeFunctionReference<
     amountCents: number;
     creditsRequested?: number;
     reference?: string;
+    academyCourseId?: Id<"academyCourses">;
   },
   PreparedCheckout
 >;
@@ -235,6 +241,7 @@ export const startCheckout = action({
     amountCents: v.number(),
     creditsRequested: v.optional(v.number()),
     reference: v.optional(v.string()),
+    academyCourseId: v.optional(v.id("academyCourses")),
   },
   returns: v.object({
     paymentId: v.id("payments"),
@@ -276,6 +283,7 @@ export const startCheckout = action({
       amountCents: args.amountCents,
       creditsRequested: args.creditsRequested,
       reference: args.reference,
+      academyCourseId: args.academyCourseId,
     });
 
     if (prepared.alreadyReady && prepared.checkoutUrl) {
@@ -294,8 +302,13 @@ export const startCheckout = action({
     }
     const notifyUrl = `${apiBase}/paywise/notify?paymentId=${prepared.paymentId}&token=${token}`;
     const callbackUrl = `${apiBase}/paywise/callback?paymentId=${prepared.paymentId}&token=${token}`;
-    const successUrl = `${appBase}/?payment=success&paymentId=${prepared.paymentId}`;
-    const errorUrl = `${appBase}/?payment=error&paymentId=${prepared.paymentId}`;
+    const academyCourseId = prepared.academyCourseId ?? args.academyCourseId;
+    const successUrl = academyCourseId
+      ? `${appBase}/?payment=success&paymentId=${prepared.paymentId}&academyCourse=${academyCourseId}`
+      : `${appBase}/?payment=success&paymentId=${prepared.paymentId}`;
+    const errorUrl = academyCourseId
+      ? `${appBase}/?payment=error&paymentId=${prepared.paymentId}&academyCourse=${academyCourseId}`
+      : `${appBase}/?payment=error&paymentId=${prepared.paymentId}`;
     const { firstName, lastName } = payerNames;
     const requestId = `studio-checkout-${prepared.paymentId}`;
     let created: Awaited<ReturnType<typeof createPaymentRequest>>;
@@ -303,7 +316,9 @@ export const startCheckout = action({
       created = await createPaymentRequest({
         transactionId: prepared.paymentId,
         amountCents: prepared.amountCents,
-        description: args.reference?.trim() || "Studio credit top-up",
+        description:
+          args.reference?.trim() ||
+          (academyCourseId ? "Studio Academy course unlock" : "Studio credit top-up"),
         payer: {
           mobileNumber: toPaywiseMobile(user.phone),
           firstName,
@@ -373,6 +388,8 @@ export const syncMyPayment = action({
     reason: v.optional(v.string()),
     amountCents: v.optional(v.number()),
     creditsGranted: v.optional(v.number()),
+    academyCourseId: v.optional(v.id("academyCourses")),
+    academyUnlocked: v.optional(v.boolean()),
   }),
   handler: async (ctx, args): Promise<StatusApplyResult> => {
     const userId = await getAuthUserId(ctx);
@@ -387,7 +404,12 @@ export const syncMyPayment = action({
       throw new Error("Payment not found");
     }
     if (!payment.externalPaymentId) {
-      return { status: payment.status, granted: false, reason: "missing_provider_id" };
+      return {
+        status: payment.status,
+        granted: false,
+        reason: "missing_provider_id",
+        academyCourseId: payment.academyCourseId,
+      };
     }
     if (
       payment.status === "payment_completed" ||
@@ -399,6 +421,11 @@ export const syncMyPayment = action({
         reason: "already_terminal",
         amountCents: payment.amountCents,
         creditsGranted: payment.creditsGranted,
+        academyCourseId: payment.academyCourseId,
+        academyUnlocked:
+          payment.status === "payment_completed"
+            ? Boolean(payment.academyCourseId)
+            : undefined,
       };
     }
     if (

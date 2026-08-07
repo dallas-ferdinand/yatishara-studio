@@ -1162,6 +1162,7 @@ export function StudioShell({
   const generateElementSheet = useAction(api.elementActions.generateSheet);
   const submitAssistedTurn = useAction(api.guidedVideoActions.submitAssistedTurn);
   const approveAndGenerate = useAction(api.guidedVideoActions.approveAndGenerate);
+  const syncPaywisePayment = useAction(api.paywiseActions.syncMyPayment);
   const cancelAssistanceTurn = useMutation(api.guidedVideo.cancelAssistanceTurn);
   const truncateAssistanceEventsAfterPrompt = useMutation(
     api.guidedVideo.truncateAssistanceEventsAfterPrompt,
@@ -1376,6 +1377,7 @@ export function StudioShell({
   const [paymentCelebration, setPaymentCelebration] = useState(null);
   /** Full-screen handoff while creating checkout + leaving for PayWise. */
   const [paywiseHandoff, setPaywiseHandoff] = useState(null);
+  const academyPaymentReturnHandledRef = useRef(false);
   /** Full-screen ask to enable browser push (gens / DMs / followed posts). */
   const [pushPromptOpen, setPushPromptOpen] = useState(false);
   const [mobileSection, setMobileSection] = useState("composer");
@@ -4560,6 +4562,8 @@ export function StudioShell({
     const outcome = params.get("payment");
     const paymentId = params.get("paymentId");
     if (!outcome || !paymentId) return;
+    // Academy returns are handled with sync + celebration below.
+    if (params.get("academyCourse")) return;
     setSettingsSection("billing");
     setSettingsOpen(true);
   }, [isMobile]);
@@ -4835,6 +4839,72 @@ export function StudioShell({
       openTab(ACADEMY_TAB);
     }
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined" || academyPaymentReturnHandledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("payment");
+    const paymentId = params.get("paymentId");
+    const academyCourse = params.get("academyCourse");
+    if (!outcome || !paymentId || !academyCourse) return;
+    academyPaymentReturnHandledRef.current = true;
+    openAcademyTab({ courseId: academyCourse });
+    setPaymentCelebration({
+      phase: "confirming",
+      kind: "academy",
+    });
+    params.delete("payment");
+    params.delete("paymentId");
+    params.delete("academyCourse");
+    const cleaned = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", cleaned);
+
+    let cancelled = false;
+    void (async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      try {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          if (cancelled) return;
+          if (attempt > 0) {
+            await sleep(Math.min(6_000, 1_200 * 2 ** Math.min(attempt - 1, 2)));
+          }
+          const result = await syncPaywisePayment({ paymentId, force: true });
+          if (cancelled) return;
+          if (result.status === "payment_completed") {
+            setPaymentCelebration({
+              phase: "success",
+              kind: "academy",
+              amountCents: result.amountCents ?? null,
+              creditsGranted: result.creditsGranted ?? null,
+              academyUnlocked: result.academyUnlocked !== false,
+            });
+            openAcademyTab({ courseId: result.academyCourseId || academyCourse });
+            return;
+          }
+          if (
+            result.status === "cancelled" ||
+            result.status === "rejected" ||
+            result.status === "checkout_failed"
+          ) {
+            setPaymentCelebration(null);
+            toast.error(
+              result.status === "cancelled"
+                ? "Payment cancelled"
+                : "Payment not completed",
+            );
+            return;
+          }
+        }
+        setPaymentCelebration(null);
+      } catch {
+        setPaymentCelebration(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot PayWise academy return
+  }, [syncPaywisePayment]);
 
   /** @deprecated Use openNetworkTab — kept for call-site compatibility. */
   function openOffersTab(_section = "home") {
@@ -22869,6 +22939,7 @@ export function StudioShell({
             payments={payments}
             onOpenSettings={() => openSettingsTab("general")}
             onOpenCredits={openCreditsPane}
+            onPaywiseHandoff={setPaywiseHandoff}
             onOpenAdminTab={openAdminTab}
             onSeedStylePresets={() => seedStylePresets()}
             onGeneratePresetThumbnails={() => generatePresetThumbnails({ force: true })}
@@ -29042,6 +29113,7 @@ function ActivePane({
   payments,
   onOpenSettings,
   onOpenCredits,
+  onPaywiseHandoff,
   onOpenAdminTab,
   onSeedStylePresets,
   onGeneratePresetThumbnails,
@@ -29477,6 +29549,7 @@ function ActivePane({
     return wrapPane(
       <StudioAcademyPane
         onOpenCredits={onOpenCredits ?? onOpenSettings}
+        onPaywiseHandoff={onPaywiseHandoff}
         creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
         creditBalance={billingAccount?.creditBalance}
       />,
@@ -32031,6 +32104,7 @@ function SelectionTakeActionMenu({ disabled = false, onDownload, onCopy, onTrash
 
 function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
   const phase = celebration?.phase ?? "confirming";
+  const isAcademy = celebration?.kind === "academy";
   const amountLabel =
     celebration?.amountCents != null
       ? formatTtdCents(celebration.amountCents)
@@ -32045,6 +32119,19 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, phase]);
+
+  const successTitle =
+    isAcademy && celebration?.academyUnlocked !== false
+      ? "Course unlocked"
+      : "Payment received";
+  const successCopy =
+    isAcademy && celebration?.academyUnlocked !== false
+      ? amountLabel
+        ? `${amountLabel} topped up — your course is unlocked.`
+        : "Your course is unlocked."
+      : amountLabel
+        ? `${amountLabel} was added to your account.`
+        : "Your Studio balance has been updated.";
 
   return (
     <div
@@ -32061,14 +32148,14 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
           <Loader2 className="studio-payment-celebration-spin" aria-hidden="true" />
         )}
         <h2 id="studio-payment-celebration-title" className="studio-payment-celebration-title">
-          {phase === "success" ? "Payment received" : "Confirming payment"}
+          {phase === "success" ? successTitle : "Confirming payment"}
         </h2>
         <p className="studio-payment-celebration-copy">
           {phase === "success"
-            ? amountLabel
-              ? `${amountLabel} was added to your account.`
-              : "Your Studio balance has been updated."
-            : "Hang tight — we’re verifying your PayWise payment."}
+            ? successCopy
+            : isAcademy
+              ? "Hang tight — we’re verifying PayWise and unlocking your course."
+              : "Hang tight — we’re verifying your PayWise payment."}
         </p>
         {phase === "success" ? (
           <button type="button" className="studio-payment-celebration-btn" onClick={onClose}>
@@ -32301,6 +32388,8 @@ function SettingsWorkspacePane({
     const outcome = params.get("payment");
     const paymentId = params.get("paymentId");
     if (!outcome || !paymentId) return;
+    // Academy shortfall returns are synced in StudioShell (course unlock path).
+    if (params.get("academyCourse")) return;
     paymentReturnHandledRef.current = true;
     setSection("billing");
     setInvoicesOpen(true);

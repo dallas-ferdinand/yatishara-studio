@@ -929,6 +929,8 @@ export default defineSchema({
     reconciliationLeaseUntil: v.optional(v.number()),
     callbackToken: v.optional(v.string()),
     reference: v.optional(v.string()),
+    /** When set, auto-purchase this Academy course after PayWise credits land. */
+    academyCourseId: v.optional(v.id("academyCourses")),
     rejectionReason: v.optional(v.string()),
     reviewedBy: v.optional(v.id("users")),
     reviewedAt: v.optional(v.number()),
