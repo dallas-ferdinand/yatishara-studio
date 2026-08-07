@@ -19969,15 +19969,15 @@ export function StudioShell({
         }
         .studio-academy-comments-avatar {
           flex: 0 0 auto;
-          width: 28px;
-          height: 28px;
+          width: 20px;
+          height: 20px;
           border-radius: 999px;
           overflow: hidden;
           display: grid;
           place-items: center;
           background: color-mix(in srgb, var(--mos-plate-strong, var(--cursor-surface-2)) 88%, transparent);
           color: var(--color-cursor-muted, var(--mos-muted));
-          font-size: 11px;
+          font-size: 9px;
           font-weight: 700;
           letter-spacing: 0.02em;
         }
