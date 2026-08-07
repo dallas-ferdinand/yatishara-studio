@@ -170,6 +170,19 @@ function CommentsBody({
   const listRef = useRef<HTMLDivElement>(null);
   const restoreScrollRef = useRef<number | null>(null);
 
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [commentSearch, setCommentSearch] = useState("");
+  const deferredSearch = useDeferredValue(commentSearch.trim());
+  const searching = deferredSearch.length > 0 && !locked;
+  const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [likeLocal, setLikeLocal] = useState<
+    Record<string, { liked: boolean; likeCount: number }>
+  >({});
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   const rootPostComments = useQuery(
     api.profiles.listComments,
     !isCourse && postId && parentId === null
@@ -259,19 +272,6 @@ function CommentsBody({
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const ensureStudioDefaults = useMutation(api.users.ensureStudioDefaults);
-
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [commentSearch, setCommentSearch] = useState("");
-  const deferredSearch = useDeferredValue(commentSearch.trim());
-  const searching = deferredSearch.length > 0 && !locked;
-  const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [likeLocal, setLikeLocal] = useState<
-    Record<string, { liked: boolean; likeCount: number }>
-  >({});
-  const imageInputRef = useRef<HTMLInputElement>(null);
 
   function clearPendingImage() {
     setPendingImage((prev) => {
