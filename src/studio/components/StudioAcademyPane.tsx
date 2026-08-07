@@ -3,16 +3,17 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
-  Check,
   GraduationCap,
   Library,
   Loader2,
   Lock,
   MessageCircle,
+  ShoppingBag,
   X,
   Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
@@ -35,6 +36,7 @@ import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { useStudioAcademy } from "./StudioAcademyContext";
 import { ProfileCommentsPanel } from "./ProfileCommentsPanel";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
+import { StudioConfirmOverlay } from "./StudioConfirmOverlay";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import "./studio-creative-network.css";
 import "./public-offers.css";
@@ -63,10 +65,8 @@ function newClientRequestId() {
 function CheckoutDock({
   showHead,
   onBuyClick,
-  onCancelConfirm,
   onPaywiseClick,
   busy,
-  confirming,
   owned,
   priceLabel,
   lessonCount,
@@ -78,10 +78,8 @@ function CheckoutDock({
 }: {
   showHead: boolean;
   onBuyClick: () => void;
-  onCancelConfirm: () => void;
   onPaywiseClick?: () => void;
   busy: boolean;
-  confirming: boolean;
   owned: boolean;
   priceLabel: string;
   lessonCount: number;
@@ -181,55 +179,21 @@ function CheckoutDock({
                 <dd>{priceLabel}</dd>
               </div>
             </dl>
-            <div className="studio-academy-checkout-paywise">
-              <div className="studio-academy-checkout-wallet-actions">
-                {confirming ? (
-                  <button
-                    type="button"
-                    className="public-offers-btn is-icon studio-academy-buy-cancel"
-                    disabled={busy}
-                    onClick={onCancelConfirm}
-                    aria-label="Cancel purchase"
-                    title="Cancel"
-                  >
-                    <X aria-hidden="true" />
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className={`studio-settings-topup-pay${busy ? " is-loading" : ""}${confirming ? " is-confirm" : ""}`}
-                  disabled={busy}
-                  onClick={onBuyClick}
-                  aria-busy={busy}
-                  aria-label={
-                    busy
-                      ? "Buying"
-                      : confirming
-                        ? `Confirm pay ${priceLabel} from wallet balance`
-                        : `Pay ${priceLabel} with wallet balance`
-                  }
-                >
-                  {busy ? (
-                    <Loader2
-                      className="studio-settings-topup-pay-spin"
-                      aria-hidden="true"
-                    />
-                  ) : confirming ? (
-                    <Check aria-hidden="true" />
-                  ) : null}
-                  <span className="studio-settings-topup-pay-label">
-                    {busy
-                      ? "Buying…"
-                      : confirming
-                        ? `Confirm · ${priceLabel}`
-                        : "Pay with wallet balance"}
-                  </span>
-                </button>
-              </div>
-              <p className="studio-settings-topup-secure">
-                <Lock aria-hidden="true" />
-                <span>secure checkout · unlocks right away</span>
-              </p>
+            <div className="studio-academy-buy-group">
+              <button
+                type="button"
+                className="public-offers-btn is-primary is-block"
+                disabled={busy}
+                onClick={onBuyClick}
+                aria-label={`Buy course for ${priceLabel}`}
+              >
+                {busy ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <ShoppingBag aria-hidden="true" />
+                )}
+                Buy course
+              </button>
             </div>
           </>
         )}
@@ -334,6 +298,7 @@ function BannerStage({
 export function StudioAcademyPane({
   onOpenCredits,
   onPaywiseHandoff,
+  onPaymentCelebration,
   creditPriceCents,
   creditBalance,
 }: {
@@ -342,6 +307,13 @@ export function StudioAcademyPane({
     phase: "preparing" | "redirect";
     amountCents: number;
     checkoutUrl?: string;
+  } | null) => void;
+  onPaymentCelebration?: (celebration: {
+    phase: "confirming" | "success";
+    kind?: "academy";
+    academyUnlocked?: boolean;
+    amountCents?: number | null;
+    creditsGranted?: number | null;
   } | null) => void;
   creditPriceCents?: number;
   creditBalance?: number;
@@ -357,7 +329,7 @@ export function StudioAcademyPane({
   const getLessonPlayback = useAction(api.academyActions.getLessonPlayback);
 
   const [busy, setBusy] = useState(false);
-  const [buyArmed, setBuyArmed] = useState(false);
+  const [purchaseConfirmOpen, setPurchaseConfirmOpen] = useState(false);
   const [introEmbed, setIntroEmbed] = useState<string | null>(null);
   const [lessonEmbed, setLessonEmbed] = useState<string | null>(null);
   const [loadingPlay, setLoadingPlay] = useState(false);
@@ -378,7 +350,7 @@ export function StudioAcademyPane({
     setIntroEmbed(null);
     setLessonEmbed(null);
     setCheckoutSheetOpen(false);
-    setBuyArmed(false);
+    setPurchaseConfirmOpen(false);
     setCommentsOpen(false);
     clientRequestIdRef.current = null;
   }, [academy.courseId]);
@@ -462,9 +434,15 @@ export function StudioAcademyPane({
     setBusy(true);
     try {
       await purchase({ courseId: academy.courseId });
-      toast.success("Course unlocked");
-      setBuyArmed(false);
+      setPurchaseConfirmOpen(false);
       setCheckoutSheetOpen(false);
+      onPaymentCelebration?.({
+        phase: "success",
+        kind: "academy",
+        academyUnlocked: true,
+        amountCents: creditsToCents(detail.priceCredits, price),
+        creditsGranted: detail.priceCredits,
+      });
     } catch (error) {
       toast.error(friendlyConvexError(error, "Purchase failed"));
     } finally {
@@ -474,11 +452,7 @@ export function StudioAcademyPane({
 
   function handleBuyClick() {
     if (!academy.courseId || owned || busy || !detail || needsTopUp) return;
-    if (buyArmed) {
-      void buy();
-      return;
-    }
-    setBuyArmed(true);
+    setPurchaseConfirmOpen(true);
   }
 
   async function handlePaywiseCheckout() {
@@ -518,10 +492,8 @@ export function StudioAcademyPane({
 
   const checkoutDockProps = {
     onBuyClick: handleBuyClick,
-    onCancelConfirm: () => setBuyArmed(false),
     onPaywiseClick: () => void handlePaywiseCheckout(),
     busy,
-    confirming: buyArmed,
     owned,
     priceLabel,
     lessonCount: detail?.lessonCount ?? 0,
@@ -905,7 +877,7 @@ export function StudioAcademyPane({
                 onClick={() => setCheckoutSheetOpen(true)}
               >
                 <Zap aria-hidden="true" />
-                {needsTopUp ? "Pay with PayWise" : "Pay with wallet"}
+                {needsTopUp ? "Pay with PayWise" : "Buy now"}
               </button>
             ) : null}
           </div>
@@ -936,49 +908,79 @@ export function StudioAcademyPane({
       </>
     ) : null;
 
+  const purchaseConfirmPortal =
+    typeof document !== "undefined"
+      ? createPortal(
+          <StudioConfirmOverlay
+            open={purchaseConfirmOpen}
+            title="Confirm purchase"
+            body={
+              detail
+                ? `Pay ${priceLabel} from your Studio wallet balance to unlock ${detail.title} for life.`
+                : `Pay ${priceLabel} from your Studio wallet balance.`
+            }
+            icon={GraduationCap}
+            confirmLabel={`Pay ${priceLabel}`}
+            cancelLabel="Cancel"
+            busy={busy}
+            onCancel={() => {
+              if (!busy) setPurchaseConfirmOpen(false);
+            }}
+            onConfirm={() => void buy()}
+          />,
+          document.body,
+        )
+      : null;
+
   if (detailOpen && !isMobile) {
     return (
-      <div className="studio-cn-pane studio-academy-pane is-with-right-rail">
-        <PanelGroup
-          direction="horizontal"
-          autoSaveId="studio-academy-comments-pane-h"
-          className="studio-cn-pane-split studio-cn-offer-panels h-full min-h-0 min-w-0 overflow-hidden"
-        >
-          <Panel
-            id="studio-academy-main-col"
-            order={1}
-            defaultSize={72}
-            minSize={52}
-            className="min-h-0 min-w-0"
+      <>
+        <div className="studio-cn-pane studio-academy-pane is-with-right-rail">
+          <PanelGroup
+            direction="horizontal"
+            autoSaveId="studio-academy-comments-pane-h"
+            className="studio-cn-pane-split studio-cn-offer-panels h-full min-h-0 min-w-0 overflow-hidden"
           >
-            <div className="studio-cn-main-col">
-              {head}
-              <div className="studio-cn-body is-catalog">{courseMain}</div>
-            </div>
-          </Panel>
-          <PanelResizeHandle className="cursor-resize" />
-          <Panel
-            id="studio-academy-comments-rail"
-            order={2}
-            defaultSize={28}
-            minSize={20}
-            maxSize={36}
-            className="studio-cn-book-panel studio-academy-comments-panel studio-cn-right-rail min-h-0 min-w-0 h-full overflow-hidden"
-          >
-            {commentsDock}
-          </Panel>
-        </PanelGroup>
-      </div>
+            <Panel
+              id="studio-academy-main-col"
+              order={1}
+              defaultSize={72}
+              minSize={52}
+              className="min-h-0 min-w-0"
+            >
+              <div className="studio-cn-main-col">
+                {head}
+                <div className="studio-cn-body is-catalog">{courseMain}</div>
+              </div>
+            </Panel>
+            <PanelResizeHandle className="cursor-resize" />
+            <Panel
+              id="studio-academy-comments-rail"
+              order={2}
+              defaultSize={28}
+              minSize={20}
+              maxSize={36}
+              className="studio-cn-book-panel studio-academy-comments-panel studio-cn-right-rail min-h-0 min-w-0 h-full overflow-hidden"
+            >
+              {commentsDock}
+            </Panel>
+          </PanelGroup>
+        </div>
+        {purchaseConfirmPortal}
+      </>
     );
   }
 
   return (
-    <div className="studio-cn-pane studio-academy-pane">
-      {head}
-      <div className="studio-cn-body is-catalog">
-        {body}
-        {mobileExtras}
+    <>
+      <div className="studio-cn-pane studio-academy-pane">
+        {head}
+        <div className="studio-cn-body is-catalog">
+          {body}
+          {mobileExtras}
+        </div>
       </div>
-    </div>
+      {purchaseConfirmPortal}
+    </>
   );
 }

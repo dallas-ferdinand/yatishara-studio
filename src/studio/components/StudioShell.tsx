@@ -23085,6 +23085,7 @@ export function StudioShell({
             onOpenSettings={() => openSettingsTab("general")}
             onOpenCredits={openCreditsPane}
             onPaywiseHandoff={setPaywiseHandoff}
+            onPaymentCelebration={setPaymentCelebration}
             onOpenAdminTab={openAdminTab}
             onSeedStylePresets={() => seedStylePresets()}
             onGeneratePresetThumbnails={() => generatePresetThumbnails({ force: true })}
@@ -29259,6 +29260,7 @@ function ActivePane({
   onOpenSettings,
   onOpenCredits,
   onPaywiseHandoff,
+  onPaymentCelebration,
   onOpenAdminTab,
   onSeedStylePresets,
   onGeneratePresetThumbnails,
@@ -29695,6 +29697,7 @@ function ActivePane({
       <StudioAcademyPane
         onOpenCredits={onOpenCredits ?? onOpenSettings}
         onPaywiseHandoff={onPaywiseHandoff}
+        onPaymentCelebration={onPaymentCelebration}
         creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
         creditBalance={billingAccount?.creditBalance}
       />,
