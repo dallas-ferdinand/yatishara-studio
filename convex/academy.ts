@@ -11,9 +11,14 @@ import {
 import { getMarketplaceSellerForUser, isAdminRole } from "./lib/auth";
 import {
   assetThumbnailPath,
+  CN_CARD_TRANSFORM,
+  PEEK_TRANSFORM,
+  PREVIEW_TRANSFORM,
   signBunnyCdnUrls,
   signBunnyFullUrl,
+  signBunnyThumbUrl,
   THUMB_TRANSFORM,
+  type BunnyImageTransform,
 } from "./lib/bunny";
 import { purchaseCourseForUser } from "./lib/academyPurchase";
 import {
@@ -51,12 +56,18 @@ function blurbFromMarkdown(md: string, max = 160): string {
   return `${plain.slice(0, max - 1).trimEnd()}…`;
 }
 
+/** Optimizer-sized covers — never full-res (matches CN / posts). */
 async function coverUrlFor(
   path: string | undefined,
+  transform: BunnyImageTransform = CN_CARD_TRANSFORM,
 ): Promise<string | undefined> {
   if (!path) return undefined;
   const expires = Math.floor(Date.now() / 1000) + COVER_URL_TTL_SEC;
-  return signBunnyFullUrl(path, expires, "image", 80);
+  try {
+    return await signBunnyThumbUrl(path, expires, transform);
+  } catch {
+    return undefined;
+  }
 }
 
 function courseIntroVideoId(course: Doc<"academyCourses">): string | undefined {
@@ -163,7 +174,7 @@ export const listPublishedCourses = authedQuery({
         slug: course.slug,
         blurb: blurbFromMarkdown(course.descriptionMarkdown),
         priceCredits: course.priceCredits,
-        coverUrl: await coverUrlFor(course.coverBunnyPath),
+        coverUrl: await coverUrlFor(course.coverBunnyPath, CN_CARD_TRANSFORM),
         owned: Boolean(purchase),
         lessonCount: lessons.length,
         sortOrder: course.sortOrder,
@@ -244,7 +255,7 @@ export const getCourse = authedQuery({
         slug: lesson.slug,
         blurb: blurbFromMarkdown(lesson.descriptionMarkdown),
         descriptionMarkdown: lesson.descriptionMarkdown,
-        coverUrl: await coverUrlFor(lesson.coverBunnyPath),
+        coverUrl: await coverUrlFor(lesson.coverBunnyPath, THUMB_TRANSFORM),
         hasVideo: Boolean(lesson.bunnyStreamVideoId) && owned,
         sortOrder: lesson.sortOrder,
         status: lesson.status,
@@ -258,7 +269,7 @@ export const getCourse = authedQuery({
       slug: course.slug,
       descriptionMarkdown: course.descriptionMarkdown,
       priceCredits: course.priceCredits,
-      coverUrl: await coverUrlFor(course.coverBunnyPath),
+      coverUrl: await coverUrlFor(course.coverBunnyPath, PREVIEW_TRANSFORM),
       owned,
       hasIntroVideo: Boolean(courseIntroVideoId(course)),
       lessonCount: lessonDocs.filter((l) => l.status === "published").length,
@@ -425,7 +436,7 @@ export const adminListCourses = adminQuery({
         descriptionMarkdown: course.descriptionMarkdown,
         priceCredits: course.priceCredits,
         coverBunnyPath: course.coverBunnyPath,
-        coverUrl: await coverUrlFor(course.coverBunnyPath),
+        coverUrl: await coverUrlFor(course.coverBunnyPath, THUMB_TRANSFORM),
         introBunnyStreamVideoId: courseIntroVideoId(course),
         bunnyStreamVideoId: course.bunnyStreamVideoId,
         lessonCount: lessons.length,
@@ -454,7 +465,7 @@ export const adminListLessons = adminQuery({
         slug: lesson.slug,
         descriptionMarkdown: lesson.descriptionMarkdown,
         coverBunnyPath: lesson.coverBunnyPath,
-        coverUrl: await coverUrlFor(lesson.coverBunnyPath),
+        coverUrl: await coverUrlFor(lesson.coverBunnyPath, THUMB_TRANSFORM),
         bunnyStreamVideoId: lesson.bunnyStreamVideoId,
         status: lesson.status,
         sortOrder: lesson.sortOrder,
@@ -1495,7 +1506,7 @@ async function signCommentAvatarUrl(
     const signed = await signBunnyCdnUrls(
       [thumbPath],
       expiresUnix,
-      THUMB_TRANSFORM,
+      PEEK_TRANSFORM,
     );
     return signed.get(thumbPath);
   } catch {

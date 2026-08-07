@@ -19765,7 +19765,19 @@ export function StudioShell({
           aspect-ratio: 16 / 10;
           border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
-        .studio-academy-card-media img {
+        .studio-academy-card-media .studio-academy-card-frame.media-load-frame,
+        .studio-academy-card-media .studio-academy-card-frame.media-load-frame.is-ready {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+        }
+        .studio-academy-card-media .media-load-frame-placeholder,
+        .studio-academy-card-media .media-load-frame-wave {
+          background: transparent;
+        }
+        .studio-academy-card-media img,
+        .studio-academy-card-media .studio-academy-card-frame img {
           display: block;
           width: 100%;
           height: 100%;
@@ -19774,6 +19786,7 @@ export function StudioShell({
         }
         .studio-academy-card-owned {
           position: absolute;
+          z-index: 2;
           top: 8px;
           left: 8px;
           padding: 2px 8px;
@@ -19833,6 +19846,7 @@ export function StudioShell({
           padding: 0 0 28px;
         }
         .studio-academy-player {
+          position: relative;
           width: 100%;
           max-width: 100%;
           aspect-ratio: 16 / 9;
@@ -19841,6 +19855,19 @@ export function StudioShell({
           border-radius: var(--cursor-radius-lg, 12px);
           overflow: hidden;
           background: #000;
+        }
+        .studio-academy-player-cover.media-load-frame,
+        .studio-academy-player-cover.media-load-frame.is-ready {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+        }
+        .studio-academy-player-cover img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
         }
         .studio-academy-player iframe,
         .studio-academy-player-video {
@@ -20092,6 +20119,15 @@ export function StudioShell({
           background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
+        .studio-academy-lesson-thumb-frame.media-load-frame,
+        .studio-academy-lesson-thumb-frame.media-load-frame.is-ready {
+          width: 100%;
+          height: 100%;
+        }
+        .studio-academy-lesson-thumb .media-load-frame-placeholder,
+        .studio-academy-lesson-thumb .media-load-frame-wave {
+          background: transparent;
+        }
         .studio-academy-lesson-thumb img {
           width: 100%;
           height: 100%;
@@ -20206,6 +20242,15 @@ export function StudioShell({
           font-size: 9px;
           font-weight: 700;
           letter-spacing: 0.02em;
+        }
+        .studio-academy-comments-avatar-frame.media-load-frame,
+        .studio-academy-comments-avatar-frame.media-load-frame.is-ready {
+          width: 100%;
+          height: 100%;
+        }
+        .studio-academy-comments-avatar .media-load-frame-placeholder,
+        .studio-academy-comments-avatar .media-load-frame-wave {
+          background: transparent;
         }
         .studio-academy-comments-avatar img {
           width: 100%;

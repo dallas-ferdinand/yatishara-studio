@@ -35,10 +35,12 @@ import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { useStudioAcademy } from "./StudioAcademyContext";
 import { ProfileCommentsPanel } from "./ProfileCommentsPanel";
+import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import "./studio-creative-network.css";
 import "./public-offers.css";
 import "./profile-post-viewer.css";
+import "./media-load-frame.css";
 
 function demoCoverUrl(slug: string): string | undefined {
   if (!slug.startsWith("demo-")) return undefined;
@@ -251,6 +253,12 @@ function BannerStage({
   onPlay: () => void;
   playLabel: string;
 }) {
+  const [posterReady, setPosterReady] = useState(!bannerUrl);
+
+  useEffect(() => {
+    setPosterReady(!bannerUrl);
+  }, [bannerUrl]);
+
   if (embedUrl) {
     return (
       <div className="studio-academy-player">
@@ -266,20 +274,50 @@ function BannerStage({
 
   return (
     <div className="studio-academy-player">
-      {/* Placeholder until Bunny Stream intros/lessons are live. */}
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <video
-        className="studio-academy-player-video"
-        controls
-        playsInline
-        preload="metadata"
-        poster={bannerUrl}
-        src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
-        title={playLabel}
-        onPlay={() => {
-          if (!loading) onPlay();
-        }}
-      />
+      {bannerUrl && !posterReady ? (
+        <MediaLoadFrame
+          kind="image"
+          src={bannerUrl}
+          cacheKey={`academy-banner:${bannerUrl}`}
+          ratio="fill"
+          className="studio-academy-player-cover"
+          loaderSize="lg"
+        >
+          {({ onLoad, onError }) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={bannerUrl}
+              alt=""
+              decoding="async"
+              onLoad={(event) => {
+                onLoad(event);
+                setPosterReady(true);
+              }}
+              onError={() => {
+                onError();
+                setPosterReady(true);
+              }}
+            />
+          )}
+        </MediaLoadFrame>
+      ) : (
+        <>
+          {/* Placeholder until Bunny Stream intros/lessons are live. */}
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <video
+            className="studio-academy-player-video"
+            controls
+            playsInline
+            preload="metadata"
+            poster={bannerUrl}
+            src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
+            title={playLabel}
+            onPlay={() => {
+              if (!loading) onPlay();
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -533,7 +571,7 @@ export function StudioAcademyPane({
           <div className="public-offers-results">
             {listLoading ? (
               <div className="public-offers-state">
-                <Loader2 className="animate-spin" aria-hidden="true" />
+                <MediaLoadWave size="lg" />
                 <strong>Loading courses…</strong>
               </div>
             ) : !list.length ? (
@@ -563,8 +601,27 @@ export function StudioAcademyPane({
                       >
                         <div className="public-offers-card-media studio-academy-card-media">
                           {banner ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={banner} alt="" loading="lazy" />
+                            <MediaLoadFrame
+                              kind="image"
+                              src={banner}
+                              cacheKey={`academy-card:${course._id}`}
+                              ratio="fill"
+                              className="studio-academy-card-frame"
+                              loaderSize="md"
+                              loaderRing
+                            >
+                              {({ onLoad, onError }) => (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={banner}
+                                  alt=""
+                                  loading="lazy"
+                                  decoding="async"
+                                  onLoad={onLoad}
+                                  onError={onError}
+                                />
+                              )}
+                            </MediaLoadFrame>
                           ) : (
                             <div className="studio-academy-card-fallback">
                               <GraduationCap aria-hidden="true" />
@@ -608,7 +665,7 @@ export function StudioAcademyPane({
       <div className="public-offers-main-scroll">
         <main className="public-offers-body">
           <div className="public-offers-state">
-            <Loader2 className="animate-spin" aria-hidden="true" />
+            <MediaLoadWave size="lg" />
             <strong>Loading course…</strong>
           </div>
         </main>

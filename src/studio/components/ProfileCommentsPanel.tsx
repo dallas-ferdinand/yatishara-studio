@@ -29,7 +29,9 @@ import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
+import { MediaLoadFrame } from "./media-load-frame";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import "./media-load-frame.css";
 
 const MAX_POST_CAPTION = 2200;
 
@@ -1677,8 +1679,26 @@ export function ProfileCommentsPanel({
           <div className="studio-cn-book-sidebar-head cursor-panel-head cursor-sidebar-head shrink-0 studio-academy-comments-head">
             <span className="studio-academy-comments-avatar" aria-hidden="true">
               {sidebarAvatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={sidebarAvatarUrl} alt="" />
+                <MediaLoadFrame
+                  kind="image"
+                  src={sidebarAvatarUrl}
+                  cacheKey={`academy-comments-avatar:${sidebarAvatarUrl}`}
+                  ratio="fill"
+                  className="studio-academy-comments-avatar-frame"
+                  loaderSize="sm"
+                  loaderRing
+                >
+                  {({ onLoad, onError }) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={sidebarAvatarUrl}
+                      alt=""
+                      decoding="async"
+                      onLoad={onLoad}
+                      onError={onError}
+                    />
+                  )}
+                </MediaLoadFrame>
               ) : (
                 <span>{headInitials || "A"}</span>
               )}
