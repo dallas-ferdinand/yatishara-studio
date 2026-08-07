@@ -19532,6 +19532,13 @@ export function StudioShell({
           backdrop-filter: none;
           isolation: isolate;
         }
+        .studio-academy-hero-bg.public-offers-hero-bg {
+          background-image: url("/academy/academy-hero-4k.webp");
+          opacity: 0.62;
+        }
+        [data-appearance="dark"] .studio-academy-hero-bg.public-offers-hero-bg {
+          opacity: 0.72;
+        }
         .studio-academy-card-fallback {
           display: grid;
           place-items: center;

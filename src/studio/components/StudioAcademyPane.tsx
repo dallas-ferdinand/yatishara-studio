@@ -289,7 +289,7 @@ export function StudioAcademyPane({
             <div className="public-offers-main-scroll">
               <main className="public-offers-body">
                 <section className="public-offers-hero">
-                  <div className="public-offers-hero-bg" aria-hidden="true" />
+                  <div className="public-offers-hero-bg studio-academy-hero-bg" aria-hidden="true" />
                   <div className="public-offers-hero-copy">
                     <h1>{listTab === "mine" ? "My courses" : "Academy"}</h1>
                     <p>
