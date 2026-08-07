@@ -1424,6 +1424,20 @@ async function requirePublishedCourseForUser(
   return course;
 }
 
+async function requireCourseAccessForComments(
+  ctx: MutationCtx,
+  courseId: Id<"academyCourses">,
+  viewer: Doc<"users">,
+): Promise<Doc<"academyCourses">> {
+  const course = await requirePublishedCourseForUser(ctx, courseId, viewer);
+  if (isAdminRole(viewer.role)) return course;
+  const purchase = await findPurchase(ctx, viewer._id, courseId);
+  if (!purchase) {
+    throw new Error("Purchase this course to join the discussion");
+  }
+  return course;
+}
+
 const academyCommentReturn = v.object({
   _id: v.id("academyComments"),
   body: v.string(),
@@ -1628,6 +1642,75 @@ export const listComments = authedQuery({
   },
 });
 
+/** Public teaser: top engaged comments for locked / unpaid viewers. */
+export const listPreviewComments = authedQuery({
+  args: {
+    courseId: v.id("academyCourses"),
+    lessonId: v.optional(v.id("academyLessons")),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(academyCommentReturn),
+  handler: async (ctx, args) => {
+    try {
+      await requirePublishedCourseForUser(ctx, args.courseId, ctx.user);
+    } catch {
+      return [];
+    }
+    if (args.lessonId) {
+      const lesson = await ctx.db.get("academyLessons", args.lessonId);
+      if (!lesson || lesson.courseId !== args.courseId) return [];
+    }
+    const limit = Math.min(Math.max(args.limit ?? 3, 1), 5);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + COMMENT_URL_TTL_SEC;
+
+    let rows: Doc<"academyComments">[];
+    if (args.lessonId) {
+      rows = await ctx.db
+        .query("academyComments")
+        .withIndex("by_lesson_and_created", (q) =>
+          q.eq("lessonId", args.lessonId!),
+        )
+        .order("desc")
+        .take(120);
+    } else {
+      rows = await ctx.db
+        .query("academyComments")
+        .withIndex("by_course_and_created", (q) => q.eq("courseId", args.courseId))
+        .order("desc")
+        .take(120);
+    }
+
+    const topLevel: Doc<"academyComments">[] = [];
+    for (const row of rows) {
+      if (row.deletedAt || row.parentId) continue;
+      if (args.lessonId) {
+        if (row.lessonId !== args.lessonId) continue;
+      } else if (row.lessonId) {
+        continue;
+      }
+      topLevel.push(row);
+    }
+
+    topLevel.sort((a, b) => {
+      const scoreA = (a.likeCount ?? 0) + (a.replyCount ?? 0) * 2;
+      const scoreB = (b.likeCount ?? 0) + (b.replyCount ?? 0) * 2;
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      return b.createdAt - a.createdAt;
+    });
+
+    const course = await ctx.db.get("academyCourses", args.courseId);
+    return hydrateAcademyComments(
+      ctx,
+      topLevel.slice(0, limit),
+      course?.createdByAdminId,
+      ctx.user._id,
+      expiresUnix,
+    );
+  },
+});
+
 export const listCommentReplies = authedQuery({
   args: {
     parentId: v.id("academyComments"),
@@ -1676,7 +1759,7 @@ export const addComment = authedMutation({
     commentCount: v.number(),
   }),
   handler: async (ctx, args) => {
-    const course = await requirePublishedCourseForUser(
+    const course = await requireCourseAccessForComments(
       ctx,
       args.courseId,
       ctx.user,
@@ -1758,7 +1841,7 @@ export const toggleCommentLike = authedMutation({
     if (!comment || comment.deletedAt) {
       throw new Error("Comment not found");
     }
-    await requirePublishedCourseForUser(ctx, comment.courseId, ctx.user);
+    await requireCourseAccessForComments(ctx, comment.courseId, ctx.user);
     const existing = await ctx.db
       .query("academyCommentLikes")
       .withIndex("by_user_and_comment", (q) =>

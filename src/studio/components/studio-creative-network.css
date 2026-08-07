@@ -195,6 +195,101 @@
   margin: 1.35em 0;
 }
 
+/* Unpaid: truncate description / comments with lock fade. */
+.studio-academy-body.is-locked {
+  position: relative;
+  max-height: 12.5rem;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.studio-academy-body.is-locked .studio-academy-body-clip {
+  max-height: inherit;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 28%, transparent 92%);
+  mask-image: linear-gradient(to bottom, #000 28%, transparent 92%);
+}
+
+.studio-academy-lock-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  place-content: end center;
+  padding-bottom: 18px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 8%,
+    color-mix(in srgb, var(--mos-page, var(--color-cursor-bg, #0b1220)) 55%, transparent) 48%,
+    color-mix(in srgb, var(--mos-page, var(--color-cursor-bg, #0b1220)) 92%, transparent) 100%
+  );
+}
+
+.studio-academy-lock-badge {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  color: var(--color-cursor-text, var(--mos-text));
+  background: color-mix(in srgb, var(--mos-plate-strong, var(--cursor-surface-2)) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cursor-accent, #5b8cff) 28%, var(--color-cursor-border-soft, transparent));
+  box-shadow: 0 8px 22px color-mix(in srgb, #000 28%, transparent);
+}
+
+.studio-academy-lock-badge svg {
+  width: 16px;
+  height: 16px;
+}
+
+.profile-comments-locked-shell {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.profile-comments-locked-shell.is-locked {
+  flex: 1 1 auto;
+}
+
+.profile-comments-locked-shell.is-locked .profile-comments-list {
+  flex: 0 1 auto;
+  max-height: none;
+  overflow: hidden;
+}
+
+.profile-comments-locked-shell.is-locked .studio-academy-lock-overlay {
+  place-content: center;
+  padding-bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--mos-panel, var(--mos-page, #0b1220)) 35%, transparent) 36%,
+    color-mix(in srgb, var(--mos-panel, var(--mos-page, #0b1220)) 94%, transparent) 100%
+  );
+}
+
+.profile-comment-like.is-static {
+  pointer-events: none;
+  cursor: default;
+}
+
+.profile-comment-view-replies.is-static {
+  pointer-events: none;
+  cursor: default;
+  opacity: 0.75;
+}
+
+.studio-cn-book-sidebar-body.is-comments-fill .profile-comments-locked-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* Match Messages rail: no stacked top border on search. */
 .studio-polish .studio-cn-sidebar .cursor-panel-search,
 .studio-cn-sidebar .cursor-panel-search {

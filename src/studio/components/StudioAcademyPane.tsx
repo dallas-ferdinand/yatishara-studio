@@ -6,6 +6,7 @@ import {
   GraduationCap,
   Library,
   Loader2,
+  Lock,
   MessageCircle,
   ShoppingBag,
   Zap,
@@ -456,11 +457,20 @@ export function StudioAcademyPane({
                 <span className="public-offers-card-price">{priceLabel}</span>
               ) : null}
             </div>
-            <div className="studio-academy-body">
-              <StudioChatMarkdown
-                className="studio-academy-md"
-                text={detail.descriptionMarkdown}
-              />
+            <div className={`studio-academy-body${!owned ? " is-locked" : ""}`}>
+              <div className="studio-academy-body-clip">
+                <StudioChatMarkdown
+                  className="studio-academy-md"
+                  text={detail.descriptionMarkdown}
+                />
+              </div>
+              {!owned ? (
+                <div className="studio-academy-lock-overlay" aria-hidden="true">
+                  <span className="studio-academy-lock-badge">
+                    <Lock aria-hidden="true" />
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
         </main>
@@ -499,6 +509,7 @@ export function StudioAcademyPane({
             onCommentCountChange={setCommentCount}
             sidebarTitle={commentsSidebarTitle}
             sidebarAvatarUrl={commentsSidebarAvatar}
+            locked={!owned}
           />
         </div>
       </div>

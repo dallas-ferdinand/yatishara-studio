@@ -10,6 +10,7 @@ import {
   Heart,
   Image as ImageIcon,
   Loader2,
+  Lock,
   MessageCircle,
   Pencil,
   Trash2,
@@ -140,6 +141,7 @@ function CommentsBody({
   postAuthor,
   postActions,
   onEditDescription,
+  locked = false,
 }: {
   postId?: Id<"profilePosts">;
   courseId?: Id<"academyCourses">;
@@ -153,6 +155,8 @@ function CommentsBody({
   postAuthor?: PostAuthorInfo;
   postActions?: PostActionsInfo;
   onEditDescription?: () => void;
+  /** Unpaid Academy: top engaged comments only, no compose/reply. */
+  locked?: boolean;
 }) {
   const auth = useConvexAuth();
   const isCourse = Boolean(courseId);
@@ -183,7 +187,7 @@ function CommentsBody({
   );
   const rootCourseComments = useQuery(
     api.academy.listComments,
-    isCourse && courseId && parentId === null
+    isCourse && courseId && parentId === null && !locked
       ? {
           courseId,
           lessonId: lessonId ?? undefined,
@@ -192,9 +196,20 @@ function CommentsBody({
         }
       : "skip",
   );
+  const previewCourseComments = useQuery(
+    api.academy.listPreviewComments,
+    isCourse && courseId && parentId === null && locked
+      ? {
+          courseId,
+          lessonId: lessonId ?? undefined,
+          expiresUnix,
+          limit: 3,
+        }
+      : "skip",
+  );
   const replyCourseComments = useQuery(
     api.academy.listCommentReplies,
-    isCourse && parentId !== null
+    isCourse && parentId !== null && !locked
       ? {
           parentId: parentId as Id<"academyComments">,
           expiresUnix,
@@ -204,7 +219,9 @@ function CommentsBody({
   );
   const comments = isCourse
     ? parentId === null
-      ? rootCourseComments
+      ? locked
+        ? previewCourseComments
+        : rootCourseComments
       : replyCourseComments
     : parentId === null
       ? rootPostComments
@@ -593,7 +610,7 @@ function CommentsBody({
                 {formatWhen(comment.createdAt)}
               </time>
             </div>
-            {comment.isMine ? (
+            {comment.isMine && !locked ? (
               <button
                 type="button"
                 className="profile-comment-delete"
@@ -619,15 +636,17 @@ function CommentsBody({
           ) : null}
           <div className="profile-comment-actions">
             <div className="profile-comment-actions-left">
-              <button
-                type="button"
-                className="profile-comment-action"
-                aria-label="Reply"
-                onClick={() => openReplies(comment)}
-              >
-                Reply
-              </button>
-              {replyCount > 0 ? (
+              {!locked ? (
+                <button
+                  type="button"
+                  className="profile-comment-action"
+                  aria-label="Reply"
+                  onClick={() => openReplies(comment)}
+                >
+                  Reply
+                </button>
+              ) : null}
+              {!locked && replyCount > 0 ? (
                 <button
                   type="button"
                   className="profile-comment-view-replies"
@@ -636,21 +655,40 @@ function CommentsBody({
                   View {replyCount} {replyCount === 1 ? "reply" : "replies"}
                 </button>
               ) : null}
+              {locked && replyCount > 0 ? (
+                <span className="profile-comment-view-replies is-static">
+                  {replyCount} {replyCount === 1 ? "reply" : "replies"}
+                </span>
+              ) : null}
             </div>
-            <button
-              type="button"
-              className={`profile-comment-like${likeState.liked ? " is-liked" : ""}`}
-              aria-pressed={likeState.liked}
-              aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
-              onClick={() => void toggleLike(comment)}
-            >
-              <Heart
-                aria-hidden="true"
-                fill={likeState.liked ? "currentColor" : "none"}
-                strokeWidth={likeState.liked ? 0 : 2}
-              />
-              {likeState.likeCount > 0 ? <span>{likeState.likeCount}</span> : null}
-            </button>
+            {locked ? (
+              <span
+                className={`profile-comment-like is-static${likeState.likeCount > 0 ? "" : " is-empty"}`}
+                aria-label={`${likeState.likeCount} likes`}
+              >
+                <Heart
+                  aria-hidden="true"
+                  fill={likeState.likeCount > 0 ? "currentColor" : "none"}
+                  strokeWidth={likeState.likeCount > 0 ? 0 : 2}
+                />
+                {likeState.likeCount > 0 ? <span>{likeState.likeCount}</span> : null}
+              </span>
+            ) : (
+              <button
+                type="button"
+                className={`profile-comment-like${likeState.liked ? " is-liked" : ""}`}
+                aria-pressed={likeState.liked}
+                aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
+                onClick={() => void toggleLike(comment)}
+              >
+                <Heart
+                  aria-hidden="true"
+                  fill={likeState.liked ? "currentColor" : "none"}
+                  strokeWidth={likeState.liked ? 0 : 2}
+                />
+                {likeState.likeCount > 0 ? <span>{likeState.likeCount}</span> : null}
+              </button>
+            )}
           </div>
         </div>
       </article>
@@ -796,30 +834,44 @@ function CommentsBody({
         </header>
       ) : null}
 
-      <div ref={listRef} className={listClass}>
-        {inThread && parent ? renderComment(parent, { isParent: true }) : null}
-        {repliesLoading ? (
-          <div className="profile-comments-empty">
-            <Loader2 className="profile-comments-empty-spin" aria-hidden="true" />
-          </div>
-        ) : repliesEmpty ? (
-          <div className="profile-comments-empty">
-            <MessageCircle className="profile-comments-empty-icon" aria-hidden="true" />
-            <p>{inThread ? "No replies yet" : "No comments yet"}</p>
-            <span>{inThread ? "Be the first to reply" : "Be the first to say something"}</span>
+      <div className={`profile-comments-locked-shell${locked ? " is-locked" : ""}`}>
+        <div ref={listRef} className={listClass}>
+          {inThread && parent ? renderComment(parent, { isParent: true }) : null}
+          {repliesLoading ? (
+            <div className="profile-comments-empty">
+              <Loader2 className="profile-comments-empty-spin" aria-hidden="true" />
+            </div>
+          ) : repliesEmpty ? (
+            <div className="profile-comments-empty">
+              <MessageCircle className="profile-comments-empty-icon" aria-hidden="true" />
+              <p>{inThread ? "No replies yet" : locked ? "No comments yet" : "No comments yet"}</p>
+              <span>
+                {inThread
+                  ? "Be the first to reply"
+                  : locked
+                    ? "Unlock the course to join the discussion"
+                    : "Be the first to say something"}
+              </span>
+            </div>
+          ) : (
+            comments.map((comment) => renderComment(comment))
+          )}
+        </div>
+
+        {locked ? (
+          <div className="studio-academy-lock-overlay" aria-hidden="true">
+            <span className="studio-academy-lock-badge">
+              <Lock aria-hidden="true" />
+            </span>
           </div>
         ) : (
-          comments.map((comment) => renderComment(comment))
-        )}
-      </div>
-
-      <form
-        className={`profile-comments-composer${variant === "sheet" ? " is-sheet-composer" : ""}`}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
+          <form
+            className={`profile-comments-composer${variant === "sheet" ? " is-sheet-composer" : ""}`}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submit();
+            }}
+          >
         <input
           ref={imageInputRef}
           type="file"
@@ -919,7 +971,9 @@ function CommentsBody({
             </button>
           </div>
         )}
-      </form>
+          </form>
+        )}
+      </div>
 
       {imagePreviewUrl ? (
         <div
@@ -1378,6 +1432,7 @@ export function ProfileCommentsPanel({
   chrome = "feed",
   sidebarTitle,
   sidebarAvatarUrl,
+  locked = false,
 }: {
   postId?: Id<"profilePosts">;
   courseId?: Id<"academyCourses">;
@@ -1396,6 +1451,8 @@ export function ProfileCommentsPanel({
   sidebarTitle?: string;
   /** Circle thumb in sidebar head (lesson/course banner). */
   sidebarAvatarUrl?: string;
+  /** Unpaid Academy: preview comments + lock overlay. */
+  locked?: boolean;
 }) {
   const { isMobile } = useMobileLayout();
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
@@ -1475,6 +1532,7 @@ export function ProfileCommentsPanel({
           ? openDescriptionEditor
           : undefined
       }
+      locked={locked}
     />
   );
 
@@ -1487,7 +1545,7 @@ export function ProfileCommentsPanel({
         .map((part) => part[0]?.toUpperCase() ?? "")
         .join("");
       return (
-        <aside className="studio-cn-book-sidebar" aria-label="Comments">
+        <aside className={`studio-cn-book-sidebar${locked ? " is-comments-locked" : ""}`} aria-label="Comments">
           <div className="studio-cn-book-sidebar-head cursor-panel-head cursor-sidebar-head shrink-0 studio-academy-comments-head">
             <span className="studio-academy-comments-avatar" aria-hidden="true">
               {sidebarAvatarUrl ? (
