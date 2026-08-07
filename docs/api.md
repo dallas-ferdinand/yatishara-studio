@@ -58,6 +58,8 @@ GET /api/v1/messages/unread-count
 GET /api/v1/messages/conversations/:id/messages?limit=
 POST /api/v1/messages/conversations/:id/messages
 POST /api/v1/messages/conversations/:id/images
+POST /api/v1/messages/conversations/:id/voice
+POST /api/v1/messages/conversations/:id/media
 POST /api/v1/messages/conversations/:id/share
 POST /api/v1/messages/conversations/:id/read
 GET|POST /api/v1/messages/labels
@@ -75,6 +77,10 @@ POST /api/v1/messages/peers/:userId/unblock
 `POST .../messages` body: `{ "body", "replyToMessageId?" }`.
 
 `POST .../images` body: `{ "assetId", "caption?", "replyToMessageId?" }` — billable Studio image asset (typically in the Messages folder).
+
+`POST .../voice` body: `{ "assetId", "durationSec", "replyToMessageId?" }` — billable Studio audio asset in Messages.
+
+`POST .../media` body: `{ "assetId?", "assetIds?", "items?", "note?", "delivery?", "permission?" }` — UI Choose/Share parity. Default `delivery=file` copies into the peer's Messages folder and posts image/video bubbles (supports video). `delivery=access` grants live Shared-with-me links. MCP: `studio_send_media_message`.
 
 `POST .../share` body: `{ "postId", "commentId?", "note?" }`.
 
@@ -499,6 +505,8 @@ POST /api/v1/edits/:id/clips/split
 POST /api/v1/edits/:id/clips/transition
 POST /api/v1/edits/:id/frame
 POST /api/v1/edits/:id/export
+POST /api/v1/edits/:id/package
+POST /api/v1/edits/:id/clips/download
 POST /api/v1/edits/:id/text
 POST /api/v1/edits/:id/clips/duplicate
 POST /api/v1/edits/:id/clips/detach-audio
@@ -511,13 +519,15 @@ POST /api/v1/edits/:id/frame-ratio
 `PUT` replaces full `project` JSON (escape hatch). Prefer clip routes for agent edits:
 
 - `POST .../clips` — append (`assetIds` or `clips[]`, optional `atTime`)
-- `PATCH .../clips` — `{ "clips": [{ "clipId", "trimIn?", "trimOut?", "startTime?", "transitionOut?", ... }] }`
+- `PATCH .../clips` — `{ "clips": [{ "clipId", "trimIn?", "trimOut?", "startTime?", "effects?", "transitionOut?", ... }] }`
 - `DELETE .../clips` — `{ "clipIds", "ripple?" }`
 - `POST .../clips/reorder` — `{ "trackId", "clipIds" }` (full track order)
 - `POST .../clips/split` — `{ "clipId", "timeSec" }`
 - `POST .../clips/transition` — `{ "clipId", "type?", "duration?", "clear?" }`
 - `POST .../frame` — ffmpeg still → image asset (`timeSec` playhead, or `assetId` + `localTimeSec`); `generate` scope
-- `POST .../export` — ffmpeg render → `{ "assetId" }` (`generate` scope); optional `{ "name", "exportResolution": "720p"|"1080p"|"4K" }` (default `1080p`)
+- `POST .../export` — ffmpeg render → `{ "assetId" }` (`generate` scope); body `{ "name?", "exportKind?": "video"|"audio", "exportResolution?": "720p"|"1080p"|"4K", "audioFormat?": "mp3"|"wav"|"m4a" }`
+- `GET|POST .../package` — portable `.studio` package manifest (`read` scope); optional `expiresUnix`
+- `POST .../clips/download` — trimmed clip download URL (`generate` scope); prefer `{ "clipId" }` or `{ "assetId", "trimIn", "trimOut", "mode?" }`
 
 Clip ops return compact timeline summaries by default (`compact: false` includes full `project`).
 
@@ -529,7 +539,7 @@ Concurrent in-flight generation jobs (image/video/audio): **10 per API key**.
 
 ## MCP
 
-Use `@yatishara/studio-mcp` **v0.7+** (or local `packages/studio-mcp`) with `STUDIO_API_KEY` and `STUDIO_API_URL`. See Settings → API keys and [`packages/studio-mcp/README.md`](../packages/studio-mcp/README.md). Preferred agent entry: `studio_bootstrap`, `studio_ensure_path`, `studio_generate_batch`, timeline edit tools (`studio_edit_*`, `studio_pull_frame`).
+Use `@yatishara/studio-mcp` **v0.8+** (or local `packages/studio-mcp`) with `STUDIO_API_KEY` and `STUDIO_API_URL`. See Settings → API keys and [`packages/studio-mcp/README.md`](../packages/studio-mcp/README.md). Preferred agent entry: `studio_bootstrap`, `studio_ensure_path`, `studio_generate_batch`, timeline edit tools (`studio_edit_*`, `studio_pull_frame`, `studio_export_edit`, `studio_download_edit_package`, `studio_download_clip_segment`).
 
 ## Errors
 

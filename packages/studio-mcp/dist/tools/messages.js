@@ -74,7 +74,7 @@ function registerMessageTools(server) {
   );
   server.tool(
     "studio_send_image_message",
-    "Send an image DM using a billable Studio image asset (Messages folder). Optional caption + reply. Requires messages scope.",
+    "Send an image DM using a billable Studio image asset (Messages folder). Optional caption + reply. Requires messages scope. For video or multi-file Choose/Share parity, use studio_send_media_message.",
     {
       conversationId: z.string(),
       assetId: z.string(),
@@ -90,6 +90,54 @@ function registerMessageTools(server) {
             assetId,
             ...caption !== void 0 ? { caption } : {},
             ...replyToMessageId ? { replyToMessageId } : {}
+          })
+        }
+      )
+    )
+  );
+  server.tool(
+    "studio_send_media_message",
+    "Send Studio media into a DM like the UI Choose/Share flow. Default delivery=file copies into the peer's Messages folder and posts image/video bubbles (supports video). Pass assetId, assetIds, and/or items[{itemKind,itemId}]. delivery=access grants live Shared-with-me links. Requires messages scope.",
+    {
+      conversationId: z.string(),
+      assetId: z.string().optional(),
+      assetIds: z.array(z.string()).optional(),
+      items: z.array(
+        z.object({
+          itemKind: z.enum([
+            "asset",
+            "document",
+            "element",
+            "videoEdit",
+            "folder"
+          ]),
+          itemId: z.string()
+        })
+      ).optional(),
+      note: z.string().optional(),
+      delivery: z.enum(["file", "access"]).optional(),
+      permission: z.enum(["view", "edit"]).optional()
+    },
+    async ({
+      conversationId,
+      assetId,
+      assetIds,
+      items,
+      note,
+      delivery,
+      permission
+    }) => jsonResult(
+      await studioFetch(
+        `/messages/conversations/${encodeURIComponent(conversationId)}/media`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ...assetId !== void 0 ? { assetId } : {},
+            ...assetIds !== void 0 ? { assetIds } : {},
+            ...items !== void 0 ? { items } : {},
+            ...note !== void 0 ? { note } : {},
+            delivery: delivery ?? "file",
+            ...permission !== void 0 ? { permission } : {}
           })
         }
       )

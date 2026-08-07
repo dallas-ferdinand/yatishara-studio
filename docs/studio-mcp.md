@@ -105,7 +105,7 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_validate_production_gates` | Pre-flight cartoon gate check |
 | `studio_generate_script` | Script → document |
 | `studio_list_conversations` / `studio_open_conversation` / `studio_list_messages` | DM inbox + thread |
-| `studio_send_message` / `studio_send_image_message` / `studio_share_post_to_dm` | Send text, image, or feed share |
+| `studio_send_message` / `studio_send_image_message` / `studio_send_voice_message` / `studio_send_media_message` / `studio_share_post_to_dm` | Send text, image, voice, Studio media (video/file → peer Messages), or feed share |
 | `studio_mark_conversation_read` / `studio_unread_count` / `studio_search_messages` | Read receipts, badge, search |
 | `studio_*_dm_label*` / `studio_*_peer_*` | Labels, notes, block/unblock |
 | `studio_get_my_profile` / `studio_list_feed` / `studio_share_asset_post` / `studio_*_like|save|follow` | Feed + profiles (`social` scope) |
@@ -159,7 +159,12 @@ Restart Cursor MCP or reload the `yatishara-studio` server.
 
 ## Timeline edits (MCP)
 
-Preferred: `studio_create_edit` → `studio_edit_append_clips` / `studio_edit_add_text` → trim/reorder/split/transition → `studio_edit_detach_audio` when needed → `studio_pull_frame` → `studio_export_edit` (`exportResolution`).
+Preferred: `studio_create_edit` → `studio_edit_append_clips` / `studio_edit_add_text` → trim/reorder/split/transition → `studio_edit_detach_audio` when needed → `studio_pull_frame` → `studio_export_edit` (`exportKind` video|audio, `exportResolution`, `audioFormat`).
 
-Also: `studio_edit_duplicate_clip`, `studio_edit_set_track_muted`, `studio_edit_set_frame_ratio`. Patch text/volume/fades via `studio_edit_update_clips`.
+Also: `studio_edit_duplicate_clip`, `studio_edit_set_track_muted`, `studio_edit_set_frame_ratio`, `studio_list_text_presets` / `studio_edit_apply_text_preset`. Patch volume/fades/speed via typed `effects` on `studio_edit_update_clips`.
+
+Exports / files parity with Studio UI:
+- `studio_export_edit` — ffmpeg render into a Studio asset (video or audio-only)
+- `studio_download_edit_package` — portable `.studio` package manifest (client zips the same way)
+- `studio_download_clip_segment` — trimmed clip download URL (Save as video/audio)
 

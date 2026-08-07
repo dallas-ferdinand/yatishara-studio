@@ -250,7 +250,7 @@ export const studioApiExtra = httpAction(async (ctx, request) => {
     // Conversation sub-routes: /messages/conversations/:id/...
     {
       const convMatch =
-        /^messages\/conversations\/([^/]+)(?:\/(messages|images|voice|share|read))?$/.exec(
+        /^messages\/conversations\/([^/]+)(?:\/(messages|images|voice|media|share|read))?$/.exec(
           route,
         );
       if (convMatch) {
@@ -357,6 +357,78 @@ export const studioApiExtra = httpAction(async (ctx, request) => {
             },
           );
           return finish(jsonResponse({ messageId }));
+        }
+
+        // UI Choose/Share parity: send Studio media into DM. Default delivery=file
+        // copies into the peer's Messages folder (video/image bubbles).
+        if (request.method === "POST" && action === "media") {
+          const auth = await authFor("messages");
+          if (auth instanceof Response) return finish(auth);
+          const body = await readJsonBody<{
+            assetId?: string;
+            assetIds?: string[];
+            items?: Array<{ itemKind?: string; itemId?: string }>;
+            note?: string;
+            delivery?: string;
+            permission?: string;
+          }>(request);
+
+          const items: Array<{ itemKind: string; itemId: string }> = [];
+          if (Array.isArray(body.items)) {
+            for (const item of body.items) {
+              if (
+                item &&
+                typeof item.itemKind === "string" &&
+                typeof item.itemId === "string"
+              ) {
+                items.push({ itemKind: item.itemKind, itemId: item.itemId });
+              }
+            }
+          }
+          const assetIds = [
+            ...(typeof body.assetId === "string" ? [body.assetId] : []),
+            ...(Array.isArray(body.assetIds)
+              ? body.assetIds.filter((id): id is string => typeof id === "string")
+              : []),
+          ];
+          for (const assetId of assetIds) {
+            items.push({ itemKind: "asset", itemId: assetId });
+          }
+          if (items.length === 0) {
+            return finish(
+              errorResponse("assetId, assetIds, or items is required", 400),
+            );
+          }
+
+          const delivery =
+            body.delivery === "access" || body.delivery === "file"
+              ? body.delivery
+              : "file";
+          const permission =
+            body.permission === "edit" || body.permission === "view"
+              ? body.permission
+              : "view";
+
+          const result = await ctx.runMutation(
+            internal.studioShares.shareItemsForApi,
+            {
+              userId: auth.userId,
+              conversationId,
+              items: items.map((item) => ({
+                itemKind: item.itemKind as
+                  | "asset"
+                  | "document"
+                  | "element"
+                  | "videoEdit"
+                  | "folder",
+                itemId: item.itemId,
+              })),
+              delivery,
+              permission,
+              ...(typeof body.note === "string" ? { note: body.note } : {}),
+            },
+          );
+          return finish(jsonResponse(result));
         }
 
         if (request.method === "POST" && action === "share") {

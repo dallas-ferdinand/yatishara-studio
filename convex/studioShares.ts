@@ -178,13 +178,14 @@ async function workspaceRootForUser(
 }
 
 async function requireOwnedShareable(
-  ctx: (QueryCtx | MutationCtx) & { user: Doc<"users"> & { _id: Id<"users"> } },
+  ctx: QueryCtx | MutationCtx,
+  ownerId: Id<"users">,
   itemKind: StudioShareItemKind,
   itemId: string,
 ): Promise<{ name: string }> {
   if (itemKind === "asset") {
     const asset = await ctx.db.get("assets", itemId as Id<"assets">);
-    if (!asset || asset.ownerId !== ctx.user._id || asset.deletedAt) {
+    if (!asset || asset.ownerId !== ownerId || asset.deletedAt) {
       throw new Error("File not found");
     }
     if (
@@ -197,14 +198,14 @@ async function requireOwnedShareable(
   }
   if (itemKind === "document") {
     const doc = await ctx.db.get("documents", itemId as Id<"documents">);
-    if (!doc || doc.ownerId !== ctx.user._id || doc.deletedAt) {
+    if (!doc || doc.ownerId !== ownerId || doc.deletedAt) {
       throw new Error("Document not found");
     }
     return { name: doc.title };
   }
   if (itemKind === "element") {
     const element = await ctx.db.get("elements", itemId as Id<"elements">);
-    if (!element || element.ownerId !== ctx.user._id || element.deletedAt) {
+    if (!element || element.ownerId !== ownerId || element.deletedAt) {
       throw new Error("Element not found");
     }
     return { name: element.name };
@@ -214,13 +215,13 @@ async function requireOwnedShareable(
       "videoEditProjects",
       itemId as Id<"videoEditProjects">,
     );
-    if (!project || project.ownerId !== ctx.user._id || project.deletedAt) {
+    if (!project || project.ownerId !== ownerId || project.deletedAt) {
       throw new Error("Edit project not found");
     }
     return { name: project.name };
   }
   const folder = await ctx.db.get("folders", itemId as Id<"folders">);
-  if (!folder || folder.ownerId !== ctx.user._id || folder.deletedAt) {
+  if (!folder || folder.ownerId !== ownerId || folder.deletedAt) {
     throw new Error("Folder not found");
   }
   if (folder.systemKind) {
@@ -290,14 +291,15 @@ async function upsertGrant(
 }
 
 async function openConversationWithUser(
-  ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
+  ctx: MutationCtx,
+  senderId: Id<"users">,
   peerUserId: Id<"users">,
 ): Promise<Id<"dmConversations">> {
-  if (peerUserId === ctx.user._id) {
+  if (peerUserId === senderId) {
     throw new Error("You cannot share with yourself");
   }
-  await assertCanMessagePeer(ctx, ctx.user._id, peerUserId);
-  const pair = sortPair(ctx.user._id, peerUserId);
+  await assertCanMessagePeer(ctx, senderId, peerUserId);
+  const pair = sortPair(senderId, peerUserId);
   const existing = await ctx.db
     .query("dmConversations")
     .withIndex("by_pair", (q) =>
@@ -439,280 +441,332 @@ async function hydrateLiveItem(
   };
 }
 
-export const shareItems = authedMutation({
-  args: {
-    peerUserIds: v.array(v.id("users")),
-    items: v.array(shareItemArg),
-    note: v.optional(v.string()),
-    /** When set, only ping this conversation (must include that peer). */
-    conversationId: v.optional(v.id("dmConversations")),
-    /** access = live grant; file = Bunny copy into peer Messages. */
-    delivery: v.optional(v.union(v.literal("access"), v.literal("file"))),
-    /** Live-link permission (ignored for file delivery). */
-    permission: v.optional(v.union(v.literal("view"), v.literal("edit"))),
-  },
-  returns: v.object({
-    sharedCount: v.number(),
-    conversationIds: v.array(v.id("dmConversations")),
-    messageIds: v.array(v.id("dmMessages")),
-  }),
-  handler: async (ctx, args) => {
-    if (args.items.length === 0) {
-      throw new Error("Pick at least one file or folder to share");
-    }
-    if (args.items.length > 40) {
-      throw new Error("You can share at most 40 items at once");
-    }
-    const peerIds = [...new Set(args.peerUserIds)].filter(
-      (id) => id !== ctx.user._id,
-    );
-    if (peerIds.length === 0) {
-      throw new Error("Pick at least one person to share with");
-    }
-    if (peerIds.length > 40) {
-      throw new Error("You can share with at most 40 people at once");
-    }
+const shareItemsArgs = {
+  peerUserIds: v.optional(v.array(v.id("users"))),
+  items: v.array(shareItemArg),
+  note: v.optional(v.string()),
+  /** When set, only ping this conversation (must include that peer). */
+  conversationId: v.optional(v.id("dmConversations")),
+  /** access = live grant; file = Bunny copy into peer Messages. */
+  delivery: v.optional(v.union(v.literal("access"), v.literal("file"))),
+  /** Live-link permission (ignored for file delivery). */
+  permission: v.optional(v.union(v.literal("view"), v.literal("edit"))),
+};
 
-    const delivery = args.delivery ?? "access";
-    const permission: StudioSharePermission =
-      args.permission === "edit" ? "edit" : "view";
+const shareItemsReturn = v.object({
+  sharedCount: v.number(),
+  conversationIds: v.array(v.id("dmConversations")),
+  messageIds: v.array(v.id("dmMessages")),
+});
+
+async function shareItemsCore(
+  ctx: MutationCtx,
+  senderId: Id<"users">,
+  args: {
+    peerUserIds?: Id<"users">[];
+    items: Array<{ itemKind: StudioShareItemKind; itemId: string }>;
+    note?: string;
+    conversationId?: Id<"dmConversations">;
+    delivery?: "access" | "file";
+    permission?: "view" | "edit";
+  },
+): Promise<{
+  sharedCount: number;
+  conversationIds: Id<"dmConversations">[];
+  messageIds: Id<"dmMessages">[];
+}> {
+  if (args.items.length === 0) {
+    throw new Error("Pick at least one file or folder to share");
+  }
+  if (args.items.length > 40) {
+    throw new Error("You can share at most 40 items at once");
+  }
+  let peerIds = [...new Set(args.peerUserIds ?? [])].filter(
+    (id) => id !== senderId,
+  );
+  if (peerIds.length === 0 && args.conversationId) {
+    const conversation = await ctx.db.get(
+      "dmConversations",
+      args.conversationId,
+    );
+    if (!conversation) throw new Error("Conversation not found");
+    const isMember =
+      conversation.userLowId === senderId ||
+      conversation.userHighId === senderId;
+    if (!isMember) throw new Error("Unauthorized");
+    peerIds = [
+      conversation.userLowId === senderId
+        ? conversation.userHighId
+        : conversation.userLowId,
+    ];
+  }
+  if (peerIds.length === 0) {
+    throw new Error("Pick at least one person to share with");
+  }
+  if (peerIds.length > 40) {
+    throw new Error("You can share with at most 40 people at once");
+  }
+
+  const delivery = args.delivery ?? "access";
+  const permission: StudioSharePermission =
+    args.permission === "edit" ? "edit" : "view";
+
+  if (delivery === "file") {
+    for (const item of args.items) {
+      if (item.itemKind !== "asset") {
+        throw new Error(
+          "Send as file supports media files only — use Access for folders/docs/edits",
+        );
+      }
+    }
+  }
+
+  const resolvedItems: Array<{
+    itemKind: StudioShareItemKind;
+    itemId: string;
+    name: string;
+    sourceAsset?: Doc<"assets">;
+  }> = [];
+  for (const item of args.items) {
+    const owned = await requireOwnedShareable(
+      ctx,
+      senderId,
+      item.itemKind,
+      item.itemId,
+    );
+    let sourceAsset: Doc<"assets"> | undefined;
+    if (item.itemKind === "asset") {
+      const asset = await ctx.db.get("assets", item.itemId as Id<"assets">);
+      if (
+        !asset?.bunnyPath ||
+        asset.deletedAt ||
+        (asset.storageStatus !== undefined && asset.storageStatus !== "ready")
+      ) {
+        throw new Error(`File not ready to share: ${owned.name}`);
+      }
+      sourceAsset = asset;
+    }
+    resolvedItems.push({
+      itemKind: item.itemKind,
+      itemId: item.itemId,
+      name: owned.name,
+      sourceAsset,
+    });
+  }
+
+  let note = (args.note ?? "").trim();
+  if (note.length > DM_BODY_MAX) {
+    note = `${note.slice(0, DM_BODY_MAX - 1)}…`;
+  }
+
+  const conversationIds: Id<"dmConversations">[] = [];
+  const messageIds: Id<"dmMessages">[] = [];
+  let sharedCount = 0;
+
+  for (const peerUserId of peerIds) {
+    const rootId = await workspaceRootForUser(ctx, peerUserId);
+
+    let conversationId: Id<"dmConversations">;
+    if (args.conversationId) {
+      const conversation = await ctx.db.get(
+        "dmConversations",
+        args.conversationId,
+      );
+      if (!conversation) throw new Error("Conversation not found");
+      const isMember =
+        conversation.userLowId === senderId ||
+        conversation.userHighId === senderId;
+      if (!isMember) throw new Error("Unauthorized");
+      const peer =
+        conversation.userLowId === senderId
+          ? conversation.userHighId
+          : conversation.userLowId;
+      if (peer !== peerUserId) {
+        throw new Error("Conversation does not match peer");
+      }
+      await assertCanMessagePeer(ctx, senderId, peerUserId);
+      conversationId = conversation._id;
+    } else {
+      conversationId = await openConversationWithUser(ctx, senderId, peerUserId);
+    }
 
     if (delivery === "file") {
-      for (const item of args.items) {
-        if (item.itemKind !== "asset") {
-          throw new Error(
-            "Send as file supports media files only — use Access for folders/docs/edits",
-          );
-        }
-      }
-    }
-
-    const resolvedItems: Array<{
-      itemKind: StudioShareItemKind;
-      itemId: string;
-      name: string;
-      sourceAsset?: Doc<"assets">;
-    }> = [];
-    for (const item of args.items) {
-      const owned = await requireOwnedShareable(
+      const messagesFolderId = await ensureMessagesFolder(
         ctx,
-        item.itemKind,
-        item.itemId,
+        peerUserId,
+        rootId,
       );
-      let sourceAsset: Doc<"assets"> | undefined;
-      if (item.itemKind === "asset") {
-        const asset = await ctx.db.get("assets", item.itemId as Id<"assets">);
-        if (
-          !asset?.bunnyPath ||
-          asset.deletedAt ||
-          (asset.storageStatus !== undefined && asset.storageStatus !== "ready")
-        ) {
-          throw new Error(`File not ready to share: ${owned.name}`);
-        }
-        sourceAsset = asset;
-      }
-      resolvedItems.push({
-        itemKind: item.itemKind,
-        itemId: item.itemId,
-        name: owned.name,
-        sourceAsset,
-      });
-    }
+      const cardItems: Array<{
+        itemKind: StudioShareItemKind;
+        itemId: string;
+        sourceItemId: string;
+        name: string;
+      }> = [];
+      let peerNote = note;
+      let lastMediaPreview = studioShareListPreview(
+        resolvedItems.map((item) => ({ name: item.name })),
+        peerNote,
+      );
 
-    let note = (args.note ?? "").trim();
-    if (note.length > DM_BODY_MAX) {
-      note = `${note.slice(0, DM_BODY_MAX - 1)}…`;
-    }
-
-    const conversationIds: Id<"dmConversations">[] = [];
-    const messageIds: Id<"dmMessages">[] = [];
-    let sharedCount = 0;
-
-    for (const peerUserId of peerIds) {
-      const rootId = await workspaceRootForUser(ctx, peerUserId);
-
-      let conversationId: Id<"dmConversations">;
-      if (args.conversationId) {
-        const conversation = await ctx.db.get(
-          "dmConversations",
-          args.conversationId,
+      for (const item of resolvedItems) {
+        const source = item.sourceAsset!;
+        const now = Date.now();
+        const destAssetId = await ctx.db.insert("assets", {
+          ownerId: peerUserId,
+          folderId: messagesFolderId,
+          name: source.name,
+          kind: source.kind,
+          mimeType: source.mimeType,
+          storageStatus: "pending",
+          durationSeconds: source.durationSeconds,
+          width: source.width,
+          height: source.height,
+          frameRate: source.frameRate,
+          videoCodec: source.videoCodec,
+          videoProfile: source.videoProfile,
+          audioCodec: source.audioCodec,
+          createdAt: now,
+          updatedAt: now,
+        });
+        const bunnyPath = buildAssetPath({
+          userId: peerUserId,
+          folderId: messagesFolderId,
+          assetId: destAssetId,
+          filename: source.name,
+        });
+        await ctx.db.patch(destAssetId, { bunnyPath, updatedAt: now });
+        await ctx.scheduler.runAfter(
+          0,
+          internal.studioShareActions.copySharedMedia,
+          {
+            destAssetId,
+            destOwnerId: peerUserId,
+            sourceBunnyPath: source.bunnyPath!,
+            destBunnyPath: bunnyPath,
+            mimeType: source.mimeType || "application/octet-stream",
+            sourceThumbnailPath: source.thumbnailPath,
+          },
         );
-        if (!conversation) throw new Error("Conversation not found");
-        const isMember =
-          conversation.userLowId === ctx.user._id ||
-          conversation.userHighId === ctx.user._id;
-        if (!isMember) throw new Error("Unauthorized");
-        const peer =
-          conversation.userLowId === ctx.user._id
-            ? conversation.userHighId
-            : conversation.userLowId;
-        if (peer !== peerUserId) {
-          throw new Error("Conversation does not match peer");
-        }
-        await assertCanMessagePeer(ctx, ctx.user._id, peerUserId);
-        conversationId = conversation._id;
-      } else {
-        conversationId = await openConversationWithUser(ctx, peerUserId);
-      }
+        sharedCount += 1;
 
-      if (delivery === "file") {
-        const messagesFolderId = await ensureMessagesFolder(
-          ctx,
-          peerUserId,
-          rootId,
-        );
-        const cardItems: Array<{
-          itemKind: StudioShareItemKind;
-          itemId: string;
-          sourceItemId: string;
-          name: string;
-        }> = [];
-        let peerNote = note;
-        let lastMediaPreview = studioShareListPreview(
-          resolvedItems.map((item) => ({ name: item.name })),
-          peerNote,
-        );
-
-        for (const item of resolvedItems) {
-          const source = item.sourceAsset!;
-          const now = Date.now();
-          const destAssetId = await ctx.db.insert("assets", {
-            ownerId: peerUserId,
-            folderId: messagesFolderId,
-            name: source.name,
-            kind: source.kind,
-            mimeType: source.mimeType,
-            storageStatus: "pending",
-            durationSeconds: source.durationSeconds,
-            width: source.width,
-            height: source.height,
-            frameRate: source.frameRate,
-            videoCodec: source.videoCodec,
-            videoProfile: source.videoProfile,
-            audioCodec: source.audioCodec,
-            createdAt: now,
-            updatedAt: now,
-          });
-          const bunnyPath = buildAssetPath({
-            userId: peerUserId,
-            folderId: messagesFolderId,
-            assetId: destAssetId,
-            filename: source.name,
-          });
-          await ctx.db.patch(destAssetId, { bunnyPath, updatedAt: now });
-          await ctx.scheduler.runAfter(
-            0,
-            internal.studioShareActions.copySharedMedia,
-            {
-              destAssetId,
-              destOwnerId: peerUserId,
-              sourceBunnyPath: source.bunnyPath!,
-              destBunnyPath: bunnyPath,
-              mimeType: source.mimeType || "application/octet-stream",
-              sourceThumbnailPath: source.thumbnailPath,
-            },
-          );
-          sharedCount += 1;
-
-          // Chat shows real media bubbles for images/videos (source asset —
-          // both peers can sign). Peer still gets a Messages-folder copy.
-          if (source.kind === "image" || source.kind === "video") {
-            const messageId = await ctx.db.insert("dmMessages", {
-              conversationId,
-              senderId: ctx.user._id,
-              body: peerNote,
-              kind: source.kind,
-              assetId: source._id,
-              contentType: source.mimeType,
-              createdAt: now,
-            });
-            messageIds.push(messageId);
-            lastMediaPreview =
-              source.kind === "image"
-                ? peerNote.trim() || "Photo"
-                : peerNote.trim() || "Video";
-            peerNote = "";
-          } else {
-            cardItems.push({
-              itemKind: "asset",
-              itemId: destAssetId,
-              sourceItemId: source._id,
-              name: source.name,
-            });
-          }
-        }
-
-        if (cardItems.length > 0) {
-          const now = Date.now();
+        // Chat shows real media bubbles for images/videos (source asset —
+        // both peers can sign). Peer still gets a Messages-folder copy.
+        if (source.kind === "image" || source.kind === "video") {
           const messageId = await ctx.db.insert("dmMessages", {
             conversationId,
-            senderId: ctx.user._id,
+            senderId,
             body: peerNote,
-            kind: "studio_share",
-            sharedItems: cardItems,
+            kind: source.kind,
+            assetId: source._id,
+            contentType: source.mimeType,
             createdAt: now,
           });
           messageIds.push(messageId);
-          lastMediaPreview = studioShareListPreview(cardItems, peerNote);
+          lastMediaPreview =
+            source.kind === "image"
+              ? peerNote.trim() || "Photo"
+              : peerNote.trim() || "Video";
+          peerNote = "";
+        } else {
+          cardItems.push({
+            itemKind: "asset",
+            itemId: destAssetId,
+            sourceItemId: source._id,
+            name: source.name,
+          });
         }
-
-        const patchNow = Date.now();
-        const isLow =
-          (await ctx.db.get(conversationId))!.userLowId === ctx.user._id;
-        await ctx.db.patch(conversationId, {
-          lastMessageAt: patchNow,
-          lastMessagePreview: lastMediaPreview,
-          lastMessageSenderId: ctx.user._id,
-          ...(isLow
-            ? { lowLastReadAt: patchNow, lowTypingAt: 0 }
-            : { highLastReadAt: patchNow, highTypingAt: 0 }),
-        });
-        conversationIds.push(conversationId);
-        continue;
       }
 
-      await ensureSharedWithMeFolder(ctx, peerUserId, rootId);
-      for (const item of resolvedItems) {
-        await upsertGrant(ctx, {
-          fromUserId: ctx.user._id,
-          toUserId: peerUserId,
-          itemKind: item.itemKind,
-          itemId: item.itemId,
-          permission,
+      if (cardItems.length > 0) {
+        const now = Date.now();
+        const messageId = await ctx.db.insert("dmMessages", {
+          conversationId,
+          senderId,
+          body: peerNote,
+          kind: "studio_share",
+          sharedItems: cardItems,
+          createdAt: now,
         });
-        sharedCount += 1;
+        messageIds.push(messageId);
+        lastMediaPreview = studioShareListPreview(cardItems, peerNote);
       }
-      const dmItems = resolvedItems.map((item) => ({
-        itemKind: item.itemKind,
-        itemId: item.itemId,
-        name: item.name,
-      }));
 
-      const now = Date.now();
-      const messageId = await ctx.db.insert("dmMessages", {
-        conversationId,
-        senderId: ctx.user._id,
-        body: note,
-        kind: "studio_share",
-        sharedItems: dmItems,
-        createdAt: now,
-      });
-
-      const isLow = (await ctx.db.get(conversationId))!.userLowId === ctx.user._id;
+      const patchNow = Date.now();
+      const isLow = (await ctx.db.get(conversationId))!.userLowId === senderId;
       await ctx.db.patch(conversationId, {
-        lastMessageAt: now,
-        lastMessagePreview: studioShareListPreview(dmItems, note),
-        lastMessageSenderId: ctx.user._id,
+        lastMessageAt: patchNow,
+        lastMessagePreview: lastMediaPreview,
+        lastMessageSenderId: senderId,
         ...(isLow
-          ? { lowLastReadAt: now, lowTypingAt: 0 }
-          : { highLastReadAt: now, highTypingAt: 0 }),
+          ? { lowLastReadAt: patchNow, lowTypingAt: 0 }
+          : { highLastReadAt: patchNow, highTypingAt: 0 }),
       });
-
       conversationIds.push(conversationId);
-      messageIds.push(messageId);
+      continue;
     }
 
-    return { sharedCount, conversationIds, messageIds };
+    await ensureSharedWithMeFolder(ctx, peerUserId, rootId);
+    for (const item of resolvedItems) {
+      await upsertGrant(ctx, {
+        fromUserId: senderId,
+        toUserId: peerUserId,
+        itemKind: item.itemKind,
+        itemId: item.itemId,
+        permission,
+      });
+      sharedCount += 1;
+    }
+    const dmItems = resolvedItems.map((item) => ({
+      itemKind: item.itemKind,
+      itemId: item.itemId,
+      name: item.name,
+    }));
+
+    const now = Date.now();
+    const messageId = await ctx.db.insert("dmMessages", {
+      conversationId,
+      senderId,
+      body: note,
+      kind: "studio_share",
+      sharedItems: dmItems,
+      createdAt: now,
+    });
+
+    const isLow = (await ctx.db.get(conversationId))!.userLowId === senderId;
+    await ctx.db.patch(conversationId, {
+      lastMessageAt: now,
+      lastMessagePreview: studioShareListPreview(dmItems, note),
+      lastMessageSenderId: senderId,
+      ...(isLow
+        ? { lowLastReadAt: now, lowTypingAt: 0 }
+        : { highLastReadAt: now, highTypingAt: 0 }),
+    });
+
+    conversationIds.push(conversationId);
+    messageIds.push(messageId);
+  }
+
+  return { sharedCount, conversationIds, messageIds };
+}
+
+export const shareItems = authedMutation({
+  args: shareItemsArgs,
+  returns: shareItemsReturn,
+  handler: async (ctx, args) => shareItemsCore(ctx, ctx.user._id, args),
+});
+
+/** API/MCP: same as UI Choose/Share — file delivery copies into peer Messages. */
+export const shareItemsForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    ...shareItemsArgs,
+  },
+  returns: shareItemsReturn,
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get("users", args.userId);
+    if (!user) throw new Error("User not found");
+    const { userId: senderId, ...rest } = args;
+    return shareItemsCore(ctx, senderId, rest);
   },
 });
 
@@ -1232,7 +1286,7 @@ export const listRecipientsForItem = authedQuery({
     // Recipients browsing Shared with me must not hit requireOwnedShareable —
     // return empty instead of throwing (context menu opens on shared items).
     try {
-      await requireOwnedShareable(ctx, args.itemKind, args.itemId);
+      await requireOwnedShareable(ctx, ctx.user._id, args.itemKind, args.itemId);
     } catch {
       return [];
     }
