@@ -416,8 +416,76 @@
   font-size: 13px;
 }
 
+.studio-academy-checkout-paywise .studio-settings-topup-pay.is-theme {
+  border-color: color-mix(in srgb, var(--cursor-accent) 58%, var(--mos-text, #111) 10%);
+  border-bottom-color: color-mix(in srgb, var(--cursor-accent) 42%, #000 38%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cursor-accent) 78%, #fff 22%) 0%,
+    var(--cursor-accent) 48%,
+    color-mix(in srgb, var(--cursor-accent) 68%, #000 32%) 100%
+  );
+  box-shadow:
+    inset 0 -2px 0 color-mix(in srgb, #000 20%, transparent),
+    0 2px 3px color-mix(in srgb, var(--cursor-accent) 22%, transparent),
+    0 4px 10px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+  color: #fff;
+  text-shadow: 0 1px 2px color-mix(in srgb, #000 42%, transparent);
+}
+
+.studio-academy-checkout-paywise .studio-settings-topup-pay.is-theme:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cursor-accent) 64%, #fff 8%);
+  border-bottom-color: color-mix(in srgb, var(--cursor-accent) 46%, #000 36%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cursor-accent) 86%, #fff 14%) 0%,
+    var(--cursor-accent) 48%,
+    color-mix(in srgb, var(--cursor-accent) 70%, #000 30%) 100%
+  );
+  box-shadow:
+    inset 0 -2px 0 color-mix(in srgb, #000 18%, transparent),
+    0 2px 4px color-mix(in srgb, var(--cursor-accent) 24%, transparent),
+    0 5px 12px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+}
+
+.studio-academy-checkout-paywise .studio-settings-topup-pay.is-theme:active:not(:disabled),
+.studio-academy-checkout-paywise .studio-settings-topup-pay.is-theme:hover:active:not(:disabled) {
+  box-shadow:
+    inset 0 2px 3px color-mix(in srgb, #000 24%, transparent),
+    0 1px 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+}
+
+.studio-academy-checkout-paywise .studio-settings-topup-pay.is-theme:disabled:not(.is-loading) {
+  border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--mos-border-soft));
+  border-bottom-color: color-mix(in srgb, var(--cursor-accent) 22%, #000 28%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cursor-accent) 34%, var(--mos-plate, #ececf0)),
+    color-mix(in srgb, var(--cursor-accent) 28%, var(--mos-plate-strong, #e0e0e6))
+  );
+  color: color-mix(in srgb, #fff 55%, var(--color-cursor-muted, #8a8a8a));
+  text-shadow: none;
+}
+
+.studio-academy-checkout-paywise .studio-settings-topup-pay.is-theme.is-loading:disabled {
+  border-color: color-mix(in srgb, var(--cursor-accent) 58%, var(--mos-text, #111) 10%);
+  border-bottom-color: color-mix(in srgb, var(--cursor-accent) 42%, #000 38%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cursor-accent) 78%, #fff 22%) 0%,
+    var(--cursor-accent) 48%,
+    color-mix(in srgb, var(--cursor-accent) 68%, #000 32%) 100%
+  );
+  color: #fff;
+}
+
 .studio-academy-checkout-paywise .studio-settings-topup-pay:focus-visible {
   outline: 2px solid color-mix(in srgb, #22c55e 70%, transparent);
+  outline-offset: 2px;
+}
+
+.studio-academy-checkout-paywise .studio-settings-topup-pay.is-theme:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cursor-accent) 70%, transparent);
   outline-offset: 2px;
 }
 

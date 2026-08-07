@@ -8,7 +8,6 @@ import {
   Loader2,
   Lock,
   MessageCircle,
-  ShoppingBag,
   Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -68,6 +67,7 @@ function CheckoutDock({
   busy,
   owned,
   priceLabel,
+  priceShort,
   lessonCount,
   needsTopUp,
   balanceLabel,
@@ -81,6 +81,7 @@ function CheckoutDock({
   busy: boolean;
   owned: boolean;
   priceLabel: string;
+  priceShort: string;
   lessonCount: number;
   needsTopUp: boolean;
   balanceLabel: string;
@@ -171,30 +172,34 @@ function CheckoutDock({
             </div>
           </>
         ) : (
-          <>
-            <dl className="studio-academy-checkout-receipt">
-              <div className="studio-academy-checkout-row">
-                <dt>Course</dt>
-                <dd>{priceLabel}</dd>
-              </div>
-            </dl>
-            <div className="studio-academy-buy-group">
-              <button
-                type="button"
-                className="public-offers-btn is-primary is-block"
-                disabled={busy}
-                onClick={onBuyClick}
-                aria-label={`Buy course for ${priceLabel}`}
-              >
-                {busy ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <ShoppingBag aria-hidden="true" />
-                )}
-                Buy course
-              </button>
-            </div>
-          </>
+          <div className="studio-academy-checkout-paywise">
+            <button
+              type="button"
+              className={`studio-settings-topup-pay is-theme${busy ? " is-loading" : ""}`}
+              disabled={busy}
+              onClick={onBuyClick}
+              aria-busy={busy}
+              aria-label={
+                busy
+                  ? "Opening checkout"
+                  : `Pay ${priceShort} with wallet to unlock course`
+              }
+            >
+              {busy ? (
+                <Loader2
+                  className="studio-settings-topup-pay-spin"
+                  aria-hidden="true"
+                />
+              ) : null}
+              <span className="studio-settings-topup-pay-label">
+                {busy ? "Opening…" : `Pay ${priceShort} with wallet`}
+              </span>
+            </button>
+            <p className="studio-settings-topup-secure">
+              <Lock aria-hidden="true" />
+              <span>secure checkout · unlocks right away</span>
+            </p>
+          </div>
         )}
       </section>
     </div>
@@ -388,6 +393,9 @@ export function StudioAcademyPane({
   const priceLabel = detail
     ? formatTtdFromCredits(detail.priceCredits, price)
     : "";
+  const priceShort = detail
+    ? formatTtdShort(creditsToCents(detail.priceCredits, price))
+    : "";
 
   const balance = Number(creditBalance ?? 0);
   const priceCredits = detail?.priceCredits ?? 0;
@@ -495,6 +503,7 @@ export function StudioAcademyPane({
     busy,
     owned,
     priceLabel,
+    priceShort,
     lessonCount: detail?.lessonCount ?? 0,
     needsTopUp,
     balanceLabel,
@@ -876,7 +885,7 @@ export function StudioAcademyPane({
                 onClick={() => setCheckoutSheetOpen(true)}
               >
                 <Zap aria-hidden="true" />
-                {needsTopUp ? "Pay with PayWise" : "Buy now"}
+                {needsTopUp ? "Pay with PayWise" : "Pay with wallet"}
               </button>
             ) : null}
           </div>
