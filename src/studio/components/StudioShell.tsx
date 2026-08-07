@@ -19799,12 +19799,6 @@ export function StudioShell({
           color: var(--color-cursor-muted);
           font-size: 11px;
         }
-        .studio-academy-lesson-rail {
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
-          height: 100%;
-        }
         .studio-academy-lesson-rail-head {
           display: flex;
           align-items: center;

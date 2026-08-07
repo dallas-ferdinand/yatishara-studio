@@ -73,10 +73,11 @@ function FilterOption({
   return (
     <button
       type="button"
-      className={`public-offers-filter-option${active ? " is-active" : ""}`}
+      className={`public-offers-filter-btn${active ? " is-active" : ""}`}
+      aria-pressed={active}
       onClick={onClick}
     >
-      {label}
+      <span>{label}</span>
     </button>
   );
 }
@@ -88,19 +89,19 @@ function CatalogFilters() {
   const priceActive =
     (academy.priceMin.trim() ? 1 : 0) + (academy.priceMax.trim() ? 1 : 0);
   const ownershipActive = academy.ownership !== "all" ? 1 : 0;
+  const sortActive = academy.sort === "newest" ? 0 : 1;
 
   return (
-    <div className="studio-cn-sidebar public-offers-rail">
-      <div className="studio-cn-sidebar-body">
-        <div className="studio-cn-sidebar-chrome">
-          <PanelSearchBar
-            value={academy.search}
-            onChange={academy.setSearch}
-            placeholder="Search courses"
-            aria-label="Search courses"
-          />
-        </div>
-        <div className="studio-cn-rail-scroll public-offers-rail-body">
+    <div className="studio-cn-sidebar-body">
+      <div className="studio-cn-sidebar-chrome">
+        <PanelSearchBar
+          value={academy.search}
+          onChange={academy.setSearch}
+          placeholder="Search courses"
+          aria-label="Search courses"
+        />
+      </div>
+      <div className="studio-cn-rail-scroll public-offers-rail-body">
         <FilterSection
           title="Price (TTD)"
           activeCount={priceActive}
@@ -167,7 +168,12 @@ function CatalogFilters() {
           ))}
         </FilterSection>
 
-        <FilterSection title="Sort" activeCount={0} open onToggle={() => undefined}>
+        <FilterSection
+          title="Sort"
+          activeCount={sortActive}
+          open
+          onToggle={() => undefined}
+        >
           {SORT_OPTIONS.map((opt) => (
             <FilterOption
               key={opt.value}
@@ -187,7 +193,6 @@ function CatalogFilters() {
             Clear filters
           </button>
         ) : null}
-        </div>
       </div>
     </div>
   );
@@ -206,7 +211,7 @@ function OwnedLessonRail({
   const lessons = academy.filterLessons(detail?.lessons ?? []);
 
   return (
-    <div className="studio-cn-sidebar studio-academy-lesson-rail">
+    <>
       <div className="studio-academy-lesson-rail-head">
         <button
           type="button"
@@ -245,7 +250,10 @@ function OwnedLessonRail({
                       className={`studio-academy-lesson-row${active ? " is-active" : ""}`}
                       onClick={() => academy.setLessonId(lesson._id)}
                     >
-                      <span className="studio-academy-lesson-num" aria-hidden="true">
+                      <span
+                        className="studio-academy-lesson-num"
+                        aria-hidden="true"
+                      >
                         {index + 1}
                       </span>
                       <span className="studio-academy-lesson-meta">
@@ -260,7 +268,7 @@ function OwnedLessonRail({
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -274,7 +282,7 @@ function UnownedOutlineRail({
   if (!academy) return null;
 
   return (
-    <div className="studio-cn-sidebar studio-academy-lesson-rail">
+    <>
       <div className="studio-academy-lesson-rail-head">
         <button
           type="button"
@@ -297,7 +305,10 @@ function UnownedOutlineRail({
             {(detail?.lessons ?? []).map((lesson, index) => (
               <li key={lesson._id}>
                 <div className="studio-academy-lesson-row is-locked">
-                  <span className="studio-academy-lesson-num" aria-hidden="true">
+                  <span
+                    className="studio-academy-lesson-num"
+                    aria-hidden="true"
+                  >
                     {index + 1}
                   </span>
                   <span className="studio-academy-lesson-meta">
@@ -310,12 +321,13 @@ function UnownedOutlineRail({
           </ul>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
 /**
- * Left rail for Academy — catalog filters, or lesson list when a course is open.
+ * Left rail for Academy — same shell as CN: one studio-cn-sidebar, no nested
+ * public-offers-rail (that class is a full page column, not an in-shell rail).
  */
 export function StudioAcademySidebar() {
   const academy = useStudioAcademyOptional();
@@ -324,21 +336,26 @@ export function StudioAcademySidebar() {
     academy?.courseId ? { courseId: academy.courseId } : "skip",
   );
 
+  let body: React.ReactNode;
   if (!academy) {
-    return (
-      <div className="studio-cn-sidebar public-offers-rail">
-        <div className="public-offers-rail-body" style={{ padding: "10px" }}>
+    body = (
+      <div className="studio-cn-sidebar-body">
+        <div className="studio-cn-rail-scroll public-offers-rail-body">
           <p className="studio-cn-list-empty">Open Academy to browse courses</p>
         </div>
       </div>
     );
+  } else if (academy.courseId && detail?.owned) {
+    body = <OwnedLessonRail courseId={academy.courseId} />;
+  } else if (academy.courseId) {
+    body = <UnownedOutlineRail courseId={academy.courseId} />;
+  } else {
+    body = <CatalogFilters />;
   }
 
-  if (academy.courseId && detail?.owned) {
-    return <OwnedLessonRail courseId={academy.courseId} />;
-  }
-  if (academy.courseId) {
-    return <UnownedOutlineRail courseId={academy.courseId} />;
-  }
-  return <CatalogFilters />;
+  return (
+    <aside className="studio-cn-sidebar" aria-label="Academy">
+      {body}
+    </aside>
+  );
 }
