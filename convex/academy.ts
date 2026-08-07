@@ -601,3 +601,152 @@ export const internalAttachStreamVideo = internalMutation({
     return null;
   },
 });
+
+const DEMO_COURSES = [
+  {
+    slug: "demo-seedance-hooks",
+    title: "Seedance Hooks That Sell",
+    priceCredits: 120,
+    sortOrder: 10,
+    descriptionMarkdown: `## What you'll learn
+
+Build **3-second hooks** that stop the scroll — without looking like AI sludge.
+
+### Inside
+- Opening beat formulas for ads
+- Gaze + prop anchors that keep the face locked
+- When to cut vs hold
+
+> Demo course for layout. Replace the video in Admin → Academy.
+`,
+  },
+  {
+    slug: "demo-studio-credits",
+    title: "Studio Credits & Cost Control",
+    priceCredits: 80,
+    sortOrder: 20,
+    descriptionMarkdown: `## Keep generation spend sane
+
+How Yatishara Studio credits map to image, video, and audio runs.
+
+### Topics
+- Credit price vs TTD top-ups
+- When Assistance burns balance
+- Batch vs one-shot generation
+
+*Demo content — safe to delete after you publish real courses.*
+`,
+  },
+  {
+    slug: "demo-creative-network",
+    title: "Creative Network Seller Playbook",
+    priceCredits: 200,
+    sortOrder: 30,
+    descriptionMarkdown: `## Get hired on Creative Network
+
+From KYC to first delivered job — the operator path we use in Studio.
+
+1. Seller application
+2. Offer packages that convert
+3. Escrow handoff without drama
+
+Markdown rich description demo for the Academy detail pane.
+`,
+  },
+  {
+    slug: "demo-product-photoshoot",
+    title: "Product Photoshoot Prompts",
+    priceCredits: 150,
+    sortOrder: 40,
+    descriptionMarkdown: `## Brand-ready stills from one SKU photo
+
+Prompt stacks for hero, lifestyle, and marketplace cards.
+
+- Lighting locks
+- Angle consistency
+- Text cleanup without mush
+
+Demo course — attach a real Bunny Stream video when ready.
+`,
+  },
+  {
+    slug: "demo-whatsapp-cs-voice",
+    title: "WhatsApp CS Voice (Sasha)",
+    priceCredits: 100,
+    sortOrder: 50,
+    descriptionMarkdown: `## Soft-accept without sounding robotic
+
+Tone, pacing, and follow-up patterns for Yatishara CS on WhatsApp.
+
+### Includes
+- Soft-accept examples
+- Deposit nudges
+- When to escalate to Jake
+
+Placeholder for Academy UI review.
+`,
+  },
+] as const;
+
+/**
+ * Deploy-key bootstrap — `npx convex run academy:internalSeedDemoCourses`
+ * Idempotent by slug. Published with placeholder Stream ids (catalog/layout only).
+ */
+export const internalSeedDemoCourses = internalMutation({
+  args: {},
+  returns: v.object({
+    created: v.number(),
+    updated: v.number(),
+  }),
+  handler: async (ctx) => {
+    const admin =
+      (await ctx.db
+        .query("users")
+        .withIndex("by_role", (q) => q.eq("role", "super_admin"))
+        .first()) ||
+      (await ctx.db
+        .query("users")
+        .withIndex("by_role", (q) => q.eq("role", "admin"))
+        .first());
+    if (!admin) {
+      throw new Error("No admin user found to own demo courses");
+    }
+
+    const now = Date.now();
+    let created = 0;
+    let updated = 0;
+
+    for (const seed of DEMO_COURSES) {
+      const existing = await ctx.db
+        .query("academyCourses")
+        .withIndex("by_slug", (q) => q.eq("slug", seed.slug))
+        .unique();
+
+      const fields = {
+        title: seed.title,
+        slug: seed.slug,
+        descriptionMarkdown: seed.descriptionMarkdown,
+        priceCredits: seed.priceCredits,
+        bunnyStreamVideoId: `demo-placeholder-${seed.slug}`,
+        status: "published" as const,
+        sortOrder: seed.sortOrder,
+        updatedAt: now,
+      };
+
+      if (existing) {
+        await ctx.db.patch(existing._id, fields);
+        updated += 1;
+      } else {
+        await ctx.db.insert("academyCourses", {
+          ...fields,
+          purchaseCount: 0,
+          createdByAdminId: admin._id,
+          createdAt: now,
+        });
+        created += 1;
+      }
+    }
+
+    return { created, updated };
+  },
+});
