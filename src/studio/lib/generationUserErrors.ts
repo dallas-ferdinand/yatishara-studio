@@ -89,7 +89,7 @@ export function friendlyGenerationError(
     return {
       title: "Check your settings",
       message:
-        "That resolution isn't supported for this video model. Try 720p or 1080p, then retry.",
+        "That resolution isn't supported for this video model. Try 480p or 720p, then retry.",
     };
   }
 

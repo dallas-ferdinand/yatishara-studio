@@ -897,8 +897,8 @@ describe("Assistance guardrails", () => {
       compiledPrompt:
         "4s Seedance clip of banana bread on a bakery counter with one slow push-in.",
       references: [],
-      resolvedModel: "bytedance/seedance-2.0",
-      videoModel: "seedance-2.0",
+      resolvedModel: "bytedance/seedance-2.5",
+      videoModel: "seedance-2.5",
       videoCapabilities: {
         requiresStartFrame: false,
         supportsMultimodalRefs: true,

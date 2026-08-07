@@ -1,10 +1,12 @@
 export type VideoModelSlug =
+  | "seedance-2.5"
   | "seedance-2.0"
   | "google-omni-flash"
   | "kling-3.0-i2v";
 
 /** MCP/API explicit picks — hidden from Studio UI composer and public catalog. */
 export const MCP_EXPLICIT_VIDEO_MODEL_SLUGS: VideoModelSlug[] = [
+  "seedance-2.0",
   "kling-3.0-i2v",
   "google-omni-flash",
 ];
@@ -35,14 +37,24 @@ export type VideoCapabilityRequest = {
 
 export const VIDEO_MODELS: VideoModelDef[] = [
   {
-    slug: "seedance-2.0",
+    slug: "seedance-2.5",
     label: "Seedance",
+    gatewayModelId: "bytedance/seedance-2.5",
+    description: "Seedance 2.5 — default Studio video (up to 30s, 480p/720p)",
+    requiresStartFrame: false,
+    supportsMultimodalRefs: true,
+    maxDurationSeconds: 30,
+    uiVisible: true,
+  },
+  {
+    slug: "seedance-2.0",
+    label: "Seedance 2.0",
     gatewayModelId: "bytedance/seedance-2.0",
-    description: "Seedance",
+    description: "Seedance 2.0 — legacy (MCP/API explicit)",
     requiresStartFrame: false,
     supportsMultimodalRefs: true,
     maxDurationSeconds: 15,
-    uiVisible: true,
+    uiVisible: false,
   },
   {
     slug: "google-omni-flash",
@@ -67,9 +79,9 @@ export const VIDEO_MODELS: VideoModelDef[] = [
 ];
 
 export function defaultVideoModelSlug(): VideoModelSlug {
-  const env = process.env.GATEWAY_VIDEO_MODEL_ID ?? "bytedance/seedance-2.0";
+  const env = process.env.GATEWAY_VIDEO_MODEL_ID ?? "bytedance/seedance-2.5";
   const match = VIDEO_MODELS.find((model) => model.gatewayModelId === env);
-  return match?.slug ?? "seedance-2.0";
+  return match?.slug ?? "seedance-2.5";
 }
 
 export function resolveVideoModel(slug?: string | null): VideoModelDef {
@@ -80,7 +92,7 @@ export function resolveVideoModel(slug?: string | null): VideoModelDef {
     );
     if (found) return found;
     throw new Error(
-      `Unknown video model: ${normalized}. Use seedance-2.0, google-omni-flash, or kling-3.0-i2v.`,
+      `Unknown video model: ${normalized}. Use seedance-2.5, seedance-2.0, google-omni-flash, or kling-3.0-i2v.`,
     );
   }
   return (
@@ -117,7 +129,7 @@ export function validateVideoModelCapabilities(
 ): VideoModelDef {
   const model = resolveVideoModel(slugOrGatewayId);
   const duration = Number(request.durationSeconds ?? 4);
-  const maxDuration = model.maxDurationSeconds ?? 15;
+  const maxDuration = model.maxDurationSeconds ?? 30;
 
   if (!Number.isFinite(duration) || duration < 4 || duration > maxDuration) {
     throw new Error(
@@ -157,6 +169,10 @@ export function isSeedanceGatewayModel(modelId: string): boolean {
   return modelId.includes("seedance");
 }
 
+export function isSeedance25GatewayModel(modelId: string): boolean {
+  return modelId.includes("seedance-2.5");
+}
+
 export function isKlingGatewayModel(modelId: string): boolean {
   return modelId.includes("kling");
 }
@@ -176,7 +192,13 @@ export function videoPricingModelFromGatewayId(gatewayModelId: string): VideoMod
   if (isOmniFlashGatewayModel(gatewayModelId)) {
     return "google-omni-flash";
   }
-  return "seedance-2.0";
+  if (isSeedance25GatewayModel(gatewayModelId)) {
+    return "seedance-2.5";
+  }
+  if (gatewayModelId.includes("seedance-2.0") || gatewayModelId.includes("seedance")) {
+    return gatewayModelId.includes("2.5") ? "seedance-2.5" : "seedance-2.0";
+  }
+  return "seedance-2.5";
 }
 
 export function videoPricingModelFromSlug(slug?: string | null): VideoModelSlug {

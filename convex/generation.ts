@@ -692,7 +692,7 @@ export const canGenerate = authedQuery({
         creditBalance: account?.creditBalance ?? 0,
         cost: 0,
         hasActiveSubscription: false,
-        reason: "4K video isn't available yet. Try 1080p or 720p for now.",
+        reason: "4K video isn't available yet. Try 720p or 480p for now.",
       };
     }
     if (args.tier === "pro_video" && !isSupportedVideoDuration(args.durationSeconds)) {
@@ -774,7 +774,7 @@ export const createQueuedJob = authedMutation({
     const saveFolderId = args.folderId ?? thread.linkedFolderId;
     await requireFolderOwner(ctx, saveFolderId);
     if (args.mode === "video" && args.resolution === "3840x2160") {
-      throw new Error("4K video is not available yet. Video generation supports up to 1080p.");
+      throw new Error("4K video is not available yet. Video generation supports up to 720p.");
     }
     if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
       throw new Error("Video duration must be between 4 and 15 seconds");
@@ -1198,7 +1198,7 @@ export const internalCreateQueuedJob = internalMutation({
     const thread = await requireThreadForUser(ctx, args.userId, args.threadId);
     await requireFolderForUser(ctx, args.userId, thread.linkedFolderId);
     if (args.mode === "video" && args.resolution === "3840x2160") {
-      throw new Error("4K video is not available yet. Video generation supports up to 1080p.");
+      throw new Error("4K video is not available yet. Video generation supports up to 720p.");
     }
     if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
       throw new Error("Video duration must be between 4 and 15 seconds");
@@ -1303,7 +1303,7 @@ export const prepareApiGeneration = internalMutation({
   handler: async (ctx, args) => {
     await requireFolderForUser(ctx, args.userId, args.folderId);
     if (args.mode === "video" && args.resolution === "3840x2160") {
-      throw new Error("4K video is not available yet. Video generation supports up to 1080p.");
+      throw new Error("4K video is not available yet. Video generation supports up to 720p.");
     }
     if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
       throw new Error("Video duration must be between 4 and 15 seconds");
@@ -2242,11 +2242,12 @@ function resolveVideoPricingModel(args: {
   tier: "image" | "pro_video" | "audio" | "low" | "medium" | "high";
   videoModel?: string;
   resolvedModel?: string;
-}): "seedance-2.0" | "google-omni-flash" | "kling-3.0-i2v" | undefined {
+}): "seedance-2.5" | "seedance-2.0" | "google-omni-flash" | "kling-3.0-i2v" | undefined {
   if (args.tier !== "pro_video") {
     return undefined;
   }
   if (
+    args.videoModel === "seedance-2.5" ||
     args.videoModel === "seedance-2.0" ||
     args.videoModel === "google-omni-flash" ||
     args.videoModel === "kling-3.0-i2v"
@@ -2256,7 +2257,7 @@ function resolveVideoPricingModel(args: {
   if (args.resolvedModel) {
     return videoPricingModelFromGatewayId(args.resolvedModel);
   }
-  return "seedance-2.0";
+  return "seedance-2.5";
 }
 
 function generationCreditCost(args: {

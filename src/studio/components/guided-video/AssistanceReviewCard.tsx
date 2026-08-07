@@ -130,10 +130,10 @@ const IMAGE_QUALITY_OPTIONS = [
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
 ];
-/** Seedance 2.0 (Vercel Gateway catalog): 720p / 1080p only. */
+/** Seedance 2.5 (Vercel Gateway catalog): 480p / 720p only. */
 const VIDEO_RESOLUTION_OPTIONS = [
+  { value: "854x480", label: "480p" },
   { value: "1280x720", label: "720p" },
-  { value: "1920x1080", label: "1080p" },
 ];
 const VIDEO_TYPE_OPTIONS = [
   { value: "standard", label: "Standard" },

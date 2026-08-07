@@ -749,7 +749,7 @@ export const estimateGenerationCost = internalQuery({
         creditBalance,
         canGenerate: false,
         hasActiveSubscription,
-        reason: "4K video is not available yet. Video generation supports up to 1080p.",
+        reason: "4K video is not available yet. Video generation supports up to 720p.",
       };
     }
     if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
@@ -782,10 +782,11 @@ export const estimateGenerationCost = internalQuery({
       videoModel:
         args.mode === "video"
           ? ((args.videoModel as
+              | "seedance-2.5"
               | "seedance-2.0"
               | "google-omni-flash"
               | "kling-3.0-i2v"
-              | undefined) ?? "seedance-2.0")
+              | undefined) ?? "seedance-2.5")
           : undefined,
       ...referenceFlags,
     });
@@ -909,10 +910,11 @@ export const estimateBatchProduction = internalQuery({
           videoModel:
             item.mode === "video"
               ? ((item.videoModel as
+                  | "seedance-2.5"
                   | "seedance-2.0"
                   | "google-omni-flash"
                   | "kling-3.0-i2v"
-                  | undefined) ?? "seedance-2.0")
+                  | undefined) ?? "seedance-2.5")
               : undefined,
           ...referenceFlags,
         });

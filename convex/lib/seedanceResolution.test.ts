@@ -9,22 +9,22 @@ import {
 describe("normalizeSeedanceResolution", () => {
   it("maps Studio WxH values to Seedance p-labels", () => {
     expect(normalizeSeedanceResolution("1280x720")).toBe("720p");
-    expect(normalizeSeedanceResolution("1920x1080")).toBe("1080p");
+    expect(normalizeSeedanceResolution("1920x1080")).toBe("720p");
     expect(normalizeSeedanceResolution("720x1280")).toBe("720p");
-    expect(normalizeSeedanceResolution("1080x1920")).toBe("1080p");
+    expect(normalizeSeedanceResolution("1080x1920")).toBe("720p");
   });
 
   it("accepts p-labels and aliases", () => {
     expect(normalizeSeedanceResolution("720p")).toBe("720p");
-    expect(normalizeSeedanceResolution("1080p")).toBe("1080p");
+    expect(normalizeSeedanceResolution("1080p")).toBe("720p");
     expect(normalizeSeedanceResolution("hd")).toBe("720p");
-    expect(normalizeSeedanceResolution("fhd")).toBe("1080p");
+    expect(normalizeSeedanceResolution("fhd")).toBe("720p");
   });
 
-  it("upgrades draft 480p to 720p (gateway rejects 480p on seedance-2.0)", () => {
-    expect(normalizeSeedanceResolution("854x480")).toBe("720p");
-    expect(normalizeSeedanceResolution("480p")).toBe("720p");
-    expect(normalizeSeedanceResolution("480")).toBe("720p");
+  it("keeps 480p (Seedance 2.5 supports it)", () => {
+    expect(normalizeSeedanceResolution("854x480")).toBe("480p");
+    expect(normalizeSeedanceResolution("480p")).toBe("480p");
+    expect(normalizeSeedanceResolution("480")).toBe("480p");
   });
 
   it("never forwards image tiers as pixel sizes", () => {

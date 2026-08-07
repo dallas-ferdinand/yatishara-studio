@@ -149,17 +149,17 @@ export const getPricing = authedQuery({
       videoCredits480p: videoCreditCost({
         resolution: "854x480",
         durationSeconds: 5,
-        videoModel: "seedance-2.0",
+        videoModel: "seedance-2.5",
       }),
       videoCredits720p: videoCreditCost({
         resolution: "1280x720",
         durationSeconds: 5,
-        videoModel: "seedance-2.0",
+        videoModel: "seedance-2.5",
       }),
       videoCredits1080p: videoCreditCost({
         resolution: "1920x1080",
         durationSeconds: 5,
-        videoModel: "seedance-2.0",
+        videoModel: "seedance-2.5",
       }),
       klingVideoCredits720p: videoCreditCost({
         resolution: "1280x720",
@@ -399,17 +399,17 @@ export const getPricingForApi = internalQuery({
       videoCredits480p: videoCreditCost({
         resolution: "854x480",
         durationSeconds: 5,
-        videoModel: "seedance-2.0",
+        videoModel: "seedance-2.5",
       }),
       videoCredits720p: videoCreditCost({
         resolution: "1280x720",
         durationSeconds: 5,
-        videoModel: "seedance-2.0",
+        videoModel: "seedance-2.5",
       }),
       videoCredits1080p: videoCreditCost({
         resolution: "1920x1080",
         durationSeconds: 5,
-        videoModel: "seedance-2.0",
+        videoModel: "seedance-2.5",
       }),
       klingVideoCredits720p: videoCreditCost({
         resolution: "1280x720",
@@ -1328,7 +1328,7 @@ export const adminSetPricing = adminMutation({
       videoCredits: videoCreditCost({
         resolution: "1280x720",
         durationSeconds: 5,
-        videoModel: "seedance-2.0",
+        videoModel: "seedance-2.5",
       }),
       updatedBy: ctx.user._id,
       updatedAt: now,
@@ -1359,7 +1359,7 @@ export const adminSeedLaunchPricing = adminMutation({
       videoCredits: videoCreditCost({
         resolution: "1280x720",
         durationSeconds: 5,
-        videoModel: "seedance-2.0",
+        videoModel: "seedance-2.5",
       }),
       updatedBy: ctx.user._id,
       updatedAt: now,

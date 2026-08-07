@@ -1965,7 +1965,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
 
     set_production_settings: tool({
       description:
-        "Update production settings for the current mode (aspect ratio, resolution, quality, duration, script/element type). When the user asks to change resolution/quality/format, ALWAYS call this with source=user_explicit. Image resolution must be exactly 1K, 2K, or 4K. Video resolution must be 1280x720 (720p) or 1920x1080 (1080p) — Seedance 2.0 on Vercel AI Gateway. Image quality must be low, medium, or high. Video aspect ratio must be one of 16:9, 9:16, 1:1, 4:3, 3:4, 21:9. Duration 4–15s.",
+        "Update production settings for the current mode (aspect ratio, resolution, quality, duration, script/element type). When the user asks to change resolution/quality/format, ALWAYS call this with source=user_explicit. Image resolution must be exactly 1K, 2K, or 4K. Video resolution must be 854x480 (480p) or 1280x720 (720p) — Seedance 2.5 on Vercel AI Gateway (1080p clamps to 720p). Image quality must be low, medium, or high. Video aspect ratio must be one of 16:9, 9:16, 1:1, 4:3, 3:4, 21:9. Duration 4–30s.",
       inputSchema: jsonSchema<object>({
         type: "object",
         properties: {
@@ -1991,7 +1991,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
         const allowedResolutions =
           session.mode === "image"
             ? new Set(["1K", "2K", "4K"])
-            : new Set(["1280x720", "1920x1080"]);
+            : new Set(["854x480", "1280x720"]);
         const normalizeResolution = (value: string): string | null => {
           const compact = value.trim().toUpperCase().replace(/\s+/g, "");
           if (session.mode === "image") {
@@ -2002,19 +2002,27 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
             return null;
           }
           const lower = value.trim().toLowerCase();
-          // Seedance 2.0 (Vercel catalog): 720p / 1080p only. Draft 480p upgrades to 720p.
+          // Seedance 2.5 (Vercel catalog): 480p / 720p only. 1080p clamps to 720p.
           if (
             lower === "480p" ||
             lower === "480" ||
             lower === "854x480" ||
-            lower === "864x480" ||
+            lower === "864x480"
+          ) {
+            return "854x480";
+          }
+          if (
             lower === "720p" ||
             lower === "720" ||
-            lower === "hd"
+            lower === "hd" ||
+            lower === "1280x720" ||
+            lower === "1080p" ||
+            lower === "1080" ||
+            lower === "fhd" ||
+            lower === "1920x1080"
           ) {
             return "1280x720";
           }
-          if (lower === "1080p" || lower === "1080" || lower === "fhd") return "1920x1080";
           if (allowedResolutions.has(value.trim())) return value.trim();
           return null;
         };

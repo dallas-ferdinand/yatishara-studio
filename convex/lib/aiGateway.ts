@@ -18,6 +18,7 @@ import { normalizeAudioMimeType, type ReferenceInput } from "./referenceInput";
 import {
   isKlingGatewayModel,
   isOmniFlashGatewayModel,
+  isSeedance25GatewayModel,
   isSeedanceGatewayModel,
 } from "./videoModels";
 import {
@@ -300,17 +301,20 @@ export async function generateVideo(
   const multimodalProviderRefs =
     seedance && hasStartFrame && (hasReferenceVideos || hasReferenceAudio);
 
-  // Seedance 2.0 (Vercel catalog): only "720p" / "1080p".
-  // WxH (1280x720) and 480p both fail with
-  // "resolution … is not valid for model dreamina-seedance-2-0 in r2v/t2v".
+  // Seedance 2.5 (Vercel catalog): only "480p" / "720p".
+  // WxH (1280x720) fails — normalizeSeedanceResolution maps to p-labels.
   const resolution = seedance
     ? normalizeSeedanceResolution(input.resolution)
     : normalizeSize(input.resolution);
   const aspectRatio = seedance
     ? normalizeSeedanceAspectRatio(input.aspectRatio)
     : normalizeAspectRatio(input.aspectRatio);
+  const seedanceMaxDuration = isSeedance25GatewayModel(model) ? 30 : 15;
   const durationSeconds = seedance
-    ? Math.max(4, Math.min(15, Math.round(Number(input.durationSeconds) || 4)))
+    ? Math.max(
+        4,
+        Math.min(seedanceMaxDuration, Math.round(Number(input.durationSeconds) || 4)),
+      )
     : input.durationSeconds;
 
   if (seedance) {

@@ -15,9 +15,23 @@ describe("validateVideoModelCapabilities", () => {
     ).toThrow("between 4 and 10 seconds");
 
     expect(
+      validateVideoModelCapabilities("seedance-2.5", {
+        durationSeconds: 30,
+        surface: "studio",
+      }).slug,
+    ).toBe("seedance-2.5");
+
+    expect(() =>
+      validateVideoModelCapabilities("seedance-2.5", {
+        durationSeconds: 31,
+        surface: "studio",
+      }),
+    ).toThrow("between 4 and 30 seconds");
+
+    expect(
       validateVideoModelCapabilities("seedance-2.0", {
         durationSeconds: 15,
-        surface: "studio",
+        surface: "api",
       }).slug,
     ).toBe("seedance-2.0");
   });

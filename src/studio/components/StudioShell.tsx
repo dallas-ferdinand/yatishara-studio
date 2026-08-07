@@ -25050,7 +25050,7 @@ function StudioComposerInlineSettings({
   showLabels = false,
   panelLayout = false,
 }) {
-  const maxVideoDuration = 15;
+  const maxVideoDuration = 30;
   const [localDurationSeconds, setLocalDurationSeconds] = useState(String(durationSeconds));
   useEffect(() => {
     const next = String(Math.max(4, Math.min(maxVideoDuration, Number(durationSeconds) || 4)));
@@ -25078,10 +25078,10 @@ function StudioComposerInlineSettings({
     { value: "medium", label: "Medium", meta: "Balanced" },
     { value: "high", label: "High", meta: "Best detail" },
   ];
-  // Seedance 2.0 (Vercel Gateway catalog): 720p / 1080p only.
+  // Seedance 2.5 (Vercel Gateway catalog): 480p / 720p only.
   const resolutionItems = [
-    { value: "1280x720", label: "720p", meta: "Standard" },
-    { value: "1920x1080", label: "1080p", meta: "Max" },
+    { value: "854x480", label: "480p", meta: "Draft" },
+    { value: "1280x720", label: "720p", meta: "Max" },
   ];
   const activeVideoResolution = resolutionItems.some((item) => item.value === resolution)
     ? resolution
@@ -25103,7 +25103,7 @@ function StudioComposerInlineSettings({
     <div className="studio-inline-settings-range-panel">
       <div className="studio-duration-readout">
         <strong>{localDurationSeconds}s</strong>
-        <span>4-15s</span>
+        <span>4-30s</span>
       </div>
       <input
         className="studio-settings-range"
@@ -25121,11 +25121,11 @@ function StudioComposerInlineSettings({
       />
       <div className="studio-duration-ticks" aria-hidden="true">
         <span>4s</span>
-        <span>8s</span>
         <span>15s</span>
+        <span>30s</span>
       </div>
       <div className="studio-settings-chip-grid studio-duration-presets is-two" role="group" aria-label="Video duration presets">
-        {["4", "8", "12", "15"].map((seconds) => (
+        {["4", "8", "15", "30"].map((seconds) => (
           <button
             key={seconds}
             type="button"
@@ -29752,8 +29752,8 @@ function AdminWorkspacePane({
                   <div className="studio-credit-cost"><span>Image 4K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits4K ?? 5, pricing?.creditPriceCents)}</strong><em>2× model</em></div>
                   <div className="studio-credit-cost"><span>Image high</span><strong>prices scale with quality</strong><em>low / medium / high</em></div>
                   <div className="studio-credit-cost"><span>Video 480p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits480p ?? 14, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway</em></div>
-                  <div className="studio-credit-cost"><span>Video 720p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits720p ?? 31, pricing?.creditPriceCents)} / 5s</strong><em>default</em></div>
-                  <div className="studio-credit-cost"><span>Video 1080p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits1080p ?? 69, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway</em></div>
+                  <div className="studio-credit-cost"><span>Video 480p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits480p ?? 22, pricing?.creditPriceCents)} / 5s</strong><em>draft</em></div>
+                  <div className="studio-credit-cost"><span>Video 720p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits720p ?? 47, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway · Seedance 2.5</em></div>
                   <div className="studio-credit-cost"><span>Script / Assistance</span><strong>2× usage · from {formatTtdFromCredits(TEXT_GENERATION_BASE_CREDITS, pricing?.creditPriceCents)}</strong><em>per turn</em></div>
                 </div>
               </section>

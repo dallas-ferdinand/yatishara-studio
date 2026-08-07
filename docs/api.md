@@ -367,7 +367,7 @@ Body:
   "referenceAssetIds": [],
   "referenceElementIds": [],
   "startFrameAssetId": null,
-  "videoModel": "seedance-2.0"
+  "videoModel": "seedance-2.5"
 }
 ```
 
@@ -431,7 +431,7 @@ GET /api/v1/generations/:id
   "resolution": "1280x720",
   "aspectRatio": "16:9",
   "audioEnabled": true,
-  "videoModel": "seedance-2.0",
+  "videoModel": "seedance-2.5",
   "startFrameAssetId": null,
   "referenceElementIds": [],
   "wait": false

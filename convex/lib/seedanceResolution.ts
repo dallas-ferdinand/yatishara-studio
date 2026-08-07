@@ -1,15 +1,15 @@
 /**
- * Seedance 2.0 (dreamina-seedance-2-0) gateway parameter alignment.
+ * Seedance gateway parameter alignment (default: Seedance 2.5).
  *
- * Vercel AI Gateway catalog for `bytedance/seedance-2.0`:
- *   Resolutions: `720p` / `1080p` only (not WxH, not 480p).
+ * Vercel AI Gateway catalog for `bytedance/seedance-2.5`:
+ *   Resolutions: `480p` / `720p` only (not WxH, not 1080p/4K).
  *   Aspect ratios: 16:9, 9:16, 1:1, 4:3, 3:4, 21:9.
- *   Duration: 4–15s.
+ *   Duration: 4–30s.
  *
  * Studio may store WxH for pricing/UI; convert at the gateway boundary.
- * Draft 480p / 854x480 is upgraded to 720p because the gateway rejects 480p.
+ * 1080p / 4K requests are clamped to 720p (2.5 does not list those tiers).
  */
-export type SeedanceResolutionLabel = "720p" | "1080p";
+export type SeedanceResolutionLabel = "480p" | "720p";
 
 const SEEDANCE_ASPECT_RATIOS = new Set([
   "16:9",
@@ -27,17 +27,18 @@ export function normalizeSeedanceResolution(
   const key = resolution.trim().toLowerCase().replace(/×/g, "x");
 
   if (
-    key === "1080p" ||
-    key === "1080" ||
-    key === "fhd" ||
-    key === "1920x1080" ||
-    key === "1080x1920"
+    key === "480p" ||
+    key === "480" ||
+    key === "854x480" ||
+    key === "864x480" ||
+    key === "480x854" ||
+    key === "480x864"
   ) {
-    return "1080p";
+    return "480p";
   }
 
-  // Everything else (including 480p / 854x480 / 720p / image tiers) → 720p.
-  // Gateway rejects 480p for seedance-2.0.
+  // 1080p / 4K / FHD → 720p (Seedance 2.5 catalog has no 1080p).
+  // Everything else (including 720p / image tiers) → 720p.
   return "720p";
 }
 

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { authedQuery } from "./lib/customFunctions";
-import { listVideoModelsPublic, videoPricingModelFromGatewayId } from "./lib/videoModels";
+import { listVideoModelsPublic } from "./lib/videoModels";
 import {
   videoCreditCost,
 } from "./lib/generationPricing";
@@ -10,6 +10,7 @@ export const list = authedQuery({
   returns: v.array(
     v.object({
       slug: v.union(
+        v.literal("seedance-2.5"),
         v.literal("seedance-2.0"),
         v.literal("google-omni-flash"),
         v.literal("kling-3.0-i2v"),
@@ -20,13 +21,21 @@ export const list = authedQuery({
       supportsMultimodalRefs: v.boolean(),
       maxDurationSeconds: v.optional(v.number()),
       isDefault: v.boolean(),
+      creditsPer5sBlock480p: v.number(),
       creditsPer5sBlock720p: v.number(),
+      /** @deprecated Seedance 2.5 has no 1080p — equals 720p clamp for display compat. */
       creditsPer5sBlock1080p: v.number(),
     }),
   ),
   handler: async () =>
     listVideoModelsPublic({ uiOnly: true }).map((model) => ({
       ...model,
+      creditsPer5sBlock480p: videoCreditCost({
+        resolution: "854x480",
+        durationSeconds: 5,
+        videoModel: model.slug,
+        audioEnabled: false,
+      }),
       creditsPer5sBlock720p: videoCreditCost({
         resolution: "1280x720",
         durationSeconds: 5,
@@ -34,7 +43,7 @@ export const list = authedQuery({
         audioEnabled: false,
       }),
       creditsPer5sBlock1080p: videoCreditCost({
-        resolution: "1920x1080",
+        resolution: "1280x720",
         durationSeconds: 5,
         videoModel: model.slug,
         audioEnabled: false,

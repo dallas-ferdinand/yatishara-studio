@@ -5,8 +5,13 @@
  * rounded up to the next TT$0.50. FX: US$1 = TT$10. Ledger: TT$0.50 per credit.
  * No platform fee on top of the 2× markup.
  *
- * Seedance (`bytedance/seedance-2.0`): $7/M tokens — same customer price with/without video refs.
- *   tokens ≈ (height × width × 24fps × seconds) / 1024. Audio included. Max 15s.
+ * Seedance 2.5 (`bytedance/seedance-2.5`): $10.70/M tokens (no video input) /
+ * $6.40/M (with video input). Customer quotes use the no-video rate (same pattern
+ * as 2.0). tokens ≈ (height × width × 24fps × seconds) / 1024. Audio included.
+ * Resolutions 480p/720p; max 30s.
+ *
+ * Seedance 2.0 (MCP legacy): $7/M / $4.30/M; max 15s; 720p/1080p historically.
+ *
  * Omni Flash (`google/gemini-omni-flash-preview`): $0.10/s output (Veo Fast-aligned). Max 10s.
  *
  * Kling 3.0 I2V (MCP, `mode: "pro"`): $0.224/s silent · $0.336/s with audio.
@@ -58,11 +63,16 @@ export const IMAGE_CREDITS_BY_RESOLUTION: Record<string, number> = {
 /** +TT$1 (2 credits) when reference images are used on 2K/4K. */
 export const IMAGE_REFERENCE_SURCHARGE = 2;
 
-/** Vercel Seedance 2.0 — USD per million video tokens (customer quotes). */
-export const SEEDANCE_USD_PER_M_TOKENS_NO_VIDEO = 7;
+/** Vercel Seedance 2.5 — USD per million video tokens (customer quotes use no-video rate). */
+export const SEEDANCE_USD_PER_M_TOKENS_NO_VIDEO = 10.7;
 /** Gateway pass-through when video is in the input — not used for customer quotes. */
-export const SEEDANCE_USD_PER_M_TOKENS_WITH_VIDEO = 4.3;
+export const SEEDANCE_USD_PER_M_TOKENS_WITH_VIDEO = 6.4;
+/** Legacy Seedance 2.0 rates (MCP explicit). */
+export const SEEDANCE_20_USD_PER_M_TOKENS_NO_VIDEO = 7;
+export const SEEDANCE_20_USD_PER_M_TOKENS_WITH_VIDEO = 4.3;
 export const SEEDANCE_FPS = 24;
+export const SEEDANCE_25_MAX_DURATION_SECONDS = 30;
+export const SEEDANCE_20_MAX_DURATION_SECONDS = 15;
 
 /**
  * Google Gemini Omni Flash Preview — published video output rate (aligned with Veo 3.1 Fast).
@@ -79,6 +89,7 @@ export const KLING_PRO_USD_PER_SECOND_SILENT = 0.224;
 export const KLING_PRO_USD_PER_SECOND_AUDIO = 0.336;
 
 export type VideoPricingModel =
+  | "seedance-2.5"
   | "seedance-2.0"
   | "google-omni-flash"
   | "kling-3.0-i2v";
@@ -241,7 +252,11 @@ export function videoDurationSeconds(
   videoModel?: VideoPricingModel,
 ): number {
   const max =
-    videoModel === "google-omni-flash" ? OMNI_FLASH_MAX_DURATION_SECONDS : 15;
+    videoModel === "google-omni-flash"
+      ? OMNI_FLASH_MAX_DURATION_SECONDS
+      : videoModel === "seedance-2.0" || videoModel === "kling-3.0-i2v"
+        ? SEEDANCE_20_MAX_DURATION_SECONDS
+        : SEEDANCE_25_MAX_DURATION_SECONDS;
   return Math.max(4, Math.min(max, Math.ceil(Number(durationSeconds) || 4)));
 }
 
@@ -273,7 +288,14 @@ export function seedanceOutputTokens(args: {
   durationSeconds?: number;
   videoModel?: VideoPricingModel;
 }): number {
-  const key = normalizeVideoResolutionKey(args.resolution);
+  let key = normalizeVideoResolutionKey(args.resolution);
+  // Seedance 2.5 has no 1080p tier — price/clamp as 720p.
+  if (
+    (args.videoModel === "seedance-2.5" || args.videoModel == null) &&
+    key === "1920x1080"
+  ) {
+    key = "1280x720";
+  }
   const { width, height } = VIDEO_RESOLUTION_WH[key];
   const seconds = videoDurationSeconds(args.durationSeconds, args.videoModel);
   return (height * width * SEEDANCE_FPS * seconds) / 1024;
@@ -286,7 +308,7 @@ export function estimateVideoModelUsd(args: {
   audioEnabled?: boolean;
   videoModel?: VideoPricingModel;
 }): number {
-  const videoModel = args.videoModel ?? "seedance-2.0";
+  const videoModel = args.videoModel ?? "seedance-2.5";
   const seconds = videoDurationSeconds(args.durationSeconds, videoModel);
 
   if (videoModel === "kling-3.0-i2v") {
@@ -303,14 +325,18 @@ export function estimateVideoModelUsd(args: {
     return OMNI_FLASH_USD_PER_SECOND * seconds;
   }
 
-  // Seedance — same customer price with or without video refs.
+  // Seedance — same customer price with or without video refs (no-video rate).
   void args.hasVideoReferenceInput;
   const tokens = seedanceOutputTokens({
     resolution: args.resolution,
     durationSeconds: args.durationSeconds,
     videoModel,
   });
-  return (tokens * SEEDANCE_USD_PER_M_TOKENS_NO_VIDEO) / 1_000_000;
+  const usdPerM =
+    videoModel === "seedance-2.0"
+      ? SEEDANCE_20_USD_PER_M_TOKENS_NO_VIDEO
+      : SEEDANCE_USD_PER_M_TOKENS_NO_VIDEO;
+  return (tokens * usdPerM) / 1_000_000;
 }
 
 export function videoSellPriceTtd(args: {
@@ -329,7 +355,7 @@ export function videoSellPriceTtd(args: {
  */
 export function videoBaseCreditsPerBlock(
   resolution: string | undefined,
-  videoModel: VideoPricingModel = "seedance-2.0",
+  videoModel: VideoPricingModel = "seedance-2.5",
 ): number {
   return videoCreditCost({
     resolution,
@@ -350,7 +376,7 @@ export function videoCreditCost(args: {
   videoModel?: VideoPricingModel;
 }): number {
   // Image / non-video refs do not change Vercel Seedance token rates.
-  // Video refs keep the same customer price as no-ref (always $7/M or Fast $5.6/M).
+  // Video refs keep the same customer price as no-ref (2.5 $10.70/M or 2.0 $7/M).
   // Kling rates swap only on audio; start-frame/image is already in the I2V base.
   void args.hasReferenceInput;
   void args.hasNonVideoReferenceInput;

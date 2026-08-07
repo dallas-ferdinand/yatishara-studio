@@ -127,9 +127,10 @@ Studio folders are the source of truth for outputs.
 
 ## Video helpers
 
-- \`studio_list_video_models\` before exotic models (default Seedance 2.0)
+- \`studio_list_video_models\` before exotic models (default Seedance 2.5)
 - People on camera: generate a start frame image first, pass \`startFrameAssetId\`
 - \`audioEnabled\` = Seedance native audio bed with the video
+- Duration 4\u201330s; resolutions 480p / 720p (1080p clamps to 720p)
 
 ## Script
 
