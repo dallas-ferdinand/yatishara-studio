@@ -417,7 +417,10 @@ export function StudioAcademyPane({
               </div>
             </div>
             <div className="studio-academy-body">
-              <StudioChatMarkdown text={selectedLesson.descriptionMarkdown} />
+              <StudioChatMarkdown
+                className="studio-academy-md"
+                text={selectedLesson.descriptionMarkdown}
+              />
             </div>
           </div>
         </main>
@@ -454,7 +457,10 @@ export function StudioAcademyPane({
               ) : null}
             </div>
             <div className="studio-academy-body">
-              <StudioChatMarkdown text={detail.descriptionMarkdown} />
+              <StudioChatMarkdown
+                className="studio-academy-md"
+                text={detail.descriptionMarkdown}
+              />
             </div>
           </div>
         </main>

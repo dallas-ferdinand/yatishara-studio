@@ -23,34 +23,176 @@
   padding: 0;
 }
 
-/* Academy lesson/course body: chat markdown greys are unreadable on light plates. */
+/* ---------------------------------------------------------------------------
+   Academy lesson/course markdown — surface prose (not chat greys).
+   Theme ink + accent bullets / marks / links.
+--------------------------------------------------------------------------- */
+.studio-academy-body {
+  --academy-md-ink: var(--color-cursor-text, var(--mos-text, #e8eaef));
+  --academy-md-muted: var(--color-cursor-muted, var(--mos-muted, #94a3b8));
+  --academy-md-accent: var(--cursor-accent, var(--color-cursor-accent, #5b8cff));
+  --academy-md-plate: var(--mos-plate, var(--color-cursor-panel, transparent));
+  color: var(--academy-md-ink);
+}
+
+[data-appearance="light"] .studio-academy-body {
+  --academy-md-ink: var(--color-cursor-text, #0f172a);
+  --academy-md-muted: var(--color-cursor-muted, #64748b);
+}
+
+[data-appearance="dark"] .studio-academy-body {
+  --academy-md-ink: var(--color-cursor-text, #e8eaef);
+  --academy-md-muted: var(--color-cursor-muted, #94a3b8);
+}
+
+.studio-academy-body .studio-academy-md,
 .studio-academy-body .studio-chat-markdown,
 .studio-academy-body .studio-chat-markdown.mos-md,
 .studio-academy-body .studio-chat-markdown.md-prose {
-  --chat-text-color: var(--color-cursor-text-bright, #0f172a);
-  --chat-text-muted: var(--color-cursor-muted, #64748b);
-  --text: var(--color-cursor-text-bright, #0f172a);
-  --text-muted: var(--color-cursor-muted, #64748b);
-  --mos-text: var(--color-cursor-text-bright, #0f172a);
-  --mos-muted: var(--color-cursor-muted, #64748b);
-  color: var(--color-cursor-text-bright, #0f172a) !important;
+  --chat-text-color: var(--academy-md-ink);
+  --chat-text-muted: var(--academy-md-muted);
+  --text: var(--academy-md-ink);
+  --text-muted: var(--academy-md-muted);
+  --mos-text: var(--academy-md-ink);
+  --mos-muted: var(--academy-md-muted);
+  --mos-accent: var(--academy-md-accent);
+  color: var(--academy-md-ink) !important;
+  font-size: 14px;
+  line-height: 1.65;
+  letter-spacing: -0.01em;
+  max-width: 46rem;
 }
 
-.studio-academy-body .studio-chat-markdown :is(h1, h2, h3, p, li, strong, blockquote, td, th) {
-  color: var(--color-cursor-text-bright, #0f172a) !important;
+.studio-academy-body .studio-academy-md :is(h1, h2, h3, h4) {
+  color: var(--academy-md-ink) !important;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
 }
 
-.studio-academy-body .studio-chat-markdown :is(h4, em) {
-  color: var(--color-cursor-muted, #64748b) !important;
+.studio-academy-body .studio-academy-md h1 {
+  font-size: 1.2em;
+  margin: 1.35em 0 0.45em;
 }
 
-[data-appearance="light"] .studio-academy-body .studio-chat-markdown,
-[data-appearance="light"] .studio-academy-body .studio-chat-markdown :is(h1, h2, h3, p, li, strong, blockquote) {
-  color: #0f172a !important;
+.studio-academy-body .studio-academy-md h2 {
+  font-size: 1.08em;
+  margin: 1.4em 0 0.4em;
+  padding-bottom: 0.28em;
+  border-bottom: 1px solid color-mix(in srgb, var(--academy-md-accent) 22%, var(--color-cursor-border-soft, transparent));
 }
 
-[data-appearance="light"] .studio-academy-body .studio-chat-markdown :is(h4, em) {
-  color: #64748b !important;
+.studio-academy-body .studio-academy-md h3 {
+  font-size: 1em;
+  margin: 1.15em 0 0.35em;
+  color: color-mix(in srgb, var(--academy-md-ink) 82%, var(--academy-md-accent)) !important;
+}
+
+.studio-academy-body .studio-academy-md h4 {
+  font-size: 0.95em;
+  margin: 1em 0 0.3em;
+  color: var(--academy-md-muted) !important;
+  text-transform: none;
+  letter-spacing: -0.01em;
+}
+
+.studio-academy-body .studio-academy-md :is(p, li, td, th) {
+  color: var(--academy-md-ink) !important;
+}
+
+.studio-academy-body .studio-academy-md p {
+  margin: 0.7em 0;
+}
+
+.studio-academy-body .studio-academy-md strong {
+  color: var(--academy-md-ink) !important;
+  font-weight: 650;
+}
+
+.studio-academy-body .studio-academy-md em {
+  color: var(--academy-md-muted) !important;
+  font-style: italic;
+}
+
+.studio-academy-body .studio-academy-md a {
+  color: var(--academy-md-accent) !important;
+  text-decoration: none;
+  font-weight: 550;
+  border-bottom: 1px solid color-mix(in srgb, var(--academy-md-accent) 35%, transparent);
+}
+
+.studio-academy-body .studio-academy-md a:hover {
+  border-bottom-color: var(--academy-md-accent);
+}
+
+.studio-academy-body .studio-academy-md ul > li::before {
+  background: var(--academy-md-accent) !important;
+  opacity: 1 !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--academy-md-accent) 18%, transparent);
+}
+
+.studio-academy-body .studio-academy-md ol {
+  list-style: none;
+  counter-reset: academy-md;
+  padding-left: 0;
+}
+
+.studio-academy-body .studio-academy-md ol > li {
+  position: relative;
+  padding-left: 1.55em;
+  counter-increment: academy-md;
+}
+
+.studio-academy-body .studio-academy-md ol > li::before {
+  content: counter(academy-md);
+  position: absolute;
+  left: 0;
+  top: 0.12em;
+  width: 1.2em;
+  height: 1.2em;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--academy-md-accent);
+  background: color-mix(in srgb, var(--academy-md-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--academy-md-accent) 32%, transparent);
+}
+
+.studio-academy-body .studio-academy-md blockquote {
+  margin: 1em 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--academy-md-accent) 22%, var(--color-cursor-border-soft, transparent));
+  border-left: 3px solid var(--academy-md-accent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--academy-md-accent) 7%, var(--academy-md-plate));
+  color: var(--academy-md-ink) !important;
+}
+
+.studio-academy-body .studio-academy-md blockquote p {
+  margin: 0.35em 0;
+  color: color-mix(in srgb, var(--academy-md-ink) 88%, var(--academy-md-muted)) !important;
+}
+
+.studio-academy-body .studio-academy-md code {
+  color: var(--academy-md-ink) !important;
+  background: color-mix(in srgb, var(--academy-md-accent) 10%, var(--academy-md-plate));
+  border: 1px solid color-mix(in srgb, var(--academy-md-accent) 18%, var(--color-cursor-border-soft, transparent));
+  border-radius: 6px;
+  padding: 0.12em 0.4em;
+}
+
+.studio-academy-body .studio-academy-md hr {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--academy-md-accent) 45%, transparent),
+    transparent
+  ) !important;
+  height: 1px;
+  margin: 1.35em 0;
 }
 
 /* Match Messages rail: no stacked top border on search. */

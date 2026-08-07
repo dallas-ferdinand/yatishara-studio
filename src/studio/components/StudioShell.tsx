@@ -19722,27 +19722,6 @@ export function StudioShell({
         .studio-academy-body {
           min-width: 0;
         }
-        /* Force surface ink — chat markdown defaults to light grey (#d8d8d8). */
-        .studio-academy-body .studio-chat-markdown,
-        .studio-academy-body .studio-chat-markdown.mos-md,
-        .studio-academy-body .studio-chat-markdown.md-prose {
-          --chat-text-color: var(--color-cursor-text-bright, #0f172a);
-          --chat-text-muted: var(--color-cursor-muted, #64748b);
-          --text: var(--color-cursor-text-bright, #0f172a);
-          --text-muted: var(--color-cursor-muted, #64748b);
-          --mos-text: var(--color-cursor-text-bright, #0f172a);
-          --mos-muted: var(--color-cursor-muted, #64748b);
-          color: var(--color-cursor-text-bright, #0f172a) !important;
-        }
-        .studio-academy-body .studio-chat-markdown :is(h1, h2, h3, p, li, strong, blockquote, td, th) {
-          color: var(--color-cursor-text-bright, #0f172a) !important;
-        }
-        .studio-academy-body .studio-chat-markdown :is(h4, em) {
-          color: var(--color-cursor-muted, #64748b) !important;
-        }
-        .studio-academy-body .studio-chat-markdown a {
-          color: var(--cursor-accent, var(--color-cursor-accent, #c45c5c)) !important;
-        }
         .studio-academy-banner-stage {
           position: relative;
           width: 100%;
