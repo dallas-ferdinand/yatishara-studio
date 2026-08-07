@@ -1369,7 +1369,7 @@
 
 .profile-comments-thread-preview {
   display: grid;
-  gap: 1px;
+  gap: 0;
   min-width: 0;
   flex: 1;
   padding: 0;
@@ -1379,7 +1379,7 @@
 .profile-comments-thread-preview strong {
   font-size: 13px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1387,9 +1387,9 @@
 
 .profile-comments-thread-preview time {
   color: var(--color-cursor-muted, color-mix(in srgb, currentColor 55%, transparent));
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.1;
 }
 
 .profile-comments-list {
