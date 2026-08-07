@@ -1895,10 +1895,6 @@ button.post-compose-inline-chip.profile-description-chip {
   cursor: grabbing;
 }
 
-.profile-comment-row:last-child {
-  border-bottom: 0;
-}
-
 .profile-comment-body {
   display: grid;
   gap: 4px;
