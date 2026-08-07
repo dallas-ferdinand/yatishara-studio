@@ -99,16 +99,22 @@ function CheckoutDock({
     <div className="public-offers-rail-detail">
       <section className="studio-academy-checkout" aria-label="Course checkout">
         <header className="studio-academy-checkout-hero">
-          <span className="studio-academy-checkout-kicker">
-            {needsTopUp && !owned ? "Due today" : "Checkout"}
-          </span>
-          <strong className="studio-academy-checkout-amount">
-            {priceLabel}
-          </strong>
-          <ul className="studio-academy-checkout-chips" aria-label="Course access">
-            <li>Lifetime</li>
-            <li>{lessonMeta}</li>
-          </ul>
+          <GraduationCap
+            className="studio-academy-checkout-hero-icon"
+            aria-hidden="true"
+          />
+          <div className="studio-academy-checkout-hero-copy">
+            <span className="studio-academy-checkout-kicker">
+              {needsTopUp && !owned ? "Due today" : "Checkout"}
+            </span>
+            <strong className="studio-academy-checkout-amount">
+              {priceLabel}
+            </strong>
+            <ul className="studio-academy-checkout-chips" aria-label="Course access">
+              <li>Lifetime</li>
+              <li>{lessonMeta}</li>
+            </ul>
+          </div>
         </header>
 
         {owned ? (

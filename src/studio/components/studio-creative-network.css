@@ -219,22 +219,46 @@
 }
 
 .studio-academy-checkout-hero {
+  position: relative;
   display: grid;
-  gap: 4px;
+  gap: 0;
   padding: 10px 12px 8px;
+  overflow: hidden;
   background:
     radial-gradient(
       circle at 88% 0%,
-      color-mix(in srgb, var(--cursor-accent) 16%, transparent),
-      transparent 48%
+      color-mix(in srgb, var(--cursor-accent) 22%, transparent),
+      transparent 52%
     ),
     radial-gradient(
       circle at 8% 100%,
-      color-mix(in srgb, var(--cursor-accent) 8%, transparent),
+      color-mix(in srgb, var(--cursor-accent) 10%, transparent),
       transparent 44%
     ),
     var(--mos-plate, var(--cursor-surface));
   border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+.studio-academy-checkout-hero-icon {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  width: 92px;
+  height: 92px;
+  transform: translateY(-46%) rotate(-8deg);
+  color: var(--cursor-accent);
+  opacity: 0.18;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.studio-academy-checkout-hero-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 4px;
+  padding-right: 56px;
+  min-width: 0;
 }
 
 .studio-academy-checkout-kicker {
