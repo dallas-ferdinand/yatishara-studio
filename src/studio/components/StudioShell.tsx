@@ -19651,28 +19651,13 @@ export function StudioShell({
           max-width: none;
           padding: 0 0 28px;
         }
-        /* Video spans the main column edge-to-edge (body has 16px pad). */
-        .studio-academy-pane .public-offers-body:has(> .studio-academy-detail) {
-          padding-top: 0;
-        }
-        .studio-academy-detail > .studio-academy-player {
-          width: calc(100% + 32px);
-          max-width: none;
-          margin: 0 -16px;
-          border-radius: 0;
-          aspect-ratio: 16 / 9;
-          height: auto;
-          max-height: none;
-          overflow: hidden;
-          background: #000;
-        }
         .studio-academy-player {
           width: 100%;
           max-width: 100%;
           aspect-ratio: 16 / 9;
           height: auto;
           max-height: none;
-          border-radius: 12px;
+          border-radius: var(--cursor-radius-lg, 12px);
           overflow: hidden;
           background: #000;
         }
@@ -19703,7 +19688,6 @@ export function StudioShell({
           align-items: flex-start;
           justify-content: space-between;
           gap: 12px;
-          padding: 0 16px;
         }
         .studio-academy-detail-title {
           margin: 0;
@@ -19737,10 +19721,6 @@ export function StudioShell({
         }
         .studio-academy-body {
           min-width: 0;
-          padding: 0 16px;
-        }
-        .studio-academy-detail > .studio-academy-lesson-teasers {
-          padding: 0 16px;
         }
         .studio-academy-banner-stage {
           position: relative;
@@ -19864,8 +19844,8 @@ export function StudioShell({
           opacity: 0.85;
         }
         .studio-academy-lesson-num {
-          width: 24px;
-          height: 24px;
+          width: 100%;
+          height: 100%;
           border-radius: 999px;
           flex: 0 0 auto;
           display: grid;
@@ -19877,12 +19857,33 @@ export function StudioShell({
           background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
+        .studio-academy-lesson-thumb {
+          width: 28px;
+          height: 28px;
+          border-radius: 999px;
+          flex: 0 0 auto;
+          overflow: hidden;
+          display: grid;
+          place-items: center;
+          background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        .studio-academy-lesson-thumb img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .studio-academy-lesson-row.is-active .studio-academy-lesson-thumb {
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
+        }
         .studio-academy-lesson-row.is-active .studio-academy-lesson-num {
           color: var(--color-cursor-text-bright, var(--mos-text));
           border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
           background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-page));
         }
         .studio-academy-lesson-meta {
+          flex: 1 1 auto;
           min-width: 0;
           display: grid;
           gap: 1px;
@@ -19899,6 +19900,20 @@ export function StudioShell({
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .studio-academy-lesson-comments {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          color: var(--color-cursor-muted, var(--mos-muted));
+          font-size: 11px;
+          font-weight: 650;
+          line-height: 1;
+        }
+        .studio-academy-lesson-comments svg {
+          width: 13px;
+          height: 13px;
         }
         .studio-academy-right-dock {
           display: flex;
@@ -19945,9 +19960,56 @@ export function StudioShell({
           flex: 0 0 auto;
           border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
-        .studio-academy-comments-count {
-          font-weight: 600;
+        .studio-academy-comments-head {
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 10px;
+          min-width: 0;
+        }
+        .studio-academy-comments-avatar {
+          flex: 0 0 auto;
+          width: 28px;
+          height: 28px;
+          border-radius: 999px;
+          overflow: hidden;
+          display: grid;
+          place-items: center;
+          background: color-mix(in srgb, var(--mos-plate-strong, var(--cursor-surface-2)) 88%, transparent);
           color: var(--color-cursor-muted, var(--mos-muted));
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+        }
+        .studio-academy-comments-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .studio-academy-comments-head-title {
+          flex: 1 1 auto;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 13px;
+          font-weight: 700;
+        }
+        .studio-academy-comments-meta {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          margin-left: auto;
+          color: var(--color-cursor-muted, var(--mos-muted));
+          font-size: 12px;
+          font-weight: 650;
+          line-height: 1;
+        }
+        .studio-academy-comments-meta svg {
+          width: 14px;
+          height: 14px;
         }
         .studio-academy-comments-panel {
           background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));

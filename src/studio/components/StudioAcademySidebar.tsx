@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, MessageCircle } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
@@ -14,6 +14,13 @@ import {
 import "./public-offers.css";
 import "./studio-creative-network.css";
 
+function formatCommentCount(value: number): string {
+  if (value >= 1_000_000)
+    return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (value >= 1_000)
+    return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(value);
+}
 const SORT_OPTIONS: Array<{ value: AcademySortKey; label: string }> = [
   { value: "newest", label: "Newest" },
   { value: "price-asc", label: "Price: low to high" },
@@ -229,6 +236,7 @@ function OwnedLessonRail({
           <ul className="studio-academy-lesson-list">
             {lessons.map((lesson, index) => {
               const active = academy.lessonId === lesson._id;
+              const count = lesson.commentCount ?? 0;
               return (
                 <li key={lesson._id}>
                   <button
@@ -237,14 +245,32 @@ function OwnedLessonRail({
                     onClick={() => academy.setLessonId(lesson._id)}
                   >
                     <span
-                      className="studio-academy-lesson-num"
+                      className="studio-academy-lesson-thumb"
                       aria-hidden="true"
                     >
-                      {index + 1}
+                      {lesson.coverUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={lesson.coverUrl} alt="" />
+                      ) : (
+                        <span className="studio-academy-lesson-num">
+                          {index + 1}
+                        </span>
+                      )}
                     </span>
                     <span className="studio-academy-lesson-meta">
                       <strong>{lesson.title}</strong>
                       <small>{lesson.blurb || "Lesson"}</small>
+                    </span>
+                    <span
+                      className="studio-academy-lesson-comments"
+                      aria-label={`${formatCommentCount(count)} comments`}
+                    >
+                      <MessageCircle
+                        aria-hidden="true"
+                        fill="currentColor"
+                        strokeWidth={0}
+                      />
+                      <span>{formatCommentCount(count)}</span>
                     </span>
                   </button>
                 </li>
@@ -277,10 +303,17 @@ function UnownedOutlineRail({
             <li key={lesson._id}>
               <div className="studio-academy-lesson-row is-locked">
                 <span
-                  className="studio-academy-lesson-num"
+                  className="studio-academy-lesson-thumb"
                   aria-hidden="true"
                 >
-                  {index + 1}
+                  {lesson.coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={lesson.coverUrl} alt="" />
+                  ) : (
+                    <span className="studio-academy-lesson-num">
+                      {index + 1}
+                    </span>
+                  )}
                 </span>
                 <span className="studio-academy-lesson-meta">
                   <strong>{lesson.title}</strong>

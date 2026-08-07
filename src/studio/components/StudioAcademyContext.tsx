@@ -46,6 +46,7 @@ export type AcademyLessonSummary = {
   hasVideo: boolean;
   sortOrder: number;
   status: "draft" | "published";
+  commentCount?: number;
 };
 
 type AcademyContextValue = {

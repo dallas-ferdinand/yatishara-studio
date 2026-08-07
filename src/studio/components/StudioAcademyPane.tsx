@@ -192,12 +192,6 @@ export function StudioAcademyPane({
   }, [academy.courseId]);
 
   useEffect(() => {
-    if (detail?.commentCount != null) {
-      setCommentCount(detail.commentCount);
-    }
-  }, [detail?.commentCount, academy.courseId]);
-
-  useEffect(() => {
     setLessonEmbed(null);
   }, [academy.lessonId]);
 
@@ -220,9 +214,37 @@ export function StudioAcademyPane({
     detail?.lessons.find((l) => l._id === academy.lessonId) ??
     detail?.lessons[0] ??
     null;
+  const commentsLessonId =
+    owned && academy.lessonId ? academy.lessonId : undefined;
+  const commentsSidebarTitle =
+    commentsLessonId && selectedLesson
+      ? selectedLesson.title
+      : (detail?.title ?? "Comments");
+  const commentsSidebarAvatar =
+    commentsLessonId && selectedLesson
+      ? selectedLesson.coverUrl || courseBannerUrl(detail!)
+      : detail
+        ? courseBannerUrl(detail)
+        : undefined;
   const priceLabel = detail
     ? formatTtdFromCredits(detail.priceCredits, price)
     : "";
+
+  useEffect(() => {
+    if (commentsLessonId && selectedLesson) {
+      setCommentCount(selectedLesson.commentCount ?? 0);
+      return;
+    }
+    if (detail?.commentCount != null) {
+      setCommentCount(detail.commentCount);
+    }
+  }, [
+    detail?.commentCount,
+    academy.courseId,
+    commentsLessonId,
+    selectedLesson?.commentCount,
+    selectedLesson?._id,
+  ]);
 
   async function buy() {
     if (!academy.courseId) return;
@@ -476,12 +498,20 @@ export function StudioAcademyPane({
         ) : null}
         <div className="studio-academy-comments-host">
           <ProfileCommentsPanel
+            key={
+              commentsLessonId
+                ? `lesson-${commentsLessonId}`
+                : `course-${detail._id}`
+            }
             courseId={detail._id}
+            lessonId={commentsLessonId}
             chrome="sidebar"
             open={isMobile ? commentsOpen : true}
             onClose={() => setCommentsOpen(false)}
             commentCount={commentCount}
             onCommentCountChange={setCommentCount}
+            sidebarTitle={commentsSidebarTitle}
+            sidebarAvatarUrl={commentsSidebarAvatar}
           />
         </div>
       </div>
@@ -548,7 +578,7 @@ export function StudioAcademyPane({
           <div className="studio-cn-book-bar-actions">
             <button
               type="button"
-              className="studio-cn-book-bar-msg"
+              className="studio-cn-book-bar-msg is-with-count"
               aria-label={
                 commentCount
                   ? `Comments, ${commentCount}`
@@ -556,7 +586,12 @@ export function StudioAcademyPane({
               }
               onClick={() => setCommentsOpen(true)}
             >
-              <MessageCircle aria-hidden="true" />
+              <MessageCircle
+                aria-hidden="true"
+                fill="currentColor"
+                strokeWidth={0}
+              />
+              <span>{commentCount}</span>
             </button>
             {!owned ? (
               <button

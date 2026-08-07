@@ -130,6 +130,7 @@ function postAuthorLabel(author: PostAuthorInfo): string {
 function CommentsBody({
   postId,
   courseId,
+  lessonId,
   commentCount,
   onCommentCountChange,
   showRootHeader,
@@ -142,6 +143,7 @@ function CommentsBody({
 }: {
   postId?: Id<"profilePosts">;
   courseId?: Id<"academyCourses">;
+  lessonId?: Id<"academyLessons">;
   commentCount: number;
   onCommentCountChange?: (count: number) => void;
   showRootHeader: boolean;
@@ -182,7 +184,12 @@ function CommentsBody({
   const rootCourseComments = useQuery(
     api.academy.listComments,
     isCourse && courseId && parentId === null
-      ? { courseId, expiresUnix, limit: 50 }
+      ? {
+          courseId,
+          lessonId: lessonId ?? undefined,
+          expiresUnix,
+          limit: 50,
+        }
       : "skip",
   );
   const replyCourseComments = useQuery(
@@ -246,7 +253,7 @@ function CommentsBody({
     setImagePreviewUrl(null);
     setLikeLocal({});
     setStack([{ parentId: null, parentPreview: null, scrollTop: 0 }]);
-  }, [postId, courseId]);
+  }, [postId, courseId, lessonId]);
 
   useEffect(() => {
     return () => {
@@ -358,6 +365,7 @@ function CommentsBody({
       const result = isCourse && courseId
         ? await addCourseComment({
             courseId,
+            lessonId: lessonId ?? undefined,
             body,
             parentId: (parentId as Id<"academyComments"> | null) ?? undefined,
             imageAssetId,
@@ -1357,6 +1365,7 @@ function DescriptionBody({
 export function ProfileCommentsPanel({
   postId,
   courseId,
+  lessonId,
   open,
   onClose,
   commentCount,
@@ -1367,9 +1376,12 @@ export function ProfileCommentsPanel({
   onModeChange,
   description,
   chrome = "feed",
+  sidebarTitle,
+  sidebarAvatarUrl,
 }: {
   postId?: Id<"profilePosts">;
   courseId?: Id<"academyCourses">;
+  lessonId?: Id<"academyLessons">;
   open: boolean;
   onClose: () => void;
   commentCount: number;
@@ -1380,6 +1392,10 @@ export function ProfileCommentsPanel({
   onModeChange?: (mode: CommentsPanelMode) => void;
   description?: DescriptionInfo;
   chrome?: "feed" | "sidebar";
+  /** Sidebar chrome title (e.g. lesson name). */
+  sidebarTitle?: string;
+  /** Circle thumb in sidebar head (lesson/course banner). */
+  sidebarAvatarUrl?: string;
 }) {
   const { isMobile } = useMobileLayout();
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
@@ -1445,6 +1461,7 @@ export function ProfileCommentsPanel({
     <CommentsBody
       postId={postId}
       courseId={courseId}
+      lessonId={lessonId}
       commentCount={commentCount}
       onCommentCountChange={onCommentCountChange}
       showRootHeader={isMobile}
@@ -1463,18 +1480,37 @@ export function ProfileCommentsPanel({
 
   if (!isMobile) {
     if (useSidebarChrome) {
+      const headLabel = sidebarTitle?.trim() || "Comments";
+      const headInitials = headLabel
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() ?? "")
+        .join("");
       return (
         <aside className="studio-cn-book-sidebar" aria-label="Comments">
-          <div className="studio-cn-book-sidebar-head cursor-panel-head cursor-sidebar-head shrink-0">
-            <strong>
-              Comments
-              {commentCount > 0 ? (
-                <span className="studio-academy-comments-count">
-                  {" "}
-                  · {commentCount}
-                </span>
-              ) : null}
+          <div className="studio-cn-book-sidebar-head cursor-panel-head cursor-sidebar-head shrink-0 studio-academy-comments-head">
+            <span className="studio-academy-comments-avatar" aria-hidden="true">
+              {sidebarAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={sidebarAvatarUrl} alt="" />
+              ) : (
+                <span>{headInitials || "A"}</span>
+              )}
+            </span>
+            <strong className="studio-academy-comments-head-title">
+              {headLabel}
             </strong>
+            <span
+              className="studio-academy-comments-meta"
+              aria-label={`${formatCount(commentCount)} comments`}
+            >
+              <MessageCircle
+                aria-hidden="true"
+                fill="currentColor"
+                strokeWidth={0}
+              />
+              <span>{formatCount(commentCount)}</span>
+            </span>
           </div>
           <div className="studio-cn-book-sidebar-body is-comments-fill">
             {descriptionPanel ?? commentsBody}

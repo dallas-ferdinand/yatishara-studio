@@ -1727,6 +1727,8 @@ export default defineSchema({
     bunnyStreamVideoId: v.optional(v.string()),
     status: v.union(v.literal("draft"), v.literal("published")),
     sortOrder: v.number(),
+    /** Discussion thread count for this lesson. */
+    commentCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1747,9 +1749,13 @@ export default defineSchema({
     .index("by_course", ["courseId"])
     .index("by_user_and_purchased", ["userId", "purchasedAt"]),
 
-  /** Course discussion — same shape as profileComments (text, image, replies, likes). */
+  /**
+   * Lesson (or course-overview) discussion — same shape as profileComments.
+   * Prefer lessonId for per-lesson threads; omit lessonId for course overview Q&A.
+   */
   academyComments: defineTable({
     courseId: v.id("academyCourses"),
+    lessonId: v.optional(v.id("academyLessons")),
     userId: v.id("users"),
     body: v.string(),
     createdAt: v.number(),
@@ -1760,6 +1766,7 @@ export default defineSchema({
     imageAssetId: v.optional(v.id("assets")),
   })
     .index("by_course_and_created", ["courseId", "createdAt"])
+    .index("by_lesson_and_created", ["lessonId", "createdAt"])
     .index("by_parent_and_created", ["parentId", "createdAt"])
     .index("by_user", ["userId"]),
 

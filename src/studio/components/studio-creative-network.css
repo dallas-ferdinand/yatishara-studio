@@ -612,12 +612,32 @@ button.studio-cn-card-btn.public-offers-card {
   min-width: 0;
 }
 
-/* Studio offer body — match Files / Messages density, not a loose marketing page. */
+/* Nested Studio pane: gallery full column width (spaced via body pad), rounded. */
 .studio-cn-offer-detail .public-offers-body {
   gap: 12px;
-  max-width: 920px;
+  max-width: none;
   margin: 0;
   padding: 14px 16px 28px;
+}
+
+.studio-cn-offer-detail .public-offers-gallery-stage {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 160px;
+  height: auto;
+  max-height: none;
+  border-radius: var(--cursor-radius-lg, 12px);
+}
+
+.studio-cn-offer-detail .public-offers-gallery-stage img,
+.studio-cn-offer-detail .public-offers-gallery-stage video {
+  object-fit: cover;
+}
+
+@media (min-width: 861px) {
+  .studio-cn-offer-detail .public-offers-gallery-stage {
+    min-height: 200px;
+  }
 }
 
 /* Settings-like overview card (section bar + body + stats grid). */
@@ -811,23 +831,6 @@ button.studio-cn-card-btn.public-offers-card {
   margin-top: 12px;
 }
 
-/* Nested Studio pane: keep gallery inside the scrollport (public page keeps 68vh). */
-.studio-cn-offer-detail .public-offers-gallery-stage {
-  aspect-ratio: 16 / 9;
-  min-height: 160px;
-  height: auto;
-  max-height: min(40vh, 380px);
-}
-
-@media (min-width: 861px) {
-  .studio-cn-offer-detail .public-offers-gallery-stage {
-    aspect-ratio: 16 / 9;
-    min-height: 200px;
-    height: auto;
-    max-height: min(42vh, 420px);
-  }
-}
-
 /* Right book dock — secondary panel chrome (settings / DM peer language). */
 .studio-cn-book-panel {
   min-width: 240px;
@@ -944,6 +947,28 @@ button.studio-cn-card-btn.public-offers-card {
   width: 12px;
   height: 12px;
   stroke-width: 2;
+}
+
+.studio-cn-book-bar-msg.is-with-count {
+  width: auto !important;
+  min-width: 24px !important;
+  padding: 0 8px !important;
+  gap: 4px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.studio-cn-book-bar-msg.is-with-count span {
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.studio-cn-book-bar-msg.is-with-count svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 0;
 }
 
 .studio-cn-offer-detail.is-mobile .studio-cn-book-bar .public-offers-btn {

@@ -116,6 +116,7 @@ const lessonSummaryReturn = v.object({
   hasVideo: v.boolean(),
   sortOrder: v.number(),
   status: v.union(v.literal("draft"), v.literal("published")),
+  commentCount: v.number(),
 });
 
 const courseDetailReturn = v.object({
@@ -242,6 +243,7 @@ export const getCourse = authedQuery({
         hasVideo: Boolean(lesson.bunnyStreamVideoId) && owned,
         sortOrder: lesson.sortOrder,
         status: lesson.status,
+        commentCount: lesson.commentCount ?? 0,
       });
     }
 
@@ -1390,6 +1392,8 @@ async function hydrateAcademyComments(
 export const listComments = authedQuery({
   args: {
     courseId: v.id("academyCourses"),
+    /** When set, load that lesson’s thread; otherwise course-overview comments only. */
+    lessonId: v.optional(v.id("academyLessons")),
     expiresUnix: v.optional(v.number()),
     limit: v.optional(v.number()),
   },
@@ -1400,18 +1404,40 @@ export const listComments = authedQuery({
     } catch {
       return [];
     }
+    if (args.lessonId) {
+      const lesson = await ctx.db.get("academyLessons", args.lessonId);
+      if (!lesson || lesson.courseId !== args.courseId) return [];
+    }
     const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + COMMENT_URL_TTL_SEC;
-    const rows = await ctx.db
-      .query("academyComments")
-      .withIndex("by_course_and_created", (q) => q.eq("courseId", args.courseId))
-      .order("desc")
-      .take(limit * 3 + 40);
+
+    let rows: Doc<"academyComments">[];
+    if (args.lessonId) {
+      rows = await ctx.db
+        .query("academyComments")
+        .withIndex("by_lesson_and_created", (q) =>
+          q.eq("lessonId", args.lessonId!),
+        )
+        .order("desc")
+        .take(limit * 3 + 40);
+    } else {
+      rows = await ctx.db
+        .query("academyComments")
+        .withIndex("by_course_and_created", (q) => q.eq("courseId", args.courseId))
+        .order("desc")
+        .take(limit * 3 + 40);
+    }
+
     const course = await ctx.db.get("academyCourses", args.courseId);
     const topLevel: Doc<"academyComments">[] = [];
     for (const row of rows) {
       if (row.deletedAt || row.parentId) continue;
+      if (args.lessonId) {
+        if (row.lessonId !== args.lessonId) continue;
+      } else if (row.lessonId) {
+        continue;
+      }
       topLevel.push(row);
       if (topLevel.length >= limit) break;
     }
@@ -1464,6 +1490,7 @@ export const listCommentReplies = authedQuery({
 export const addComment = authedMutation({
   args: {
     courseId: v.id("academyCourses"),
+    lessonId: v.optional(v.id("academyLessons")),
     body: v.string(),
     parentId: v.optional(v.id("academyComments")),
     imageAssetId: v.optional(v.id("assets")),
@@ -1478,6 +1505,13 @@ export const addComment = authedMutation({
       args.courseId,
       ctx.user,
     );
+    let lesson: Doc<"academyLessons"> | null = null;
+    if (args.lessonId) {
+      lesson = await ctx.db.get("academyLessons", args.lessonId);
+      if (!lesson || lesson.courseId !== args.courseId) {
+        throw new Error("Lesson not found");
+      }
+    }
     const body = sanitizeCommentBody(args.body, {
       allowEmpty: Boolean(args.imageAssetId),
     });
@@ -1504,9 +1538,15 @@ export const addComment = authedMutation({
       if (!parent || parent.deletedAt || parent.courseId !== args.courseId) {
         throw new Error("Comment not found");
       }
+      const parentLesson = parent.lessonId ?? undefined;
+      const argLesson = args.lessonId ?? undefined;
+      if (parentLesson !== argLesson) {
+        throw new Error("Comment not found");
+      }
     }
     const commentId = await ctx.db.insert("academyComments", {
       courseId: args.courseId,
+      lessonId: lesson?._id,
       userId: ctx.user._id,
       body,
       createdAt: Date.now(),
@@ -1519,6 +1559,11 @@ export const addComment = authedMutation({
       await ctx.db.patch(parent._id, {
         replyCount: (parent.replyCount ?? 0) + 1,
       });
+    }
+    if (lesson) {
+      const commentCount = (lesson.commentCount ?? 0) + 1;
+      await ctx.db.patch(lesson._id, { commentCount });
+      return { commentId, commentCount };
     }
     const commentCount = (course.commentCount ?? 0) + 1;
     await ctx.db.patch(course._id, { commentCount });
@@ -1586,6 +1631,13 @@ export const deleteComment = authedMutation({
           replyCount: Math.max(0, (parent.replyCount ?? 1) - 1),
         });
       }
+    }
+    if (comment.lessonId) {
+      const lesson = await ctx.db.get("academyLessons", comment.lessonId);
+      if (!lesson) return { commentCount: 0 };
+      const commentCount = Math.max(0, (lesson.commentCount ?? 1) - 1);
+      await ctx.db.patch(lesson._id, { commentCount });
+      return { commentCount };
     }
     if (!course) return { commentCount: 0 };
     const commentCount = Math.max(0, (course.commentCount ?? 1) - 1);
