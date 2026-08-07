@@ -19961,36 +19961,58 @@ export function StudioShell({
           border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
         .studio-academy-comments-head {
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 8px;
+          min-width: 0;
+        }
+        .studio-academy-comments-avatar {
           flex: 0 0 auto;
-          padding: 10px 12px;
-          border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-          background: transparent;
-          color: inherit;
-        }
-        .studio-academy-comments-head .profile-comments-post-action {
-          pointer-events: none;
-          cursor: default;
-        }
-        .studio-academy-comments-sub {
+          width: 20px;
+          height: 20px;
+          border-radius: 999px;
+          overflow: hidden;
+          display: grid;
+          place-items: center;
+          background: color-mix(in srgb, var(--mos-plate-strong, var(--cursor-surface-2)) 88%, transparent);
           color: var(--color-cursor-muted, var(--mos-muted));
-          font-size: 12px;
-          font-weight: 500;
-          line-height: 1.2;
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+        }
+        .studio-academy-comments-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .studio-academy-comments-head-title {
+          flex: 1 1 auto;
+          min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          font-size: 12px;
+          font-weight: 650;
+        }
+        .studio-academy-comments-meta {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          margin-left: auto;
+          color: var(--color-cursor-muted, var(--mos-muted));
+          font-size: 12px;
+          font-weight: 650;
+          line-height: 1;
+        }
+        .studio-academy-comments-meta svg {
+          width: 13px;
+          height: 13px;
         }
         .studio-academy-comments-panel {
           background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
-        }
-        .studio-academy-comments-panel .studio-academy-comments-head {
-          color: var(--color-cursor-text-bright, var(--mos-text));
-        }
-        .studio-academy-comments-panel .profile-comments-thread-preview strong {
-          color: inherit;
-        }
-        .studio-academy-comments-panel .profile-comments-post-action {
-          color: inherit;
         }
         .studio-history-floating-panel {
           width: 100%;

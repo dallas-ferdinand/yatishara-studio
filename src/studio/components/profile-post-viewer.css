@@ -1192,20 +1192,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 14px 10px;
+  gap: 8px;
+  min-height: var(--cursor-head-h, 32px);
+  padding: 0 10px 0 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .profile-comments-head > div:not(.profile-comments-thread-head):not(.profile-comments-post-actions) {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .profile-comments-head strong {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
+  line-height: 1.2;
 }
 
 .profile-comments-head span {
@@ -1215,8 +1218,8 @@
 }
 
 .profile-comments-close {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -1231,8 +1234,8 @@
 }
 
 .profile-comments-close svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   display: block;
 }
 
@@ -1243,7 +1246,7 @@
   gap: 2px;
   flex-shrink: 0;
   margin-left: auto;
-  min-height: 32px;
+  min-height: 24px;
 }
 
 .profile-comments-post-actions .profile-comments-close {
@@ -1256,9 +1259,9 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  height: 32px;
-  min-height: 32px;
-  padding: 0 6px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 4px;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -1271,8 +1274,8 @@
 }
 
 .profile-comments-post-action svg {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
 }
 
 .profile-comments-post-action.is-liked {
@@ -1310,8 +1313,8 @@
 
 .profile-comments-head.is-thread .profile-comments-post-actions {
   align-self: center;
-  height: 32px;
-  min-height: 32px;
+  height: 24px;
+  min-height: 24px;
   margin-left: 0;
   display: inline-flex;
   align-items: center;
@@ -1325,8 +1328,8 @@
 }
 
 .profile-comments-head.is-thread .profile-comments-close {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
 }
 
 .profile-comments-thread-head {
@@ -1338,8 +1341,8 @@
 }
 
 .profile-comments-back {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   margin: 0;
   border: 0;
   border-radius: 999px;
@@ -1349,6 +1352,11 @@
   place-items: center;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.profile-comments-back svg {
+  width: 14px;
+  height: 14px;
 }
 
 .profile-comments-thread-avatar {
