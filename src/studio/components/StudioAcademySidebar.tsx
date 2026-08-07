@@ -105,8 +105,8 @@ function CatalogFilters() {
         <FilterSection
           title="Price (TTD)"
           activeCount={priceActive}
-          open
-          onToggle={() => undefined}
+          open={!academy.closedSections.price}
+          onToggle={() => academy.toggleSection("price")}
         >
           <div className="public-offers-range">
             <input
@@ -155,8 +155,8 @@ function CatalogFilters() {
         <FilterSection
           title="Ownership"
           activeCount={ownershipActive}
-          open
-          onToggle={() => undefined}
+          open={!academy.closedSections.ownership}
+          onToggle={() => academy.toggleSection("ownership")}
         >
           {OWNERSHIP_OPTIONS.map((opt) => (
             <FilterOption
@@ -171,8 +171,8 @@ function CatalogFilters() {
         <FilterSection
           title="Sort"
           activeCount={sortActive}
-          open
-          onToggle={() => undefined}
+          open={!academy.closedSections.sort}
+          onToggle={() => academy.toggleSection("sort")}
         >
           {SORT_OPTIONS.map((opt) => (
             <FilterOption

@@ -70,6 +70,8 @@ type AcademyContextValue = {
   setSort: (value: AcademySortKey) => void;
   clearFilters: () => void;
   hasFilters: boolean;
+  closedSections: Record<string, boolean>;
+  toggleSection: (id: string) => void;
   creditPriceCents: number;
   openCourse: (id: Id<"academyCourses">) => void;
   backToCatalog: () => void;
@@ -128,10 +130,17 @@ export function StudioAcademyProvider({
   const [ownership, setOwnership] =
     useState<AcademyOwnershipFilter>("all");
   const [sort, setSort] = useState<AcademySortKey>("newest");
+  const [closedSections, setClosedSections] = useState<Record<string, boolean>>(
+    {},
+  );
 
   const setPriceRange = useCallback((min: string, max: string) => {
     setPriceMin(min);
     setPriceMax(max);
+  }, []);
+
+  const toggleSection = useCallback((id: string) => {
+    setClosedSections((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
   const clearFilters = useCallback(() => {
@@ -251,6 +260,8 @@ export function StudioAcademyProvider({
       setSort,
       clearFilters,
       hasFilters,
+      closedSections,
+      toggleSection,
       creditPriceCents,
       openCourse,
       backToCatalog,
@@ -270,6 +281,8 @@ export function StudioAcademyProvider({
       sort,
       clearFilters,
       hasFilters,
+      closedSections,
+      toggleSection,
       creditPriceCents,
       openCourse,
       backToCatalog,
