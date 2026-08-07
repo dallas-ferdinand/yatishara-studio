@@ -19525,99 +19525,58 @@ export function StudioShell({
           opacity: 0;
           pointer-events: none;
         }
-        /* Flat opaque plate — same blank page as admin / Network (no wallpaper). */
-        .studio-academy-pane {
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
-          flex: 1 1 0;
-          height: 100%;
-          width: 100%;
-          overflow: auto;
-          padding: 16px 18px 28px;
-          gap: 14px;
+        /* Academy reuses CN secondary head + public-offers catalog chrome. */
+        .studio-academy-pane.studio-cn-pane {
           background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
           -webkit-backdrop-filter: none;
           backdrop-filter: none;
           isolation: isolate;
         }
-        .studio-academy-head {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-        }
-        .studio-academy-title {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          margin: 0;
-          font-size: 1.15rem;
-          font-weight: 650;
-        }
-        .studio-academy-tabs {
-          display: inline-flex;
-          gap: 4px;
-        }
-        .studio-academy-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-          gap: 12px;
-        }
-        .studio-academy-card {
-          display: flex;
-          flex-direction: column;
-          text-align: left;
-          border: 1px solid color-mix(in srgb, var(--mos-border, #333) 70%, transparent);
-          background: var(--mos-plate, var(--mos-panel));
-          border-radius: 12px;
-          overflow: hidden;
-          cursor: pointer;
-          color: inherit;
-          padding: 0;
-        }
-        .studio-academy-card img,
-        .studio-academy-card-fallback {
-          width: 100%;
-          aspect-ratio: 16 / 9;
-          object-fit: cover;
-          background: color-mix(in srgb, var(--mos-plate-strong, #222) 80%, transparent);
-        }
         .studio-academy-card-fallback {
           display: grid;
           place-items: center;
+          color: var(--color-cursor-muted);
           opacity: 0.55;
         }
-        .studio-academy-card-body {
-          display: grid;
-          gap: 4px;
-          padding: 10px 12px 12px;
-        }
-        .studio-academy-card-body p {
-          margin: 0;
-          font-size: 12px;
-          opacity: 0.75;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-        .studio-academy-card-body span {
-          font-size: 12px;
-          font-weight: 600;
-          color: var(--cursor-accent);
+        .studio-academy-card-fallback > svg {
+          width: 28px;
+          height: 28px;
         }
         .studio-academy-detail {
           display: grid;
-          gap: 14px;
+          gap: 16px;
           max-width: 820px;
+          padding: 18px 0 28px;
         }
-        .studio-academy-cover {
+        .studio-academy-banner {
           width: 100%;
-          max-height: 280px;
+          aspect-ratio: 16 / 8;
+          overflow: hidden;
+          border-radius: var(--cursor-radius-lg, 10px);
+          background: var(--mos-plate-strong, var(--cursor-surface-raised));
+        }
+        .studio-academy-banner img {
+          display: block;
+          width: 100%;
+          height: 100%;
           object-fit: cover;
-          border-radius: 12px;
+        }
+        .studio-academy-detail-top {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .studio-academy-detail-title {
+          margin: 0;
+          font-size: 1.25rem;
+          font-weight: 650;
+          line-height: 1.25;
+        }
+        .studio-academy-detail-sub {
+          margin: 4px 0 0;
+          font-size: 12px;
+          color: var(--color-cursor-muted);
         }
         .studio-academy-player {
           width: 100%;
@@ -19649,11 +19608,6 @@ export function StudioShell({
           flex-wrap: wrap;
           align-items: center;
           gap: 10px;
-        }
-        .studio-academy-owned {
-          font-size: 13px;
-          font-weight: 600;
-          color: var(--cursor-accent);
         }
         .studio-academy-body {
           min-width: 0;
@@ -29064,6 +29018,7 @@ function ActivePane({
     return wrapPane(
       <StudioAcademyPane
         onOpenCredits={onOpenCredits ?? onOpenSettings}
+        creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
         initialCourseId={courseId}
       />,
     );
