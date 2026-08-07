@@ -19819,7 +19819,7 @@ export function StudioShell({
         .studio-academy-lesson-list {
           list-style: none;
           margin: 0;
-          padding: 10px;
+          padding: 0;
           display: flex;
           flex-direction: column;
           gap: 8px;
