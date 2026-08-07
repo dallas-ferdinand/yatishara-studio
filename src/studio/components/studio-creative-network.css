@@ -1011,21 +1011,22 @@ button.studio-cn-card-btn.public-offers-card {
   box-sizing: border-box;
 }
 
-/* Offer-detail panel gutters (14px L/R) break width:100% CTAs inside book chrome. */
+/* Book dock: keep Settings-card gutters (same as offer-detail panels).
+   Block CTAs must not use width:100% + side margins (overflow). */
 .studio-cn-book-sheet .public-offers-panel > :not(h2),
 .studio-cn-book-sidebar .public-offers-panel > :not(h2) {
-  margin-left: 0;
-  margin-right: 0;
+  margin-left: 14px;
+  margin-right: 14px;
 }
 
 .studio-cn-book-sheet .public-offers-panel > :not(h2):first-of-type,
 .studio-cn-book-sidebar .public-offers-panel > :not(h2):first-of-type {
-  margin-top: 0;
+  margin-top: 12px;
 }
 
 .studio-cn-book-sheet .public-offers-panel > :not(h2):last-child,
 .studio-cn-book-sidebar .public-offers-panel > :not(h2):last-child {
-  margin-bottom: 0;
+  margin-bottom: 12px;
 }
 
 .studio-cn-book-sheet .public-offers-panel,
@@ -1038,7 +1039,9 @@ button.studio-cn-card-btn.public-offers-card {
 
 .studio-cn-book-sheet .public-offers-btn.is-block,
 .studio-cn-book-sidebar .public-offers-btn.is-block {
-  max-width: 100%;
+  width: auto;
+  max-width: none;
+  justify-self: stretch;
   box-sizing: border-box;
 }
 
