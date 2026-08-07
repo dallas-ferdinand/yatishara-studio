@@ -103,7 +103,7 @@ function CheckoutDock({
             {needsTopUp && !owned ? "Due today" : "Checkout"}
           </span>
           <strong className="studio-academy-checkout-amount">
-            {needsTopUp && !owned ? totalDueLabel : priceLabel}
+            {priceLabel}
           </strong>
           {courseTitle ? (
             <span className="studio-academy-checkout-course" title={courseTitle}>
@@ -136,7 +136,7 @@ function CheckoutDock({
                 </div>
               ) : null}
               <div className="studio-academy-checkout-row is-total">
-                <dt>Total</dt>
+                <dt>Extra to pay</dt>
                 <dd>{totalDueLabel}</dd>
               </div>
             </dl>
