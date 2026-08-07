@@ -26,6 +26,7 @@ import {
   creditsToCents,
   formatTtdCents,
   formatTtdFromCredits,
+  formatTtdShort,
   paywiseCardFeeCents,
   paywiseCheckoutTotalCents,
   topUpMinAmountCents,
@@ -70,8 +71,8 @@ function CheckoutDock({
   lessonCount,
   needsTopUp,
   topUpLabel,
-  feeLabel,
-  totalDueLabel,
+  feeCents,
+  totalDueCents,
 }: {
   showHead: boolean;
   onBuyClick: () => void;
@@ -84,60 +85,65 @@ function CheckoutDock({
   lessonCount: number;
   needsTopUp: boolean;
   topUpLabel: string;
-  feeLabel: string;
-  totalDueLabel: string;
+  feeCents: number;
+  totalDueCents: number;
 }) {
+  const paywiseTotalShort = formatTtdShort(totalDueCents);
   const body = (
     <div className="public-offers-rail-detail">
-      <section className="public-offers-panel">
-        <h2>Checkout</h2>
-        <p className="public-offers-price">{priceLabel}</p>
-        <dl className="public-offers-rows">
-          <div className="public-offers-row">
+      <section className="studio-academy-checkout" aria-label="Course checkout">
+        <p className="studio-academy-checkout-kicker">Checkout</p>
+        <p className="studio-academy-checkout-amount">{priceLabel}</p>
+        <dl className="studio-academy-checkout-rows">
+          <div className="studio-academy-checkout-row">
             <dt>Access</dt>
             <dd>Lifetime</dd>
           </div>
-          <div className="public-offers-row">
+          <div className="studio-academy-checkout-row">
             <dt>Lessons</dt>
             <dd>{lessonCount}</dd>
           </div>
           {needsTopUp ? (
-            <div className="public-offers-row">
+            <div className="studio-academy-checkout-row">
               <dt>Top up</dt>
               <dd>{topUpLabel}</dd>
             </div>
           ) : null}
         </dl>
         {owned ? (
-          <p className="public-offers-note">You own this course.</p>
+          <p className="studio-academy-checkout-note">You own this course.</p>
         ) : needsTopUp ? (
           <div className="studio-academy-checkout-paywise">
-            <p className="public-offers-note studio-academy-checkout-fee">
-              Includes transaction fee · PayWise {feeLabel}
-            </p>
-            <p className="studio-academy-checkout-total">
-              Pay {totalDueLabel} with PayWise
-            </p>
+            {feeCents > 0 ? (
+              <p className="studio-settings-topup-fee">
+                Includes transaction fee · PayWise{" "}
+                <strong>{formatTtdShort(feeCents)}</strong>
+              </p>
+            ) : null}
             <button
               type="button"
-              className="public-offers-btn is-primary is-block"
+              className={`studio-settings-topup-pay${busy ? " is-loading" : ""}`}
               disabled={busy}
               onClick={onPaywiseClick}
+              aria-busy={busy}
               aria-label={
                 busy
                   ? "Opening PayWise"
-                  : `Pay ${totalDueLabel} with PayWise to unlock course`
+                  : `Pay ${paywiseTotalShort} with PayWise to unlock course`
               }
             >
               {busy ? (
-                <Loader2 className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Zap aria-hidden="true" />
-              )}
-              {busy ? "Opening PayWise…" : "Pay with PayWise"}
+                <Loader2 className="studio-settings-topup-pay-spin" aria-hidden="true" />
+              ) : null}
+              <span className="studio-settings-topup-pay-label">
+                {busy
+                  ? "Opening PayWise…"
+                  : `Pay ${paywiseTotalShort} with PayWise`}
+              </span>
             </button>
-            <p className="public-offers-note">
-              After payment, the course unlocks automatically.
+            <p className="studio-settings-topup-secure">
+              <Lock aria-hidden="true" />
+              <span>secure checkout</span>
             </p>
           </div>
         ) : (
@@ -346,10 +352,8 @@ export function StudioAcademyPane({
     : 0;
   const topUpCredits = creditsFromAmountCents(topUpAmountCents, price);
   const topUpLabel = formatTtdCents(topUpAmountCents);
-  const feeLabel = formatTtdCents(paywiseCardFeeCents(topUpAmountCents));
-  const totalDueLabel = formatTtdCents(
-    paywiseCheckoutTotalCents(topUpAmountCents),
-  );
+  const feeCents = paywiseCardFeeCents(topUpAmountCents);
+  const totalDueCents = paywiseCheckoutTotalCents(topUpAmountCents);
 
   useEffect(() => {
     if (commentsLessonId && selectedLesson) {
@@ -437,8 +441,8 @@ export function StudioAcademyPane({
     lessonCount: detail?.lessonCount ?? 0,
     needsTopUp,
     topUpLabel,
-    feeLabel,
-    totalDueLabel,
+    feeCents,
+    totalDueCents,
   };
 
   async function playIntro() {

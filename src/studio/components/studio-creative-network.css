@@ -206,11 +206,74 @@
   padding-bottom: 10px;
 }
 
+.studio-academy-checkout {
+  display: grid;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: var(--cursor-radius-lg, 10px);
+  background: var(--mos-plate, var(--cursor-surface));
+}
+
+.studio-academy-checkout-kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-cursor-text-secondary, #8a8a8a);
+}
+
+.studio-academy-checkout-amount {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--color-cursor-text-bright, var(--cursor-text-bright));
+}
+
+.studio-academy-checkout-rows {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 0;
+}
+
+.studio-academy-checkout-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.studio-academy-checkout-row dt {
+  margin: 0;
+  color: var(--color-cursor-text-secondary, #8a8a8a);
+  font-weight: 500;
+}
+
+.studio-academy-checkout-row dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-cursor-text-bright, var(--cursor-text-bright));
+  text-align: right;
+}
+
+.studio-academy-checkout-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-cursor-text-secondary, #8a8a8a);
+}
+
 .studio-academy-buy-group {
   display: flex;
   align-items: stretch;
   gap: 6px;
   width: 100%;
+  margin-top: 4px;
 }
 
 .studio-academy-buy-group .public-offers-btn.is-block {
@@ -237,19 +300,22 @@
 .studio-academy-checkout-paywise {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: stretch;
+  gap: 0;
   width: 100%;
+  margin-top: 2px;
 }
 
-.studio-academy-checkout-fee {
-  margin: 0;
+.studio-academy-checkout-paywise .studio-settings-topup-fee {
+  margin: 8px 0 6px;
 }
 
-.studio-academy-checkout-total {
-  margin: 0;
-  font-size: 0.92rem;
-  font-weight: 600;
-  color: var(--color-cursor-text-bright, var(--cursor-text-bright));
+.studio-academy-checkout-paywise .studio-settings-topup-pay {
+  margin-top: 0;
+}
+
+.studio-academy-checkout-paywise .studio-settings-topup-secure {
+  margin-top: 8px;
 }
 
 .studio-academy-body.is-locked .studio-academy-body-clip {
