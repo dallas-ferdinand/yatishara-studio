@@ -295,17 +295,6 @@
   opacity: 0.5;
 }
 
-.studio-academy-checkout-save {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 650;
-  color: color-mix(
-    in srgb,
-    var(--cursor-accent) 70%,
-    var(--color-cursor-text-bright, var(--mos-text))
-  );
-}
-
 .studio-academy-checkout-chips {
   display: flex;
   flex-wrap: wrap;

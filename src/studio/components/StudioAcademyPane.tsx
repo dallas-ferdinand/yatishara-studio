@@ -110,12 +110,10 @@ function saleDiscountCredits(
 function SaleCountdownPanel({
   saleEndsAt,
   now,
-  discountLabel,
   compact = false,
 }: {
   saleEndsAt: number;
   now: number;
-  discountLabel?: string | null;
   compact?: boolean;
 }) {
   const parts = saleCountdownParts(saleEndsAt, now);
@@ -140,11 +138,6 @@ function SaleCountdownPanel({
     >
       <div className="studio-academy-sale-pan-head">
         <span className="studio-academy-sale-pan-kicker">Sale ends in</span>
-        {discountLabel ? (
-          <span className="studio-academy-sale-pan-save">
-            Save {discountLabel}
-          </span>
-        ) : null}
       </div>
       <div className="studio-academy-sale-pan-units">
         {units.map((unit, index) => (
@@ -241,10 +234,10 @@ function CheckoutDock({
               {onSale && listPriceLabel ? (
                 <s className="studio-academy-checkout-price-was">{listPriceLabel}</s>
               ) : null}
+              {onSale && discountLabel && !owned ? (
+                <span className="studio-academy-price-save">−{discountLabel}</span>
+              ) : null}
             </strong>
-            {onSale && discountLabel && !owned ? (
-              <p className="studio-academy-checkout-save">Save {discountLabel}</p>
-            ) : null}
           </div>
         </header>
 
@@ -816,6 +809,12 @@ export function StudioAcademyPane({
                                   </s>
                                 </>
                               ) : null}
+                              {discountCredits != null ? (
+                                <span className="studio-academy-price-save">
+                                  −
+                                  {formatTtdFromCredits(discountCredits, price)}
+                                </span>
+                              ) : null}
                             </span>
                             <span>
                               {comingSoon
@@ -829,10 +828,6 @@ export function StudioAcademyPane({
                             <SaleCountdownPanel
                               saleEndsAt={course.saleEndsAt}
                               now={now}
-                              discountLabel={formatTtdFromCredits(
-                                discountCredits,
-                                price,
-                              )}
                               compact
                             />
                           ) : null}
@@ -907,12 +902,16 @@ export function StudioAcademyPane({
                         </s>
                       </>
                     ) : null}
+                    {discountLabel ? (
+                      <span className="studio-academy-price-save">
+                        −{discountLabel}
+                      </span>
+                    ) : null}
                   </span>
                   {detail.onSale && detail.saleEndsAt ? (
                     <SaleCountdownPanel
                       saleEndsAt={detail.saleEndsAt}
                       now={now}
-                      discountLabel={discountLabel}
                       compact
                     />
                   ) : null}
@@ -976,12 +975,16 @@ export function StudioAcademyPane({
                         </s>
                       </>
                     ) : null}
+                    {discountLabel ? (
+                      <span className="studio-academy-price-save">
+                        −{discountLabel}
+                      </span>
+                    ) : null}
                   </span>
                   {detail.onSale && detail.saleEndsAt ? (
                     <SaleCountdownPanel
                       saleEndsAt={detail.saleEndsAt}
                       now={now}
-                      discountLabel={discountLabel}
                       compact
                     />
                   ) : null}
