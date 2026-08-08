@@ -14537,46 +14537,27 @@ export function StudioShell({
         .studio-ops-chat-main-peer-copy {
           display: flex;
           align-items: center;
-          gap: 7px;
+          gap: 6px;
           min-width: 0;
           overflow: hidden;
           white-space: nowrap;
         }
         .studio-ops-chat-main-peer strong {
-          display: block;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .studio-ops-phone-copy {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
           min-width: 0;
-          height: 18px;
-          padding: 0 5px;
-          border: 0;
-          border-radius: 6px;
-          background: transparent;
-          color: var(--color-cursor-muted);
-          font: inherit;
-          font-size: 10.5px;
-          font-variant-numeric: tabular-nums;
-          cursor: pointer;
-        }
-        .studio-ops-phone-copy span {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          font-size: 12.5px;
+          font-weight: 600;
+          line-height: 1.2;
         }
-        .studio-ops-phone-copy:hover,
-        .studio-ops-phone-copy:focus-visible {
-          background: var(--mos-hover);
-          color: var(--color-cursor-text);
-          outline: none;
-        }
-        .studio-ops-phone-copy:focus-visible {
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 28%, transparent);
+        .studio-ops-chat-main-peer-copy .studio-ops-chat-head-action {
+          width: 24px;
+          min-width: 24px;
+          height: 24px;
+          min-height: 24px;
+          padding: 0;
+          flex: 0 0 auto;
         }
         .studio-ops-peer-payment {
           flex: 0 0 auto;

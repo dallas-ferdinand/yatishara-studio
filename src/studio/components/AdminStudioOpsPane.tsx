@@ -150,7 +150,7 @@ export function AdminStudioOpsPane() {
                           <strong>{sessionTitle(selected)}</strong>
                           <button
                             type="button"
-                            className="studio-ops-phone-copy"
+                            className="studio-composer-circle-btn studio-ops-chat-head-action"
                             title="Copy WhatsApp number"
                             aria-label={`Copy WhatsApp number ${selected.phone_display || selected.phone}`}
                             onClick={() => {
@@ -166,10 +166,7 @@ export function AdminStudioOpsPane() {
                                 );
                             }}
                           >
-                            <span>
-                              {selected.phone_display || selected.phone}
-                            </span>
-                            <Copy className="h-3 w-3" aria-hidden />
+                            <Copy className="h-3.5 w-3.5" aria-hidden />
                           </button>
                           {selected.payment_state ? (
                             <span className="studio-ops-peer-payment">
