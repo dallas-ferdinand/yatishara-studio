@@ -307,3 +307,164 @@ export const adminServiceStatus = action({
     return studioCsFetch("/api/studio-cs/status");
   },
 });
+
+export const adminNudge = action({
+  args: { phone: v.string(), text: v.optional(v.string()) },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/nudge`, {
+      method: "POST",
+      body: JSON.stringify({ text: args.text || undefined }),
+    });
+  },
+});
+
+export const adminStop = action({
+  args: { phone: v.string() },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/stop`, {
+      method: "POST",
+      body: "{}",
+    });
+  },
+});
+
+export const adminSetBabysit = action({
+  args: { phone: v.string(), enabled: v.boolean() },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/babysit`, {
+      method: "POST",
+      body: JSON.stringify({ enabled: args.enabled }),
+    });
+  },
+});
+
+export const adminApproveBabysit = action({
+  args: { phone: v.string() },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/babysit/approve`, {
+      method: "POST",
+      body: "{}",
+    });
+  },
+});
+
+export const adminDiscardBabysit = action({
+  args: { phone: v.string() },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/babysit/discard`, {
+      method: "POST",
+      body: "{}",
+    });
+  },
+});
+
+export const adminEscalate = action({
+  args: {
+    phone: v.string(),
+    on: v.optional(v.boolean()),
+    message: v.optional(v.string()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/escalate`, {
+      method: "POST",
+      body: JSON.stringify({
+        on: args.on !== false,
+        clear: args.on === false,
+        message: args.message,
+      }),
+    });
+  },
+});
+
+export const adminStartChat = action({
+  args: {
+    phone: v.string(),
+    text: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/start`, {
+      method: "POST",
+      body: JSON.stringify({
+        phone,
+        text: args.text,
+        display_name: args.displayName,
+      }),
+    });
+  },
+});
+
+export const adminSearch = action({
+  args: { q: v.string() },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    return studioCsFetch(
+      `/api/studio-cs/search?q=${encodeURIComponent(args.q)}`,
+    );
+  },
+});
+
+export const adminListFollowups = action({
+  args: { due: v.optional(v.boolean()) },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const q = args.due ? "?due=1" : "";
+    return studioCsFetch(`/api/studio-cs/followups${q}`);
+  },
+});
+
+export const adminGetSettings = action({
+  args: {},
+  returns: v.any(),
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    return studioCsFetch("/api/studio-cs/settings");
+  },
+});
+
+export const adminSetSettings = action({
+  args: {
+    autoEnableAgentNewChats: v.optional(v.boolean()),
+    defaultFollowupDays: v.optional(v.number()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const settings: Record<string, string> = {};
+    if (args.autoEnableAgentNewChats != null) {
+      settings.auto_enable_agent_new_chats = args.autoEnableAgentNewChats
+        ? "1"
+        : "0";
+    }
+    if (args.defaultFollowupDays != null) {
+      settings.default_followup_days = String(args.defaultFollowupDays);
+    }
+    return studioCsFetch("/api/studio-cs/settings", {
+      method: "PATCH",
+      body: JSON.stringify({ settings }),
+    });
+  },
+});

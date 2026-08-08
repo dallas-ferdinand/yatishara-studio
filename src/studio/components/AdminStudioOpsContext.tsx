@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 
-export type OpsTab = "chats" | "settings";
+export type OpsTab = "chats" | "followups" | "approvals" | "settings";
 
 export type DeviceStatus = {
   ok?: boolean;
@@ -32,6 +32,7 @@ export type DeviceStatus = {
   qr?: string | null;
   qrcode?: { base64?: string; pairingCode?: string } | string;
   base64?: string;
+  enabled?: boolean;
 };
 
 export type SessionRow = {
@@ -61,6 +62,13 @@ export type SessionRow = {
     typing?: boolean;
     online?: boolean;
   } | null;
+  unanswered_count?: number;
+  needs_owner?: boolean;
+  babysit?: {
+    enabled?: boolean;
+    pending?: { preview?: string; text?: string; createdAt?: string | null } | null;
+  } | null;
+  babysit_enabled?: number;
   context_reset_at?: string | null;
 };
 
@@ -101,7 +109,56 @@ export type ActivityRow = {
 
 export type StatusOpt = { id: string; label: string };
 
-export type ChatFilterId = "all" | "approval" | "agent" | "human" | string;
+export type ChatFilterId =
+  | "all"
+  | "approval"
+  | "agent"
+  | "human"
+  | "watch"
+  | "working"
+  | "escalated"
+  | "unanswered"
+  | string;
+
+export type MediaRow = {
+  id: number;
+  phone: string;
+  path: string;
+  role?: string | null;
+  created_at?: string;
+};
+
+type DetailState = {
+  session: SessionRow | null;
+  statuses: string[];
+  activity: ActivityRow[];
+  payments: PaymentRow[];
+  media: MediaRow[];
+};
+
+export function sessionMatchesFilter(
+  s: SessionRow,
+  filter: ChatFilterId,
+  pendingByPhone: Map<string, number>,
+) {
+  const statuses = s.statuses || s.cs_statuses || [];
+  if (filter === "all") return true;
+  if (filter === "approval") return pendingByPhone.has(s.phone);
+  if (filter === "agent") return Boolean(s.agent_enabled);
+  if (filter === "human") return Boolean(s.human_takeover);
+  if (filter === "watch")
+    return !s.agent_enabled && !s.human_takeover;
+  if (filter === "working")
+    return Boolean(
+      s.working?.sophie ||
+        s.status === "running" ||
+        (s.badges || []).includes("sophie"),
+    );
+  if (filter === "escalated")
+    return Boolean(s.needs_owner || (s.badges || []).includes("escalated"));
+  if (filter === "unanswered") return Number(s.unanswered_count || 0) > 0;
+  return statuses.includes(filter) || s.cs_status === filter;
+}
 
 export const FALLBACK_STATUSES: StatusOpt[] = [
   { id: "new", label: "New" },
@@ -157,6 +214,7 @@ type DetailState = {
   statuses: string[];
   activity: ActivityRow[];
   payments: PaymentRow[];
+  media: MediaRow[];
 };
 
 type OpsContextValue = {
@@ -204,6 +262,38 @@ type OpsContextValue = {
   threadEpoch: number;
   /** Bumps when SSE says this open chat got a new WhatsApp message. */
   threadTick: number;
+  filterCounts: Record<string, number>;
+  serviceEnabled: boolean;
+  followups: SessionRow[];
+  loadFollowups: () => Promise<void>;
+  setNotes: (args: { phone: string; notes: string }) => Promise<unknown>;
+  setFollowup: (args: {
+    phone: string;
+    atIso?: string;
+    note?: string;
+    clear?: boolean;
+  }) => Promise<unknown>;
+  nudge: (args: { phone: string; text?: string }) => Promise<unknown>;
+  stopAgent: (args: { phone: string }) => Promise<unknown>;
+  setBabysit: (args: { phone: string; enabled: boolean }) => Promise<unknown>;
+  approveBabysit: (args: { phone: string }) => Promise<unknown>;
+  discardBabysit: (args: { phone: string }) => Promise<unknown>;
+  escalate: (args: {
+    phone: string;
+    on?: boolean;
+    message?: string;
+  }) => Promise<unknown>;
+  startChat: (args: {
+    phone: string;
+    text?: string;
+    displayName?: string;
+  }) => Promise<unknown>;
+  searchOps: (args: { q: string }) => Promise<unknown>;
+  getSettings: () => Promise<unknown>;
+  setSettings: (args: {
+    autoEnableAgentNewChats?: boolean;
+    defaultFollowupDays?: number;
+  }) => Promise<unknown>;
 };
 
 const OpsContext = createContext<OpsContextValue | null>(null);
@@ -234,6 +324,25 @@ export function AdminStudioOpsProvider({
     api.studioCsOpsActions.adminDecidePayment,
   );
   const serviceStatus = useAction(api.studioCsOpsActions.adminServiceStatus);
+  const setNotesAction = useAction(api.studioCsOpsActions.adminSetNotes);
+  const setFollowupAction = useAction(api.studioCsOpsActions.adminSetFollowup);
+  const nudgeAction = useAction(api.studioCsOpsActions.adminNudge);
+  const stopAction = useAction(api.studioCsOpsActions.adminStop);
+  const setBabysitAction = useAction(api.studioCsOpsActions.adminSetBabysit);
+  const approveBabysitAction = useAction(
+    api.studioCsOpsActions.adminApproveBabysit,
+  );
+  const discardBabysitAction = useAction(
+    api.studioCsOpsActions.adminDiscardBabysit,
+  );
+  const escalateAction = useAction(api.studioCsOpsActions.adminEscalate);
+  const startChatAction = useAction(api.studioCsOpsActions.adminStartChat);
+  const searchOpsAction = useAction(api.studioCsOpsActions.adminSearch);
+  const listFollowupsAction = useAction(
+    api.studioCsOpsActions.adminListFollowups,
+  );
+  const getSettingsAction = useAction(api.studioCsOpsActions.adminGetSettings);
+  const setSettingsAction = useAction(api.studioCsOpsActions.adminSetSettings);
 
   const [opsTab, setOpsTab] = useState<OpsTab>("chats");
   const bootedRef = useRef(false);
@@ -241,6 +350,8 @@ export function AdminStudioOpsProvider({
   const [qrSrc, setQrSrc] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [pendingPayments, setPendingPayments] = useState<PaymentRow[]>([]);
+  const [followups, setFollowups] = useState<SessionRow[]>([]);
+  const [serviceEnabled, setServiceEnabled] = useState(true);
   const [statusCatalog, setStatusCatalog] =
     useState<StatusOpt[]>(FALLBACK_STATUSES);
   const [busy, setBusy] = useState<string | null>(null);
@@ -280,9 +391,13 @@ export function AdminStudioOpsProvider({
       setPendingPayments(
         ((p as { payments?: PaymentRow[] })?.payments || []) as PaymentRow[],
       );
-      const statuses = (st as { statuses?: StatusOpt[] } | null)?.statuses;
+      const statuses = (st as { statuses?: StatusOpt[]; enabled?: boolean } | null)
+        ?.statuses;
       if (Array.isArray(statuses) && statuses.length) {
         setStatusCatalog(statuses);
+      }
+      if (st && typeof st === "object" && "enabled" in st) {
+        setServiceEnabled((st as { enabled?: boolean }).enabled !== false);
       }
       const sel = selectedPhoneRef.current;
       if (sel) {
@@ -320,12 +435,14 @@ export function AdminStudioOpsProvider({
           statuses?: string[];
           activity?: ActivityRow[];
           payments?: PaymentRow[];
+          media?: MediaRow[];
         };
         setDetail({
           session: raw.session || null,
           statuses: raw.statuses || [],
           activity: raw.activity || [],
           payments: raw.payments || [],
+          media: raw.media || [],
         });
       } catch (err) {
         if (!quiet) {
@@ -442,6 +559,24 @@ export function AdminStudioOpsProvider({
           if (selectedPhoneRef.current === phone) {
             setThreadTick((n) => n + 1);
           }
+          if (
+            typeof document !== "undefined" &&
+            document.visibilityState === "hidden" &&
+            typeof Notification !== "undefined" &&
+            Notification.permission === "granted"
+          ) {
+            try {
+              new Notification("Sophie Ops", {
+                body: "New WhatsApp message",
+                tag: `studio-ops-${phone}`,
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        if (data.type === "babysit" && phone) {
+          void refresh({ quiet: true });
         }
       };
       es.onerror = () => {
@@ -483,18 +618,7 @@ export function AdminStudioOpsProvider({
   const filteredSessions = useMemo(() => {
     const q = search.trim().toLowerCase();
     return sessions.filter((s) => {
-      const statuses = s.statuses || [];
-      if (chatFilter === "approval") {
-        if (!pendingByPhone.has(s.phone)) return false;
-      } else if (chatFilter === "agent") {
-        if (!s.agent_enabled) return false;
-      } else if (chatFilter === "human") {
-        if (!s.human_takeover) return false;
-      } else if (chatFilter !== "all") {
-        if (!statuses.includes(chatFilter) && s.cs_status !== chatFilter) {
-          return false;
-        }
-      }
+      if (!sessionMatchesFilter(s, chatFilter, pendingByPhone)) return false;
       if (!q) return true;
       const hay = [
         s.client_name,
@@ -513,10 +637,48 @@ export function AdminStudioOpsProvider({
     });
   }, [sessions, chatFilter, search, pendingByPhone]);
 
+  const filterCounts = useMemo(() => {
+    const ids = [
+      "all",
+      "unanswered",
+      "working",
+      "watch",
+      "agent",
+      "human",
+      "approval",
+      "escalated",
+      ...statusCatalog.map((s) => s.id),
+    ];
+    const out: Record<string, number> = {};
+    for (const id of ids) {
+      out[id] = sessions.filter((s) =>
+        sessionMatchesFilter(s, id, pendingByPhone),
+      ).length;
+    }
+    return out;
+  }, [sessions, pendingByPhone, statusCatalog]);
+
+  const loadFollowups = useCallback(async () => {
+    try {
+      const raw = (await listFollowupsAction({})) as {
+        followups?: SessionRow[];
+      };
+      setFollowups(raw.followups || []);
+    } catch (err) {
+      toast.error(friendlyConvexError(err, "Could not load follow-ups"));
+    }
+  }, [listFollowupsAction]);
+
+  useEffect(() => {
+    if (!active || opsTab !== "followups") return;
+    void loadFollowups();
+  }, [active, opsTab, loadFollowups]);
+
   const afterMutate = useCallback(async () => {
     await refresh();
     if (selectedPhone) await loadDetail(selectedPhone);
-  }, [refresh, loadDetail, selectedPhone]);
+    if (opsTab === "followups") await loadFollowups();
+  }, [refresh, loadDetail, selectedPhone, opsTab, loadFollowups]);
 
   const linkPhone = useCallback(async () => {
     setBusy("link");
@@ -624,6 +786,22 @@ export function AdminStudioOpsProvider({
       setWebhook,
       threadEpoch,
       threadTick,
+      filterCounts,
+      serviceEnabled,
+      followups,
+      loadFollowups,
+      setNotes: setNotesAction,
+      setFollowup: setFollowupAction,
+      nudge: nudgeAction,
+      stopAgent: stopAction,
+      setBabysit: setBabysitAction,
+      approveBabysit: approveBabysitAction,
+      discardBabysit: discardBabysitAction,
+      escalate: escalateAction,
+      startChat: startChatAction,
+      searchOps: searchOpsAction,
+      getSettings: getSettingsAction,
+      setSettings: setSettingsAction,
     }),
     [
       active,
@@ -656,6 +834,22 @@ export function AdminStudioOpsProvider({
       setWebhook,
       threadEpoch,
       threadTick,
+      filterCounts,
+      serviceEnabled,
+      followups,
+      loadFollowups,
+      setNotesAction,
+      setFollowupAction,
+      nudgeAction,
+      stopAction,
+      setBabysitAction,
+      approveBabysitAction,
+      discardBabysitAction,
+      escalateAction,
+      startChatAction,
+      searchOpsAction,
+      getSettingsAction,
+      setSettingsAction,
     ],
   );
 

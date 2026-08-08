@@ -5,15 +5,12 @@ import {
   Bot,
   Eye,
   Loader2,
-  Tags,
   UserRound,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { Icon } from "@/desk/components/Icons";
-import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
-import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
   sessionAvatarSrc,
@@ -25,11 +22,16 @@ import {
   type SessionRow,
   type StatusOpt,
 } from "./AdminStudioOpsContext";
+import { OpsFilterPills } from "./AdminStudioOpsExtras";
 import "./studio-messages.css";
 
 const META_FILTERS: { id: ChatFilterId; label: string }[] = [
   { id: "all", label: "All chats" },
+  { id: "unanswered", label: "Unanswered" },
+  { id: "working", label: "Working" },
+  { id: "watch", label: "Watch" },
   { id: "approval", label: "Needs approval" },
+  { id: "escalated", label: "Escalated" },
   { id: "agent", label: "Agent on" },
   { id: "human", label: "Human takeover" },
 ];
@@ -224,6 +226,11 @@ function OpsConversationRow({
               aria-hidden
             />
           ) : null}
+          {Number(session.unanswered_count || 0) > 0 ? (
+            <span className="studio-ops-unanswered" aria-label="Unanswered">
+              {Math.min(99, Number(session.unanswered_count || 0))}
+            </span>
+          ) : null}
         </span>
       </span>
       <span className="studio-ops-chat-card-body">
@@ -292,16 +299,8 @@ export function AdminStudioOpsSidebar() {
     selectedPhone,
     setSelectedPhone,
     pendingByPhone,
+    filterCounts,
   } = useAdminStudioOps();
-
-  const labelRailRef = useRef<HTMLDivElement | null>(null);
-  useHorizontalWheelScroll(labelRailRef);
-  useHorizontalScrollFade(labelRailRef);
-
-  const labelChips: StatusOpt[] = [
-    { id: "all", label: "All" },
-    ...statusCatalog.slice(0, 8),
-  ];
 
   return (
     <div className="studio-dm-sidebar studio-ops-rail-sidebar">
@@ -313,31 +312,14 @@ export function AdminStudioOpsSidebar() {
           aria-label="Search Sophie chats"
         />
 
+        <OpsFilterPills
+          value={chatFilter}
+          onChange={setChatFilter}
+          counts={filterCounts}
+          statusIds={statusCatalog}
+        />
+
         <div className="studio-dm-rail-row">
-          <div
-            ref={labelRailRef}
-            className="studio-dm-label-rail"
-            role="tablist"
-            aria-label="Labels"
-          >
-            {labelChips.map((chip) => {
-              const isAll = chip.id === "all";
-              const on = isAll ? chatFilter === "all" : chatFilter === chip.id;
-              return (
-                <button
-                  key={chip.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  className={`studio-dm-label-chip${on ? " is-active" : ""}`}
-                  onClick={() => setChatFilter(isAll ? "all" : chip.id)}
-                >
-                  {isAll ? <Tags aria-hidden="true" /> : null}
-                  <span>{chip.label}</span>
-                </button>
-              );
-            })}
-          </div>
           <OpsChatFilter
             value={chatFilter}
             onChange={setChatFilter}

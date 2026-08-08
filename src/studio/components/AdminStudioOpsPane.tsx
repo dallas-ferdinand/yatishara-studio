@@ -13,6 +13,19 @@ import { toast } from "sonner";
 import { AdminStudioOpsThread } from "./AdminStudioOpsThread";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
+  OpsApprovalsBoard,
+  OpsBabysitBar,
+  OpsActivityFeed,
+  OpsFollowupEditor,
+  OpsFollowupsBoard,
+  OpsHeadExtraActions,
+  OpsKillSwitchBanner,
+  OpsMediaRail,
+  OpsNotesEditor,
+  OpsSettingsExtras,
+  OpsStartChatForm,
+} from "./AdminStudioOpsExtras";
+import {
   money,
   sessionAvatarSrc,
   sessionTitle,
@@ -24,10 +37,12 @@ import {
 
 const OPS_TABS: { id: OpsTab; label: string }[] = [
   { id: "chats", label: "Chats" },
+  { id: "followups", label: "Follow-ups" },
+  { id: "approvals", label: "Approvals" },
   { id: "settings", label: "Settings" },
 ];
 
-type ActionTab = "notes" | "followups" | "labels" | "payments";
+type ActionTab = "notes" | "followups" | "labels" | "payments" | "media" | "activity";
 
 const ACTION_TABS: Array<{
   id: ActionTab;
@@ -37,6 +52,8 @@ const ACTION_TABS: Array<{
   { id: "followups", label: "Follow-ups" },
   { id: "labels", label: "Labels" },
   { id: "payments", label: "Payments" },
+  { id: "media", label: "Media" },
+  { id: "activity", label: "Activity" },
 ];
 
 function paymentStatusTone(p: PaymentRow): string {
@@ -98,11 +115,14 @@ export function AdminStudioOpsPane() {
     followups: selected?.followup_at ? 1 : 0,
     labels: selectedStatuses.length,
     payments: detail?.payments?.length || 0,
+    media: detail?.media?.length || 0,
+    activity: detail?.activity?.length || 0,
   };
 
   return (
     <div className={`studio-ops-shell${showPeer ? " has-peer" : ""}`}>
       <div className="studio-ops-main-col">
+        <OpsKillSwitchBanner />
         <header className="studio-admin-head studio-ops-subhead">
           <nav className="studio-admin-head-tabs" aria-label="Ops sections">
             {OPS_TABS.map((item) => (
@@ -113,7 +133,7 @@ export function AdminStudioOpsPane() {
                 onClick={() => setOpsTab(item.id)}
               >
                 {item.label}
-                {item.id === "chats" && pendingPayments.length > 0 ? (
+                {item.id === "approvals" && pendingPayments.length > 0 ? (
                   <span className="studio-ops-tab-count" title="Pending approvals">
                     {pendingPayments.length}
                   </span>
@@ -225,6 +245,7 @@ export function AdminStudioOpsPane() {
                         </div>
                       </div>
                       <div className="studio-ops-chat-main-actions">
+                        <OpsHeadExtraActions session={selected} />
                         <button
                           type="button"
                           className="studio-composer-circle-btn studio-ops-chat-head-action"
@@ -304,6 +325,7 @@ export function AdminStudioOpsPane() {
                         Agent context reset. Showing WhatsApp since reset only.
                       </p>
                     ) : null}
+                    <OpsBabysitBar session={selected} />
                     <AdminStudioOpsThread
                       key={`${selected.phone}:${threadEpoch}`}
                       phone={selected.phone}
@@ -313,6 +335,10 @@ export function AdminStudioOpsPane() {
                 )}
               </section>
             </div>
+          ) : opsTab === "followups" ? (
+            <OpsFollowupsBoard />
+          ) : opsTab === "approvals" ? (
+            <OpsApprovalsBoard />
           ) : (
             <div className="studio-ops-settings">
               <div className="studio-ops-device">
@@ -364,6 +390,8 @@ export function AdminStudioOpsPane() {
                   </div>
                 </details>
               </div>
+              <OpsSettingsExtras />
+              <OpsStartChatForm />
             </div>
           )}
         </div>
@@ -394,31 +422,15 @@ export function AdminStudioOpsPane() {
           </div>
           <div className="studio-ops-chat-peer-scroll">
             {actionTab === "notes" ? (
-              agentNotes ? (
-                <div className="studio-ops-agent-item">
-                  <p className="studio-ops-agent-item-body">{agentNotes}</p>
-                  <span className="studio-muted">Sophie</span>
-                </div>
-              ) : (
-                <p className="studio-muted studio-ops-peer-hint">
-                  No agent notes yet.
-                </p>
-              )
+              <OpsNotesEditor phone={selected.phone} notes={agentNotes} />
             ) : null}
 
             {actionTab === "followups" ? (
-              selected.followup_at ? (
-                <div className="studio-ops-followup-card">
-                  <strong>{whenLabel(selected.followup_at)}</strong>
-                  <p className="studio-muted">
-                    {selected.followup_note || "Scheduled by Sophie"}
-                  </p>
-                </div>
-              ) : (
-                <p className="studio-muted studio-ops-peer-hint">
-                  No follow-up scheduled.
-                </p>
-              )
+              <OpsFollowupEditor
+                phone={selected.phone}
+                at={selected.followup_at}
+                note={selected.followup_note}
+              />
             ) : null}
 
             {actionTab === "labels" ? (
@@ -521,6 +533,14 @@ export function AdminStudioOpsPane() {
                   ))}
                 </ul>
               )
+            ) : null}
+
+            {actionTab === "media" ? (
+              <OpsMediaRail media={detail?.media || []} />
+            ) : null}
+
+            {actionTab === "activity" ? (
+              <OpsActivityFeed activity={detail?.activity || []} />
             ) : null}
           </div>
         </aside>

@@ -14607,6 +14607,126 @@ export function StudioShell({
         .studio-ops-presence-dot.is-online {
           background: #22c55e;
         }
+        .studio-ops-unanswered {
+          position: absolute;
+          top: -4px;
+          right: -4px;
+          min-width: 16px;
+          height: 16px;
+          padding: 0 4px;
+          border-radius: 999px;
+          background: #dc2626;
+          color: #fff;
+          font-size: 9px;
+          font-weight: 700;
+          line-height: 16px;
+          text-align: center;
+          border: 2px solid var(--mos-page, var(--mos-panel));
+        }
+        .studio-ops-filter-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          padding: 0 2px 6px;
+        }
+        .studio-ops-filter-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          height: 22px;
+          padding: 0 8px;
+          border-radius: 999px;
+          border: 1px solid var(--color-cursor-border-soft);
+          background: var(--mos-page, var(--mos-panel));
+          color: inherit;
+          font-size: 10px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .studio-ops-filter-pill em {
+          font-style: normal;
+          color: var(--color-cursor-muted);
+        }
+        .studio-ops-filter-pill.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 50%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-page));
+        }
+        .studio-ops-kill-banner {
+          padding: 8px 12px;
+          background: color-mix(in srgb, #dc2626 16%, var(--mos-page));
+          color: #991b1b;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .studio-ops-babysit-bar,
+        .studio-ops-editor,
+        .studio-ops-board {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 10px 12px;
+          border-bottom: 1px solid var(--color-cursor-border-soft);
+        }
+        .studio-ops-babysit-toggle {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+        }
+        .studio-ops-babysit-draft,
+        .studio-ops-board-list,
+        .studio-ops-activity-list,
+        .studio-ops-media-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .studio-ops-babysit-draft p,
+        .studio-ops-activity-list p {
+          margin: 0;
+          font-size: 12px;
+          white-space: pre-wrap;
+        }
+        .studio-ops-babysit-actions,
+        .studio-ops-approval-row {
+          display: flex;
+          gap: 6px;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+        .studio-ops-board-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .studio-ops-board-list button,
+        .studio-ops-approval-row > button {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 2px;
+          width: 100%;
+          text-align: left;
+          background: transparent;
+          border: 0;
+          color: inherit;
+          cursor: pointer;
+          padding: 6px 0;
+        }
+        .studio-ops-editor textarea,
+        .studio-ops-editor input {
+          width: 100%;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: 8px;
+          background: var(--mos-page);
+          color: inherit;
+          padding: 8px;
+          font: inherit;
+          font-size: 12px;
+        }
         .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md,
         .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md .studio-profile-avatar-media,
         .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
