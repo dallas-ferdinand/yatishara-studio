@@ -5,7 +5,6 @@ import {
   Bot,
   Eye,
   Loader2,
-  RefreshCw,
   Tags,
   UserRound,
   X,
@@ -267,8 +266,6 @@ export function AdminStudioOpsSidebar() {
     selectedPhone,
     setSelectedPhone,
     pendingByPhone,
-    busy,
-    refresh,
   } = useAdminStudioOps();
 
   const labelRailRef = useRef<HTMLDivElement | null>(null);
@@ -288,22 +285,6 @@ export function AdminStudioOpsSidebar() {
           onChange={setSearch}
           placeholder="Search chats"
           aria-label="Search Sophie chats"
-          end={
-            <button
-              type="button"
-              className="studio-composer-circle-btn studio-dm-open-full"
-              aria-label="Refresh chats"
-              title="Refresh"
-              disabled={busy === "refresh"}
-              onClick={() => void refresh()}
-            >
-              {busy === "refresh" ? (
-                <Loader2 size={13} strokeWidth={2.25} className="animate-spin" />
-              ) : (
-                <RefreshCw size={13} strokeWidth={2.25} aria-hidden="true" />
-              )}
-            </button>
-          }
         />
 
         <div className="studio-dm-rail-row">

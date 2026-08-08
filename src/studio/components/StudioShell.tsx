@@ -14348,19 +14348,25 @@ export function StudioShell({
           color: var(--color-cursor-text-bright);
         }
         .studio-admin-body {
-          flex: 1 1 auto;
+          flex: 1 1 0;
           min-height: 0;
           overflow: auto;
           padding: 16px;
+        }
+        .studio-admin-body.is-ops-fill {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          padding: 0;
         }
         .studio-admin-ops-fill {
           display: flex;
           flex: 1 1 0;
           flex-direction: column;
           min-height: 0;
-          margin: -16px;
-          height: calc(100% + 32px);
-          max-height: calc(100% + 32px);
+          height: 100%;
+          max-height: none;
+          margin: 0;
           overflow: hidden;
         }
         .studio-admin-ops-fill > .studio-ops-shell {
@@ -14368,6 +14374,7 @@ export function StudioShell({
           flex: 1 1 0;
           flex-direction: column;
           min-height: 0;
+          height: 100%;
           overflow: hidden;
         }
         .studio-ops-shell.has-peer {
@@ -14380,6 +14387,7 @@ export function StudioShell({
           flex-direction: column;
           min-width: 0;
           min-height: 0;
+          height: 100%;
           overflow: hidden;
         }
         .studio-ops-main-col > .studio-admin-head {
@@ -14790,10 +14798,13 @@ export function StudioShell({
           color: var(--color-cursor-muted);
         }
         .studio-ops-shell > .studio-ops-chat-peer {
+          display: flex;
           flex: 0 0 clamp(260px, 28vw, 320px);
+          flex-direction: column;
           width: clamp(260px, 28vw, 320px);
           align-self: stretch;
           min-height: 0;
+          height: 100%;
           overflow: hidden;
           border-left: 1px solid var(--color-cursor-border);
           background: var(--mos-page);
@@ -31241,7 +31252,7 @@ function AdminWorkspacePane({
           ))}
         </nav>
       </header>
-      <div className="studio-admin-body">
+      <div className={`studio-admin-body${adminSection === "ops" ? " is-ops-fill" : ""}`}>
         <div className="studio-admin-workspace">
         {adminSection === "payments" ? (
           <div className="studio-admin-payments-shell">

@@ -1,18 +1,20 @@
 /* Sophie Ops WhatsApp thread.
-   Keep this scoped: Studio's general DM chat owns its own bubble system. */
+   Keep this scoped: Studio's general DM chat owns its own bubble system.
+   Scroll containment: flex 1 1 0 + min-height 0 — never height:100% (clips chat head). */
 
 .studio-ops-wa-thread {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  height: 100%;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
   background: var(--mos-page, var(--color-cursor-bg));
 }
 
 .studio-ops-wa-thread .cs-ops-thread-scroll {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 12px 16px 10px;
