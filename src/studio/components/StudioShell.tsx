@@ -21157,9 +21157,29 @@ export function StudioShell({
           opacity: 0.92;
         }
         .studio-academy-card-compare {
-          margin-left: 6px;
-          opacity: 0.55;
-          font-weight: 500;
+          margin: 0;
+          color: var(--cursor-accent, var(--mos-accent, #5b8cff));
+          font-weight: 700;
+          opacity: 1;
+          text-decoration-thickness: 1.5px;
+          text-decoration-color: color-mix(
+            in srgb,
+            var(--cursor-accent, #5b8cff) 70%,
+            transparent
+          );
+        }
+        .studio-academy-card-now {
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          font-weight: 800;
+          font-size: 1.12em;
+          letter-spacing: -0.01em;
+        }
+        .studio-academy-card-foot .public-offers-card-price {
+          display: inline-flex;
+          align-items: baseline;
+          gap: 7px;
+          font-size: 12px;
+          font-weight: 700;
         }
         .studio-academy-card-body {
           display: grid;
@@ -21190,10 +21210,6 @@ export function StudioShell({
           gap: 10px;
           margin-top: 4px;
           min-width: 0;
-        }
-        .studio-academy-card-foot .public-offers-card-price {
-          font-size: 12px;
-          font-weight: 700;
         }
         .studio-academy-card-foot > span:last-child {
           font-size: 11px;

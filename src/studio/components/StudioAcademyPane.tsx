@@ -828,18 +828,24 @@ export function StudioAcademyPane({
                           </p>
                           <div className="studio-academy-card-foot">
                             <span className="public-offers-card-price">
-                              {formatTtdFromCredits(course.priceCredits, price)}
                               {compareAt != null &&
                               compareAt > course.priceCredits ? (
                                 <>
-                                  {" "}
                                   <s className="studio-academy-card-compare">
                                     {formatTtdShort(
                                       creditsToCents(compareAt, price),
                                     )}
                                   </s>
+                                  <span className="studio-academy-card-now">
+                                    {formatTtdFromCredits(
+                                      course.priceCredits,
+                                      price,
+                                    )}
+                                  </span>
                                 </>
-                              ) : null}
+                              ) : (
+                                formatTtdFromCredits(course.priceCredits, price)
+                              )}
                             </span>
                             <span>
                               {comingSoon
