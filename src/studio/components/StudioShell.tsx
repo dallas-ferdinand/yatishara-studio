@@ -21061,15 +21061,17 @@ export function StudioShell({
         .studio-academy-sale-pan-unit {
           flex: 1 1 0;
           display: grid;
-          gap: 1px;
-          justify-items: center;
+          place-items: center;
           min-width: 0;
-          padding: 5px 2px 4px;
+          padding: 6px 4px;
           border-radius: 8px;
           background: color-mix(in srgb, var(--mos-page, #f5f5f7) 72%, transparent);
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 22%, transparent);
         }
         .studio-academy-sale-pan-unit strong {
+          display: inline-flex;
+          align-items: baseline;
+          gap: 1px;
           font-size: 14px;
           font-weight: 750;
           font-variant-numeric: tabular-nums;
@@ -21077,17 +21079,16 @@ export function StudioShell({
           line-height: 1.1;
           color: var(--color-cursor-text-bright, var(--mos-text));
         }
-        .studio-academy-sale-pan-unit > span {
-          font-size: 9px;
-          font-weight: 650;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: color-mix(in srgb, var(--cursor-accent) 68%, var(--color-cursor-text-muted, var(--mos-text-muted)));
+        .studio-academy-sale-pan-unit strong > span {
+          font-size: 0.72em;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          text-transform: lowercase;
+          color: color-mix(in srgb, var(--cursor-accent) 72%, var(--color-cursor-text-muted, var(--mos-text-muted)));
         }
         .studio-academy-sale-pan-sep {
           display: grid;
           place-items: center;
-          padding-bottom: 10px;
           font-size: 12px;
           font-weight: 700;
           color: color-mix(in srgb, var(--cursor-accent) 55%, transparent);
