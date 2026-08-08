@@ -190,6 +190,7 @@ function CheckoutDock({
   discountLabel,
   saleEndsAt,
   now,
+  lessonCount,
   needsTopUp,
   balanceLabel,
   topUpLabel,
@@ -207,6 +208,7 @@ function CheckoutDock({
   discountLabel?: string | null;
   saleEndsAt?: number | null;
   now?: number;
+  lessonCount: number;
   needsTopUp: boolean;
   balanceLabel: string;
   topUpLabel: string;
@@ -217,6 +219,8 @@ function CheckoutDock({
   const totalDueLabel = formatTtdCents(totalDueCents);
   const feeLabel = formatTtdShort(feeCents);
   const onSale = Boolean(listPriceLabel && discountLabel);
+  const lessonMeta =
+    lessonCount === 1 ? "1 lesson" : `${lessonCount} lessons`;
   const countdown =
     !owned &&
     onSale &&
@@ -246,6 +250,15 @@ function CheckoutDock({
                 <s className="studio-academy-checkout-price-was">{listPriceLabel}</s>
               ) : null}
             </strong>
+            {!owned ? (
+              <ul
+                className="studio-academy-checkout-chips"
+                aria-label="Course access"
+              >
+                <li>Lifetime access</li>
+                <li>{onSale ? "Sale" : lessonMeta}</li>
+              </ul>
+            ) : null}
           </div>
         </header>
 
@@ -664,6 +677,7 @@ export function StudioAcademyPane({
     discountLabel,
     saleEndsAt: detail?.onSale ? detail.saleEndsAt : null,
     now,
+    lessonCount: detail?.lessonCount ?? 0,
     needsTopUp,
     balanceLabel,
     topUpLabel,
