@@ -155,8 +155,10 @@ function SaleCountdownPanel({
               </span>
             ) : null}
             <span className="studio-academy-sale-pan-unit">
-              <strong>{String(unit.value).padStart(2, "0")}</strong>
-              <span>{unit.label}</span>
+              <strong>
+                {String(unit.value).padStart(2, "0")}
+                <span>{unit.label}</span>
+              </strong>
             </span>
           </Fragment>
         ))}
