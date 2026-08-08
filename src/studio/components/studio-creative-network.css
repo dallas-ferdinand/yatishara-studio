@@ -344,6 +344,15 @@
   font-weight: 500;
 }
 
+.studio-academy-checkout-row.is-discount dd {
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  font-weight: 650;
+}
+
+.studio-academy-sale-receipt {
+  margin-bottom: 10px;
+}
+
 .studio-academy-checkout-row.is-total {
   margin-top: 0;
   border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));

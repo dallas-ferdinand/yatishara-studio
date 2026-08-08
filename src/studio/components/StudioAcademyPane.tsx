@@ -59,6 +59,52 @@ function courseBannerUrl(course: {
   return course.coverUrl || localCoverUrl(course.slug);
 }
 
+function useNowTick(intervalMs = 30_000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+function formatSaleEndDate(saleEndsAt: number): string {
+  try {
+    return new Intl.DateTimeFormat("en-TT", {
+      timeZone: "America/Port_of_Spain",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(saleEndsAt));
+  } catch {
+    return new Date(saleEndsAt).toLocaleDateString();
+  }
+}
+
+/** Human countdown for an active sale end (AST-facing catalog). */
+function formatSaleRemaining(saleEndsAt: number, now = Date.now()): string | null {
+  if (!Number.isFinite(saleEndsAt) || saleEndsAt <= now) return null;
+  const ms = saleEndsAt - now;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const hourMs = 60 * 60 * 1000;
+  const minMs = 60 * 1000;
+  const days = Math.floor(ms / dayMs);
+  const hours = Math.floor((ms % dayMs) / hourMs);
+  const mins = Math.floor((ms % hourMs) / minMs);
+  if (days >= 2) return `${days} days left`;
+  if (days === 1) return hours > 0 ? `1 day ${hours}h left` : "1 day left";
+  if (hours >= 1) return mins > 0 ? `${hours}h ${mins}m left` : `${hours}h left`;
+  return `${Math.max(1, mins)}m left`;
+}
+
+function saleDiscountCredits(
+  priceCredits: number,
+  compareAtCredits?: number | null,
+): number | null {
+  if (compareAtCredits == null || compareAtCredits <= priceCredits) return null;
+  return compareAtCredits - priceCredits;
+}
+
 function newClientRequestId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -74,6 +120,10 @@ function CheckoutDock({
   owned,
   priceLabel,
   priceShort,
+  listPriceLabel,
+  discountLabel,
+  saleEndsLabel,
+  saleRemainingLabel,
   lessonCount,
   needsTopUp,
   balanceLabel,
@@ -88,6 +138,10 @@ function CheckoutDock({
   owned: boolean;
   priceLabel: string;
   priceShort: string;
+  listPriceLabel?: string | null;
+  discountLabel?: string | null;
+  saleEndsLabel?: string | null;
+  saleRemainingLabel?: string | null;
   lessonCount: number;
   needsTopUp: boolean;
   balanceLabel: string;
@@ -100,6 +154,33 @@ function CheckoutDock({
   const feeLabel = formatTtdShort(feeCents);
   const lessonMeta =
     lessonCount === 1 ? "1 lesson" : `${lessonCount} lessons`;
+  const onSale = Boolean(listPriceLabel && discountLabel);
+  const saleReceipt = onSale ? (
+    <dl className="studio-academy-checkout-receipt studio-academy-sale-receipt">
+      <div className="studio-academy-checkout-row">
+        <dt>List price</dt>
+        <dd>
+          <s>{listPriceLabel}</s>
+        </dd>
+      </div>
+      <div className="studio-academy-checkout-row is-discount">
+        <dt>Discount</dt>
+        <dd>−{discountLabel}</dd>
+      </div>
+      {saleEndsLabel || saleRemainingLabel ? (
+        <div className="studio-academy-checkout-row is-muted">
+          <dt>Sale ends</dt>
+          <dd>
+            {[saleEndsLabel, saleRemainingLabel].filter(Boolean).join(" · ")}
+          </dd>
+        </div>
+      ) : null}
+      <div className="studio-academy-checkout-row is-total">
+        <dt>You pay</dt>
+        <dd>{priceLabel}</dd>
+      </div>
+    </dl>
+  ) : null;
   const body = (
     <div className="public-offers-rail-detail">
       <section className="studio-academy-checkout" aria-label="Course checkout">
@@ -110,14 +191,25 @@ function CheckoutDock({
           />
           <div className="studio-academy-checkout-hero-copy">
             <span className="studio-academy-checkout-kicker">
-              {needsTopUp && !owned ? "Due today" : "Checkout"}
+              {needsTopUp && !owned
+                ? "Due today"
+                : onSale && !owned
+                  ? "Sale price"
+                  : "Checkout"}
             </span>
             <strong className="studio-academy-checkout-amount">
               {priceLabel}
+              {onSale && listPriceLabel ? (
+                <>
+                  {" "}
+                  <s className="studio-academy-card-compare">{listPriceLabel}</s>
+                </>
+              ) : null}
             </strong>
             <ul className="studio-academy-checkout-chips" aria-label="Course access">
               <li>Lifetime</li>
               <li>{lessonMeta}</li>
+              {saleRemainingLabel ? <li>{saleRemainingLabel}</li> : null}
             </ul>
           </div>
         </header>
@@ -126,6 +218,7 @@ function CheckoutDock({
           <p className="studio-academy-checkout-note">You own this course.</p>
         ) : needsTopUp ? (
           <>
+            {saleReceipt}
             <dl className="studio-academy-checkout-receipt">
               <div className="studio-academy-checkout-row">
                 <dt>Available balance</dt>
@@ -178,34 +271,37 @@ function CheckoutDock({
             </div>
           </>
         ) : (
-          <div className="studio-academy-checkout-paywise">
-            <button
-              type="button"
-              className={`studio-settings-topup-pay is-theme${busy ? " is-loading" : ""}`}
-              disabled={busy}
-              onClick={onBuyClick}
-              aria-busy={busy}
-              aria-label={
-                busy
-                  ? "Opening checkout"
-                  : `Pay ${priceShort} with wallet to unlock course`
-              }
-            >
-              {busy ? (
-                <Loader2
-                  className="studio-settings-topup-pay-spin"
-                  aria-hidden="true"
-                />
-              ) : null}
-              <span className="studio-settings-topup-pay-label">
-                {busy ? "Opening…" : `Pay ${priceShort} with wallet`}
-              </span>
-            </button>
-            <p className="studio-settings-topup-secure">
-              <Lock aria-hidden="true" />
-              <span>secure checkout · unlocks right away</span>
-            </p>
-          </div>
+          <>
+            {saleReceipt}
+            <div className="studio-academy-checkout-paywise">
+              <button
+                type="button"
+                className={`studio-settings-topup-pay is-theme${busy ? " is-loading" : ""}`}
+                disabled={busy}
+                onClick={onBuyClick}
+                aria-busy={busy}
+                aria-label={
+                  busy
+                    ? "Opening checkout"
+                    : `Pay ${priceShort} with wallet to unlock course`
+                }
+              >
+                {busy ? (
+                  <Loader2
+                    className="studio-settings-topup-pay-spin"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span className="studio-settings-topup-pay-label">
+                  {busy ? "Opening…" : `Pay ${priceShort} with wallet`}
+                </span>
+              </button>
+              <p className="studio-settings-topup-secure">
+                <Lock aria-hidden="true" />
+                <span>secure checkout · unlocks right away</span>
+              </p>
+            </div>
+          </>
         )}
       </section>
     </div>
@@ -330,6 +426,7 @@ export function StudioAcademyPane({
 }) {
   const price = creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
   const academy = useStudioAcademy();
+  const now = useNowTick();
   const { isMobile } = useMobileLayout();
   const catalog = useQuery(api.academy.listPublishedCourses, {});
   const mine = useQuery(api.academy.listMyCourses, {});
@@ -408,6 +505,26 @@ export function StudioAcademyPane({
   const priceShort = detail
     ? formatTtdShort(creditsToCents(detail.priceCredits, price))
     : "";
+  const detailDiscountCredits =
+    detail && detail.onSale
+      ? saleDiscountCredits(detail.priceCredits, detail.compareAtCredits)
+      : null;
+  const listPriceLabel =
+    detailDiscountCredits != null && detail?.compareAtCredits != null
+      ? formatTtdFromCredits(detail.compareAtCredits, price)
+      : null;
+  const discountLabel =
+    detailDiscountCredits != null
+      ? formatTtdFromCredits(detailDiscountCredits, price)
+      : null;
+  const saleEndsLabel =
+    detail?.onSale && detail.saleEndsAt
+      ? formatSaleEndDate(detail.saleEndsAt)
+      : null;
+  const saleRemainingLabel =
+    detail?.onSale && detail.saleEndsAt
+      ? formatSaleRemaining(detail.saleEndsAt, now)
+      : null;
 
   const balance = Number(creditBalance ?? 0);
   const priceCredits = detail?.priceCredits ?? 0;
@@ -516,6 +633,10 @@ export function StudioAcademyPane({
     owned,
     priceLabel,
     priceShort,
+    listPriceLabel,
+    discountLabel,
+    saleEndsLabel,
+    saleRemainingLabel,
     lessonCount: detail?.lessonCount ?? 0,
     needsTopUp,
     balanceLabel,
@@ -595,6 +716,17 @@ export function StudioAcademyPane({
                   const banner = courseBannerUrl(course);
                   const comingSoon = Boolean(course.comingSoon);
                   const compareAt = course.compareAtCredits;
+                  const discountCredits = course.onSale
+                    ? saleDiscountCredits(course.priceCredits, compareAt)
+                    : null;
+                  const remaining =
+                    course.onSale && course.saleEndsAt
+                      ? formatSaleRemaining(course.saleEndsAt, now)
+                      : null;
+                  const endsLabel =
+                    course.onSale && course.saleEndsAt
+                      ? formatSaleEndDate(course.saleEndsAt)
+                      : null;
                   return (
                     <li key={course._id}>
                       <button
@@ -646,6 +778,10 @@ export function StudioAcademyPane({
                             <span className="studio-academy-card-soon">
                               Coming soon
                             </span>
+                          ) : discountCredits != null ? (
+                            <span className="studio-academy-card-sale">
+                              Save {formatTtdFromCredits(discountCredits, price)}
+                            </span>
                           ) : null}
                         </div>
                         <div className="public-offers-card-body studio-academy-card-body">
@@ -658,7 +794,8 @@ export function StudioAcademyPane({
                           <div className="studio-academy-card-foot">
                             <span className="public-offers-card-price">
                               {formatTtdFromCredits(course.priceCredits, price)}
-                              {compareAt != null && compareAt > course.priceCredits ? (
+                              {compareAt != null &&
+                              compareAt > course.priceCredits ? (
                                 <>
                                   {" "}
                                   <s className="studio-academy-card-compare">
@@ -675,6 +812,16 @@ export function StudioAcademyPane({
                                   }`}
                             </span>
                           </div>
+                          {discountCredits != null ? (
+                            <p className="studio-academy-card-sale-meta">
+                              Save {formatTtdFromCredits(discountCredits, price)}
+                              {endsLabel || remaining
+                                ? ` · ${[endsLabel, remaining]
+                                    .filter(Boolean)
+                                    .join(" · ")}`
+                                : ""}
+                            </p>
+                          ) : null}
                         </div>
                       </button>
                     </li>
@@ -735,7 +882,29 @@ export function StudioAcademyPane({
                 </p>
               </div>
               {!owned ? (
-                <span className="public-offers-card-price">{priceLabel}</span>
+                <div className="studio-academy-detail-price">
+                  <span className="public-offers-card-price">
+                    {priceLabel}
+                    {listPriceLabel ? (
+                      <>
+                        {" "}
+                        <s className="studio-academy-card-compare">
+                          {listPriceLabel}
+                        </s>
+                      </>
+                    ) : null}
+                  </span>
+                  {discountLabel ? (
+                    <span className="studio-academy-card-sale-meta">
+                      Save {discountLabel}
+                      {saleEndsLabel || saleRemainingLabel
+                        ? ` · ${[saleEndsLabel, saleRemainingLabel]
+                            .filter(Boolean)
+                            .join(" · ")}`
+                        : ""}
+                    </span>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <div className={`studio-academy-body${!owned ? " is-locked" : ""}`}>
@@ -784,7 +953,29 @@ export function StudioAcademyPane({
                 </p>
               </div>
               {!owned ? (
-                <span className="public-offers-card-price">{priceLabel}</span>
+                <div className="studio-academy-detail-price">
+                  <span className="public-offers-card-price">
+                    {priceLabel}
+                    {listPriceLabel ? (
+                      <>
+                        {" "}
+                        <s className="studio-academy-card-compare">
+                          {listPriceLabel}
+                        </s>
+                      </>
+                    ) : null}
+                  </span>
+                  {discountLabel ? (
+                    <span className="studio-academy-card-sale-meta">
+                      Save {discountLabel}
+                      {saleEndsLabel || saleRemainingLabel
+                        ? ` · ${[saleEndsLabel, saleRemainingLabel]
+                            .filter(Boolean)
+                            .join(" · ")}`
+                        : ""}
+                    </span>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <div className={`studio-academy-body${!owned ? " is-locked" : ""}`}>
