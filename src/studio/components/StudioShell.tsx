@@ -14650,11 +14650,12 @@ export function StudioShell({
           height: 22px;
           padding: 0 8px;
           border-radius: 999px;
-          border: 1px solid var(--color-cursor-border-soft);
-          background: var(--mos-page, var(--mos-panel));
-          color: inherit;
-          font-size: 10px;
-          font-weight: 600;
+          border: 1px solid var(--color-cursor-border, var(--mos-border));
+          background: var(--cursor-surface-raised, var(--mos-surface));
+          color: var(--color-cursor-text, var(--mos-text));
+          font-size: 10.5px;
+          font-weight: 650;
+          line-height: 1;
           cursor: pointer;
           flex: 0 0 auto;
           white-space: nowrap;
@@ -14664,8 +14665,21 @@ export function StudioShell({
           color: var(--color-cursor-muted);
         }
         .studio-ops-filter-pill.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 50%, transparent);
-          background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-page));
+          border-color: color-mix(
+            in srgb,
+            var(--cursor-accent, var(--mos-accent)) 46%,
+            var(--mos-border)
+          );
+          background: color-mix(
+            in srgb,
+            var(--cursor-accent, var(--mos-accent)) 12%,
+            var(--cursor-surface-raised, var(--mos-surface))
+          );
+          color: var(--color-cursor-text-bright, var(--mos-text));
+        }
+        .studio-ops-filter-pill.is-active em {
+          color: inherit;
+          opacity: 0.72;
         }
         .studio-ops-kill-banner {
           padding: 8px 12px;
