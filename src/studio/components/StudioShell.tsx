@@ -14626,12 +14626,17 @@ export function StudioShell({
         .studio-ops-filter-pills {
           display: flex;
           flex-wrap: nowrap;
+          align-items: center;
           gap: 4px;
-          padding: 0 2px 6px;
+          min-height: 36px;
+          padding: 7px 8px;
+          box-sizing: border-box;
           overflow-x: auto;
           overflow-y: hidden;
           scrollbar-width: none;
           -ms-overflow-style: none;
+          border-bottom: 1px solid
+            var(--studio-chrome-divider, var(--color-cursor-border-soft));
         }
         .studio-ops-filter-pills::-webkit-scrollbar {
           display: none;
