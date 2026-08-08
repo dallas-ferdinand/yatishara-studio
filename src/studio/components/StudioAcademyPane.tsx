@@ -536,11 +536,11 @@ export function StudioAcademyPane({
       : null;
   const listPriceLabel =
     detailDiscountCredits != null && detail?.compareAtCredits != null
-      ? formatTtdFromCredits(detail.compareAtCredits, price)
+      ? formatTtdShort(creditsToCents(detail.compareAtCredits, price))
       : null;
   const discountLabel =
     detailDiscountCredits != null
-      ? formatTtdFromCredits(detailDiscountCredits, price)
+      ? formatTtdShort(creditsToCents(detailDiscountCredits, price))
       : null;
 
   const balance = Number(creditBalance ?? 0);
@@ -803,14 +803,18 @@ export function StudioAcademyPane({
                                 <>
                                   {" "}
                                   <s className="studio-academy-card-compare">
-                                    {formatTtdFromCredits(compareAt, price)}
+                                    {formatTtdShort(
+                                      creditsToCents(compareAt, price),
+                                    )}
                                   </s>
                                 </>
                               ) : null}
                               {discountCredits != null ? (
                                 <span className="studio-academy-price-save">
                                   −
-                                  {formatTtdFromCredits(discountCredits, price)}
+                                  {formatTtdShort(
+                                    creditsToCents(discountCredits, price),
+                                  )}
                                 </span>
                               ) : null}
                             </span>
