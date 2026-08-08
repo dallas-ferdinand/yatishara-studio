@@ -14,6 +14,7 @@ import {
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { AdminStudioOpsThread } from "./AdminStudioOpsThread";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
   money,
@@ -175,7 +176,7 @@ export function AdminStudioOpsPane() {
                   <header className="studio-ops-chat-main-head">
                     <div className="studio-ops-chat-main-peer">
                       <StudioProfileAvatar
-                        size="sm"
+                        size="md"
                         src={sessionAvatarSrc(selected.phone)}
                         displayName={sessionTitle(selected)}
                         name={selected.phone}
@@ -226,23 +227,10 @@ export function AdminStudioOpsPane() {
                       </button>
                     </div>
                   </header>
-                  <div className="studio-ops-activity">
-                    {(detail?.activity || []).length === 0 ? (
-                      <p className="studio-ops-empty">No activity yet.</p>
-                    ) : (
-                      <ul className="studio-ops-activity-list">
-                        {(detail?.activity || []).map((a) => (
-                          <li key={a.id}>
-                            <span className="studio-ops-chip">{a.kind}</span>
-                            <div>
-                              <p>{a.body || "—"}</p>
-                              <time>{whenLabel(a.created_at)}</time>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+                  <AdminStudioOpsThread
+                    phone={selected.phone}
+                    humanTakeover={Boolean(selected.human_takeover)}
+                  />
                 </>
               )}
             </section>

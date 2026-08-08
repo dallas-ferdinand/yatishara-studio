@@ -14417,6 +14417,59 @@ export function StudioShell({
         .studio-ops-dm-row {
           width: 100%;
         }
+        .studio-ops-dm-row .studio-dm-row-main {
+          align-items: flex-start;
+        }
+        .studio-ops-dm-row .studio-dm-row-avatar-wrap,
+        .studio-ops-dm-row .studio-profile-avatar.is-md {
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .studio-ops-dm-row .studio-profile-avatar.is-md .studio-profile-avatar-media,
+        .studio-ops-dm-row .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
+          width: 44px;
+          height: 44px;
+          font-size: 15px;
+        }
+        .studio-ops-chat-main-peer .studio-profile-avatar.is-md {
+          width: 40px;
+          height: 40px;
+          min-width: 40px;
+          min-height: 40px;
+        }
+        .studio-ops-wa-thread {
+          flex: 1 1 auto;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        .studio-ops-wa-thread .cs-ops-thread-scroll {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: auto;
+          padding: 12px 14px 8px;
+        }
+        .studio-ops-wa-thread .cs-ops-thread-messages {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .studio-ops-wa-thread .cs-ops-composer {
+          flex: 0 0 auto;
+          border-top: 1px solid var(--color-cursor-border);
+        }
+        .studio-ops-wa-text {
+          margin: 0;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .studio-ops-chat-main {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
         .studio-ops-row-badges {
           display: flex;
           flex-wrap: wrap;

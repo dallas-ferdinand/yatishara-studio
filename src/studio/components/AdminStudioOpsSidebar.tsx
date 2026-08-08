@@ -191,7 +191,7 @@ function OpsConversationRow({
       <span className="studio-dm-row-main">
         <span className="studio-dm-row-avatar-wrap">
           <StudioProfileAvatar
-            size="sm"
+            size="md"
             src={avatarSrc}
             displayName={title}
             name={session.phone}

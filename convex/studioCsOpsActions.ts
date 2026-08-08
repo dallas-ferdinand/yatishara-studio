@@ -222,6 +222,32 @@ export const adminSetNotes = action({
   },
 });
 
+export const adminGetMessages = action({
+  args: { phone: v.string(), limit: v.optional(v.number()) },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    const lim = Math.min(Math.max(Number(args.limit) || 200, 1), 2000);
+    return studioCsFetch(
+      `/api/studio-cs/sessions/${phone}/messages?limit=${lim}`,
+    );
+  },
+});
+
+export const adminSendMessage = action({
+  args: { phone: v.string(), text: v.string() },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/send`, {
+      method: "POST",
+      body: JSON.stringify({ text: args.text }),
+    });
+  },
+});
+
 export const adminListPayments = action({
   args: { pending: v.optional(v.boolean()) },
   returns: v.any(),
