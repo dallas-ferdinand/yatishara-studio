@@ -195,8 +195,13 @@ export function AdminStudioOpsPane() {
                     <div className="studio-ops-chat-main-actions">
                       <button
                         type="button"
-                        className="cursor-settings-action"
+                        className={`studio-composer-circle-btn studio-ops-chat-head-action${selected.agent_enabled ? " is-on" : ""}`}
                         disabled={!!busy}
+                        aria-label={
+                          selected.agent_enabled ? "Turn Sophie off" : "Turn Sophie on"
+                        }
+                        aria-pressed={Boolean(selected.agent_enabled)}
+                        title={selected.agent_enabled ? "Sophie is on" : "Sophie is off"}
                         onClick={() =>
                           void setAgent({
                             phone: selected.phone,
@@ -205,12 +210,22 @@ export function AdminStudioOpsPane() {
                         }
                       >
                         <Bot className="h-3.5 w-3.5" />
-                        {selected.agent_enabled ? "Agent on" : "Agent off"}
                       </button>
                       <button
                         type="button"
-                        className="cursor-settings-action"
+                        className={`studio-composer-circle-btn studio-ops-chat-head-action${selected.human_takeover ? " is-on is-human" : ""}`}
                         disabled={!!busy}
+                        aria-label={
+                          selected.human_takeover
+                            ? "Return chat to Sophie"
+                            : "Take over this chat"
+                        }
+                        aria-pressed={Boolean(selected.human_takeover)}
+                        title={
+                          selected.human_takeover
+                            ? "Human takeover is on"
+                            : "Take over from Sophie"
+                        }
                         onClick={() =>
                           void setTakeover({
                             phone: selected.phone,
@@ -223,7 +238,6 @@ export function AdminStudioOpsPane() {
                         ) : (
                           <UserRoundCheck className="h-3.5 w-3.5" />
                         )}
-                        {selected.human_takeover ? "Human" : "Take over"}
                       </button>
                     </div>
                   </header>

@@ -14406,10 +14406,10 @@ export function StudioShell({
         .studio-ops-rail-list {
           list-style: none;
           margin: 0;
-          padding: 4px 6px 8px;
+          padding: 10px;
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: 8px;
         }
         .studio-ops-rail-list > li {
           margin: 0;
@@ -14434,10 +14434,10 @@ export function StudioShell({
           font-size: 15px;
         }
         .studio-ops-chat-main-peer .studio-profile-avatar.is-md {
-          width: 40px;
-          height: 40px;
-          min-width: 40px;
-          min-height: 40px;
+          width: 30px;
+          height: 30px;
+          min-width: 30px;
+          min-height: 30px;
         }
         .studio-ops-wa-thread {
           flex: 1 1 auto;
@@ -14452,9 +14452,11 @@ export function StudioShell({
           padding: 12px 14px 8px;
         }
         .studio-ops-wa-thread .cs-ops-thread-messages {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
+          display: grid;
+          align-content: start;
+          gap: 3px;
+          width: 100%;
+          min-height: 100%;
         }
         .studio-ops-wa-thread .cs-ops-composer {
           flex: 0 0 auto;
@@ -14662,21 +14664,46 @@ export function StudioShell({
           align-items: center;
           justify-content: space-between;
           gap: 10px;
-          padding: 10px 14px;
-          border-bottom: 1px solid var(--color-cursor-border);
+          height: 48px;
+          min-height: 48px;
+          padding: 0 10px;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          background: var(--mos-panel, var(--mos-page));
         }
         .studio-ops-chat-main-head strong {
           display: block;
-          font-size: 14px;
-          font-weight: 650;
+          font-size: 13px;
+          font-weight: 600;
         }
         .studio-ops-chat-main-head .studio-muted {
-          font-size: 12px;
+          font-size: 10.5px;
         }
         .studio-ops-chat-main-actions {
           display: flex;
-          flex-wrap: wrap;
+          flex: 0 0 auto;
+          flex-wrap: nowrap;
           gap: 6px;
+        }
+        .studio-ops-chat-main-actions .studio-ops-chat-head-action {
+          width: 28px;
+          min-width: 28px;
+          height: 28px;
+          min-height: 28px;
+          padding: 0;
+        }
+        .studio-ops-chat-main-actions .studio-ops-chat-head-action.is-on {
+          border-color: color-mix(
+            in srgb,
+            var(--cursor-accent) 48%,
+            var(--color-cursor-border-soft)
+          );
+          background: color-mix(in srgb, var(--cursor-accent) 16%, var(--mos-plate-strong));
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-ops-chat-main-actions .studio-ops-chat-head-action.is-human {
+          border-color: color-mix(in srgb, #dc2626 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, #dc2626 12%, var(--mos-plate-strong));
+          color: #dc2626;
         }
         .studio-ops-activity {
           flex: 1 1 auto;

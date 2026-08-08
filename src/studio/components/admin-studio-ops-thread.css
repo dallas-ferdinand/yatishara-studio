@@ -1,0 +1,558 @@
+/* Sophie Ops WhatsApp thread.
+   Keep this scoped: Studio's general DM chat owns its own bubble system. */
+
+.studio-ops-wa-thread {
+  background: var(--mos-page, var(--color-cursor-bg));
+}
+
+.studio-ops-wa-thread .cs-ops-thread-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 16px 10px;
+  scrollbar-width: none;
+}
+
+.studio-ops-wa-thread .cs-ops-thread-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.studio-ops-wa-thread .cs-ops-thread-messages {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  width: 100%;
+  min-height: 100%;
+}
+
+.studio-ops-wa-thread .cs-ops-thread-empty {
+  min-height: 100%;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-ops-wa-thread .cs-ops-thread-empty p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.studio-ops-wa-thread .cs-ops-day-sep {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 10px 0 6px;
+  pointer-events: none;
+}
+
+.studio-ops-wa-thread .cs-ops-day-sep span {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--mos-plate, var(--mos-panel));
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: var(--desk-text-2xs, 10px);
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble-row {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble-row.is-mine {
+  justify-content: flex-end;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: min(72%, 42rem);
+  padding: 7px 10px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: 14px;
+  border-end-start-radius: 5px;
+  background: var(--mos-plate, var(--mos-panel));
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.studio-ops-wa-thread .cs-ops-bubble-row.is-mine .cs-ops-bubble {
+  border-radius: 14px;
+  border-end-end-radius: 5px;
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 26%,
+    var(--color-cursor-border-soft, var(--mos-border-soft))
+  );
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 16%,
+    var(--mos-plate, var(--mos-panel))
+  );
+}
+
+.studio-ops-wa-thread .cs-ops-bubble-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble p,
+.studio-ops-wa-thread .studio-ops-wa-text {
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.studio-ops-wa-thread .studio-ops-wa-text code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble-foot {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble-meta {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 0 2px 1px;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 9.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.studio-ops-wa-thread .cs-ops-wa-quote {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0 0 2px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.studio-ops-wa-thread .cs-ops-wa-quote-bar {
+  width: 3px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  background: var(--cursor-accent, var(--mos-accent));
+}
+
+.studio-ops-wa-thread .cs-ops-wa-quote-text {
+  display: -webkit-box;
+  overflow: hidden;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: 0.85;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble.is-media {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  max-width: min(78%, 20rem);
+  padding: 4px;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble.is-media .cs-ops-bubble-body > p {
+  padding-inline: 6px;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble.is-sticker {
+  max-width: min(46%, 9rem);
+  padding: 2px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.studio-ops-wa-thread .cs-ops-media-link {
+  display: block;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.studio-ops-wa-thread .cs-ops-media-img,
+.studio-ops-wa-thread .cs-ops-media-video {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent);
+  object-fit: cover;
+}
+
+.studio-ops-wa-thread .cs-ops-media-video {
+  background: #0b0b0b;
+  object-fit: contain;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble.is-sticker .cs-ops-media-img {
+  max-height: 140px;
+  background: transparent;
+  object-fit: contain;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble.is-audio {
+  max-width: min(92%, 22rem);
+  padding: 8px 10px 6px;
+}
+
+.studio-ops-wa-thread .cs-ops-audio-wrap {
+  display: grid;
+  min-width: 200px;
+}
+
+.studio-ops-wa-thread .cs-ops-audio {
+  width: 100%;
+  min-width: 190px;
+  height: 32px;
+}
+
+.studio-ops-wa-thread .cs-ops-media-missing {
+  margin: 0;
+  padding: 4px 8px;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 12px;
+  font-style: italic;
+}
+
+.studio-ops-wa-thread .cs-ops-doc-link,
+.studio-ops-wa-thread .cs-ops-loc-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.studio-ops-wa-thread .cs-ops-doc-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 16%, transparent);
+  color: var(--cursor-accent, var(--mos-accent));
+}
+
+.studio-ops-wa-thread .cs-ops-doc-meta,
+.studio-ops-wa-thread .cs-ops-contact,
+.studio-ops-wa-thread .cs-ops-loc-link {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.studio-ops-wa-thread .cs-ops-doc-meta strong,
+.studio-ops-wa-thread .cs-ops-contact strong,
+.studio-ops-wa-thread .cs-ops-loc-link strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-ops-wa-thread .cs-ops-doc-meta em,
+.studio-ops-wa-thread .cs-ops-contact em,
+.studio-ops-wa-thread .cs-ops-loc-link em {
+  overflow: hidden;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 10px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble.has-reactions {
+  margin-bottom: 10px;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble-reactions {
+  position: absolute;
+  z-index: 1;
+  inset-inline-start: 8px;
+  bottom: -11px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: calc(100% - 16px);
+}
+
+.studio-ops-wa-thread .cs-ops-bubble-row.is-mine .cs-ops-bubble-reactions {
+  inset-inline: auto 8px;
+  justify-content: flex-end;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble-reaction {
+  display: inline-flex;
+  min-width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--color-cursor-text) 14%, transparent);
+  border-radius: 999px;
+  background: var(--mos-page, var(--color-cursor-bg));
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 12%, transparent);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble-row.is-system {
+  justify-content: center;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble.is-system {
+  max-width: min(90%, 28rem);
+  padding: 2px 8px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble.is-system p {
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 11px;
+  font-style: italic;
+  text-align: center;
+}
+
+.studio-ops-wa-thread .cs-ops-bubble.is-interactive {
+  display: flex;
+  width: min(86%, 24rem);
+  max-width: min(86%, 24rem);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 6px;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive {
+  display: grid;
+  gap: 6px;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-kicker {
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-title {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-header,
+.studio-ops-wa-thread .cs-ops-interactive-card > img {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-cursor-text) 6%, transparent);
+  object-fit: cover;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 8px;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mos-page) 70%, transparent);
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-card > img {
+  border-radius: 0;
+  aspect-ratio: 1.15;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-card-copy {
+  display: grid;
+  gap: 3px;
+  padding: 3px 7px;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-card-copy strong {
+  font-size: 12px;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-card-copy em,
+.studio-ops-wa-thread .cs-ops-interactive-footer {
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 10px;
+  font-style: normal;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-list li {
+  display: grid;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-list em {
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 10px;
+  font-style: normal;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-btns {
+  display: grid;
+  gap: 4px;
+}
+
+.studio-ops-wa-thread .cs-ops-interactive-btn {
+  display: block;
+  padding: 6px 8px;
+  border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  color: var(--cursor-accent, var(--mos-accent));
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.studio-ops-wa-thread .cs-ops-composer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-panel, var(--mos-page));
+}
+
+.studio-ops-wa-thread .cs-ops-composer-row {
+  display: flex;
+  width: 100%;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.studio-ops-wa-thread .cs-ops-composer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 32px;
+  max-height: 120px;
+  resize: none;
+  padding: 7px 12px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  border-radius: 16px;
+  outline: none;
+  background: var(--cursor-surface-input, var(--mos-surface));
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  scrollbar-width: none;
+}
+
+.studio-ops-wa-thread .cs-ops-composer-input:focus-visible {
+  border-color: var(--cursor-border-focus, var(--cursor-accent, var(--mos-accent)));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 14%, transparent);
+}
+
+.studio-ops-wa-thread .cs-ops-composer-send {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--cursor-accent, var(--mos-accent));
+  color: var(--mos-accent-ink, #10140a);
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+
+.studio-ops-wa-thread .cs-ops-composer-send:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.studio-ops-wa-thread .cs-ops-composer-send:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 58%, transparent);
+  outline-offset: 2px;
+}
+
+.studio-ops-wa-thread .cs-ops-composer-send:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+@media (max-width: 760px) {
+  .studio-ops-wa-thread .cs-ops-thread-scroll {
+    padding-inline: 10px;
+  }
+
+  .studio-ops-wa-thread .cs-ops-bubble {
+    max-width: 88%;
+  }
+
+  .studio-ops-wa-thread .cs-ops-bubble.is-media,
+  .studio-ops-wa-thread .cs-ops-bubble.is-interactive {
+    max-width: 92%;
+  }
+}

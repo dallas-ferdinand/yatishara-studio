@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Phone } from "lucide-react";
+import { ArrowUp, Loader2, Phone } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { Icon } from "@/desk/components/Icons";
+import "./admin-studio-ops-thread.css";
 
 export type WaThreadMessage = {
   id?: string | null;
@@ -37,9 +38,26 @@ export type WaThreadMessage = {
   reactions?: Array<{ emoji: string; fromMe?: boolean }>;
   callStatus?: string | null;
   interactive?: {
+    variant?: string;
     body?: string;
     buttons?: Array<{ id?: string; label?: string }>;
     title?: string;
+    footer?: string;
+    selectedId?: string;
+    selectedText?: string;
+    rows?: Array<{
+      id?: string;
+      label?: string;
+      description?: string | null;
+      section?: string | null;
+    }>;
+    cards?: Array<{
+      title?: string | null;
+      body?: string | null;
+      footer?: string | null;
+      thumbDataUrl?: string | null;
+      buttons?: Array<{ id?: string; label?: string }>;
+    }>;
   } | null;
 };
 
@@ -58,6 +76,35 @@ function msgTime(ts?: number | string | null) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+  });
+}
+
+function messageDate(ts?: number | string | null) {
+  if (ts == null || ts === "") return null;
+  const n = Number(ts);
+  const ms = n > 1e12 ? n : n > 0 ? n * 1000 : Date.parse(String(ts));
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms);
+}
+
+function messageDayKey(ts?: number | string | null) {
+  const d = messageDate(ts);
+  if (!d) return "unknown";
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function messageDayLabel(ts?: number | string | null) {
+  const d = messageDate(ts);
+  if (!d) return "";
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
   });
 }
 
@@ -105,6 +152,118 @@ function foldThreadReactions(messages: WaThreadMessage[]) {
     if (!reactions?.length) return m;
     return { ...m, reactions };
   });
+}
+
+function WaInteractiveBody({
+  message,
+  caption,
+}: {
+  message: WaThreadMessage;
+  caption: string;
+}) {
+  const interactive = message.interactive || {};
+  const variant = String(interactive.variant || "interactive");
+  const cards = Array.isArray(interactive.cards) ? interactive.cards : [];
+  const buttons = Array.isArray(interactive.buttons) ? interactive.buttons : [];
+  const rows = Array.isArray(interactive.rows) ? interactive.rows : [];
+
+  if (variant === "reply") {
+    return (
+      <div className="cs-ops-interactive is-reply">
+        <span className="cs-ops-interactive-kicker">Tapped</span>
+        <WaRichText
+          text={interactive.selectedText || interactive.body || caption || "Selection"}
+        />
+      </div>
+    );
+  }
+
+  if (variant === "carousel" && cards.length) {
+    return (
+      <div className="cs-ops-interactive is-carousel">
+        {interactive.body ? <WaRichText text={interactive.body} /> : null}
+        <div className="cs-ops-interactive-cards" role="list">
+          {cards.map((card, index) => (
+            <div
+              className="cs-ops-interactive-card"
+              role="listitem"
+              key={`${card.title || card.body || "card"}-${index}`}
+            >
+              {card.thumbDataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={card.thumbDataUrl}
+                  alt={card.title || card.body || `Option ${index + 1}`}
+                />
+              ) : null}
+              <div className="cs-ops-interactive-card-copy">
+                {card.title ? <strong>{card.title}</strong> : null}
+                {card.body ? <WaRichText text={card.body} /> : null}
+                {card.footer ? <em>{card.footer}</em> : null}
+              </div>
+              {(card.buttons || []).length ? (
+                <div className="cs-ops-interactive-btns">
+                  {card.buttons!.map((button, buttonIndex) => (
+                    <span
+                      className="cs-ops-interactive-btn"
+                      key={`${button.id || button.label}-${buttonIndex}`}
+                    >
+                      {button.label || "Button"}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        {interactive.footer ? (
+          <em className="cs-ops-interactive-footer">{interactive.footer}</em>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`cs-ops-interactive is-${variant}`}>
+      {message.thumbDataUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="cs-ops-interactive-header" src={message.thumbDataUrl} alt="" />
+      ) : null}
+      {interactive.title ? (
+        <strong className="cs-ops-interactive-title">{interactive.title}</strong>
+      ) : null}
+      {interactive.body ? (
+        <WaRichText text={interactive.body} />
+      ) : caption && variant !== "list" ? (
+        <WaRichText text={caption} />
+      ) : null}
+      {variant === "list" && rows.length ? (
+        <ul className="cs-ops-interactive-list">
+          {rows.slice(0, 8).map((row, index) => (
+            <li key={`${row.id || row.label}-${index}`}>
+              <span>{row.label || "Option"}</span>
+              {row.description ? <em>{row.description}</em> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {buttons.length ? (
+        <div className="cs-ops-interactive-btns">
+          {buttons.map((button, index) => (
+            <span
+              className="cs-ops-interactive-btn"
+              key={`${button.id || button.label}-${index}`}
+            >
+              {button.label || "Button"}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {interactive.footer ? (
+        <em className="cs-ops-interactive-footer">{interactive.footer}</em>
+      ) : null}
+    </div>
+  );
 }
 
 function CsWaBubble({ m }: { m: WaThreadMessage }) {
@@ -246,20 +405,7 @@ function CsWaBubble({ m }: { m: WaThreadMessage }) {
       </div>
     );
   } else if (kind === "interactive") {
-    body = (
-      <div className="cs-ops-interactive">
-        <WaRichText text={caption || m.interactive?.body || "Message"} />
-        {(m.interactive?.buttons || []).length ? (
-          <div className="cs-ops-interactive-btns">
-            {m.interactive!.buttons!.map((b, i) => (
-              <span key={b.id || i} className="cs-ops-interactive-btn">
-                {b.label || "Button"}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    );
+    body = <WaInteractiveBody message={m} caption={caption} />;
   } else {
     body = <WaRichText text={caption || "[message]"} />;
   }
@@ -324,30 +470,55 @@ export function AdminStudioOpsThread({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const raw = (await getMessages({ phone, limit: 400 })) as {
         messages?: WaThreadMessage[];
       };
       setMessages(Array.isArray(raw?.messages) ? raw.messages : []);
     } catch (err) {
-      toast.error(friendlyConvexError(err, "Could not load WhatsApp thread"));
-      setMessages([]);
+      if (!quiet) {
+        toast.error(friendlyConvexError(err, "Could not load WhatsApp thread"));
+        setMessages([]);
+      }
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [getMessages, phone]);
 
   useEffect(() => {
     void load();
+    const timer = window.setInterval(() => void load(true), 5_000);
+    return () => window.clearInterval(timer);
   }, [load]);
 
   const folded = useMemo(() => foldThreadReactions(messages), [messages]);
+  const timeline = useMemo(() => {
+    const items: Array<
+      | { type: "day"; key: string; label: string }
+      | { type: "message"; key: string; message: WaThreadMessage }
+    > = [];
+    let previousDay = "";
+    folded.forEach((message, index) => {
+      const dayKey = messageDayKey(message.timestamp);
+      if (dayKey !== previousDay) {
+        const label = messageDayLabel(message.timestamp);
+        if (label) items.push({ type: "day", key: `day-${dayKey}-${index}`, label });
+        previousDay = dayKey;
+      }
+      items.push({
+        type: "message",
+        key: String(message.id || `${message.timestamp}-${index}`),
+        message,
+      });
+    });
+    return items;
+  }, [folded]);
 
   useLayoutEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [folded.length, phone, loading]);
+  }, [timeline.length, phone, loading]);
 
   async function onSend() {
     const text = draft.trim();
@@ -377,9 +548,15 @@ export function AdminStudioOpsThread({
           </div>
         ) : (
           <div className="cs-ops-thread-messages">
-            {folded.map((m, i) => (
-              <CsWaBubble key={m.id || `${m.timestamp}-${i}`} m={m} />
-            ))}
+            {timeline.map((item) =>
+              item.type === "day" ? (
+                <div key={item.key} className="cs-ops-day-sep" role="separator">
+                  <span>{item.label}</span>
+                </div>
+              ) : (
+                <CsWaBubble key={item.key} m={item.message} />
+              ),
+            )}
             <div ref={bottomRef} />
           </div>
         )}
@@ -387,22 +564,20 @@ export function AdminStudioOpsThread({
 
       <form
         className="cs-ops-composer"
+        title={
+          humanTakeover
+            ? "Human takeover is on — Sophie is paused."
+            : "Sending as staff turns on human takeover and pauses Sophie."
+        }
         onSubmit={(e) => {
           e.preventDefault();
           void onSend();
         }}
       >
-        {!humanTakeover ? (
-          <p className="cs-ops-composer-hint">
-            Sending as staff turns on human takeover (Sophie pauses).
-          </p>
-        ) : (
-          <p className="cs-ops-composer-hint">Human takeover on — Sophie won’t reply.</p>
-        )}
         <div className="cs-ops-composer-row">
           <textarea
             className="cs-ops-composer-input"
-            rows={2}
+            rows={1}
             value={draft}
             placeholder="Message on WhatsApp…"
             disabled={sending}
@@ -418,8 +593,13 @@ export function AdminStudioOpsThread({
             type="submit"
             className="cs-ops-composer-send"
             disabled={sending || !draft.trim()}
+            aria-label={sending ? "Sending message" : "Send message"}
           >
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+            {sending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ArrowUp className="h-4 w-4" aria-hidden />
+            )}
           </button>
         </div>
       </form>
