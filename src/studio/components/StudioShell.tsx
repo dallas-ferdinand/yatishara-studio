@@ -21243,7 +21243,7 @@ export function StudioShell({
           position: relative;
           width: 100%;
           max-width: 100%;
-          aspect-ratio: 16 / 9;
+          aspect-ratio: 16 / 10;
           height: auto;
           max-height: none;
           border-radius: var(--cursor-radius-lg, 12px);
