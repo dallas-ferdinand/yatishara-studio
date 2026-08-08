@@ -4,6 +4,34 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { purchaseCourseForUser } from "./lib/academyPurchase";
 import type { MutationCtx } from "./_generated/server";
+import { CN_CARD_TRANSFORM, signBunnyThumbUrl } from "./lib/bunny";
+
+const COVER_URL_TTL_SEC = 60 * 60 * 6;
+
+async function courseCoverUrl(
+  path: string | undefined,
+): Promise<string | undefined> {
+  if (!path) return undefined;
+  const expires = Math.floor(Date.now() / 1000) + COVER_URL_TTL_SEC;
+  try {
+    return await signBunnyThumbUrl(path, expires, CN_CARD_TRANSFORM);
+  } catch {
+    return undefined;
+  }
+}
+
+function blurbFromMarkdown(md: string, max = 160): string {
+  const plain = String(md || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]*`/g, " ")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[[^\]]*]\([^)]*\)/g, "$1")
+    .replace(/[#>*_~`-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (plain.length <= max) return plain;
+  return `${plain.slice(0, max - 1).trimEnd()}…`;
+}
 
 function normalizePhone(raw: string): string {
   return String(raw || "").replace(/\D/g, "");
@@ -78,7 +106,9 @@ export const internalListPublishedCourses = internalQuery({
       _id: v.id("academyCourses"),
       title: v.string(),
       slug: v.string(),
+      blurb: v.string(),
       priceCredits: v.number(),
+      coverUrl: v.optional(v.string()),
     }),
   ),
   handler: async (ctx) => {
@@ -87,12 +117,18 @@ export const internalListPublishedCourses = internalQuery({
       .withIndex("by_status_and_sort", (q) => q.eq("status", "published"))
       .collect();
     rows.sort((a, b) => a.sortOrder - b.sortOrder || b.updatedAt - a.updatedAt);
-    return rows.map((c) => ({
-      _id: c._id,
-      title: c.title,
-      slug: c.slug,
-      priceCredits: c.priceCredits,
-    }));
+    const out = [];
+    for (const c of rows) {
+      out.push({
+        _id: c._id,
+        title: c.title,
+        slug: c.slug,
+        blurb: blurbFromMarkdown(c.descriptionMarkdown),
+        priceCredits: c.priceCredits,
+        coverUrl: await courseCoverUrl(c.coverBunnyPath),
+      });
+    }
+    return out;
   },
 });
 
