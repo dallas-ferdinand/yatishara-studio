@@ -225,6 +225,11 @@ import {
 import { StudioCreativeNetworkSidebar } from "./StudioCreativeNetworkSidebar";
 import { StudioAcademySidebar } from "./StudioAcademySidebar";
 import { StudioAcademyProvider } from "./StudioAcademyContext";
+import {
+  AdminStudioOpsProvider,
+  useAdminStudioOpsOptional,
+} from "./AdminStudioOpsContext";
+import { AdminStudioOpsSidebar } from "./AdminStudioOpsSidebar";
 import { StudioCreativeNetworkStore } from "./StudioCreativeNetworkStore";
 import { StudioOnlinePresence } from "./StudioOnlinePresence";
 import {
@@ -8222,6 +8227,7 @@ export function StudioShell({
     isNetworkRail && !pickingFromFiles && cnMode !== "my-assets";
   const networkUsesFilesRail = isNetworkRail && cnMode === "my-assets";
   const effectiveAcademyRail = isAcademyRail && !pickingFromFiles;
+  const adminOpsTabActive = activeAdminTab === "ops";
 
   // My Assets: keep left rail on Your files (not the CN store browse strip).
   useEffect(() => {
@@ -8359,6 +8365,7 @@ export function StudioShell({
   }, [isMobile]);
 
   return (
+    <AdminStudioOpsProvider active={adminOpsTabActive}>
     <StudioAcademyProvider
       creditPriceCents={pricing?.creditPriceCents}
       initialCourseId={
@@ -14384,6 +14391,25 @@ export function StudioShell({
         }
         .studio-ops-chats.has-selected {
           grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(260px, 320px);
+        }
+        /* Chat list lives in the Studio left rail (like DMs) — pane is main + peer only. */
+        .studio-ops-chats.is-rail-layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .studio-ops-chats.is-rail-layout.has-selected {
+          grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+        }
+        .studio-ops-rail-sidebar {
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+        .studio-ops-rail-list {
+          list-style: none;
+          margin: 0;
+          padding: 4px 6px 8px;
+        }
+        .studio-ops-rail-list > li {
+          margin: 0;
         }
         .studio-ops-chat-rail,
         .studio-ops-chat-main,
@@ -22778,20 +22804,17 @@ export function StudioShell({
         }${sharingToPeople ? " is-share-people" : ""}`}
       >
         <div className={STYLE.panelHead}>
-          {effectiveFilesRail ? (
-            <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-sidebar-brand min-w-0">
-              <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span className="studio-sidebar-brand-label truncate">Files</span>
-            </div>
-          ) : (
-            <StudioSidebarBrand />
-          )}
-          {!effectiveSocialRail &&
-          !effectiveMessagesRail &&
-          !effectiveNetworkRail &&
-          !effectiveAcademyRail &&
-          !effectiveFilesRail &&
-          !sharingToPeople ? (
+          <StudioShellSidebarBrand effectiveFilesRail={effectiveFilesRail} />
+          <StudioShellSidebarHeadExtras
+            showExplorerTools={
+              !effectiveSocialRail &&
+              !effectiveMessagesRail &&
+              !effectiveNetworkRail &&
+              !effectiveAcademyRail &&
+              !effectiveFilesRail &&
+              !sharingToPeople
+            }
+          >
             <div className="flex items-center gap-1">
               <StudioAddMenu
                 open={addMenuOpen}
@@ -22808,7 +22831,7 @@ export function StudioShell({
                 {viewMode === "grid" ? <List className="h-3.5 w-3.5" /> : <LayoutGrid className="h-3.5 w-3.5" />}
               </button>
             </div>
-          ) : null}
+          </StudioShellSidebarHeadExtras>
           <input
             ref={fileInputRef}
             className="hidden"
@@ -22850,7 +22873,9 @@ export function StudioShell({
             onOpenProfile={openPublicProfile}
             onOpenFeedPost={(postId) => openProfilePost("", postId)}
           />
-        ) : effectiveFilesRail ? (
+        ) : (
+          <StudioAdminOpsRailSlot pickingFromFiles={pickingFromFiles}>
+        {effectiveFilesRail ? (
           <StudioFilesNavPane
             activeFolderId={activeFolderId}
             workspaceRootId={filesNavWorkspaceRootId}
@@ -23023,6 +23048,8 @@ export function StudioShell({
             onNeedTopUp={openCreditsPane}
           />
           </>
+        )}
+          </StudioAdminOpsRailSlot>
         )}
         {pickingFromFiles ? (
           <div className="studio-asset-pick-chrome">
@@ -24713,6 +24740,7 @@ export function StudioShell({
     </div>
     </StudioCreativeNetworkProvider>
     </StudioAcademyProvider>
+    </AdminStudioOpsProvider>
   );
 }
 
@@ -32317,6 +32345,44 @@ function StudioFilesMobileSheet({
       </div>
     </div>
   );
+}
+
+/** Brand in the left rail — Ops Chats swaps the Files/Studio title like Messages. */
+function StudioShellSidebarBrand({ effectiveFilesRail }) {
+  const ops = useAdminStudioOpsOptional();
+  if (ops?.active && ops.opsTab === "chats") {
+    return (
+      <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-sidebar-brand min-w-0">
+        <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span className="studio-sidebar-brand-label truncate">Ops</span>
+      </div>
+    );
+  }
+  if (effectiveFilesRail) {
+    return (
+      <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-sidebar-brand min-w-0">
+        <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span className="studio-sidebar-brand-label truncate">Files</span>
+      </div>
+    );
+  }
+  return <StudioSidebarBrand />;
+}
+
+function StudioShellSidebarHeadExtras({ showExplorerTools, children }) {
+  const ops = useAdminStudioOpsOptional();
+  if (ops?.active && ops.opsTab === "chats") return null;
+  if (!showExplorerTools) return null;
+  return children;
+}
+
+/** When Admin → Ops → Chats is open, replace the file explorer with Sophie chat list. */
+function StudioAdminOpsRailSlot({ pickingFromFiles, children }) {
+  const ops = useAdminStudioOpsOptional();
+  if (!pickingFromFiles && ops?.active && ops.opsTab === "chats") {
+    return <AdminStudioOpsSidebar />;
+  }
+  return children;
 }
 
 /** Feed/Profile left rail: same Messages list ↔ inline chat as My offers/jobs. */
