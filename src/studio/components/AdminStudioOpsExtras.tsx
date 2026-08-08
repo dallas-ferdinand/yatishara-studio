@@ -3,7 +3,7 @@
 /**
  * Extra Ops boards + controls ported from Desk CS Ops (Academy-safe subset).
  */
-import { Bell, Loader2, OctagonX, Zap } from "lucide-react";
+import { Baby, Bell, Loader2, OctagonX, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
@@ -79,67 +79,75 @@ export function OpsFilterPills({
 }
 
 export function OpsBabysitBar({ session }: { session: SessionRow }) {
-  const { setBabysit, approveBabysit, discardBabysit, afterMutate, busy } =
+  const { approveBabysit, discardBabysit, afterMutate, busy } =
     useAdminStudioOps();
   const pending = session.babysit?.pending;
-  const enabled = Boolean(session.babysit?.enabled || session.babysit_enabled);
+  if (!pending) return null;
   return (
     <div className="studio-ops-babysit-bar">
-      <label className="studio-ops-babysit-toggle">
-        <input
-          type="checkbox"
-          checked={enabled}
-          disabled={!!busy}
-          onChange={() =>
-            void setBabysit({ phone: session.phone, enabled: !enabled }).then(
-              afterMutate,
-            )
-          }
-        />
-        Babysit (approve before send)
-      </label>
-      {pending ? (
-        <div className="studio-ops-babysit-draft">
-          <p>{pending.preview || pending.text}</p>
-          <div className="studio-ops-babysit-actions">
-            <button
-              type="button"
-              className="cursor-settings-action"
-              disabled={!!busy}
-              onClick={() =>
-                void approveBabysit({ phone: session.phone })
-                  .then(afterMutate)
-                  .then(() => toast.success("Approved & sent"))
-              }
-            >
-              Approve
-            </button>
-            <button
-              type="button"
-              className="cursor-settings-action"
-              disabled={!!busy}
-              onClick={() =>
-                void discardBabysit({ phone: session.phone })
-                  .then(afterMutate)
-                  .then(() => toast.message("Draft discarded"))
-              }
-            >
-              Discard
-            </button>
-          </div>
+      <div className="studio-ops-babysit-draft">
+        <p>{pending.preview || pending.text}</p>
+        <div className="studio-ops-babysit-actions">
+          <button
+            type="button"
+            className="cursor-settings-action"
+            disabled={!!busy}
+            onClick={() =>
+              void approveBabysit({ phone: session.phone })
+                .then(afterMutate)
+                .then(() => toast.success("Approved & sent"))
+            }
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            className="cursor-settings-action"
+            disabled={!!busy}
+            onClick={() =>
+              void discardBabysit({ phone: session.phone })
+                .then(afterMutate)
+                .then(() => toast.message("Draft discarded"))
+            }
+          >
+            Discard
+          </button>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
 
 export function OpsHeadExtraActions({ session }: { session: SessionRow }) {
-  const { nudge, stopAgent, escalate, afterMutate, busy } = useAdminStudioOps();
+  const { nudge, stopAgent, escalate, setBabysit, afterMutate, busy } =
+    useAdminStudioOps();
   const running = Boolean(
     session.working?.sophie || session.status === "running",
   );
+  const babysitOn = Boolean(
+    session.babysit?.enabled || session.babysit_enabled,
+  );
   return (
     <>
+      <button
+        type="button"
+        className={`studio-composer-circle-btn studio-ops-chat-head-action${babysitOn ? " is-on" : ""}`}
+        disabled={!!busy}
+        title={
+          babysitOn
+            ? "Babysit on — approve before send"
+            : "Babysit off — toggle to approve before send"
+        }
+        aria-label={babysitOn ? "Turn babysit off" : "Turn babysit on"}
+        aria-pressed={babysitOn}
+        onClick={() =>
+          void setBabysit({ phone: session.phone, enabled: !babysitOn }).then(
+            afterMutate,
+          )
+        }
+      >
+        <Baby className="h-3.5 w-3.5" />
+      </button>
       <button
         type="button"
         className="studio-composer-circle-btn studio-ops-chat-head-action"
