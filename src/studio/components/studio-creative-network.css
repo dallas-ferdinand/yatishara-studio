@@ -273,7 +273,7 @@
 .studio-academy-checkout-amount {
   margin: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: baseline;
   gap: 8px;
   font-size: 22px;
@@ -290,9 +290,9 @@
 
 .studio-academy-checkout-price-was {
   white-space: nowrap;
-  font-size: 0.62em;
+  font-size: 0.58em;
   font-weight: 550;
-  opacity: 0.5;
+  opacity: 0.48;
 }
 
 .studio-academy-checkout-chips {

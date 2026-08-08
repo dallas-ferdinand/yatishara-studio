@@ -232,9 +232,6 @@ function CheckoutDock({
               {onSale && listPriceLabel ? (
                 <s className="studio-academy-checkout-price-was">{listPriceLabel}</s>
               ) : null}
-              {onSale && discountLabel && !owned ? (
-                <span className="studio-academy-price-save">−{discountLabel}</span>
-              ) : null}
             </strong>
           </div>
         </header>
