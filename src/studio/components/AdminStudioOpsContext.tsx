@@ -725,6 +725,10 @@ export function AdminStudioOpsProvider({
     async ({ phone }: { phone: string }) => {
       const p = String(phone || "").replace(/\D/g, "");
       if (!p) throw new Error("phone required");
+      if (p !== "18684762078") {
+        toast.error("Reset is only available for your test number");
+        throw new Error("reset_not_allowed");
+      }
       setBusy(`reset:${p}`);
       try {
         const res = (await resetChatAction({ phone: p })) as {
@@ -734,9 +738,11 @@ export function AdminStudioOpsProvider({
         if (res?.ok === false) {
           throw new Error(res.error || "Reset failed");
         }
+        setSelectedPhone(null);
+        setDetail(null);
         setThreadEpoch((n) => n + 1);
         await afterMutate();
-        toast.success("Chat context reset");
+        toast.success("Customer deleted from Ops");
         return res;
       } catch (err) {
         toast.error(friendlyConvexError(err, "Could not reset chat"));
