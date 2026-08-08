@@ -14,8 +14,11 @@ import {
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
   money,
+  sessionAvatarSrc,
+  sessionTitle,
   useAdminStudioOps,
   whenLabel,
   type OpsTab,
@@ -170,14 +173,23 @@ export function AdminStudioOpsPane() {
               ) : (
                 <>
                   <header className="studio-ops-chat-main-head">
-                    <div>
-                      <strong>{selected.display_name || selected.phone}</strong>
-                      <span className="studio-muted">
-                        {selected.phone}
-                        {selected.payment_state
-                          ? ` · ${selected.payment_state}`
-                          : ""}
-                      </span>
+                    <div className="studio-ops-chat-main-peer">
+                      <StudioProfileAvatar
+                        size="sm"
+                        src={sessionAvatarSrc(selected.phone)}
+                        displayName={sessionTitle(selected)}
+                        name={selected.phone}
+                        alt=""
+                      />
+                      <div>
+                        <strong>{sessionTitle(selected)}</strong>
+                        <span className="studio-muted">
+                          {selected.phone_display || selected.phone}
+                          {selected.payment_state
+                            ? ` · ${selected.payment_state}`
+                            : ""}
+                        </span>
+                      </div>
                     </div>
                     <div className="studio-ops-chat-main-actions">
                       <button

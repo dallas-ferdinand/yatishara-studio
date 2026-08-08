@@ -36,9 +36,12 @@ export type DeviceStatus = {
 
 export type SessionRow = {
   phone: string;
+  phone_display?: string | null;
   display_name?: string | null;
+  client_name?: string | null;
   cs_status?: string;
   statuses?: string[];
+  cs_statuses?: string[];
   agent_enabled?: number;
   human_takeover?: number;
   payment_state?: string;
@@ -46,8 +49,28 @@ export type SessionRow = {
   followup_note?: string | null;
   notes?: string | null;
   last_inbound_at?: string | null;
+  last_message_at?: string | null;
   updated_at?: string | null;
+  preview?: string | null;
+  avatar_url?: string | null;
+  badges?: string[];
+  working?: { sophie?: boolean; csr?: boolean };
+  status?: string | null;
 };
+
+export function sessionTitle(s: SessionRow | null | undefined) {
+  if (!s) return "";
+  return (
+    String(s.client_name || s.display_name || "").trim() ||
+    s.phone_display ||
+    s.phone
+  );
+}
+
+export function sessionAvatarSrc(phone: string) {
+  const p = String(phone || "").replace(/\D/g, "");
+  return p ? `/api/studio-ops/avatar/${encodeURIComponent(p)}` : null;
+}
 
 export type PaymentRow = {
   id: number;
@@ -300,6 +323,22 @@ export function AdminStudioOpsProvider({
     void refresh();
   }, [active, refresh]);
 
+  // Poll while Sophie is running so CSR-style working badges clear (Desk parity).
+  useEffect(() => {
+    if (!active || opsTab !== "chats") return;
+    const anyRunning = sessions.some(
+      (s) =>
+        s.working?.sophie ||
+        s.status === "running" ||
+        (s.badges || []).includes("sophie"),
+    );
+    if (!anyRunning) return;
+    const id = window.setInterval(() => {
+      void refresh();
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [active, opsTab, sessions, refresh]);
+
   useEffect(() => {
     if (!active || !selectedPhone) {
       if (!selectedPhone) setDetail(null);
@@ -325,10 +364,13 @@ export function AdminStudioOpsProvider({
       }
       if (!q) return true;
       const hay = [
+        s.client_name,
         s.display_name,
         s.phone,
+        s.phone_display,
+        s.preview,
         s.payment_state,
-        ...(s.statuses || []),
+        ...(s.statuses || s.cs_statuses || []),
         s.cs_status,
       ]
         .filter(Boolean)

@@ -1,16 +1,29 @@
 "use client";
 
-import { ArrowDown, Loader2, RefreshCw, Tags, X } from "lucide-react";
+import {
+  ArrowDown,
+  Bot,
+  Eye,
+  Loader2,
+  RefreshCw,
+  Tags,
+  UserRound,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { Icon } from "@/desk/components/Icons";
 import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
+import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
+  sessionAvatarSrc,
+  sessionTitle,
   statusLabel,
   useAdminStudioOps,
   whenLabel,
   type ChatFilterId,
+  type SessionRow,
   type StatusOpt,
 } from "./AdminStudioOpsContext";
 import "./studio-messages.css";
@@ -114,7 +127,134 @@ function OpsChatFilter({
   );
 }
 
-/** Chat list for the Studio left rail — same chrome as Messages / file manager swap. */
+function MetaBadge({
+  kind,
+  label,
+  spinning = false,
+}: {
+  kind: string;
+  label: string;
+  spinning?: boolean;
+}) {
+  return (
+    <span
+      className={`studio-ops-meta-badge is-${kind}${spinning ? " is-working" : ""}`}
+      title={spinning ? `${label} working` : label}
+    >
+      {spinning ? (
+        <Loader2 className="h-2.5 w-2.5 animate-spin" aria-hidden={true} />
+      ) : kind === "agent" ? (
+        <Bot className="h-2.5 w-2.5" aria-hidden={true} />
+      ) : kind === "human" ? (
+        <UserRound className="h-2.5 w-2.5" aria-hidden={true} />
+      ) : kind === "watch" ? (
+        <Eye className="h-2.5 w-2.5" aria-hidden={true} />
+      ) : (
+        <Bot className="h-2.5 w-2.5" aria-hidden={true} />
+      )}
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function OpsConversationRow({
+  session,
+  active,
+  pending,
+  statusCatalog,
+  onSelect,
+}: {
+  session: SessionRow;
+  active: boolean;
+  pending: number;
+  statusCatalog: StatusOpt[];
+  onSelect: () => void;
+}) {
+  const title = sessionTitle(session);
+  const preview = String(session.preview || "").trim() || "Tap to open";
+  const avatarSrc = sessionAvatarSrc(session.phone);
+  const running = Boolean(
+    session.working?.sophie ||
+      session.working?.csr ||
+      session.status === "running" ||
+      (session.badges || []).includes("sophie"),
+  );
+  const labels = (session.statuses || session.cs_statuses || []).filter(Boolean);
+  const badges = (session.badges || []).filter((b) => b !== "sophie");
+
+  return (
+    <button
+      type="button"
+      className={`studio-dm-row studio-ops-dm-row${active ? " is-active" : ""}${pending > 0 ? " is-unread" : ""}`}
+      onClick={onSelect}
+    >
+      <span className="studio-dm-row-main">
+        <span className="studio-dm-row-avatar-wrap">
+          <StudioProfileAvatar
+            size="sm"
+            src={avatarSrc}
+            displayName={title}
+            name={session.phone}
+            alt=""
+          />
+        </span>
+        <span className="studio-dm-row-copy">
+          <span className="studio-dm-row-top">
+            <strong title={`${title} · ${session.phone_display || session.phone}`}>
+              <span className="studio-dm-name-text">{title}</span>
+            </strong>
+            <time>
+              {whenLabel(
+                session.last_message_at ||
+                  session.last_inbound_at ||
+                  session.updated_at,
+              )}
+            </time>
+          </span>
+          <span className="studio-dm-row-bottom">
+            <span className="studio-dm-row-preview">{preview}</span>
+            {pending > 0 ? (
+              <span className="studio-dm-unread-dot" aria-label="Needs approval" />
+            ) : null}
+          </span>
+          {running || badges.length > 0 ? (
+            <span className="studio-ops-row-badges">
+              {running ? (
+                <MetaBadge kind="sophie" label="Sophie" spinning />
+              ) : null}
+              {badges.map((b) => (
+                <MetaBadge
+                  key={b}
+                  kind={b}
+                  label={
+                    b === "agent"
+                      ? "Agent"
+                      : b === "human"
+                        ? "Human"
+                        : b === "watch"
+                          ? "Watch"
+                          : b
+                  }
+                />
+              ))}
+            </span>
+          ) : null}
+        </span>
+      </span>
+      {labels.length > 0 ? (
+        <span className="studio-dm-row-labels" aria-label="Labels">
+          {labels.slice(0, 4).map((id) => (
+            <span key={String(id)} className="studio-dm-row-label" title={String(id)}>
+              {statusLabel(String(id), statusCatalog)}
+            </span>
+          ))}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+/** Chat list for the Studio left rail — DM bubble rows + Desk-like working tags. */
 export function AdminStudioOpsSidebar() {
   const {
     search,
@@ -200,62 +340,29 @@ export function AdminStudioOpsSidebar() {
       </div>
 
       <div className="studio-dm-sidebar-body">
-        <ul className="studio-dm-conversations studio-ops-rail-list">
+        <div className="studio-dm-conversations studio-ops-rail-list">
           {filteredSessions.length === 0 ? (
-            <li className="studio-ops-empty-card">
+            <div className="studio-ops-empty-card">
               <strong>{sessions.length ? "No matches" : "No chats yet"}</strong>
               <span>
                 {sessions.length
                   ? "Try a different search or label."
                   : "Sophie’s inbound DMs will show here."}
               </span>
-            </li>
+            </div>
           ) : (
-            filteredSessions.map((s) => {
-              const labels = (s.statuses || [s.cs_status]).filter(Boolean);
-              const pending = pendingByPhone.get(s.phone) || 0;
-              return (
-                <li key={s.phone}>
-                  <button
-                    type="button"
-                    className={`studio-ops-chat-row${selectedPhone === s.phone ? " is-active" : ""}`}
-                    onClick={() => setSelectedPhone(s.phone)}
-                  >
-                    <div className="studio-ops-chat-row-top">
-                      <strong title={s.display_name || s.phone}>
-                        {s.display_name || s.phone}
-                      </strong>
-                      <time>
-                        {whenLabel(s.last_inbound_at || s.updated_at)}
-                      </time>
-                    </div>
-                    <div className="studio-ops-chat-row-meta">
-                      <span>
-                        {s.payment_state || "unpaid"}
-                        {s.human_takeover ? " · human" : ""}
-                        {!s.agent_enabled ? " · agent off" : ""}
-                      </span>
-                      {pending > 0 ? (
-                        <span className="studio-ops-chip is-wait">
-                          {pending} approval{pending === 1 ? "" : "s"}
-                        </span>
-                      ) : null}
-                    </div>
-                    {labels.length ? (
-                      <div className="studio-ops-chat-row-tags">
-                        {labels.slice(0, 3).map((id) => (
-                          <span key={String(id)} className="studio-ops-chip">
-                            {statusLabel(String(id), statusCatalog)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })
+            filteredSessions.map((s) => (
+              <OpsConversationRow
+                key={s.phone}
+                session={s}
+                active={selectedPhone === s.phone}
+                pending={pendingByPhone.get(s.phone) || 0}
+                statusCatalog={statusCatalog}
+                onSelect={() => setSelectedPhone(s.phone)}
+              />
+            ))
           )}
-        </ul>
+        </div>
       </div>
     </div>
   );
