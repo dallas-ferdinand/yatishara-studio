@@ -3,7 +3,7 @@
 /**
  * Extra Ops boards + controls ported from Desk CS Ops (Academy-safe subset).
  */
-import { Baby, Bell, Loader2, OctagonX, Zap } from "lucide-react";
+import { Baby, Bell, CalendarClock, CreditCard, FileText, ImageIcon, Loader2, OctagonX, StickyNote, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
@@ -16,6 +16,24 @@ import {
   type PaymentRow,
   type SessionRow,
 } from "./AdminStudioOpsContext";
+
+function OpsEmptyState({
+  icon: Icon,
+  title,
+  body,
+}: {
+  icon: typeof StickyNote;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="studio-ops-empty-state" role="status">
+      <Icon aria-hidden />
+      <strong>{title}</strong>
+      <p>{body}</p>
+    </div>
+  );
+}
 
 export function OpsKillSwitchBanner() {
   const { serviceEnabled } = useAdminStudioOps();
@@ -219,7 +237,11 @@ export function OpsFollowupsBoard() {
         </button>
       </header>
       {followups.length === 0 ? (
-        <p className="studio-muted">No scheduled follow-ups.</p>
+        <OpsEmptyState
+          icon={CalendarClock}
+          title="No follow-ups"
+          body="When Sophie schedules a follow-up, it shows up here."
+        />
       ) : (
         <ul className="studio-ops-board-list">
           {followups.map((s) => (
@@ -258,7 +280,11 @@ export function OpsApprovalsBoard() {
         <strong>Payment approvals</strong>
       </header>
       {pendingPayments.length === 0 ? (
-        <p className="studio-muted">Nothing pending.</p>
+        <OpsEmptyState
+          icon={CreditCard}
+          title="No approvals waiting"
+          body="Payment receipts Sophie flags for review will land here."
+        />
       ) : (
         <ul className="studio-ops-board-list">
           {pendingPayments.map((p: PaymentRow) => (
@@ -313,97 +339,44 @@ export function OpsApprovalsBoard() {
   );
 }
 
-export function OpsNotesEditor({
-  phone,
-  notes,
-}: {
-  phone: string;
-  notes: string;
-}) {
-  const { setNotes, afterMutate, busy } = useAdminStudioOps();
-  const [draft, setDraft] = useState(notes);
-  useEffect(() => setDraft(notes), [notes, phone]);
-  return (
-    <div className="studio-ops-editor">
-      <textarea
-        value={draft}
-        rows={6}
-        placeholder="Owner notes…"
-        onChange={(e) => setDraft(e.target.value)}
+export function OpsNotesPanel({ notes }: { notes: string }) {
+  const text = String(notes || "").trim();
+  if (!text) {
+    return (
+      <OpsEmptyState
+        icon={StickyNote}
+        title="No notes yet"
+        body="Sophie and the agent write notes here — there’s no manual create."
       />
-      <button
-        type="button"
-        className="cursor-settings-action"
-        disabled={!!busy || draft === notes}
-        onClick={() =>
-          void setNotes({ phone, notes: draft })
-            .then(afterMutate)
-            .then(() => toast.success("Notes saved"))
-        }
-      >
-        Save notes
-      </button>
+    );
+  }
+  return (
+    <div className="studio-ops-readout" aria-label="Owner notes">
+      <p>{text}</p>
     </div>
   );
 }
 
-export function OpsFollowupEditor({
-  phone,
+export function OpsFollowupPanel({
   at,
   note,
 }: {
-  phone: string;
   at?: string | null;
   note?: string | null;
 }) {
-  const { setFollowup, afterMutate, busy } = useAdminStudioOps();
-  const [atIso, setAtIso] = useState(at || "");
-  const [body, setBody] = useState(note || "");
-  useEffect(() => {
-    setAtIso(at || "");
-    setBody(note || "");
-  }, [at, note, phone]);
+  if (!at) {
+    return (
+      <OpsEmptyState
+        icon={CalendarClock}
+        title="No follow-up set"
+        body="Follow-ups are scheduled by Sophie — open the Follow-ups board to see what’s due."
+      />
+    );
+  }
   return (
-    <div className="studio-ops-editor">
-      <input
-        type="datetime-local"
-        value={atIso ? atIso.slice(0, 16) : ""}
-        onChange={(e) =>
-          setAtIso(e.target.value ? new Date(e.target.value).toISOString() : "")
-        }
-      />
-      <textarea
-        value={body}
-        rows={3}
-        placeholder="Follow-up note…"
-        onChange={(e) => setBody(e.target.value)}
-      />
-      <div className="studio-ops-babysit-actions">
-        <button
-          type="button"
-          className="cursor-settings-action"
-          disabled={!!busy || !atIso}
-          onClick={() =>
-            void setFollowup({ phone, atIso, note: body })
-              .then(afterMutate)
-              .then(() => toast.success("Follow-up saved"))
-          }
-        >
-          Save follow-up
-        </button>
-        {at ? (
-          <button
-            type="button"
-            className="cursor-settings-action"
-            disabled={!!busy}
-            onClick={() =>
-              void setFollowup({ phone, clear: true }).then(afterMutate)
-            }
-          >
-            Clear
-          </button>
-        ) : null}
-      </div>
+    <div className="studio-ops-readout" aria-label="Follow-up">
+      <strong>{whenLabel(at)}</strong>
+      <p>{String(note || "").trim() || "No note on this follow-up."}</p>
     </div>
   );
 }
@@ -414,7 +387,13 @@ export function OpsActivityFeed({
   activity: Array<{ id: number; kind: string; body?: string | null; created_at?: string }>;
 }) {
   if (!activity.length) {
-    return <p className="studio-muted studio-ops-peer-hint">No activity yet.</p>;
+    return (
+      <OpsEmptyState
+        icon={FileText}
+        title="No activity yet"
+        body="Inbound actions, tool runs, and status changes will show up here."
+      />
+    );
   }
   return (
     <ul className="studio-ops-activity-list">
@@ -435,7 +414,13 @@ export function OpsMediaRail({
   media: Array<{ id: number; path: string; role?: string | null }>;
 }) {
   if (!media.length) {
-    return <p className="studio-muted studio-ops-peer-hint">No saved media.</p>;
+    return (
+      <OpsEmptyState
+        icon={ImageIcon}
+        title="No media saved"
+        body="Receipts and attachments Sophie saves for this chat appear here."
+      />
+    );
   }
   return (
     <ul className="studio-ops-media-list">
@@ -446,6 +431,16 @@ export function OpsMediaRail({
         </li>
       ))}
     </ul>
+  );
+}
+
+export function OpsPaymentsEmpty() {
+  return (
+    <OpsEmptyState
+      icon={CreditCard}
+      title="No payments yet"
+      body="When a customer sends a receipt or Sophie logs a payment attempt, it shows here."
+    />
   );
 }
 

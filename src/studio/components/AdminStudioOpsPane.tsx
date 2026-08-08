@@ -16,12 +16,13 @@ import {
   OpsApprovalsBoard,
   OpsBabysitBar,
   OpsActivityFeed,
-  OpsFollowupEditor,
+  OpsFollowupPanel,
   OpsFollowupsBoard,
   OpsHeadExtraActions,
   OpsKillSwitchBanner,
   OpsMediaRail,
-  OpsNotesEditor,
+  OpsNotesPanel,
+  OpsPaymentsEmpty,
   OpsSettingsExtras,
   OpsStartChatForm,
 } from "./AdminStudioOpsExtras";
@@ -412,12 +413,11 @@ export function AdminStudioOpsPane() {
           </div>
           <div className="studio-ops-chat-peer-scroll">
             {actionTab === "notes" ? (
-              <OpsNotesEditor phone={selected.phone} notes={agentNotes} />
+              <OpsNotesPanel notes={agentNotes} />
             ) : null}
 
             {actionTab === "followups" ? (
-              <OpsFollowupEditor
-                phone={selected.phone}
+              <OpsFollowupPanel
                 at={selected.followup_at}
                 note={selected.followup_note}
               />
@@ -457,9 +457,7 @@ export function AdminStudioOpsPane() {
 
             {actionTab === "payments" ? (
               (detail?.payments || []).length === 0 ? (
-                <p className="studio-muted studio-ops-peer-hint">
-                  No payment attempts yet.
-                </p>
+                <OpsPaymentsEmpty />
               ) : (
                 <ul className="studio-ops-pay-list">
                   {(detail?.payments || []).map((p) => (

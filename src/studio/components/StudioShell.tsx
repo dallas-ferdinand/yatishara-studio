@@ -15039,14 +15039,6 @@ export function StudioShell({
           min-height: 24px;
           padding: 0;
         }
-        .studio-ops-reset-banner {
-          flex: 0 0 auto;
-          margin: 0;
-          padding: 6px 10px;
-          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
-          font-size: 11px;
-          background: color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-page));
-        }
         .studio-ops-chat-main-actions .studio-ops-chat-head-action.is-on {
           border-color: color-mix(
             in srgb,
@@ -15207,6 +15199,60 @@ export function StudioShell({
         .studio-ops-peer-hint {
           margin: 0;
           font-size: 12px;
+        }
+        .studio-ops-empty-state {
+          display: grid;
+          justify-items: center;
+          align-content: start;
+          gap: 6px;
+          flex: 1 1 auto;
+          min-height: 140px;
+          padding: 28px 16px 20px;
+          text-align: center;
+          color: var(--color-cursor-muted, var(--mos-muted));
+        }
+        .studio-ops-empty-state svg {
+          width: 26px;
+          height: 26px;
+          opacity: 0.55;
+          margin-bottom: 2px;
+        }
+        .studio-ops-empty-state strong {
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1.25;
+        }
+        .studio-ops-empty-state p {
+          margin: 0;
+          max-width: 16.5rem;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+        .studio-ops-board .studio-ops-empty-state {
+          min-height: 180px;
+          padding-top: 40px;
+        }
+        .studio-ops-readout {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 10px 12px;
+          border-radius: var(--cursor-radius-md, 8px);
+          background: var(--mos-plate, var(--mos-bg));
+        }
+        .studio-ops-readout strong {
+          font-size: 12.5px;
+          font-weight: 650;
+          color: var(--color-cursor-text-bright, var(--mos-text));
+        }
+        .studio-ops-readout p {
+          margin: 0;
+          font-size: 12.5px;
+          line-height: 1.45;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          color: var(--color-cursor-text, var(--mos-text));
         }
         .studio-ops-followup-card {
           display: flex;
