@@ -56,7 +56,7 @@ function courseBannerUrl(course: {
   slug: string;
   coverUrl?: string;
 }): string | undefined {
-  return course.coverUrl || localCoverUrl(course.slug);
+  return localCoverUrl(course.slug) || course.coverUrl;
 }
 
 function useNowTick(intervalMs = 1_000) {
