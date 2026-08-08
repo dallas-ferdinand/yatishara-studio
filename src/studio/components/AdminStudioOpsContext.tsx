@@ -56,6 +56,7 @@ export type SessionRow = {
   badges?: string[];
   working?: { sophie?: boolean; csr?: boolean };
   status?: string | null;
+  context_reset_at?: string | null;
 };
 
 export function sessionTitle(s: SessionRow | null | undefined) {
@@ -181,6 +182,7 @@ type OpsContextValue = {
   unlink: () => Promise<void>;
   setAgent: (args: { phone: string; enabled: boolean }) => Promise<unknown>;
   setTakeover: (args: { phone: string; on: boolean }) => Promise<unknown>;
+  resetChat: (args: { phone: string }) => Promise<unknown>;
   setStatus: (args: {
     phone: string;
     status: string;
@@ -194,6 +196,7 @@ type OpsContextValue = {
   deviceConnect: (args: { logoutFirst?: boolean }) => Promise<unknown>;
   deviceUnlink: () => Promise<unknown>;
   setWebhook: () => Promise<unknown>;
+  threadEpoch: number;
 };
 
 const OpsContext = createContext<OpsContextValue | null>(null);
@@ -214,6 +217,7 @@ export function AdminStudioOpsProvider({
   const getSession = useAction(api.studioCsOpsActions.adminGetSession);
   const setAgentAction = useAction(api.studioCsOpsActions.adminSetAgent);
   const setTakeoverAction = useAction(api.studioCsOpsActions.adminSetTakeover);
+  const resetChatAction = useAction(api.studioCsOpsActions.adminResetChat);
   const setStatusAction = useAction(api.studioCsOpsActions.adminSetStatus);
   const listPayments = useAction(api.studioCsOpsActions.adminListPayments);
   const decidePaymentAction = useAction(
@@ -234,6 +238,7 @@ export function AdminStudioOpsProvider({
   const [chatFilter, setChatFilter] = useState<ChatFilterId>("all");
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [detail, setDetail] = useState<DetailState | null>(null);
+  const [threadEpoch, setThreadEpoch] = useState(0);
 
   const pendingByPhone = useMemo(() => {
     const map = new Map<string, number>();
@@ -409,6 +414,33 @@ export function AdminStudioOpsProvider({
     }
   }, [deviceUnlink, refresh]);
 
+  const resetChat = useCallback(
+    async ({ phone }: { phone: string }) => {
+      const p = String(phone || "").replace(/\D/g, "");
+      if (!p) throw new Error("phone required");
+      setBusy(`reset:${p}`);
+      try {
+        const res = (await resetChatAction({ phone: p })) as {
+          ok?: boolean;
+          error?: string;
+        };
+        if (res?.ok === false) {
+          throw new Error(res.error || "Reset failed");
+        }
+        setThreadEpoch((n) => n + 1);
+        await afterMutate();
+        toast.success("Chat context reset");
+        return res;
+      } catch (err) {
+        toast.error(friendlyConvexError(err, "Could not reset chat"));
+        throw err;
+      } finally {
+        setBusy(null);
+      }
+    },
+    [resetChatAction, afterMutate],
+  );
+
   const value = useMemo<OpsContextValue>(
     () => ({
       active,
@@ -438,12 +470,14 @@ export function AdminStudioOpsProvider({
       unlink,
       setAgent: setAgentAction,
       setTakeover: setTakeoverAction,
+      resetChat,
       setStatus: setStatusAction,
       decidePayment: decidePaymentAction,
       deviceEnsure,
       deviceConnect,
       deviceUnlink,
       setWebhook,
+      threadEpoch,
     }),
     [
       active,
@@ -467,12 +501,14 @@ export function AdminStudioOpsProvider({
       unlink,
       setAgentAction,
       setTakeoverAction,
+      resetChat,
       setStatusAction,
       decidePaymentAction,
       deviceEnsure,
       deviceConnect,
       deviceUnlink,
       setWebhook,
+      threadEpoch,
     ],
   );
 

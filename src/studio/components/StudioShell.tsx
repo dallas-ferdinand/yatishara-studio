@@ -14623,38 +14623,6 @@ export function StudioShell({
           min-height: 0;
           overflow: hidden;
         }
-        .studio-ops-row-badges {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 4px;
-          margin-top: 3px;
-        }
-        .studio-ops-meta-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 3px;
-          height: 18px;
-          padding: 0 6px;
-          border-radius: 999px;
-          font-size: 10px;
-          font-weight: 700;
-          line-height: 1;
-          background: var(--mos-plate-strong);
-          color: var(--color-cursor-text);
-        }
-        .studio-ops-meta-badge.is-sophie,
-        .studio-ops-meta-badge.is-working {
-          background: color-mix(in srgb, var(--cursor-accent) 22%, var(--mos-plate));
-          color: var(--color-cursor-text-bright);
-        }
-        .studio-ops-meta-badge.is-human {
-          background: color-mix(in srgb, #dc2626 16%, var(--mos-plate));
-          color: #dc2626;
-        }
-        .studio-ops-meta-badge.is-watch {
-          background: var(--mos-plate);
-          color: var(--color-cursor-muted);
-        }
         .studio-ops-chat-main-peer {
           display: flex;
           align-items: center;
@@ -14867,6 +14835,14 @@ export function StudioShell({
           height: 24px;
           min-height: 24px;
           padding: 0;
+        }
+        .studio-ops-reset-banner {
+          flex: 0 0 auto;
+          margin: 0;
+          padding: 6px 10px;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          font-size: 11px;
+          background: color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-page));
         }
         .studio-ops-chat-main-actions .studio-ops-chat-head-action.is-on {
           border-color: color-mix(

@@ -248,6 +248,19 @@ export const adminSendMessage = action({
   },
 });
 
+export const adminResetChat = action({
+  args: { phone: v.string() },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/reset`, {
+      method: "POST",
+      body: "{}",
+    });
+  },
+});
+
 export const adminListPayments = action({
   args: { pending: v.optional(v.boolean()) },
   returns: v.any(),

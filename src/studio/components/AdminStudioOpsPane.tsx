@@ -5,6 +5,7 @@ import {
   Bot,
   Copy,
   Loader2,
+  RotateCcw,
   UserRoundCheck,
 } from "lucide-react";
 import { useState } from "react";
@@ -63,8 +64,10 @@ export function AdminStudioOpsPane() {
     unlink,
     setAgent,
     setTakeover,
+    resetChat,
     setStatus,
     decidePayment,
+    threadEpoch,
   } = useAdminStudioOps();
 
   const linked = Boolean(device?.open);
@@ -178,6 +181,26 @@ export function AdminStudioOpsPane() {
                       <div className="studio-ops-chat-main-actions">
                         <button
                           type="button"
+                          className="studio-composer-circle-btn studio-ops-chat-head-action"
+                          disabled={!!busy}
+                          aria-label="Reset chat context"
+                          title="Reset chat context for testing"
+                          onClick={() => {
+                            const ok = window.confirm(
+                              "Reset this chat for testing?\n\nClears Sophie session notes, statuses, follow-ups, local payments, and media. WhatsApp history before now is hidden in Ops. Cannot undo.",
+                            );
+                            if (!ok) return;
+                            void resetChat({ phone: selected.phone });
+                          }}
+                        >
+                          {busy === `reset:${selected.phone}` ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
                           className={`studio-composer-circle-btn studio-ops-chat-head-action${selected.agent_enabled ? " is-on" : ""}`}
                           disabled={!!busy}
                           aria-label={
@@ -230,7 +253,13 @@ export function AdminStudioOpsPane() {
                         </button>
                       </div>
                     </header>
+                    {selected.context_reset_at ? (
+                      <p className="studio-ops-reset-banner studio-muted">
+                        Agent context reset. Showing WhatsApp since reset only.
+                      </p>
+                    ) : null}
                     <AdminStudioOpsThread
+                      key={`${selected.phone}:${threadEpoch}`}
                       phone={selected.phone}
                       humanTakeover={Boolean(selected.human_takeover)}
                     />
