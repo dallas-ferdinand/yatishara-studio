@@ -21107,7 +21107,7 @@ export function StudioShell({
           font-size: 13px;
         }
         .studio-academy-checkout .studio-academy-sale-pan {
-          margin: 0 12px 10px;
+          margin: 12px 12px 10px;
         }
         .studio-academy-detail-price .studio-academy-sale-pan {
           width: min(100%, 220px);
