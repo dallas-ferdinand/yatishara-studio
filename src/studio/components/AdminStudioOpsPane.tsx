@@ -233,10 +233,6 @@ export function AdminStudioOpsPane() {
                             <span className="studio-ops-presence-label">
                               typing…
                             </span>
-                          ) : selected.presence?.online ? (
-                            <span className="studio-ops-presence-label">
-                              online
-                            </span>
                           ) : null}
                         </div>
                       </div>
