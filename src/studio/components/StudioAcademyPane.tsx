@@ -10,7 +10,7 @@ import {
   MessageCircle,
   Zap,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -59,7 +59,7 @@ function courseBannerUrl(course: {
   return course.coverUrl || localCoverUrl(course.slug);
 }
 
-function useNowTick(intervalMs = 30_000) {
+function useNowTick(intervalMs = 1_000) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), intervalMs);
@@ -81,20 +81,35 @@ function formatSaleEndDate(saleEndsAt: number): string {
   }
 }
 
-/** Human countdown for an active sale end (AST-facing catalog). */
-function formatSaleRemaining(saleEndsAt: number, now = Date.now()): string | null {
-  if (!Number.isFinite(saleEndsAt) || saleEndsAt <= now) return null;
-  const ms = saleEndsAt - now;
+function saleCountdownParts(saleEndsAt: number, now = Date.now()) {
+  const ms = Math.max(0, Number(saleEndsAt) - now);
   const dayMs = 24 * 60 * 60 * 1000;
   const hourMs = 60 * 60 * 1000;
   const minMs = 60 * 1000;
-  const days = Math.floor(ms / dayMs);
-  const hours = Math.floor((ms % dayMs) / hourMs);
-  const mins = Math.floor((ms % hourMs) / minMs);
-  if (days >= 2) return `${days} days left`;
-  if (days === 1) return hours > 0 ? `1 day ${hours}h left` : "1 day left";
-  if (hours >= 1) return mins > 0 ? `${hours}h ${mins}m left` : `${hours}h left`;
-  return `${Math.max(1, mins)}m left`;
+  return {
+    ended: ms <= 0,
+    days: Math.floor(ms / dayMs),
+    hours: Math.floor((ms % dayMs) / hourMs),
+    mins: Math.floor((ms % hourMs) / minMs),
+    secs: Math.floor((ms % minMs) / 1000),
+  };
+}
+
+/** Human countdown for chips / receipt fallback. */
+function formatSaleRemaining(saleEndsAt: number, now = Date.now()): string | null {
+  const parts = saleCountdownParts(saleEndsAt, now);
+  if (parts.ended) return null;
+  if (parts.days >= 2) return `${parts.days} days left`;
+  if (parts.days === 1) {
+    return parts.hours > 0 ? `1 day ${parts.hours}h left` : "1 day left";
+  }
+  if (parts.hours >= 1) {
+    return parts.mins > 0
+      ? `${parts.hours}h ${parts.mins}m left`
+      : `${parts.hours}h left`;
+  }
+  if (parts.mins >= 1) return `${parts.mins}m ${parts.secs}s left`;
+  return `${Math.max(1, parts.secs)}s left`;
 }
 
 function saleDiscountCredits(
@@ -103,6 +118,64 @@ function saleDiscountCredits(
 ): number | null {
   if (compareAtCredits == null || compareAtCredits <= priceCredits) return null;
   return compareAtCredits - priceCredits;
+}
+
+function SaleCountdownPanel({
+  saleEndsAt,
+  now,
+  discountLabel,
+  compact = false,
+}: {
+  saleEndsAt: number;
+  now: number;
+  discountLabel?: string | null;
+  compact?: boolean;
+}) {
+  const parts = saleCountdownParts(saleEndsAt, now);
+  if (parts.ended) return null;
+  const units =
+    parts.days > 0
+      ? [
+          { value: parts.days, label: "d" },
+          { value: parts.hours, label: "h" },
+          { value: parts.mins, label: "m" },
+        ]
+      : [
+          { value: parts.hours, label: "h" },
+          { value: parts.mins, label: "m" },
+          { value: parts.secs, label: "s" },
+        ];
+  const spoken = formatSaleRemaining(saleEndsAt, now) || "ending soon";
+  return (
+    <div
+      className={`studio-academy-sale-pan${compact ? " is-compact" : ""}`}
+      aria-label={`Sale ends in ${spoken}`}
+    >
+      <div className="studio-academy-sale-pan-head">
+        <span className="studio-academy-sale-pan-kicker">Sale ends in</span>
+        {discountLabel ? (
+          <span className="studio-academy-sale-pan-save">
+            Save {discountLabel}
+          </span>
+        ) : null}
+      </div>
+      <div className="studio-academy-sale-pan-units">
+        {units.map((unit, index) => (
+          <Fragment key={unit.label}>
+            {index > 0 ? (
+              <span className="studio-academy-sale-pan-sep" aria-hidden="true">
+                :
+              </span>
+            ) : null}
+            <span className="studio-academy-sale-pan-unit">
+              <strong>{String(unit.value).padStart(2, "0")}</strong>
+              <span>{unit.label}</span>
+            </span>
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function newClientRequestId() {
@@ -122,6 +195,8 @@ function CheckoutDock({
   priceShort,
   listPriceLabel,
   discountLabel,
+  saleEndsAt,
+  now,
   saleEndsLabel,
   saleRemainingLabel,
   lessonCount,
@@ -140,6 +215,8 @@ function CheckoutDock({
   priceShort: string;
   listPriceLabel?: string | null;
   discountLabel?: string | null;
+  saleEndsAt?: number | null;
+  now?: number;
   saleEndsLabel?: string | null;
   saleRemainingLabel?: string | null;
   lessonCount: number;
@@ -155,6 +232,15 @@ function CheckoutDock({
   const lessonMeta =
     lessonCount === 1 ? "1 lesson" : `${lessonCount} lessons`;
   const onSale = Boolean(listPriceLabel && discountLabel);
+  const countdown =
+    onSale && saleEndsAt != null && Number.isFinite(saleEndsAt) ? (
+      <SaleCountdownPanel
+        saleEndsAt={saleEndsAt}
+        now={now ?? Date.now()}
+        discountLabel={discountLabel}
+        compact
+      />
+    ) : null;
   const saleReceipt = onSale ? (
     <dl className="studio-academy-checkout-receipt studio-academy-sale-receipt">
       <div className="studio-academy-checkout-row">
@@ -167,12 +253,10 @@ function CheckoutDock({
         <dt>Discount</dt>
         <dd>−{discountLabel}</dd>
       </div>
-      {saleEndsLabel || saleRemainingLabel ? (
+      {saleEndsLabel ? (
         <div className="studio-academy-checkout-row is-muted">
-          <dt>Sale ends</dt>
-          <dd>
-            {[saleEndsLabel, saleRemainingLabel].filter(Boolean).join(" · ")}
-          </dd>
+          <dt>Until</dt>
+          <dd>{saleEndsLabel}</dd>
         </div>
       ) : null}
       <div className="studio-academy-checkout-row is-total">
@@ -209,7 +293,6 @@ function CheckoutDock({
             <ul className="studio-academy-checkout-chips" aria-label="Course access">
               <li>Lifetime</li>
               <li>{lessonMeta}</li>
-              {saleRemainingLabel ? <li>{saleRemainingLabel}</li> : null}
             </ul>
           </div>
         </header>
@@ -218,6 +301,7 @@ function CheckoutDock({
           <p className="studio-academy-checkout-note">You own this course.</p>
         ) : needsTopUp ? (
           <>
+            {countdown}
             {saleReceipt}
             <dl className="studio-academy-checkout-receipt">
               <div className="studio-academy-checkout-row">
@@ -272,6 +356,7 @@ function CheckoutDock({
           </>
         ) : (
           <>
+            {countdown}
             {saleReceipt}
             <div className="studio-academy-checkout-paywise">
               <button
@@ -635,6 +720,8 @@ export function StudioAcademyPane({
     priceShort,
     listPriceLabel,
     discountLabel,
+    saleEndsAt: detail?.onSale ? detail.saleEndsAt : null,
+    now,
     saleEndsLabel,
     saleRemainingLabel,
     lessonCount: detail?.lessonCount ?? 0,
@@ -719,14 +806,6 @@ export function StudioAcademyPane({
                   const discountCredits = course.onSale
                     ? saleDiscountCredits(course.priceCredits, compareAt)
                     : null;
-                  const remaining =
-                    course.onSale && course.saleEndsAt
-                      ? formatSaleRemaining(course.saleEndsAt, now)
-                      : null;
-                  const endsLabel =
-                    course.onSale && course.saleEndsAt
-                      ? formatSaleEndDate(course.saleEndsAt)
-                      : null;
                   return (
                     <li key={course._id}>
                       <button
@@ -778,10 +857,6 @@ export function StudioAcademyPane({
                             <span className="studio-academy-card-soon">
                               Coming soon
                             </span>
-                          ) : discountCredits != null ? (
-                            <span className="studio-academy-card-sale">
-                              Save {formatTtdFromCredits(discountCredits, price)}
-                            </span>
                           ) : null}
                         </div>
                         <div className="public-offers-card-body studio-academy-card-body">
@@ -812,15 +887,16 @@ export function StudioAcademyPane({
                                   }`}
                             </span>
                           </div>
-                          {discountCredits != null ? (
-                            <p className="studio-academy-card-sale-meta">
-                              Save {formatTtdFromCredits(discountCredits, price)}
-                              {endsLabel || remaining
-                                ? ` · ${[endsLabel, remaining]
-                                    .filter(Boolean)
-                                    .join(" · ")}`
-                                : ""}
-                            </p>
+                          {discountCredits != null && course.saleEndsAt ? (
+                            <SaleCountdownPanel
+                              saleEndsAt={course.saleEndsAt}
+                              now={now}
+                              discountLabel={formatTtdFromCredits(
+                                discountCredits,
+                                price,
+                              )}
+                              compact
+                            />
                           ) : null}
                         </div>
                       </button>
@@ -894,15 +970,13 @@ export function StudioAcademyPane({
                       </>
                     ) : null}
                   </span>
-                  {discountLabel ? (
-                    <span className="studio-academy-card-sale-meta">
-                      Save {discountLabel}
-                      {saleEndsLabel || saleRemainingLabel
-                        ? ` · ${[saleEndsLabel, saleRemainingLabel]
-                            .filter(Boolean)
-                            .join(" · ")}`
-                        : ""}
-                    </span>
+                  {detail.onSale && detail.saleEndsAt ? (
+                    <SaleCountdownPanel
+                      saleEndsAt={detail.saleEndsAt}
+                      now={now}
+                      discountLabel={discountLabel}
+                      compact
+                    />
                   ) : null}
                 </div>
               ) : null}
@@ -965,15 +1039,13 @@ export function StudioAcademyPane({
                       </>
                     ) : null}
                   </span>
-                  {discountLabel ? (
-                    <span className="studio-academy-card-sale-meta">
-                      Save {discountLabel}
-                      {saleEndsLabel || saleRemainingLabel
-                        ? ` · ${[saleEndsLabel, saleRemainingLabel]
-                            .filter(Boolean)
-                            .join(" · ")}`
-                        : ""}
-                    </span>
+                  {detail.onSale && detail.saleEndsAt ? (
+                    <SaleCountdownPanel
+                      saleEndsAt={detail.saleEndsAt}
+                      now={now}
+                      discountLabel={discountLabel}
+                      compact
+                    />
                   ) : null}
                 </div>
               ) : null}

@@ -21009,6 +21009,99 @@ export function StudioShell({
           background: color-mix(in srgb, var(--mos-page, #f5f5f7) 88%, transparent);
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
+        .studio-academy-sale-pan {
+          display: grid;
+          gap: 8px;
+          margin-top: 2px;
+          padding: 8px 10px;
+          border-radius: 12px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft, var(--mos-border-soft)));
+          background:
+            linear-gradient(
+              135deg,
+              color-mix(in srgb, var(--cursor-accent) 16%, transparent),
+              color-mix(in srgb, var(--cursor-accent) 6%, var(--mos-plate, transparent))
+            );
+          box-shadow:
+            inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 12%, transparent),
+            0 8px 20px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+        }
+        .studio-academy-sale-pan.is-compact {
+          gap: 6px;
+          padding: 7px 9px;
+          border-radius: 10px;
+        }
+        .studio-academy-sale-pan-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          min-width: 0;
+        }
+        .studio-academy-sale-pan-kicker {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: color-mix(in srgb, var(--cursor-accent) 72%, var(--color-cursor-text-bright, var(--mos-text)));
+        }
+        .studio-academy-sale-pan-save {
+          flex: 0 0 auto;
+          font-size: 10px;
+          font-weight: 650;
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          opacity: 0.92;
+        }
+        .studio-academy-sale-pan-units {
+          display: flex;
+          align-items: stretch;
+          justify-content: space-between;
+          gap: 4px;
+        }
+        .studio-academy-sale-pan-unit {
+          flex: 1 1 0;
+          display: grid;
+          gap: 1px;
+          justify-items: center;
+          min-width: 0;
+          padding: 5px 2px 4px;
+          border-radius: 8px;
+          background: color-mix(in srgb, var(--mos-page, #f5f5f7) 72%, transparent);
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 22%, transparent);
+        }
+        .studio-academy-sale-pan-unit strong {
+          font-size: 14px;
+          font-weight: 750;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: 0.02em;
+          line-height: 1.1;
+          color: var(--color-cursor-text-bright, var(--mos-text));
+        }
+        .studio-academy-sale-pan-unit > span {
+          font-size: 9px;
+          font-weight: 650;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: color-mix(in srgb, var(--cursor-accent) 68%, var(--color-cursor-text-muted, var(--mos-text-muted)));
+        }
+        .studio-academy-sale-pan-sep {
+          display: grid;
+          place-items: center;
+          padding-bottom: 10px;
+          font-size: 12px;
+          font-weight: 700;
+          color: color-mix(in srgb, var(--cursor-accent) 55%, transparent);
+        }
+        .studio-academy-sale-pan.is-compact .studio-academy-sale-pan-unit strong {
+          font-size: 13px;
+        }
+        .studio-academy-checkout .studio-academy-sale-pan {
+          margin: 0 0 10px;
+        }
+        .studio-academy-detail-price .studio-academy-sale-pan {
+          width: min(100%, 220px);
+          justify-self: end;
+        }
         .studio-academy-card-sale-meta {
           margin: 0;
           font-size: 11px;
@@ -21017,7 +21110,7 @@ export function StudioShell({
         }
         .studio-academy-detail-price {
           display: grid;
-          gap: 4px;
+          gap: 8px;
           justify-items: end;
           text-align: right;
         }
