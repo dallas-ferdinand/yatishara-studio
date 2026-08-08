@@ -14463,13 +14463,13 @@ export function StudioShell({
         .studio-ops-chat-card-avatar .studio-profile-avatar.is-md,
         .studio-ops-chat-card-avatar .studio-profile-avatar.is-md .studio-profile-avatar-media,
         .studio-ops-chat-card-avatar .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
-          width: 40px;
-          height: 40px;
-          min-width: 40px;
-          min-height: 40px;
+          width: 32px;
+          height: 32px;
+          min-width: 32px;
+          min-height: 32px;
         }
         .studio-ops-chat-card-avatar .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
-          font-size: 14px;
+          font-size: 11px;
         }
         .studio-ops-chat-card-body {
           display: flex;
@@ -14505,18 +14505,18 @@ export function StudioShell({
         .studio-ops-chat-card-chips {
           display: flex;
           flex-wrap: wrap;
-          gap: 4px;
+          gap: 3px;
           min-width: 0;
         }
         .studio-ops-tag {
           display: inline-flex;
           align-items: center;
-          gap: 3px;
+          gap: 2px;
           max-width: 100%;
-          height: 18px;
-          padding: 0 7px;
+          height: 15px;
+          padding: 0 6px;
           border-radius: 999px;
-          font-size: 10px;
+          font-size: 9px;
           font-weight: 650;
           line-height: 1;
           white-space: nowrap;

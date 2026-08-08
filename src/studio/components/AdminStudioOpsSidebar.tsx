@@ -161,7 +161,7 @@ function MetaBadge({
       ) : kind === "human" ? (
         <UserRound className="h-2.5 w-2.5" aria-hidden={true} />
       ) : kind === "watch" || statusTone(kind) === "watch" ? (
-        <Eye className="h-2.5 w-2.5" aria-hidden={true} />
+        <Eye className="h-2 w-2" aria-hidden={true} />
       ) : null}
       <span>{label}</span>
     </span>

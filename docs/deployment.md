@@ -117,6 +117,7 @@ Preview architecture:
 1. systemd runs the repo with Next dev on the VPS.
 2. Traefik routes `preview.studio.yatishara.com` to that dev server.
 3. Browser requests hit `src/proxy.ts` → Convex Auth middleware (open preview; no password gate).
+4. Sophie Ops avatar/media proxies (`/api/studio-ops/*`) call host `studio-cs` on `:8795`. Inside the preview container that must be `host.docker.internal` / Coolify gateway (`10.0.1.1`), never `127.0.0.1` — same rule as Convex `STUDIO_CS_OPS_URL`.
 
 ## Verification
 
