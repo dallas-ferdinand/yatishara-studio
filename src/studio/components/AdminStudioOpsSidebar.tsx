@@ -126,6 +126,20 @@ function OpsChatFilter({
   );
 }
 
+function statusTone(id: string): string {
+  const key = id.toLowerCase();
+  if (key.includes("watch")) return "watch";
+  if (key.includes("inbound") || key === "new") return "inbound";
+  if (key.includes("outbound")) return "outbound";
+  if (key.includes("intake")) return "intake";
+  if (key.includes("await") || key.includes("payment")) return "await";
+  if (key.includes("owner")) return "owner";
+  if (key.includes("friend") || key.includes("family")) return "friends";
+  if (key.includes("human")) return "human";
+  if (key.includes("agent") || key.includes("sophie")) return "agent";
+  return "neutral";
+}
+
 function MetaBadge({
   kind,
   label,
@@ -137,20 +151,18 @@ function MetaBadge({
 }) {
   return (
     <span
-      className={`studio-ops-meta-badge is-${kind}${spinning ? " is-working" : ""}`}
+      className={`studio-ops-tag is-${statusTone(kind)}${spinning ? " is-working" : ""}`}
       title={spinning ? `${label} working` : label}
     >
       {spinning ? (
         <Loader2 className="h-2.5 w-2.5 animate-spin" aria-hidden={true} />
-      ) : kind === "agent" ? (
+      ) : kind === "agent" || kind === "sophie" ? (
         <Bot className="h-2.5 w-2.5" aria-hidden={true} />
       ) : kind === "human" ? (
         <UserRound className="h-2.5 w-2.5" aria-hidden={true} />
-      ) : kind === "watch" ? (
+      ) : kind === "watch" || statusTone(kind) === "watch" ? (
         <Eye className="h-2.5 w-2.5" aria-hidden={true} />
-      ) : (
-        <Bot className="h-2.5 w-2.5" aria-hidden={true} />
-      )}
+      ) : null}
       <span>{label}</span>
     </span>
   );
@@ -184,71 +196,67 @@ function OpsConversationRow({
   return (
     <button
       type="button"
-      className={`studio-dm-row studio-ops-dm-row${active ? " is-active" : ""}${pending > 0 ? " is-unread" : ""}`}
+      className={`studio-ops-chat-card${active ? " is-active" : ""}${pending > 0 ? " is-unread" : ""}`}
       onClick={onSelect}
     >
-      <span className="studio-dm-row-main">
-        <span className="studio-dm-row-avatar-wrap">
-          <StudioProfileAvatar
-            size="md"
-            src={avatarSrc}
-            displayName={title}
-            name={session.phone}
-            alt=""
-          />
+      <span className="studio-ops-chat-card-avatar">
+        <StudioProfileAvatar
+          size="md"
+          src={avatarSrc}
+          displayName={title}
+          name={session.phone}
+          alt=""
+        />
+      </span>
+      <span className="studio-ops-chat-card-body">
+        <span className="studio-ops-chat-card-top">
+          <strong title={`${title} · ${session.phone_display || session.phone}`}>
+            {title}
+          </strong>
+          <time>
+            {whenLabel(
+              session.last_message_at ||
+                session.last_inbound_at ||
+                session.updated_at,
+            )}
+          </time>
         </span>
-        <span className="studio-dm-row-copy">
-          <span className="studio-dm-row-top">
-            <strong title={`${title} · ${session.phone_display || session.phone}`}>
-              <span className="studio-dm-name-text">{title}</span>
-            </strong>
-            <time>
-              {whenLabel(
-                session.last_message_at ||
-                  session.last_inbound_at ||
-                  session.updated_at,
-              )}
-            </time>
-          </span>
-          <span className="studio-dm-row-bottom">
-            <span className="studio-dm-row-preview">{preview}</span>
-            {pending > 0 ? (
-              <span className="studio-dm-unread-dot" aria-label="Needs approval" />
+        {running || badges.length > 0 || labels.length > 0 ? (
+          <span className="studio-ops-chat-card-chips" aria-label="Labels">
+            {running ? (
+              <MetaBadge kind="sophie" label="Sophie" spinning />
             ) : null}
+            {badges.map((b) => (
+              <MetaBadge
+                key={b}
+                kind={b}
+                label={
+                  b === "agent"
+                    ? "Agent"
+                    : b === "human"
+                      ? "Human takeover"
+                      : b === "watch"
+                        ? "Watch"
+                        : b
+                }
+              />
+            ))}
+            {labels.slice(0, 4).map((id) => (
+              <MetaBadge
+                key={String(id)}
+                kind={String(id)}
+                label={statusLabel(String(id), statusCatalog)}
+              />
+            ))}
           </span>
-          {running || badges.length > 0 ? (
-            <span className="studio-ops-row-badges">
-              {running ? (
-                <MetaBadge kind="sophie" label="Sophie" spinning />
-              ) : null}
-              {badges.map((b) => (
-                <MetaBadge
-                  key={b}
-                  kind={b}
-                  label={
-                    b === "agent"
-                      ? "Agent"
-                      : b === "human"
-                        ? "Human"
-                        : b === "watch"
-                          ? "Watch"
-                          : b
-                  }
-                />
-              ))}
-            </span>
+        ) : null}
+        <span className="studio-ops-chat-card-preview">
+          <span>{preview}</span>
+          {pending > 0 ? (
+            <span className="studio-ops-chat-card-dot" aria-label="Needs approval" />
           ) : null}
         </span>
       </span>
-      {labels.length > 0 ? (
-        <span className="studio-dm-row-labels" aria-label="Labels">
-          {labels.slice(0, 4).map((id) => (
-            <span key={String(id)} className="studio-dm-row-label" title={String(id)}>
-              {statusLabel(String(id), statusCatalog)}
-            </span>
-          ))}
-        </span>
-      ) : null}
     </button>
   );
 }

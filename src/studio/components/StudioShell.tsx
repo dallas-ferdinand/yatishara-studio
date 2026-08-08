@@ -14427,32 +14427,159 @@ export function StudioShell({
         .studio-ops-rail-list {
           list-style: none;
           margin: 0;
-          padding: 10px;
+          padding: 8px;
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          gap: 6px;
         }
         .studio-ops-rail-list > li {
           margin: 0;
         }
-        .studio-ops-dm-row {
-          width: 100%;
-        }
-        .studio-ops-dm-row .studio-dm-row-main {
+        .studio-ops-chat-card {
+          display: flex;
           align-items: flex-start;
+          gap: 10px;
+          width: 100%;
+          min-width: 0;
+          padding: 8px 10px;
+          border: 1px solid var(--color-cursor-border-soft, var(--color-cursor-border));
+          border-radius: 12px;
+          background: var(--mos-page, var(--mos-panel));
+          color: inherit;
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
         }
-        .studio-ops-dm-row .studio-dm-row-avatar-wrap,
-        .studio-ops-dm-row .studio-profile-avatar.is-md {
-          width: 44px;
-          height: 44px;
-          min-width: 44px;
-          min-height: 44px;
+        .studio-ops-chat-card:hover {
+          background: color-mix(in srgb, var(--cursor-accent) 6%, var(--mos-page, var(--mos-panel)));
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
         }
-        .studio-ops-dm-row .studio-profile-avatar.is-md .studio-profile-avatar-media,
-        .studio-ops-dm-row .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
-          width: 44px;
-          height: 44px;
-          font-size: 15px;
+        .studio-ops-chat-card.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 55%, var(--color-cursor-border));
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-page, var(--mos-panel)));
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+        }
+        .studio-ops-chat-card-avatar,
+        .studio-ops-chat-card-avatar .studio-profile-avatar.is-md,
+        .studio-ops-chat-card-avatar .studio-profile-avatar.is-md .studio-profile-avatar-media,
+        .studio-ops-chat-card-avatar .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
+          width: 40px;
+          height: 40px;
+          min-width: 40px;
+          min-height: 40px;
+        }
+        .studio-ops-chat-card-avatar .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
+          font-size: 14px;
+        }
+        .studio-ops-chat-card-body {
+          display: flex;
+          flex: 1 1 auto;
+          flex-direction: column;
+          gap: 3px;
+          min-width: 0;
+        }
+        .studio-ops-chat-card-top {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 8px;
+          min-width: 0;
+        }
+        .studio-ops-chat-card-top strong {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 13px;
+          font-weight: 650;
+          line-height: 1.25;
+          color: var(--color-cursor-text);
+        }
+        .studio-ops-chat-card-top time {
+          flex: 0 0 auto;
+          font-size: 10.5px;
+          line-height: 1.2;
+          color: var(--color-cursor-muted);
+          font-variant-numeric: tabular-nums;
+        }
+        .studio-ops-chat-card-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          min-width: 0;
+        }
+        .studio-ops-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          max-width: 100%;
+          height: 18px;
+          padding: 0 7px;
+          border-radius: 999px;
+          font-size: 10px;
+          font-weight: 650;
+          line-height: 1;
+          white-space: nowrap;
+          color: #fff;
+          background: #64748b;
+        }
+        .studio-ops-tag > span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .studio-ops-tag.is-watch {
+          background: #64748b;
+        }
+        .studio-ops-tag.is-inbound,
+        .studio-ops-tag.is-intake {
+          background: #3b82f6;
+        }
+        .studio-ops-tag.is-outbound {
+          background: #8b5cf6;
+        }
+        .studio-ops-tag.is-owner {
+          background: #1d4ed8;
+        }
+        .studio-ops-tag.is-friends {
+          background: #14b8a6;
+        }
+        .studio-ops-tag.is-await {
+          background: #f59e0b;
+          color: #111827;
+        }
+        .studio-ops-tag.is-human {
+          background: #dc2626;
+        }
+        .studio-ops-tag.is-agent,
+        .studio-ops-tag.is-sophie,
+        .studio-ops-tag.is-working {
+          background: color-mix(in srgb, var(--cursor-accent) 88%, #0f172a);
+        }
+        .studio-ops-tag.is-neutral {
+          background: #94a3b8;
+          color: #0f172a;
+        }
+        .studio-ops-chat-card-preview {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.3;
+        }
+        .studio-ops-chat-card-preview > span:first-child {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-ops-chat-card-dot {
+          flex: 0 0 auto;
+          width: 7px;
+          height: 7px;
+          border-radius: 999px;
+          background: var(--cursor-accent);
         }
         .studio-ops-chat-main-peer .studio-profile-avatar.is-sm {
           width: 22px;
