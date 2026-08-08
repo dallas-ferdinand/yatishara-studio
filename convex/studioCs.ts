@@ -115,6 +115,7 @@ export const internalListPublishedCourses = internalQuery({
       priceCredits: v.number(),
       compareAtCredits: v.optional(v.number()),
       onSale: v.boolean(),
+      saleEndsAt: v.optional(v.number()),
       comingSoon: v.boolean(),
       coverUrl: v.optional(v.string()),
     }),
@@ -134,6 +135,7 @@ export const internalListPublishedCourses = internalQuery({
     const out = [];
     for (const c of rows) {
       const compareAt = compareAtCoursePriceCredits(c, now);
+      const onSale = isCourseSaleActive(c, now);
       out.push({
         _id: c._id,
         title: c.title,
@@ -141,7 +143,8 @@ export const internalListPublishedCourses = internalQuery({
         blurb: blurbFromMarkdown(c.descriptionMarkdown),
         priceCredits: effectiveCoursePriceCredits(c, now),
         compareAtCredits: compareAt ?? undefined,
-        onSale: isCourseSaleActive(c, now),
+        onSale,
+        saleEndsAt: onSale && c.saleEndsAt ? Number(c.saleEndsAt) : undefined,
         comingSoon: c.status === "coming_soon",
         coverUrl: await courseCoverUrl(c.coverBunnyPath),
       });
