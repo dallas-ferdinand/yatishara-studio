@@ -14355,27 +14355,42 @@ export function StudioShell({
         }
         .studio-admin-ops-fill {
           display: flex;
-          flex: 1 1 auto;
+          flex: 1 1 0;
           flex-direction: column;
           min-height: 0;
           margin: -16px;
           height: calc(100% + 32px);
           max-height: calc(100% + 32px);
+          overflow: hidden;
         }
         .studio-admin-ops-fill > .studio-ops-shell {
           display: flex;
-          flex: 1 1 auto;
+          flex: 1 1 0;
           flex-direction: column;
           min-height: 0;
+          overflow: hidden;
         }
-        .studio-ops-shell > .studio-admin-head {
+        .studio-ops-shell.has-peer {
+          flex-direction: row;
+          align-items: stretch;
+        }
+        .studio-ops-main-col {
+          display: flex;
+          flex: 1 1 0;
+          flex-direction: column;
+          min-width: 0;
+          min-height: 0;
+          overflow: hidden;
+        }
+        .studio-ops-main-col > .studio-admin-head {
           flex: 0 0 auto;
         }
-        .studio-ops-shell > .studio-admin-body {
-          flex: 1 1 auto;
+        .studio-ops-main-col > .studio-admin-body {
+          flex: 1 1 0;
           min-height: 0;
+          overflow: auto;
         }
-        .studio-ops-shell > .studio-admin-body.is-ops-chats {
+        .studio-ops-main-col > .studio-admin-body.is-ops-chats {
           padding: 0;
           overflow: hidden;
           display: flex;
@@ -14384,20 +14399,15 @@ export function StudioShell({
         .studio-ops-chats {
           position: relative;
           display: grid;
-          grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
-          flex: 1 1 auto;
-          min-height: 0;
-          height: 100%;
-        }
-        .studio-ops-chats.has-selected {
-          grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(260px, 320px);
-        }
-        /* Chat list lives in the Studio left rail (like DMs) — pane is main + peer only. */
-        .studio-ops-chats.is-rail-layout {
           grid-template-columns: minmax(0, 1fr);
+          flex: 1 1 0;
+          min-height: 0;
+          overflow: hidden;
         }
+        /* Chat list lives in the Studio left rail (like DMs) — pane is main only; peer is shell sibling. */
+        .studio-ops-chats.is-rail-layout,
         .studio-ops-chats.is-rail-layout.has-selected {
-          grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+          grid-template-columns: minmax(0, 1fr);
         }
         .studio-ops-rail-sidebar {
           flex: 1 1 auto;
@@ -14433,24 +14443,24 @@ export function StudioShell({
           height: 44px;
           font-size: 15px;
         }
-        .studio-ops-chat-main-peer .studio-profile-avatar.is-md {
-          width: 30px;
-          height: 30px;
-          min-width: 30px;
-          min-height: 30px;
+        .studio-ops-chat-main-peer .studio-profile-avatar.is-sm {
+          width: 22px;
+          height: 22px;
+          min-width: 22px;
+          min-height: 22px;
         }
         .studio-ops-wa-thread {
-          flex: 1 1 auto;
-          height: 100%;
+          flex: 1 1 0;
           min-height: 0;
-          display: grid;
-          grid-template-rows: minmax(0, 1fr) auto;
+          display: flex;
+          flex-direction: column;
           overflow: hidden;
         }
         .studio-ops-wa-thread .cs-ops-thread-scroll {
-          flex: 1 1 auto;
+          flex: 1 1 0;
           min-height: 0;
-          overflow: auto;
+          overflow-x: hidden;
+          overflow-y: auto;
           padding: 12px 14px 8px;
         }
         .studio-ops-wa-thread .cs-ops-thread-messages {
@@ -14532,8 +14542,8 @@ export function StudioShell({
           align-items: center;
           gap: 4px;
           min-width: 0;
-          height: 22px;
-          padding: 0 6px;
+          height: 18px;
+          padding: 0 5px;
           border: 0;
           border-radius: 6px;
           background: transparent;
@@ -14709,17 +14719,19 @@ export function StudioShell({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
-          height: 48px;
-          min-height: 48px;
+          gap: 8px;
+          height: var(--cursor-head-h, 32px);
+          min-height: var(--cursor-head-h, 32px);
+          max-height: var(--cursor-head-h, 32px);
           padding: 0 10px;
           border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
           background: var(--mos-panel, var(--mos-page));
         }
         .studio-ops-chat-main-head strong {
           display: block;
-          font-size: 13px;
+          font-size: 12.5px;
           font-weight: 600;
+          line-height: 1.2;
         }
         .studio-ops-chat-main-head .studio-muted {
           font-size: 10.5px;
@@ -14731,10 +14743,10 @@ export function StudioShell({
           gap: 6px;
         }
         .studio-ops-chat-main-actions .studio-ops-chat-head-action {
-          width: 28px;
-          min-width: 28px;
-          height: 28px;
-          min-height: 28px;
+          width: 24px;
+          min-width: 24px;
+          height: 24px;
+          min-height: 24px;
           padding: 0;
         }
         .studio-ops-chat-main-actions .studio-ops-chat-head-action.is-on {
@@ -14777,20 +14789,27 @@ export function StudioShell({
           font-size: 11px;
           color: var(--color-cursor-muted);
         }
-        .studio-ops-chat-peer {
+        .studio-ops-shell > .studio-ops-chat-peer {
+          flex: 0 0 clamp(260px, 28vw, 320px);
+          width: clamp(260px, 28vw, 320px);
+          align-self: stretch;
+          min-height: 0;
+          overflow: hidden;
           border-left: 1px solid var(--color-cursor-border);
           background: var(--mos-page);
         }
-        .studio-ops-chat-peer[hidden] {
-          display: none !important;
-        }
         .studio-ops-chat-peer-scroll {
-          flex: 1 1 auto;
-          overflow: auto;
+          flex: 1 1 0;
+          min-height: 0;
+          overflow-x: hidden;
+          overflow-y: auto;
           padding: 10px;
           display: flex;
           flex-direction: column;
           gap: 10px;
+        }
+        .studio-ops-label-list {
+          width: 100%;
         }
         .studio-ops-action-tabs {
           display: flex;
@@ -14880,11 +14899,6 @@ export function StudioShell({
         .studio-ops-followup-card strong {
           font-size: 12.5px;
         }
-        .studio-ops-label-grid {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 6px;
-        }
         .studio-ops-pay-list {
           list-style: none;
           margin: 0;
@@ -14909,14 +14923,11 @@ export function StudioShell({
           font-size: 11px;
         }
         @media (max-width: 980px) {
-          .studio-ops-chats,
-          .studio-ops-chats.has-selected {
-            grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
-          }
-          .studio-ops-chat-peer {
+          .studio-ops-shell.has-peer > .studio-ops-chat-peer {
             position: absolute;
             inset: 0 0 0 auto;
             width: min(320px, 92vw);
+            flex-basis: min(320px, 92vw);
             z-index: 4;
             box-shadow: -8px 0 24px color-mix(in srgb, #000 18%, transparent);
           }
