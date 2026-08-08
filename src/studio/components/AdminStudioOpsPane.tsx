@@ -25,6 +25,8 @@ type DeviceStatus = {
   phone?: string | null;
   profileName?: string | null;
   agentName?: string;
+  state?: string;
+  qr?: string | null;
   qrcode?: { base64?: string; pairingCode?: string } | string;
   base64?: string;
 };
@@ -57,15 +59,17 @@ function money(cents: number) {
 
 function extractQr(result: unknown): string | null {
   const r = result as DeviceStatus & {
+    qr?: string | null;
     qrcode?: { base64?: string } | string;
     base64?: string;
   };
-  const b64 =
+  const raw =
+    r.qr ||
     (typeof r.qrcode === "string" ? r.qrcode : r.qrcode?.base64) ||
     r.base64 ||
     null;
-  if (!b64) return null;
-  return b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`;
+  if (!raw) return null;
+  return raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
 }
 
 export function AdminStudioOpsPane() {
@@ -129,7 +133,7 @@ export function AdminStudioOpsPane() {
       setDevice((prev) => ({ ...(prev || {}), ...(result as DeviceStatus) }));
       if (!qr) {
         await refresh();
-        toast.message("No QR yet — refresh in a few seconds");
+        toast.message("No QR yet — try again in a few seconds");
       }
     } catch (err) {
       toast.error(friendlyConvexError(err, "Could not show QR"));
@@ -156,11 +160,15 @@ export function AdminStudioOpsPane() {
   }
 
   const linked = Boolean(device?.open);
-  const statusLabel = linked
-    ? "Linked"
-    : device?.connecting || qrSrc
-      ? "Scan QR"
-      : "Not linked";
+  const showingQr = Boolean(qrSrc) && !linked;
+  const statusClass = linked ? "is-linked" : showingQr ? "is-scan" : "";
+  const statusLabel = linked ? "Linked" : showingQr ? "Scan QR" : "Not linked";
+  const phoneLine = [
+    device?.hint || "+1 868 337-7338",
+    linked && device?.profileName ? device.profileName : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="studio-admin-stack">
@@ -169,76 +177,70 @@ export function AdminStudioOpsPane() {
           <span className="studio-admin-section-title">
             <Smartphone className="h-3.5 w-3.5" aria-hidden /> Sophie
           </span>
-          <div className="studio-admin-section-extras">
-            <button
-              type="button"
-              className="cursor-settings-action"
-              onClick={() => void refresh()}
-              disabled={busy === "refresh"}
-              aria-label="Refresh"
-            >
-              {busy === "refresh" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
-              )}
-            </button>
-          </div>
         </div>
 
-        <div className="studio-admin-list-row" style={{ alignItems: "center" }}>
-          <div>
-            <strong>{statusLabel}</strong>
-            <div className="studio-muted">
-              {device?.hint || "+1 868 337-7338"}
-              {linked && device?.profileName ? ` · ${device.profileName}` : ""}
+        <div className="studio-ops-device">
+          <div className="studio-ops-device-top">
+            <div className="studio-ops-device-copy">
+              <span className={`studio-ops-status ${statusClass}`}>{statusLabel}</span>
+              <p className="studio-ops-device-title">
+                {linked ? "WhatsApp connected" : "WhatsApp for Academy CS"}
+              </p>
+              <p className="studio-ops-device-phone">{phoneLine}</p>
+            </div>
+            <div className="studio-ops-device-actions">
+              <button
+                type="button"
+                className="studio-ops-icon-btn"
+                onClick={() => void refresh()}
+                disabled={busy === "refresh"}
+                aria-label="Refresh status"
+              >
+                {busy === "refresh" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+              </button>
+              {!linked ? (
+                <button
+                  type="button"
+                  className="studio-ops-primary"
+                  disabled={!!busy}
+                  onClick={() => void linkPhone()}
+                >
+                  {busy === "link" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : null}
+                  {showingQr ? "Refresh QR" : "Link WhatsApp"}
+                </button>
+              ) : null}
             </div>
           </div>
-          <div className="studio-admin-row-actions">
-            {!linked ? (
+
+          {showingQr ? (
+            <div className="studio-ops-qr">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qrSrc!} alt="Scan with WhatsApp to link Sophie" />
+              <p className="studio-ops-qr-hint">Open WhatsApp → Linked devices → Scan</p>
+            </div>
+          ) : null}
+
+          <details className="studio-ops-advanced">
+            <summary>Advanced</summary>
+            <div className="studio-ops-advanced-body">
               <button
                 type="button"
                 className="cursor-settings-action"
+                style={{ width: "auto" }}
                 disabled={!!busy}
-                onClick={() => void linkPhone()}
+                onClick={() => void unlink()}
               >
-                {busy === "link" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : null}
-                {qrSrc ? "Refresh QR" : "Link WhatsApp"}
+                Unlink
               </button>
-            ) : null}
-          </div>
+            </div>
+          </details>
         </div>
-
-        {qrSrc && !linked ? (
-          <div style={{ marginTop: 4 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={qrSrc}
-              alt="Scan with WhatsApp to link Sophie"
-              width={220}
-              height={220}
-              style={{ borderRadius: 8, background: "#fff" }}
-            />
-          </div>
-        ) : null}
-
-        <details>
-          <summary className="studio-settings-empty" style={{ cursor: "pointer" }}>
-            Advanced
-          </summary>
-          <div className="studio-admin-row-actions" style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              className="cursor-settings-action"
-              disabled={!!busy}
-              onClick={() => void unlink()}
-            >
-              Unlink
-            </button>
-          </div>
-        </details>
       </section>
 
       {sessions.length > 0 ? (
