@@ -10,6 +10,7 @@ import {
   effectiveCoursePriceCredits,
   isCourseSaleActive,
 } from "./lib/academyPricing";
+import { hashMagicToken, MAGIC_LINK_TTL_MS } from "./magicLoginAuth";
 
 const COVER_URL_TTL_SEC = 60 * 60 * 6;
 
@@ -432,5 +433,65 @@ export const internalCompleteProfile = internalMutation({
       updatedAt: Date.now(),
     });
     return { userId: user._id };
+  },
+});
+
+/** Sophie CS — create a one-time Studio login URL (5 min, single-use). */
+export const internalCreateMagicLoginLink = internalMutation({
+  args: {
+    phone: v.string(),
+    source: v.optional(v.string()),
+  },
+  returns: v.object({
+    url: v.string(),
+    expiresAt: v.number(),
+    expiresInSec: v.number(),
+    userId: v.id("users"),
+  }),
+  handler: async (ctx, args) => {
+    const phone = normalizePhone(args.phone);
+    if (phone.length < 8) throw new Error("Invalid phone");
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .unique();
+    if (!user) throw new Error("No Studio account for this phone — create user first");
+
+    const pending = await ctx.db
+      .query("magicLoginTokens")
+      .withIndex("by_user_and_status", (q) =>
+        q.eq("userId", user._id).eq("status", "pending"),
+      )
+      .collect();
+    const now = Date.now();
+    for (const row of pending) {
+      await ctx.db.patch(row._id, { status: "expired" });
+    }
+
+    const rawBytes = new Uint8Array(32);
+    crypto.getRandomValues(rawBytes);
+    const raw = [...rawBytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const tokenHash = await hashMagicToken(raw);
+    const expiresAt = now + MAGIC_LINK_TTL_MS;
+    await ctx.db.insert("magicLoginTokens", {
+      userId: user._id,
+      phone,
+      tokenHash,
+      status: "pending",
+      expiresAt,
+      createdAt: now,
+      source: args.source ?? "sophie_cs",
+    });
+
+    const site = String(process.env.SITE_URL || "https://studio.yatishara.com").replace(
+      /\/$/,
+      "",
+    );
+    return {
+      url: `${site}/auth/magic?token=${raw}`,
+      expiresAt,
+      expiresInSec: Math.floor(MAGIC_LINK_TTL_MS / 1000),
+      userId: user._id,
+    };
   },
 });

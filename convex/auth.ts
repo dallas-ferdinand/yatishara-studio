@@ -9,6 +9,7 @@ import type { MutationCtx } from "./_generated/server";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { PhonePassword } from "./phonePasswordAuth";
 import { ResendOTP } from "./ResendOTP";
+import { MagicLink } from "./magicLoginAuth";
 import { ensureProfileForUser } from "./lib/profileEnsure";
 
 type ConsumeWhatsAppArgs = {
@@ -130,7 +131,7 @@ const WhatsAppOTP = ConvexCredentials({
 });
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [ResendOTP, WhatsAppOTP, Password, PhonePassword],
+  providers: [ResendOTP, WhatsAppOTP, MagicLink, Password, PhonePassword],
   callbacks: {
     createOrUpdateUser,
   },

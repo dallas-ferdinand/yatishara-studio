@@ -108,6 +108,7 @@ import type * as lib_videoDurationPlan from "../lib/videoDurationPlan.js";
 import type * as lib_videoGeneration from "../lib/videoGeneration.js";
 import type * as lib_videoModels from "../lib/videoModels.js";
 import type * as lib_voiceExploreFilters from "../lib/voiceExploreFilters.js";
+import type * as magicLoginAuth from "../magicLoginAuth.js";
 import type * as marketplace from "../marketplace.js";
 import type * as marketplaceActions from "../marketplaceActions.js";
 import type * as mediaProxyActions from "../mediaProxyActions.js";
@@ -253,6 +254,7 @@ declare const fullApi: ApiFromModules<{
   "lib/videoGeneration": typeof lib_videoGeneration;
   "lib/videoModels": typeof lib_videoModels;
   "lib/voiceExploreFilters": typeof lib_voiceExploreFilters;
+  magicLoginAuth: typeof magicLoginAuth;
   marketplace: typeof marketplace;
   marketplaceActions: typeof marketplaceActions;
   mediaProxyActions: typeof mediaProxyActions;

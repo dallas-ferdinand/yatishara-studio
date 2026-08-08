@@ -1799,4 +1799,22 @@ export default defineSchema({
     expiresAt: v.number(),
     createdAt: v.number(),
   }).index("by_email", ["email"]),
+
+  /** One-time Studio login links (Sophie WA). Single-use; 5 min TTL. */
+  magicLoginTokens: defineTable({
+    userId: v.id("users"),
+    phone: v.optional(v.string()),
+    tokenHash: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("consumed"),
+      v.literal("expired"),
+    ),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    consumedAt: v.optional(v.number()),
+    source: v.optional(v.string()),
+  })
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_user_and_status", ["userId", "status"]),
 });
