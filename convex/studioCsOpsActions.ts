@@ -187,6 +187,41 @@ export const adminSetFollowup = action({
   },
 });
 
+export const adminSetStatus = action({
+  args: {
+    phone: v.string(),
+    status: v.string(),
+    action: v.optional(
+      v.union(v.literal("add"), v.literal("remove"), v.literal("set")),
+    ),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/status`, {
+      method: "POST",
+      body: JSON.stringify({
+        status: args.status,
+        action: args.action || "add",
+      }),
+    });
+  },
+});
+
+export const adminSetNotes = action({
+  args: { phone: v.string(), notes: v.string() },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ notes: args.notes }),
+    });
+  },
+});
+
 export const adminListPayments = action({
   args: { pending: v.optional(v.boolean()) },
   returns: v.any(),
