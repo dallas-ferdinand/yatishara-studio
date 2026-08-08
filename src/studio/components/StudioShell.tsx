@@ -20944,9 +20944,12 @@ export function StudioShell({
         }
         .studio-academy-card-media.public-offers-card-media {
           position: relative;
-          margin: 0;
+          margin: 10px 10px 0;
           aspect-ratio: 16 / 10;
-          border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          overflow: hidden;
+          border: none;
+          border-radius: var(--cursor-radius-lg, 12px);
+          background: var(--mos-plate-strong, var(--cursor-surface-raised));
         }
         .studio-academy-card-media .studio-academy-card-frame.media-load-frame,
         .studio-academy-card-media .studio-academy-card-frame.media-load-frame.is-ready {
