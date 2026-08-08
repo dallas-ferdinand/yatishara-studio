@@ -10,8 +10,7 @@
   padding: 0;
   border-radius: 50%;
   overflow: hidden;
-  display: grid;
-  place-items: center;
+  display: block;
   flex-shrink: 0;
   border: 1px solid var(
     --studio-composer-glass-border,
@@ -83,20 +82,37 @@
   cursor: not-allowed;
 }
 
+/* Fill the content box (inside the border). Never force outer size on media —
+   that oversized the img vs border-box and clipped off-center. */
 .studio-profile-avatar-media,
 .studio-profile-avatar-fallback {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
   overflow: hidden;
 }
 
 .studio-profile-avatar-media {
-  object-fit: cover;
   display: block;
+  object-fit: cover;
+  object-position: center center;
   background: color-mix(in srgb, #050608 55%, transparent);
+}
+
+.studio-profile-avatar-fallback {
+  display: grid;
+  place-items: center;
+  place-content: center;
+  font: inherit;
+  color: inherit;
+  line-height: 1;
 }
 
 .studio-profile-avatar-fallback.is-placeholder {
@@ -108,7 +124,7 @@
   position: absolute;
   inset: 0;
   z-index: 2;
-  border-radius: 50%;
+  border-radius: inherit;
   display: grid;
   place-items: center;
   background: color-mix(in srgb, #000 45%, transparent);

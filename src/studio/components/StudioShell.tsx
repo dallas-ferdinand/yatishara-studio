@@ -14459,10 +14459,7 @@ export function StudioShell({
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-page, var(--mos-panel)));
           box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
         }
-        .studio-ops-chat-card-avatar,
-        .studio-ops-chat-card-avatar .studio-profile-avatar.is-md,
-        .studio-ops-chat-card-avatar .studio-profile-avatar.is-md .studio-profile-avatar-media,
-        .studio-ops-chat-card-avatar .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
+        .studio-ops-chat-card-avatar .studio-profile-avatar.is-md {
           width: 32px;
           height: 32px;
           min-width: 32px;
@@ -14801,9 +14798,7 @@ export function StudioShell({
           font: inherit;
           font-size: 12px;
         }
-        .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md,
-        .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md .studio-profile-avatar-media,
-        .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
+        .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md {
           width: 30px;
           height: 30px;
           min-width: 30px;
