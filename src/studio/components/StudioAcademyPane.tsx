@@ -237,9 +237,6 @@ function CheckoutDock({
             aria-hidden="true"
           />
           <div className="studio-academy-checkout-hero-copy">
-            <span className="studio-academy-checkout-kicker">
-              {owned ? "Unlocked" : needsTopUp ? "Top up to unlock" : "Unlock"}
-            </span>
             <strong className="studio-academy-checkout-amount">
               <span className="studio-academy-checkout-price-now">{priceLabel}</span>
               {onSale && listPriceLabel ? (
