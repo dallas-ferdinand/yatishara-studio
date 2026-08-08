@@ -14804,7 +14804,7 @@ export function StudioShell({
           overflow-x: auto;
           overflow-y: hidden;
           border-bottom: 1px solid var(--color-cursor-border-soft, var(--color-cursor-border));
-          background: var(--mos-bg, var(--color-cursor-bg));
+          background: var(--mos-page, var(--mos-panel));
           scrollbar-width: none;
         }
         .studio-ops-action-tabs::-webkit-scrollbar {
@@ -14849,30 +14849,21 @@ export function StudioShell({
           font-size: 9px;
           font-weight: 700;
         }
-        .studio-ops-chat-peer .studio-admin-section {
-          margin: 0;
-        }
-        .studio-ops-peer-section-icon {
-          display: inline-flex;
-          margin-right: 6px;
-          vertical-align: -2px;
-          opacity: 0.85;
-        }
-        .studio-ops-notes,
-        .studio-ops-input {
-          width: 100%;
-          border: 0;
+        .studio-ops-agent-item {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          padding: 10px;
           border-radius: 8px;
           background: var(--mos-plate);
-          color: var(--color-cursor-text);
-          padding: 8px 10px;
-          font: inherit;
-          font-size: 12.5px;
-          resize: vertical;
         }
-        .studio-ops-notes:focus,
-        .studio-ops-input:focus {
-          outline: 1px solid color-mix(in srgb, var(--cursor-accent) 45%, transparent);
+        .studio-ops-agent-item-body {
+          margin: 0;
+          font-size: 12.5px;
+          line-height: 1.4;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          color: var(--color-cursor-text);
         }
         .studio-ops-peer-hint {
           margin: 0;
@@ -14885,17 +14876,10 @@ export function StudioShell({
           padding: 8px 10px;
           border-radius: 8px;
           background: var(--mos-plate);
-          margin-bottom: 8px;
         }
         .studio-ops-followup-card strong {
           font-size: 12.5px;
         }
-        .studio-ops-followup-form {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-        .studio-ops-followup-actions,
         .studio-ops-label-grid {
           display: flex;
           flex-wrap: wrap;

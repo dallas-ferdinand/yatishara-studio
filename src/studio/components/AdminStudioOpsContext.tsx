@@ -173,10 +173,6 @@ type OpsContextValue = {
   selectedPhone: string | null;
   setSelectedPhone: (phone: string | null) => void;
   detail: DetailState | null;
-  notesDraft: string;
-  setNotesDraft: (v: string) => void;
-  followNote: string;
-  setFollowNote: (v: string) => void;
   filteredSessions: SessionRow[];
   refresh: () => Promise<void>;
   loadDetail: (phone: string) => Promise<void>;
@@ -185,18 +181,11 @@ type OpsContextValue = {
   unlink: () => Promise<void>;
   setAgent: (args: { phone: string; enabled: boolean }) => Promise<unknown>;
   setTakeover: (args: { phone: string; on: boolean }) => Promise<unknown>;
-  setFollowup: (args: {
-    phone: string;
-    atIso?: string;
-    note?: string;
-    clear?: boolean;
-  }) => Promise<unknown>;
   setStatus: (args: {
     phone: string;
     status: string;
     action?: "add" | "remove" | "set";
   }) => Promise<unknown>;
-  setNotes: (args: { phone: string; notes: string }) => Promise<unknown>;
   decidePayment: (args: {
     paymentId: number;
     decision: "approve" | "reject";
@@ -225,9 +214,7 @@ export function AdminStudioOpsProvider({
   const getSession = useAction(api.studioCsOpsActions.adminGetSession);
   const setAgentAction = useAction(api.studioCsOpsActions.adminSetAgent);
   const setTakeoverAction = useAction(api.studioCsOpsActions.adminSetTakeover);
-  const setFollowupAction = useAction(api.studioCsOpsActions.adminSetFollowup);
   const setStatusAction = useAction(api.studioCsOpsActions.adminSetStatus);
-  const setNotesAction = useAction(api.studioCsOpsActions.adminSetNotes);
   const listPayments = useAction(api.studioCsOpsActions.adminListPayments);
   const decidePaymentAction = useAction(
     api.studioCsOpsActions.adminDecidePayment,
@@ -247,8 +234,6 @@ export function AdminStudioOpsProvider({
   const [chatFilter, setChatFilter] = useState<ChatFilterId>("all");
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [detail, setDetail] = useState<DetailState | null>(null);
-  const [notesDraft, setNotesDraft] = useState("");
-  const [followNote, setFollowNote] = useState("");
 
   const pendingByPhone = useMemo(() => {
     const map = new Map<string, number>();
@@ -307,8 +292,6 @@ export function AdminStudioOpsProvider({
           activity: raw.activity || [],
           payments: raw.payments || [],
         });
-        setNotesDraft(raw.session?.notes || "");
-        setFollowNote(raw.session?.followup_note || "");
       } catch (err) {
         toast.error(friendlyConvexError(err, "Could not open chat"));
       } finally {
@@ -447,10 +430,6 @@ export function AdminStudioOpsProvider({
       selectedPhone,
       setSelectedPhone,
       detail,
-      notesDraft,
-      setNotesDraft,
-      followNote,
-      setFollowNote,
       filteredSessions,
       refresh,
       loadDetail,
@@ -459,9 +438,7 @@ export function AdminStudioOpsProvider({
       unlink,
       setAgent: setAgentAction,
       setTakeover: setTakeoverAction,
-      setFollowup: setFollowupAction,
       setStatus: setStatusAction,
-      setNotes: setNotesAction,
       decidePayment: decidePaymentAction,
       deviceEnsure,
       deviceConnect,
@@ -482,8 +459,6 @@ export function AdminStudioOpsProvider({
       chatFilter,
       selectedPhone,
       detail,
-      notesDraft,
-      followNote,
       filteredSessions,
       refresh,
       loadDetail,
@@ -492,9 +467,7 @@ export function AdminStudioOpsProvider({
       unlink,
       setAgentAction,
       setTakeoverAction,
-      setFollowupAction,
       setStatusAction,
-      setNotesAction,
       decidePaymentAction,
       deviceEnsure,
       deviceConnect,

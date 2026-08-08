@@ -4,17 +4,12 @@ import {
   Ban,
   Bot,
   Copy,
-  Clock,
   Loader2,
-  NotebookPen,
   RefreshCw,
-  Tags,
   UserRoundCheck,
-  Wallet,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { AdminStudioOpsThread } from "./AdminStudioOpsThread";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
@@ -51,37 +46,6 @@ function paymentStatusTone(p: PaymentRow): string {
   return "";
 }
 
-function Section({
-  title,
-  icon,
-  extras,
-  children,
-}: {
-  title: string;
-  icon?: ReactNode;
-  extras?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="studio-admin-section">
-      <div className="studio-admin-section-head">
-        <span className="studio-admin-section-title">
-          {icon ? (
-            <span className="studio-ops-peer-section-icon" aria-hidden="true">
-              {icon}
-            </span>
-          ) : null}
-          {title}
-        </span>
-        {extras ? (
-          <div className="studio-admin-section-extras">{extras}</div>
-        ) : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
 export function AdminStudioOpsPane() {
   const [actionTab, setActionTab] = useState<ActionTab>("notes");
   const {
@@ -95,19 +59,13 @@ export function AdminStudioOpsPane() {
     busy,
     selectedPhone,
     detail,
-    notesDraft,
-    setNotesDraft,
-    followNote,
-    setFollowNote,
     refresh,
     afterMutate,
     linkPhone,
     unlink,
     setAgent,
     setTakeover,
-    setFollowup,
     setStatus,
-    setNotes,
     decidePayment,
   } = useAdminStudioOps();
 
@@ -132,8 +90,9 @@ export function AdminStudioOpsPane() {
     null;
   const selectedStatuses =
     detail?.statuses || selected?.statuses || ([] as string[]);
+  const agentNotes = String(selected?.notes || "").trim();
   const actionCounts: Record<ActionTab, number> = {
-    notes: notesDraft.trim() ? 1 : 0,
+    notes: agentNotes ? 1 : 0,
     followups: selected?.followup_at ? 1 : 0,
     labels: selectedStatuses.length,
     payments: detail?.payments?.length || 0,
@@ -313,217 +272,126 @@ export function AdminStudioOpsPane() {
                   </div>
                   <div className="studio-ops-chat-peer-scroll">
                     {actionTab === "notes" ? (
-                      <Section
-                        title="Notes"
-                        icon={<NotebookPen className="h-3.5 w-3.5" />}
-                        extras={
-                          <button
-                            type="button"
-                            className="cursor-settings-action"
-                            disabled={!!busy}
-                            onClick={() =>
-                              void setNotes({
-                                phone: selected.phone,
-                                notes: notesDraft,
-                              })
-                                .then(afterMutate)
-                                .then(() => toast.success("Notes saved"))
-                                .catch((err) =>
-                                  toast.error(
-                                    friendlyConvexError(err, "Could not save notes"),
-                                  ),
-                                )
-                            }
-                          >
-                            Save
-                          </button>
-                        }
-                      >
-                        <textarea
-                          className="studio-ops-notes"
-                          rows={4}
-                          value={notesDraft}
-                          placeholder="Internal notes for this lead…"
-                          onChange={(e) => setNotesDraft(e.target.value)}
-                        />
-                      </Section>
+                      agentNotes ? (
+                        <div className="studio-ops-agent-item">
+                          <p className="studio-ops-agent-item-body">{agentNotes}</p>
+                          <span className="studio-muted">Sophie</span>
+                        </div>
+                      ) : (
+                        <p className="studio-muted studio-ops-peer-hint">
+                          No agent notes yet.
+                        </p>
+                      )
                     ) : null}
 
                     {actionTab === "followups" ? (
-                      <Section
-                        title="Follow-ups"
-                        icon={<Clock className="h-3.5 w-3.5" />}
-                      >
-                    {selected.followup_at ? (
-                      <div className="studio-ops-followup-card">
-                        <strong>{whenLabel(selected.followup_at)}</strong>
-                        <p className="studio-muted">
-                          {selected.followup_note || "Scheduled by Sophie / ops"}
+                      selected.followup_at ? (
+                        <div className="studio-ops-followup-card">
+                          <strong>{whenLabel(selected.followup_at)}</strong>
+                          <p className="studio-muted">
+                            {selected.followup_note || "Scheduled by Sophie"}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="studio-muted studio-ops-peer-hint">
+                          No follow-up scheduled.
                         </p>
-                        <button
-                          type="button"
-                          className="cursor-settings-action"
-                          onClick={() =>
-                            void setFollowup({
-                              phone: selected.phone,
-                              clear: true,
-                            }).then(afterMutate)
-                          }
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="studio-muted studio-ops-peer-hint">
-                        No follow-up scheduled.
-                      </p>
-                    )}
-                    <div className="studio-ops-followup-form">
-                      <input
-                        type="text"
-                        className="studio-ops-input"
-                        placeholder="Note for Sophie…"
-                        value={followNote}
-                        onChange={(e) => setFollowNote(e.target.value)}
-                      />
-                      <div className="studio-ops-followup-actions">
-                        <button
-                          type="button"
-                          className="cursor-settings-action"
-                          onClick={() => {
-                            const at = new Date(
-                              Date.now() + 60 * 60 * 1000,
-                            ).toISOString();
-                            void setFollowup({
-                              phone: selected.phone,
-                              atIso: at,
-                              note: followNote || "Check in",
-                            }).then(afterMutate);
-                          }}
-                        >
-                          +1h
-                        </button>
-                        <button
-                          type="button"
-                          className="cursor-settings-action"
-                          onClick={() => {
-                            const d = new Date();
-                            d.setDate(d.getDate() + 1);
-                            d.setHours(10, 0, 0, 0);
-                            void setFollowup({
-                              phone: selected.phone,
-                              atIso: d.toISOString(),
-                              note: followNote || "Follow up tomorrow",
-                            }).then(afterMutate);
-                          }}
-                        >
-                          Tomorrow
-                        </button>
-                      </div>
-                    </div>
-                      </Section>
+                      )
                     ) : null}
 
                     {actionTab === "labels" ? (
-                      <Section title="Labels" icon={<Tags className="h-3.5 w-3.5" />}>
-                        <div className="studio-ops-label-grid">
-                          {statusCatalog.map((opt) => {
-                            const on = selectedStatuses.includes(opt.id);
-                            return (
-                              <button
-                                key={opt.id}
-                                type="button"
-                                className={`studio-ops-chip-btn${on ? " is-on" : ""}`}
-                                onClick={() =>
-                                  void setStatus({
-                                    phone: selected.phone,
-                                    status: opt.id,
-                                    action: on ? "remove" : "add",
-                                  }).then(afterMutate)
-                                }
-                              >
-                                {opt.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </Section>
+                      <div className="studio-ops-label-grid">
+                        {statusCatalog.map((opt) => {
+                          const on = selectedStatuses.includes(opt.id);
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              className={`studio-ops-chip-btn${on ? " is-on" : ""}`}
+                              onClick={() =>
+                                void setStatus({
+                                  phone: selected.phone,
+                                  status: opt.id,
+                                  action: on ? "remove" : "add",
+                                }).then(afterMutate)
+                              }
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     ) : null}
 
                     {actionTab === "payments" ? (
-                      <Section
-                        title="Payments"
-                        icon={<Wallet className="h-3.5 w-3.5" />}
-                      >
-                    {(detail?.payments || []).length === 0 ? (
-                      <p className="studio-muted studio-ops-peer-hint">
-                        No payment attempts yet.
-                      </p>
-                    ) : (
-                      <ul className="studio-ops-pay-list">
-                        {(detail?.payments || []).map((p) => (
-                          <li
-                            key={p.id}
-                            className={`studio-ops-pay-row ${paymentStatusTone(p)}`}
-                          >
-                            <div>
-                              <strong>
-                                {money(p.amount_cents)} · {p.kind}
-                              </strong>
-                              <div className="studio-muted">
-                                {[
-                                  p.method || "—",
-                                  `status ${p.status}`,
-                                  `owner ${p.owner_status}`,
-                                  p.course_id ? `course ${p.course_id}` : null,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ")}
+                      (detail?.payments || []).length === 0 ? (
+                        <p className="studio-muted studio-ops-peer-hint">
+                          No payment attempts yet.
+                        </p>
+                      ) : (
+                        <ul className="studio-ops-pay-list">
+                          {(detail?.payments || []).map((p) => (
+                            <li
+                              key={p.id}
+                              className={`studio-ops-pay-row ${paymentStatusTone(p)}`}
+                            >
+                              <div>
+                                <strong>
+                                  {money(p.amount_cents)} · {p.kind}
+                                </strong>
+                                <div className="studio-muted">
+                                  {[
+                                    p.method || "—",
+                                    `status ${p.status}`,
+                                    `owner ${p.owner_status}`,
+                                    p.course_id ? `course ${p.course_id}` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </div>
+                                {p.notes ? (
+                                  <div className="studio-muted">{p.notes}</div>
+                                ) : null}
                               </div>
-                              {p.notes ? (
-                                <div className="studio-muted">{p.notes}</div>
-                              ) : null}
-                            </div>
-                            {p.owner_status === "pending" &&
-                            p.agent_accepted ? (
-                              <div className="studio-admin-row-actions">
-                                <button
-                                  type="button"
-                                  className="cursor-settings-action"
-                                  onClick={() =>
-                                    void decidePayment({
-                                      paymentId: p.id,
-                                      decision: "approve",
-                                    }).then(afterMutate)
-                                  }
+                              {p.owner_status === "pending" &&
+                              p.agent_accepted ? (
+                                <div className="studio-admin-row-actions">
+                                  <button
+                                    type="button"
+                                    className="cursor-settings-action"
+                                    onClick={() =>
+                                      void decidePayment({
+                                        paymentId: p.id,
+                                        decision: "approve",
+                                      }).then(afterMutate)
+                                    }
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cursor-settings-action"
+                                    onClick={() =>
+                                      void decidePayment({
+                                        paymentId: p.id,
+                                        decision: "reject",
+                                      }).then(afterMutate)
+                                    }
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              ) : (
+                                <span
+                                  className={`studio-ops-chip ${paymentStatusTone(p)}`}
                                 >
-                                  Approve
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cursor-settings-action"
-                                  onClick={() =>
-                                    void decidePayment({
-                                      paymentId: p.id,
-                                      decision: "reject",
-                                    }).then(afterMutate)
-                                  }
-                                >
-                                  Reject
-                                </button>
-                              </div>
-                            ) : (
-                              <span
-                                className={`studio-ops-chip ${paymentStatusTone(p)}`}
-                              >
-                                {p.owner_status}
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                      </Section>
+                                  {p.owner_status}
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )
                     ) : null}
                   </div>
                 </>
