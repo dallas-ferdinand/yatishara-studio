@@ -249,10 +249,10 @@ function CheckoutDock({
           />
           <div className="studio-academy-checkout-hero-copy">
             <strong className="studio-academy-checkout-amount">
-              <span className="studio-academy-checkout-price-now">{priceLabel}</span>
               {onSale && listPriceLabel ? (
-                <s className="studio-academy-checkout-price-was">{listPriceLabel}</s>
+                <s className="studio-academy-card-compare">{listPriceLabel}</s>
               ) : null}
+              <span className="studio-academy-card-now">{priceLabel}</span>
             </strong>
             {!owned ? (
               <ul
@@ -924,15 +924,18 @@ export function StudioAcademyPane({
               {!owned ? (
                 <div className="studio-academy-detail-price">
                   <span className="public-offers-card-price">
-                    {priceLabel}
                     {listPriceLabel ? (
                       <>
-                        {" "}
                         <s className="studio-academy-card-compare">
                           {listPriceLabel}
                         </s>
+                        <span className="studio-academy-card-now">
+                          {priceLabel}
+                        </span>
                       </>
-                    ) : null}
+                    ) : (
+                      priceLabel
+                    )}
                   </span>
                 </div>
               ) : null}
@@ -988,15 +991,18 @@ export function StudioAcademyPane({
               {!owned ? (
                 <div className="studio-academy-detail-price">
                   <span className="public-offers-card-price">
-                    {priceLabel}
                     {listPriceLabel ? (
                       <>
-                        {" "}
                         <s className="studio-academy-card-compare">
                           {listPriceLabel}
                         </s>
+                        <span className="studio-academy-card-now">
+                          {priceLabel}
+                        </span>
                       </>
-                    ) : null}
+                    ) : (
+                      priceLabel
+                    )}
                   </span>
                 </div>
               ) : null}

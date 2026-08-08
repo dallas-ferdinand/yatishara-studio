@@ -21142,15 +21142,16 @@ export function StudioShell({
           background: transparent;
           box-shadow: none;
           font-size: 15px;
-          font-weight: 700;
+          font-weight: 750;
           line-height: 1.2;
           white-space: nowrap;
         }
         .studio-academy-detail-price .studio-academy-card-compare {
-          font-size: 12px;
-          font-weight: 550;
-          opacity: 0.5;
+          font-size: 0.92em;
           background: transparent;
+        }
+        .studio-academy-detail-price .studio-academy-card-now {
+          font-size: 1.18em;
         }
         .studio-academy-card--soon {
           cursor: default;
