@@ -100,7 +100,7 @@ export function AdminStudioOpsPane() {
   return (
     <div className={`studio-ops-shell${showPeer ? " has-peer" : ""}`}>
       <div className="studio-ops-main-col">
-        <header className="studio-admin-head">
+        <header className="studio-admin-head studio-ops-subhead">
           <nav className="studio-admin-head-tabs" aria-label="Ops sections">
             {OPS_TABS.map((item) => (
               <button
@@ -123,7 +123,7 @@ export function AdminStudioOpsPane() {
         </header>
 
         <div
-          className={`studio-admin-body${opsTab === "chats" ? " is-ops-chats" : ""}`}
+          className={`studio-ops-main-body${opsTab === "chats" ? " is-ops-chats" : ""}`}
         >
           {opsTab === "chats" ? (
             <div

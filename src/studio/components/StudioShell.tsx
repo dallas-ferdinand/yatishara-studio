@@ -14353,28 +14353,32 @@ export function StudioShell({
           overflow: auto;
           padding: 16px;
         }
+        /* Ops must own a real box — percentage height on a flex child was collapsing
+           the whole Chats/Settings + peer chrome to blank white. */
         .studio-admin-body.is-ops-fill {
-          display: flex;
-          flex-direction: column;
+          position: relative;
+          display: block;
+          flex: 1 1 0;
+          min-height: 0;
           overflow: hidden;
           padding: 0;
         }
         .studio-admin-ops-fill {
+          position: absolute;
+          inset: 0;
           display: flex;
-          flex: 1 1 0;
           flex-direction: column;
+          min-width: 0;
           min-height: 0;
-          height: 100%;
-          max-height: none;
-          margin: 0;
           overflow: hidden;
+          background: var(--mos-page, var(--mos-panel));
         }
         .studio-admin-ops-fill > .studio-ops-shell {
           display: flex;
           flex: 1 1 0;
           flex-direction: column;
+          min-width: 0;
           min-height: 0;
-          height: 100%;
           overflow: hidden;
         }
         .studio-ops-shell.has-peer {
@@ -14387,22 +14391,21 @@ export function StudioShell({
           flex-direction: column;
           min-width: 0;
           min-height: 0;
-          height: 100%;
           overflow: hidden;
         }
-        .studio-ops-main-col > .studio-admin-head {
+        .studio-ops-main-col > .studio-ops-subhead {
           flex: 0 0 auto;
         }
-        .studio-ops-main-col > .studio-admin-body {
+        .studio-ops-main-col > .studio-ops-main-body {
+          display: flex;
           flex: 1 1 0;
+          flex-direction: column;
           min-height: 0;
           overflow: auto;
-        }
-        .studio-ops-main-col > .studio-admin-body.is-ops-chats {
           padding: 0;
+        }
+        .studio-ops-main-col > .studio-ops-main-body.is-ops-chats {
           overflow: hidden;
-          display: flex;
-          flex-direction: column;
         }
         .studio-ops-chats {
           position: relative;
@@ -14803,8 +14806,8 @@ export function StudioShell({
           flex-direction: column;
           width: clamp(260px, 28vw, 320px);
           align-self: stretch;
+          min-width: 0;
           min-height: 0;
-          height: 100%;
           overflow: hidden;
           border-left: 1px solid var(--color-cursor-border);
           background: var(--mos-page);
