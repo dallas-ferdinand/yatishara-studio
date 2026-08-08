@@ -18390,6 +18390,34 @@ export function StudioShell({
           display: grid;
           gap: 8px;
         }
+        .studio-admin-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          gap: 8px;
+        }
+        .studio-admin-list-row {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 10px 12px;
+          border: 1px solid var(--color-cursor-border);
+          border-radius: var(--cursor-radius-sm, 6px);
+          background: var(--mos-plate, var(--mos-bg, var(--cursor-surface-raised)));
+        }
+        .studio-admin-row-actions {
+          display: inline-flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          justify-content: flex-end;
+        }
+        .studio-admin-list-row .studio-muted {
+          margin-top: 4px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+        }
         /* Compact section bar — MercuryOS finance-section-title language. */
         .studio-admin-section-head {
           display: flex;
@@ -31089,6 +31117,8 @@ function adminTitle(tab) {
   if (tab === "offers") return "Offers";
   if (tab === "jobs") return "Jobs";
   if (tab === "assets") return "Assets";
+  if (tab === "academy") return "Academy";
+  if (tab === "ops") return "Ops";
   if (tab === "payouts") return "Payouts";
   if (tab === "tools" || tab === "setup" || tab === "pricing") return "Tools";
   return "Payments";

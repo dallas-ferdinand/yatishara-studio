@@ -113,7 +113,9 @@ export function AdminStudioOpsPane() {
           (typeof r.qrcode === "string" ? r.qrcode : r.qrcode?.base64) ||
           r.base64 ||
           null;
-        setQrSrc(b64 ? (b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`) : null);
+        setQrSrc(
+          b64 ? (b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`) : null,
+        );
         setDevice((prev) => ({ ...(prev || {}), ...(r as DeviceStatus) }));
       } else {
         await refresh();
@@ -135,7 +137,7 @@ export function AdminStudioOpsPane() {
           </span>
           <button
             type="button"
-            className="studio-btn-ghost"
+            className="cursor-settings-action"
             onClick={() => void refresh()}
             disabled={busy === "refresh"}
           >
@@ -175,14 +177,15 @@ export function AdminStudioOpsPane() {
               {svc?.enabled === false ? "Paused" : "Live"}
             </div>
             <div className="studio-admin-metric-body">
-              Port {(svc?.port as number) || 8795} · {String(svc?.instance || "yatishara-studio")}
+              Port {(svc?.port as number) || 8795} ·{" "}
+              {String(svc?.instance || "yatishara-studio")}
             </div>
           </div>
         </div>
         <div className="studio-admin-setup-grid" style={{ marginTop: 12 }}>
           <button
             type="button"
-            className="studio-btn"
+            className="cursor-settings-action"
             disabled={!!busy}
             onClick={() => void run("ensure", () => deviceEnsure({}))}
           >
@@ -190,15 +193,17 @@ export function AdminStudioOpsPane() {
           </button>
           <button
             type="button"
-            className="studio-btn"
+            className="cursor-settings-action"
             disabled={!!busy}
-            onClick={() => void run("connect", () => deviceConnect({ logoutFirst: false }))}
+            onClick={() =>
+              void run("connect", () => deviceConnect({ logoutFirst: false }))
+            }
           >
             Show QR / connect
           </button>
           <button
             type="button"
-            className="studio-btn"
+            className="cursor-settings-action"
             disabled={!!busy}
             onClick={() => void run("webhook", () => setWebhook({}))}
           >
@@ -206,10 +211,16 @@ export function AdminStudioOpsPane() {
           </button>
           <button
             type="button"
-            className="studio-btn-ghost"
+            className="cursor-settings-action"
             disabled={!!busy}
             onClick={() => {
-              if (!confirm("Unlink Sophie WA session? You will need to scan QR again.")) return;
+              if (
+                !confirm(
+                  "Unlink Sophie WA session? You will need to scan QR again.",
+                )
+              ) {
+                return;
+              }
               void run("unlink", () => deviceUnlink({}));
             }}
           >
@@ -243,7 +254,8 @@ export function AdminStudioOpsPane() {
                 <div>
                   <strong>{s.display_name || s.phone}</strong>
                   <div className="studio-muted">
-                    {s.phone} · {(s.statuses || [s.cs_status]).filter(Boolean).join(", ")} ·{" "}
+                    {s.phone} ·{" "}
+                    {(s.statuses || [s.cs_status]).filter(Boolean).join(", ")} ·{" "}
                     {s.payment_state || "unpaid"}
                     {s.followup_at ? ` · follow-up ${s.followup_at}` : ""}
                   </div>
@@ -251,7 +263,7 @@ export function AdminStudioOpsPane() {
                 <div className="studio-admin-row-actions">
                   <button
                     type="button"
-                    className="studio-btn-ghost"
+                    className="cursor-settings-action"
                     title="Agent on/off"
                     onClick={() =>
                       void run("agent", () =>
@@ -267,7 +279,7 @@ export function AdminStudioOpsPane() {
                   </button>
                   <button
                     type="button"
-                    className="studio-btn-ghost"
+                    className="cursor-settings-action"
                     title="Human takeover"
                     onClick={() =>
                       void run("takeover", () =>
@@ -307,14 +319,15 @@ export function AdminStudioOpsPane() {
                     #{p.id} {money(p.amount_cents)} · {p.kind}
                   </strong>
                   <div className="studio-muted">
-                    {p.phone} · {p.method || "?"} · {p.status} · owner {p.owner_status}
+                    {p.phone} · {p.method || "?"} · {p.status} · owner{" "}
+                    {p.owner_status}
                     {p.notes ? ` · ${p.notes}` : ""}
                   </div>
                 </div>
                 <div className="studio-admin-row-actions">
                   <button
                     type="button"
-                    className="studio-btn"
+                    className="cursor-settings-action"
                     onClick={() =>
                       void run("approve", () =>
                         decidePayment({ paymentId: p.id, decision: "approve" }),
@@ -325,7 +338,7 @@ export function AdminStudioOpsPane() {
                   </button>
                   <button
                     type="button"
-                    className="studio-btn-ghost"
+                    className="cursor-settings-action"
                     onClick={() =>
                       void run("reject", () =>
                         decidePayment({ paymentId: p.id, decision: "reject" }),
