@@ -14531,6 +14531,43 @@ export function StudioShell({
         .studio-ops-tag.is-working {
           background: #6d28d9;
         }
+        .studio-ops-tag.is-typing {
+          /* Same pill family as Sophie; sky keeps it distinct from is-working spin. */
+          background: #0284c7;
+          gap: 4px;
+        }
+        .studio-ops-typing-dots {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          flex: 0 0 auto;
+        }
+        .studio-ops-typing-dots > i {
+          display: block;
+          width: 3px;
+          height: 3px;
+          border-radius: 999px;
+          background: currentColor;
+          animation: studio-ops-typing-bounce 1s ease-in-out infinite;
+        }
+        .studio-ops-typing-dots > i:nth-child(2) {
+          animation-delay: 0.15s;
+        }
+        .studio-ops-typing-dots > i:nth-child(3) {
+          animation-delay: 0.3s;
+        }
+        @keyframes studio-ops-typing-bounce {
+          0%,
+          60%,
+          100% {
+            opacity: 0.35;
+            transform: translateY(0);
+          }
+          30% {
+            opacity: 1;
+            transform: translateY(-1.5px);
+          }
+        }
         .studio-ops-tag.is-agent {
           background: #15803d;
         }
@@ -14828,14 +14865,6 @@ export function StudioShell({
           min-width: 0;
           overflow: hidden;
           white-space: nowrap;
-        }
-        .studio-ops-presence-label {
-          font-size: 10.5px;
-          line-height: 1.2;
-          color: var(--color-cursor-muted);
-        }
-        .studio-ops-presence-label:first-letter {
-          text-transform: none;
         }
         .studio-ops-wa-thread {
           flex: 1 1 0;
