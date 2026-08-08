@@ -21080,11 +21080,12 @@ export function StudioShell({
           color: var(--color-cursor-text-bright, var(--mos-text));
         }
         .studio-academy-sale-pan-unit strong > span {
-          font-size: 0.72em;
-          font-weight: 700;
+          font-size: 1em;
+          font-weight: inherit;
           letter-spacing: 0.02em;
           text-transform: lowercase;
-          color: color-mix(in srgb, var(--cursor-accent) 72%, var(--color-cursor-text-muted, var(--mos-text-muted)));
+          opacity: 0.55;
+          color: inherit;
         }
         .studio-academy-sale-pan-sep {
           display: grid;
