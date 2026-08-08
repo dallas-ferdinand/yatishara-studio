@@ -901,19 +901,7 @@ export function StudioAcademyPane({
                         </s>
                       </>
                     ) : null}
-                    {discountLabel ? (
-                      <span className="studio-academy-price-save">
-                        −{discountLabel}
-                      </span>
-                    ) : null}
                   </span>
-                  {detail.onSale && detail.saleEndsAt ? (
-                    <SaleCountdownPanel
-                      saleEndsAt={detail.saleEndsAt}
-                      now={now}
-                      compact
-                    />
-                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -974,19 +962,7 @@ export function StudioAcademyPane({
                         </s>
                       </>
                     ) : null}
-                    {discountLabel ? (
-                      <span className="studio-academy-price-save">
-                        −{discountLabel}
-                      </span>
-                    ) : null}
                   </span>
-                  {detail.onSale && detail.saleEndsAt ? (
-                    <SaleCountdownPanel
-                      saleEndsAt={detail.saleEndsAt}
-                      now={now}
-                      compact
-                    />
-                  ) : null}
                 </div>
               ) : null}
             </div>
