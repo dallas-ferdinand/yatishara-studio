@@ -575,3 +575,107 @@
     max-width: 92%;
   }
 }
+
+
+.studio-ops-wa-thread .cs-ops-audio-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 12rem;
+}
+.studio-ops-wa-thread .cs-ops-vn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.studio-ops-wa-thread .cs-ops-vn-orb {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--cursor-accent, #22c55e) 35%, transparent);
+  background: color-mix(in srgb, var(--cursor-accent, #22c55e) 16%, transparent);
+  color: var(--mos-text-bright, var(--color-cursor-text));
+  cursor: pointer;
+  padding: 0;
+}
+.studio-ops-wa-thread .cs-ops-vn-orb.is-playing {
+  background: color-mix(in srgb, var(--cursor-accent, #22c55e) 28%, transparent);
+}
+.studio-ops-wa-thread .cs-ops-vn-wave {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.studio-ops-wa-thread .cs-ops-vn-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--mos-text-bright, #fff) 72%, transparent);
+}
+.studio-ops-wa-thread .cs-ops-bubble-row:not(.is-mine) .cs-ops-vn-bar {
+  background: color-mix(in srgb, var(--color-cursor-text) 55%, transparent);
+}
+.studio-ops-wa-thread .cs-ops-vn-time {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cursor-muted);
+  min-width: 2.4em;
+  text-align: right;
+}
+.studio-ops-wa-thread .cs-ops-vn-transcript {
+  margin: 0;
+  padding: 2px 2px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--color-cursor-text) 88%, transparent);
+  white-space: pre-wrap;
+}
+.studio-ops-wa-thread .cs-ops-bubble {
+  position: relative;
+}
+.studio-ops-wa-thread .studio-ops-react-strip {
+  position: absolute;
+  z-index: 3;
+  top: -14px;
+  inset-inline-end: 6px;
+  display: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--mos-plate, var(--mos-panel));
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 16%, transparent);
+}
+.studio-ops-wa-thread .cs-ops-bubble-row:hover .studio-ops-react-strip,
+.studio-ops-wa-thread .cs-ops-bubble-row:focus-within .studio-ops-react-strip {
+  display: inline-flex;
+}
+.studio-ops-wa-thread .studio-ops-react-btn {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+.studio-ops-wa-thread .studio-ops-react-btn:hover,
+.studio-ops-wa-thread .studio-ops-react-btn.is-active {
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 16%, transparent);
+}
+.studio-ops-wa-thread .studio-ops-react-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+

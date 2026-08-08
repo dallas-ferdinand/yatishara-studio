@@ -248,6 +248,28 @@ export const adminSendMessage = action({
   },
 });
 
+export const adminSendReaction = action({
+  args: {
+    phone: v.string(),
+    messageId: v.string(),
+    emoji: v.string(),
+    fromMe: v.optional(v.boolean()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const phone = args.phone.replace(/\D/g, "");
+    return studioCsFetch(`/api/studio-cs/sessions/${phone}/react`, {
+      method: "POST",
+      body: JSON.stringify({
+        messageId: args.messageId,
+        emoji: args.emoji,
+        fromMe: args.fromMe === true,
+      }),
+    });
+  },
+});
+
 export const adminSubscribePresence = action({
   args: { phone: v.string() },
   returns: v.any(),

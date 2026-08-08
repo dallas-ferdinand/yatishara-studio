@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Loader2, Phone } from "lucide-react";
+import { ArrowUp, Loader2, Pause, Phone, Play } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -37,6 +37,8 @@ export type WaThreadMessage = {
   quotedMessageId?: string | null;
   reaction?: { targetId?: string; emoji?: string; removed?: boolean } | null;
   reactions?: Array<{ emoji: string; fromMe?: boolean }>;
+  transcript?: string | null;
+  mediaKey?: string | null;
   callStatus?: string | null;
   interactive?: {
     variant?: string;
@@ -267,7 +269,129 @@ function WaInteractiveBody({
   );
 }
 
-function CsWaBubble({ m }: { m: WaThreadMessage }) {
+const REACT_EMOJI = ["👍", "❤️", "😂", "😮", "😢", "🙏"] as const;
+
+/** Studio-DM / Desk CS Ops style voice note player. */
+function StudioOpsVnPlayer({
+  src,
+  seconds = null,
+  seedKey = "",
+}: {
+  src: string;
+  seconds?: number | null;
+  seedKey?: string;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [dur, setDur] = useState(Number(seconds) > 0 ? Number(seconds) : 0);
+  const bars = useMemo(() => {
+    const key = String(seedKey || src || "vn");
+    let seed = 2166136261;
+    for (let i = 0; i < key.length; i += 1) {
+      seed ^= key.charCodeAt(i);
+      seed = Math.imul(seed, 16777619);
+    }
+    const out: number[] = [];
+    for (let i = 0; i < 28; i += 1) {
+      seed = Math.imul(seed ^ (seed >>> 13), 1274126177);
+      const n = ((seed >>> 0) % 1000) / 1000;
+      out.push(0.22 + 0.7 * n);
+    }
+    return out;
+  }, [seedKey, src]);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return undefined;
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    const onEnded = () => {
+      setPlaying(false);
+      setProgress(0);
+    };
+    const onTime = () => {
+      const d = el.duration;
+      if (Number.isFinite(d) && d > 0) setDur(d);
+      const denom = Number.isFinite(d) && d > 0 ? d : dur || 1;
+      setProgress(Math.min(1, (el.currentTime || 0) / denom));
+    };
+    const onMeta = () => {
+      if (Number.isFinite(el.duration) && el.duration > 0) setDur(el.duration);
+    };
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onPause);
+    el.addEventListener("ended", onEnded);
+    el.addEventListener("timeupdate", onTime);
+    el.addEventListener("loadedmetadata", onMeta);
+    return () => {
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onPause);
+      el.removeEventListener("ended", onEnded);
+      el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("loadedmetadata", onMeta);
+    };
+  }, [src, dur]);
+
+  const toggle = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) void el.play().catch(() => {});
+    else el.pause();
+  };
+
+  const clock = (() => {
+    const s =
+      dur > 0
+        ? Math.round(dur)
+        : Number(seconds) > 0
+          ? Math.round(Number(seconds))
+          : 0;
+    if (!s) return playing ? "…" : "0:00";
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  })();
+
+  return (
+    <div className="cs-ops-vn">
+      <audio ref={audioRef} src={src} preload="metadata" />
+      <button
+        type="button"
+        className={`cs-ops-vn-orb${playing ? " is-playing" : ""}`}
+        aria-label={playing ? "Pause voice note" : "Play voice note"}
+        onClick={toggle}
+      >
+        {playing ? (
+          <Pause className="h-3.5 w-3.5" aria-hidden />
+        ) : (
+          <Play className="h-3.5 w-3.5" aria-hidden />
+        )}
+      </button>
+      <div className="cs-ops-vn-wave" aria-hidden="true">
+        {bars.map((h, i) => (
+          <span
+            key={i}
+            className="cs-ops-vn-bar"
+            style={{
+              height: `${Math.round(h * 100)}%`,
+              opacity: i / bars.length <= progress ? 1 : 0.35,
+            }}
+          />
+        ))}
+      </div>
+      <span className="cs-ops-vn-time">{clock}</span>
+    </div>
+  );
+}
+
+function CsWaBubble({
+  m,
+  onReact,
+  reactingId,
+}: {
+  m: WaThreadMessage;
+  onReact?: (messageId: string, emoji: string, fromMe: boolean) => void;
+  reactingId?: string | null;
+}) {
   const kind = String(m.kind || "text");
   const mediaSrc = m.mediaUrl || m.thumbDataUrl || null;
   const preview = m.thumbDataUrl || mediaSrc;
@@ -276,9 +400,12 @@ function CsWaBubble({ m }: { m: WaThreadMessage }) {
   const quotedText = String(m.quotedText || "").trim();
   const quotedId = String(m.quotedMessageId || "").trim();
   const showQuote = !m.fromMe && Boolean(quotedText || quotedId);
+  const transcript = String(m.transcript || "").trim();
   const bubbleReactions = Array.isArray(m.reactions)
     ? m.reactions.filter((r) => r?.emoji)
     : [];
+  const msgId = String(m.id || "").trim();
+  const canReact = Boolean(msgId && onReact);
   const bubbleClass = [
     "cs-ops-bubble",
     kind === "image" || kind === "sticker" || kind === "video" ? "is-media" : "",
@@ -354,14 +481,23 @@ function CsWaBubble({ m }: { m: WaThreadMessage }) {
       <p className="cs-ops-media-missing">Video unavailable</p>
     );
   } else if (kind === "voice" || kind === "audio") {
-    body = mediaSrc ? (
+    body = (
       <div className="cs-ops-audio-wrap">
-        <audio className="cs-ops-audio" src={mediaSrc} controls preload="metadata" />
+        {mediaSrc ? (
+          <StudioOpsVnPlayer
+            src={mediaSrc}
+            seconds={m.seconds}
+            seedKey={msgId || mediaSrc}
+          />
+        ) : (
+          <p className="cs-ops-media-missing">
+            {kind === "voice" ? "Voice note unavailable" : "Audio unavailable"}
+          </p>
+        )}
+        {transcript ? (
+          <p className="cs-ops-vn-transcript">{transcript}</p>
+        ) : null}
       </div>
-    ) : (
-      <p className="cs-ops-media-missing">
-        {kind === "voice" ? "Voice note unavailable" : "Audio unavailable"}
-      </p>
     );
   } else if (kind === "document") {
     const docInner = (
@@ -417,12 +553,35 @@ function CsWaBubble({ m }: { m: WaThreadMessage }) {
       kind === "video" ||
       (kind === "document" && caption !== m.fileName));
 
+  const mineEmoji = bubbleReactions.find((r) => r.fromMe)?.emoji || "";
+
   return (
     <div
       className={`cs-ops-bubble-row${m.fromMe ? " is-mine" : ""}`}
       data-wa-id={m.id || undefined}
     >
       <div className={bubbleClass}>
+        {canReact ? (
+          <div className="studio-ops-react-strip" role="toolbar" aria-label="React">
+            {REACT_EMOJI.map((emoji) => {
+              const active = mineEmoji === emoji;
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  className={`studio-ops-react-btn${active ? " is-active" : ""}`}
+                  disabled={reactingId === msgId}
+                  title={active ? "Remove reaction" : `React ${emoji}`}
+                  onClick={() =>
+                    onReact?.(msgId, active ? "" : emoji, Boolean(m.fromMe))
+                  }
+                >
+                  {emoji}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="cs-ops-bubble-body">
           {showQuote ? (
             <div className="cs-ops-wa-quote">
@@ -465,11 +624,13 @@ export function AdminStudioOpsThread({
   const { threadTick, refresh } = useAdminStudioOps();
   const getMessages = useAction(api.studioCsOpsActions.adminGetMessages);
   const sendMessage = useAction(api.studioCsOpsActions.adminSendMessage);
+  const sendReaction = useAction(api.studioCsOpsActions.adminSendReaction);
   const [messages, setMessages] = useState<WaThreadMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [stale, setStale] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [reactingId, setReactingId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const failCountRef = useRef(0);
@@ -557,6 +718,25 @@ export function AdminStudioOpsThread({
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [timeline.length, phone, loading]);
 
+  async function onReact(messageId: string, emoji: string, fromMe: boolean) {
+    if (!messageId) return;
+    setReactingId(messageId);
+    try {
+      await sendReaction({
+        phone,
+        messageId,
+        emoji,
+        fromMe,
+      });
+      await load(true);
+      void refresh({ quiet: true });
+    } catch (err) {
+      toast.error(friendlyConvexError(err, "Reaction failed"));
+    } finally {
+      setReactingId(null);
+    }
+  }
+
   async function onSend() {
     const text = draft.trim();
     if (!text || sending) return;
@@ -606,7 +786,12 @@ export function AdminStudioOpsThread({
                   <span>{item.label}</span>
                 </div>
               ) : (
-                <CsWaBubble key={item.key} m={item.message} />
+                <CsWaBubble
+                  key={item.key}
+                  m={item.message}
+                  onReact={onReact}
+                  reactingId={reactingId}
+                />
               ),
             )}
             <div ref={bottomRef} />

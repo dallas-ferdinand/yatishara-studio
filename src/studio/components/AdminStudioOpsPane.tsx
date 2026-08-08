@@ -214,6 +214,11 @@ export function AdminStudioOpsPane() {
                             >
                               <Copy className="h-3.5 w-3.5" aria-hidden />
                             </button>
+                            {selected.presence?.typing ? (
+                              <span className="studio-ops-presence-label">
+                                typing…
+                              </span>
+                            ) : null}
                             {selected.working?.sophie ||
                             selected.status === "running" ||
                             (selected.badges || []).includes("sophie") ? (
@@ -229,11 +234,6 @@ export function AdminStudioOpsPane() {
                               </span>
                             ) : null}
                           </div>
-                          {selected.presence?.typing ? (
-                            <span className="studio-ops-presence-label">
-                              typing…
-                            </span>
-                          ) : null}
                         </div>
                       </div>
                       <div className="studio-ops-chat-main-actions">
