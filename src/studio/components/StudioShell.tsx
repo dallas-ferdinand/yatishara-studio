@@ -20944,11 +20944,12 @@ export function StudioShell({
         }
         .studio-academy-card-media.public-offers-card-media {
           position: relative;
-          margin: 10px 10px 0;
+          margin: 0;
           aspect-ratio: 16 / 10;
           overflow: hidden;
-          border: none;
-          border-radius: var(--cursor-radius-lg, 12px);
+          border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          border-radius: calc(var(--cursor-radius-lg, 10px) - 1px)
+            calc(var(--cursor-radius-lg, 10px) - 1px) 0 0;
           background: var(--mos-plate-strong, var(--cursor-surface-raised));
         }
         .studio-academy-card-media .studio-academy-card-frame.media-load-frame,
