@@ -45,7 +45,7 @@ function localCoverUrl(slug: string): string | undefined {
   const map: Record<string, string> = {
     "ad-side-hustle": "/academy/ad-side-hustle.webp",
     "short-films-studio": "/academy/short-films-studio.webp",
-    "cinematic-film-mastery": "/academy/academy-hero-4k.webp",
+    "cinematic-film-mastery": "/academy/cinematic-film-mastery.webp",
   };
   if (map[slug]) return map[slug];
   if (!slug.startsWith("demo-")) return undefined;
