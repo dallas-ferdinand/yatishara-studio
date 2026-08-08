@@ -315,11 +315,6 @@ export function AdminStudioOpsPane() {
                         </button>
                       </div>
                     </header>
-                    {selected.context_reset_at ? (
-                      <p className="studio-ops-reset-banner studio-muted">
-                        Agent context reset. Showing WhatsApp since reset only.
-                      </p>
-                    ) : null}
                     <OpsBabysitBar session={selected} />
                     <AdminStudioOpsThread
                       key={`${selected.phone}:${threadEpoch}`}

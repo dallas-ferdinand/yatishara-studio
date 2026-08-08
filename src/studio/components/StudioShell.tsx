@@ -15104,10 +15104,18 @@ export function StudioShell({
           min-height: 0;
           overflow-x: hidden;
           overflow-y: auto;
-          padding: 10px;
+          /* Match left Ops rail / DM peer body: 8px frame, 6px stack gap. */
+          padding: 8px;
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 6px;
+        }
+        .studio-ops-chat-peer-scroll .studio-ops-editor,
+        .studio-ops-chat-peer-scroll .studio-ops-babysit-bar,
+        .studio-ops-chat-peer-scroll .studio-ops-board {
+          padding: 0;
+          border-bottom: 0;
+          gap: 8px;
         }
         .studio-ops-label-list {
           width: 100%;
@@ -15116,7 +15124,7 @@ export function StudioShell({
           display: flex;
           align-items: center;
           flex: 0 0 auto;
-          gap: 2px;
+          gap: 4px;
           min-width: 0;
           height: var(--cursor-head-h, 32px);
           min-height: var(--cursor-head-h, 32px);
@@ -15134,23 +15142,34 @@ export function StudioShell({
           display: inline-flex;
           align-items: center;
           gap: 5px;
-          height: calc(var(--cursor-head-h, 32px) - 6px);
-          padding: 0 9px;
-          border: 0;
-          border-radius: 6px;
+          height: 24px;
+          padding: 0 10px;
+          border: 1px solid transparent;
+          border-radius: 999px;
           background: transparent;
           color: var(--color-cursor-muted);
           font: inherit;
           font-size: 12px;
-          font-weight: 500;
+          font-weight: 600;
           line-height: 1;
           white-space: nowrap;
           cursor: pointer;
+          transition:
+            color 160ms ease,
+            border-color 160ms ease,
+            background 160ms ease;
         }
-        .studio-ops-action-tab:hover,
+        .studio-ops-action-tab:hover {
+          color: var(--color-cursor-text-bright);
+        }
         .studio-ops-action-tab.is-active {
-          background: color-mix(in srgb, var(--mos-text) 8%, transparent);
-          color: var(--color-cursor-text);
+          border-color: color-mix(
+            in srgb,
+            var(--cursor-accent) 42%,
+            var(--color-cursor-border-soft)
+          );
+          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+          color: var(--color-cursor-text-bright);
         }
         .studio-ops-action-tab:focus-visible {
           outline: 2px solid color-mix(in srgb, var(--cursor-accent) 42%, transparent);
