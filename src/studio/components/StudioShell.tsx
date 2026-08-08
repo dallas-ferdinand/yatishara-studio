@@ -14441,9 +14441,11 @@ export function StudioShell({
         }
         .studio-ops-wa-thread {
           flex: 1 1 auto;
+          height: 100%;
           min-height: 0;
-          display: flex;
-          flex-direction: column;
+          display: grid;
+          grid-template-rows: minmax(0, 1fr) auto;
+          overflow: hidden;
         }
         .studio-ops-wa-thread .cs-ops-thread-scroll {
           flex: 1 1 auto;
@@ -14471,6 +14473,7 @@ export function StudioShell({
           display: flex;
           flex-direction: column;
           min-height: 0;
+          overflow: hidden;
         }
         .studio-ops-row-badges {
           display: flex;
@@ -14507,14 +14510,57 @@ export function StudioShell({
         .studio-ops-chat-main-peer {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
           min-width: 0;
+        }
+        .studio-ops-chat-main-peer-copy {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          min-width: 0;
+          overflow: hidden;
+          white-space: nowrap;
         }
         .studio-ops-chat-main-peer strong {
           display: block;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .studio-ops-phone-copy {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          min-width: 0;
+          height: 22px;
+          padding: 0 6px;
+          border: 0;
+          border-radius: 6px;
+          background: transparent;
+          color: var(--color-cursor-muted);
+          font: inherit;
+          font-size: 10.5px;
+          font-variant-numeric: tabular-nums;
+          cursor: pointer;
+        }
+        .studio-ops-phone-copy span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-ops-phone-copy:hover,
+        .studio-ops-phone-copy:focus-visible {
+          background: var(--mos-hover);
+          color: var(--color-cursor-text);
+          outline: none;
+        }
+        .studio-ops-phone-copy:focus-visible {
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 28%, transparent);
+        }
+        .studio-ops-peer-payment {
+          flex: 0 0 auto;
+          color: var(--color-cursor-muted);
+          font-size: 10px;
         }
         .studio-ops-chat-rail,
         .studio-ops-chat-main,
@@ -14745,6 +14791,63 @@ export function StudioShell({
           display: flex;
           flex-direction: column;
           gap: 10px;
+        }
+        .studio-ops-action-tabs {
+          display: flex;
+          align-items: center;
+          flex: 0 0 auto;
+          gap: 2px;
+          min-width: 0;
+          height: var(--cursor-head-h, 32px);
+          min-height: var(--cursor-head-h, 32px);
+          padding: 0 8px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          border-bottom: 1px solid var(--color-cursor-border-soft, var(--color-cursor-border));
+          background: var(--mos-bg, var(--color-cursor-bg));
+          scrollbar-width: none;
+        }
+        .studio-ops-action-tabs::-webkit-scrollbar {
+          display: none;
+        }
+        .studio-ops-action-tab {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          height: calc(var(--cursor-head-h, 32px) - 6px);
+          padding: 0 9px;
+          border: 0;
+          border-radius: 6px;
+          background: transparent;
+          color: var(--color-cursor-muted);
+          font: inherit;
+          font-size: 12px;
+          font-weight: 500;
+          line-height: 1;
+          white-space: nowrap;
+          cursor: pointer;
+        }
+        .studio-ops-action-tab:hover,
+        .studio-ops-action-tab.is-active {
+          background: color-mix(in srgb, var(--mos-text) 8%, transparent);
+          color: var(--color-cursor-text);
+        }
+        .studio-ops-action-tab:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--cursor-accent) 42%, transparent);
+          outline-offset: -2px;
+        }
+        .studio-ops-action-tab > span {
+          display: inline-flex;
+          min-width: 15px;
+          height: 15px;
+          align-items: center;
+          justify-content: center;
+          padding: 0 4px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent) 18%, var(--mos-plate));
+          color: var(--color-cursor-text);
+          font-size: 9px;
+          font-weight: 700;
         }
         .studio-ops-chat-peer .studio-admin-section {
           margin: 0;

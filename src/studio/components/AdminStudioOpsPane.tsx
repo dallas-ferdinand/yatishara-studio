@@ -3,6 +3,7 @@
 import {
   Ban,
   Bot,
+  Copy,
   Clock,
   Loader2,
   NotebookPen,
@@ -11,7 +12,7 @@ import {
   UserRoundCheck,
   Wallet,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { AdminStudioOpsThread } from "./AdminStudioOpsThread";
@@ -29,6 +30,18 @@ import {
 const OPS_TABS: { id: OpsTab; label: string }[] = [
   { id: "chats", label: "Chats" },
   { id: "settings", label: "Settings" },
+];
+
+type ActionTab = "notes" | "followups" | "labels" | "payments";
+
+const ACTION_TABS: Array<{
+  id: ActionTab;
+  label: string;
+}> = [
+  { id: "notes", label: "Notes" },
+  { id: "followups", label: "Follow-ups" },
+  { id: "labels", label: "Labels" },
+  { id: "payments", label: "Payments" },
 ];
 
 function paymentStatusTone(p: PaymentRow): string {
@@ -70,6 +83,7 @@ function Section({
 }
 
 export function AdminStudioOpsPane() {
+  const [actionTab, setActionTab] = useState<ActionTab>("notes");
   const {
     opsTab,
     setOpsTab,
@@ -118,6 +132,12 @@ export function AdminStudioOpsPane() {
     null;
   const selectedStatuses =
     detail?.statuses || selected?.statuses || ([] as string[]);
+  const actionCounts: Record<ActionTab, number> = {
+    notes: notesDraft.trim() ? 1 : 0,
+    followups: selected?.followup_at ? 1 : 0,
+    labels: selectedStatuses.length,
+    payments: detail?.payments?.length || 0,
+  };
 
   return (
     <div className="studio-ops-shell">
@@ -182,14 +202,28 @@ export function AdminStudioOpsPane() {
                         name={selected.phone}
                         alt=""
                       />
-                      <div>
+                      <div className="studio-ops-chat-main-peer-copy">
                         <strong>{sessionTitle(selected)}</strong>
-                        <span className="studio-muted">
-                          {selected.phone_display || selected.phone}
-                          {selected.payment_state
-                            ? ` · ${selected.payment_state}`
-                            : ""}
-                        </span>
+                        <button
+                          type="button"
+                          className="studio-ops-phone-copy"
+                          title="Copy WhatsApp number"
+                          aria-label={`Copy WhatsApp number ${selected.phone_display || selected.phone}`}
+                          onClick={() => {
+                            void navigator.clipboard
+                              .writeText(selected.phone_display || selected.phone)
+                              .then(() => toast.success("WhatsApp number copied"))
+                              .catch(() => toast.error("Could not copy number"));
+                          }}
+                        >
+                          <span>{selected.phone_display || selected.phone}</span>
+                          <Copy className="h-3 w-3" aria-hidden />
+                        </button>
+                        {selected.payment_state ? (
+                          <span className="studio-ops-peer-payment">
+                            {selected.payment_state}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="studio-ops-chat-main-actions">
@@ -255,46 +289,71 @@ export function AdminStudioOpsPane() {
               hidden={!selectedPhone || !selected}
             >
               {selectedPhone && selected ? (
-                <div className="studio-ops-chat-peer-scroll">
-                  <Section
-                    title="Notes"
-                    icon={<NotebookPen className="h-3.5 w-3.5" />}
-                    extras={
+                <>
+                  <div
+                    className="studio-ops-action-tabs"
+                    role="tablist"
+                    aria-label="Chat action panels"
+                  >
+                    {ACTION_TABS.map((tab) => (
                       <button
+                        key={tab.id}
                         type="button"
-                        className="cursor-settings-action"
-                        disabled={!!busy}
-                        onClick={() =>
-                          void setNotes({
-                            phone: selected.phone,
-                            notes: notesDraft,
-                          })
-                            .then(afterMutate)
-                            .then(() => toast.success("Notes saved"))
-                            .catch((err) =>
-                              toast.error(
-                                friendlyConvexError(err, "Could not save notes"),
-                              ),
-                            )
+                        role="tab"
+                        aria-selected={actionTab === tab.id}
+                        className={`studio-ops-action-tab${actionTab === tab.id ? " is-active" : ""}`}
+                        onClick={() => setActionTab(tab.id)}
+                      >
+                        {tab.label}
+                        {actionCounts[tab.id] ? (
+                          <span>{actionCounts[tab.id]}</span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="studio-ops-chat-peer-scroll">
+                    {actionTab === "notes" ? (
+                      <Section
+                        title="Notes"
+                        icon={<NotebookPen className="h-3.5 w-3.5" />}
+                        extras={
+                          <button
+                            type="button"
+                            className="cursor-settings-action"
+                            disabled={!!busy}
+                            onClick={() =>
+                              void setNotes({
+                                phone: selected.phone,
+                                notes: notesDraft,
+                              })
+                                .then(afterMutate)
+                                .then(() => toast.success("Notes saved"))
+                                .catch((err) =>
+                                  toast.error(
+                                    friendlyConvexError(err, "Could not save notes"),
+                                  ),
+                                )
+                            }
+                          >
+                            Save
+                          </button>
                         }
                       >
-                        Save
-                      </button>
-                    }
-                  >
-                    <textarea
-                      className="studio-ops-notes"
-                      rows={4}
-                      value={notesDraft}
-                      placeholder="Internal notes for this lead…"
-                      onChange={(e) => setNotesDraft(e.target.value)}
-                    />
-                  </Section>
+                        <textarea
+                          className="studio-ops-notes"
+                          rows={4}
+                          value={notesDraft}
+                          placeholder="Internal notes for this lead…"
+                          onChange={(e) => setNotesDraft(e.target.value)}
+                        />
+                      </Section>
+                    ) : null}
 
-                  <Section
-                    title="Follow-ups"
-                    icon={<Clock className="h-3.5 w-3.5" />}
-                  >
+                    {actionTab === "followups" ? (
+                      <Section
+                        title="Follow-ups"
+                        icon={<Clock className="h-3.5 w-3.5" />}
+                      >
                     {selected.followup_at ? (
                       <div className="studio-ops-followup-card">
                         <strong>{whenLabel(selected.followup_at)}</strong>
@@ -362,36 +421,40 @@ export function AdminStudioOpsPane() {
                         </button>
                       </div>
                     </div>
-                  </Section>
+                      </Section>
+                    ) : null}
 
-                  <Section title="Labels" icon={<Tags className="h-3.5 w-3.5" />}>
-                    <div className="studio-ops-label-grid">
-                      {statusCatalog.map((opt) => {
-                        const on = selectedStatuses.includes(opt.id);
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            className={`studio-ops-chip-btn${on ? " is-on" : ""}`}
-                            onClick={() =>
-                              void setStatus({
-                                phone: selected.phone,
-                                status: opt.id,
-                                action: on ? "remove" : "add",
-                              }).then(afterMutate)
-                            }
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </Section>
+                    {actionTab === "labels" ? (
+                      <Section title="Labels" icon={<Tags className="h-3.5 w-3.5" />}>
+                        <div className="studio-ops-label-grid">
+                          {statusCatalog.map((opt) => {
+                            const on = selectedStatuses.includes(opt.id);
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                className={`studio-ops-chip-btn${on ? " is-on" : ""}`}
+                                onClick={() =>
+                                  void setStatus({
+                                    phone: selected.phone,
+                                    status: opt.id,
+                                    action: on ? "remove" : "add",
+                                  }).then(afterMutate)
+                                }
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </Section>
+                    ) : null}
 
-                  <Section
-                    title="Payments"
-                    icon={<Wallet className="h-3.5 w-3.5" />}
-                  >
+                    {actionTab === "payments" ? (
+                      <Section
+                        title="Payments"
+                        icon={<Wallet className="h-3.5 w-3.5" />}
+                      >
                     {(detail?.payments || []).length === 0 ? (
                       <p className="studio-muted studio-ops-peer-hint">
                         No payment attempts yet.
@@ -460,8 +523,10 @@ export function AdminStudioOpsPane() {
                         ))}
                       </ul>
                     )}
-                  </Section>
-                </div>
+                      </Section>
+                    ) : null}
+                  </div>
+                </>
               ) : null}
             </aside>
           </div>
