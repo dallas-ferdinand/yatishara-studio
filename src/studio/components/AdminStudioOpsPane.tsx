@@ -194,13 +194,12 @@ export function AdminStudioOpsPane() {
               onClick={() => setTab(item.id)}
             >
               {item.label}
-              {item.id === "chats" && sessions.length > 0 ? (
-                <span className="studio-ops-tab-count">{sessions.length}</span>
-              ) : null}
               {item.id === "chats" && payments.length > 0 ? (
                 <span className="studio-ops-tab-count" title="Pending approvals">
                   {payments.length}
                 </span>
+              ) : item.id === "chats" && sessions.length > 0 ? (
+                <span className="studio-ops-tab-count">{sessions.length}</span>
               ) : null}
             </button>
           ))}
@@ -333,41 +332,38 @@ export function AdminStudioOpsPane() {
             </section>
           </div>
         ) : (
-          <div className="studio-admin-stack">
+          <div className="studio-ops-settings">
             <div className="studio-ops-device">
-              <div className="studio-ops-device-top">
-                <div className="studio-ops-device-copy">
-                  <span className={`studio-ops-status ${statusClass}`}>
-                    {statusLabel}
-                  </span>
-                  <p className="studio-ops-device-title">
-                    {linked ? "WhatsApp connected" : "WhatsApp for Academy CS"}
-                  </p>
-                  <p className="studio-ops-device-phone">{phoneLine}</p>
-                </div>
-                <div className="studio-ops-device-actions">
-                  {!linked ? (
-                    <button
-                      type="button"
-                      className="studio-ops-primary"
-                      disabled={!!busy}
-                      onClick={() => void linkPhone()}
-                    >
-                      {busy === "link" ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : null}
-                      {showingQr ? "Refresh QR" : "Link WhatsApp"}
-                    </button>
-                  ) : null}
-                </div>
+              <div className="studio-ops-device-copy">
+                <span className={`studio-ops-status ${statusClass}`}>
+                  {statusLabel}
+                </span>
+                <p className="studio-ops-device-title">
+                  {linked ? "WhatsApp connected" : "Link Sophie’s WhatsApp"}
+                </p>
+                <p className="studio-ops-device-phone">{phoneLine}</p>
               </div>
+
+              {!linked ? (
+                <button
+                  type="button"
+                  className="studio-ops-primary"
+                  disabled={!!busy}
+                  onClick={() => void linkPhone()}
+                >
+                  {busy === "link" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : null}
+                  {showingQr ? "Refresh QR" : "Link WhatsApp"}
+                </button>
+              ) : null}
 
               {showingQr ? (
                 <div className="studio-ops-qr">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={qrSrc!} alt="Scan with WhatsApp to link Sophie" />
                   <p className="studio-ops-qr-hint">
-                    Open WhatsApp → Linked devices → Scan
+                    WhatsApp → Linked devices → Scan
                   </p>
                 </div>
               ) : null}
@@ -378,7 +374,6 @@ export function AdminStudioOpsPane() {
                   <button
                     type="button"
                     className="cursor-settings-action"
-                    style={{ width: "auto" }}
                     disabled={!!busy}
                     onClick={() => void unlink()}
                   >
