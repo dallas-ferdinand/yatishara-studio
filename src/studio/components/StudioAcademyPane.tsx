@@ -847,7 +847,7 @@ export function StudioAcademyPane({
                                 formatTtdFromCredits(course.priceCredits, price)
                               )}
                             </span>
-                            <span>
+                            <span className="studio-academy-card-meta-tag">
                               {comingSoon
                                 ? "Coming soon"
                                 : `${course.lessonCount} lesson${

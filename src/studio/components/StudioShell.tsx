@@ -21171,15 +21171,16 @@ export function StudioShell({
         .studio-academy-card-now {
           color: var(--color-cursor-text-bright, var(--mos-text));
           font-weight: 800;
-          font-size: 1.12em;
-          letter-spacing: -0.01em;
+          font-size: 1.18em;
+          letter-spacing: -0.015em;
         }
         .studio-academy-card-foot .public-offers-card-price {
           display: inline-flex;
           align-items: baseline;
           gap: 7px;
-          font-size: 12px;
-          font-weight: 700;
+          font-size: 15px;
+          font-weight: 750;
+          line-height: 1.15;
         }
         .studio-academy-card-body {
           display: grid;
@@ -21205,16 +21206,26 @@ export function StudioShell({
         }
         .studio-academy-card-foot {
           display: flex;
-          align-items: baseline;
+          align-items: center;
           justify-content: space-between;
           gap: 10px;
           margin-top: 4px;
           min-width: 0;
         }
-        .studio-academy-card-foot > span:last-child {
-          font-size: 11px;
-          font-weight: 600;
+        .studio-academy-card-meta-tag {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          min-height: 22px;
+          padding: 0 8px;
+          border-radius: 999px;
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          background: color-mix(in srgb, var(--mos-plate-strong, #d4d4da) 55%, transparent);
           color: var(--color-cursor-muted, var(--mos-muted));
+          font-size: 10px;
+          font-weight: 650;
+          letter-spacing: 0.01em;
+          line-height: 1;
           white-space: nowrap;
         }
         .studio-academy-detail {
