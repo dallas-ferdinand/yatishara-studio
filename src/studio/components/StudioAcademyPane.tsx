@@ -107,6 +107,17 @@ function saleDiscountCredits(
   return compareAtCredits - priceCredits;
 }
 
+function salePercentOff(
+  priceCredits: number,
+  compareAtCredits?: number | null,
+): number | null {
+  if (compareAtCredits == null || compareAtCredits <= priceCredits) return null;
+  const pct = Math.round(
+    ((compareAtCredits - priceCredits) / compareAtCredits) * 100,
+  );
+  return pct >= 1 ? pct : null;
+}
+
 /** Drop a leading #/## heading that just repeats the course title. */
 function academyBodyMarkdown(md: string, title: string): string {
   let text = String(md || "").replace(/^\uFEFF/, "").trim();
@@ -747,6 +758,10 @@ export function StudioAcademyPane({
                   const banner = courseBannerUrl(course);
                   const comingSoon = Boolean(course.comingSoon);
                   const compareAt = course.compareAtCredits;
+                  const percentOff =
+                    !comingSoon && course.onSale
+                      ? salePercentOff(course.priceCredits, compareAt)
+                      : null;
                   return (
                     <li key={course._id}>
                       <button
@@ -797,6 +812,10 @@ export function StudioAcademyPane({
                           {comingSoon ? (
                             <span className="studio-academy-card-soon">
                               Coming soon
+                            </span>
+                          ) : percentOff != null ? (
+                            <span className="studio-academy-card-sale">
+                              {percentOff}% off
                             </span>
                           ) : null}
                         </div>

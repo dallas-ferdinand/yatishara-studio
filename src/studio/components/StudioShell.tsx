@@ -21000,14 +21000,18 @@ export function StudioShell({
           z-index: 2;
           top: 8px;
           right: 8px;
-          padding: 2px 8px;
+          padding: 3px 9px;
           border-radius: 999px;
           font-size: 10px;
-          font-weight: 650;
-          line-height: 1.4;
-          color: var(--color-cursor-text-bright, var(--mos-text));
-          background: color-mix(in srgb, var(--mos-page, #f5f5f7) 88%, transparent);
-          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          font-weight: 750;
+          letter-spacing: 0.02em;
+          line-height: 1.35;
+          color: #fff;
+          background: var(--cursor-accent, var(--mos-accent, #5b8cff));
+          border: 1px solid color-mix(in srgb, var(--cursor-accent, #5b8cff) 55%, #000 18%);
+          box-shadow:
+            0 1px 0 color-mix(in srgb, #fff 18%, transparent),
+            0 6px 14px color-mix(in srgb, var(--cursor-accent, #5b8cff) 28%, transparent);
         }
         .studio-academy-sale-pan {
           display: flex;
