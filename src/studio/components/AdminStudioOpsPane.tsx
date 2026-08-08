@@ -155,32 +155,34 @@ export function AdminStudioOpsPane() {
           Reconnect uses status/QR only — do not wipe a live session unless you
           deliberately choose unlink.
         </p>
-        <div className="studio-admin-grid-large">
-          <div className="studio-admin-metric">
-            <div className="studio-admin-metric-label">Connection</div>
-            <div className="studio-admin-metric-value">
-              {device?.status || (svc ? "service up" : "…")}
+        <div className="studio-admin-setup-grid">
+          <article className="studio-admin-setup-card">
+            <div>
+              <h4>Connection</h4>
+              <p>
+                <strong>{device?.status || (svc ? "service up" : "…")}</strong>
+                {" — "}
+                {device?.open
+                  ? `Linked${device.phone ? ` · ${device.phone}` : ""}${
+                      device.profileName ? ` · ${device.profileName}` : ""
+                    }`
+                  : device?.connecting
+                    ? "Connecting — scan QR"
+                    : "Not open — track + connect"}
+              </p>
             </div>
-            <div className="studio-admin-metric-body">
-              {device?.open
-                ? `Linked${device.phone ? ` · ${device.phone}` : ""}${
-                    device.profileName ? ` · ${device.profileName}` : ""
-                  }`
-                : device?.connecting
-                  ? "Connecting — scan QR"
-                  : "Not open — track + connect"}
+          </article>
+          <article className="studio-admin-setup-card">
+            <div>
+              <h4>Service</h4>
+              <p>
+                <strong>{svc?.enabled === false ? "Paused" : "Live"}</strong>
+                {" — "}
+                Port {(svc?.port as number) || 8795} ·{" "}
+                {String(svc?.instance || "yatishara-studio")}
+              </p>
             </div>
-          </div>
-          <div className="studio-admin-metric">
-            <div className="studio-admin-metric-label">Service</div>
-            <div className="studio-admin-metric-value">
-              {svc?.enabled === false ? "Paused" : "Live"}
-            </div>
-            <div className="studio-admin-metric-body">
-              Port {(svc?.port as number) || 8795} ·{" "}
-              {String(svc?.instance || "yatishara-studio")}
-            </div>
-          </div>
+          </article>
         </div>
         <div className="studio-admin-setup-grid" style={{ marginTop: 12 }}>
           <button
