@@ -272,12 +272,38 @@
 
 .studio-academy-checkout-amount {
   margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.03em;
-  line-height: 1.05;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
   color: var(--color-cursor-text-bright, var(--cursor-text-bright));
+}
+
+.studio-academy-checkout-price-now {
+  white-space: nowrap;
+}
+
+.studio-academy-checkout-price-was {
+  white-space: nowrap;
+  font-size: 0.62em;
+  font-weight: 550;
+  opacity: 0.5;
+}
+
+.studio-academy-checkout-save {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: color-mix(
+    in srgb,
+    var(--cursor-accent) 70%,
+    var(--color-cursor-text-bright, var(--mos-text))
+  );
 }
 
 .studio-academy-checkout-chips {

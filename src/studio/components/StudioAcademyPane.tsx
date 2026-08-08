@@ -68,19 +68,6 @@ function useNowTick(intervalMs = 1_000) {
   return now;
 }
 
-function formatSaleEndDate(saleEndsAt: number): string {
-  try {
-    return new Intl.DateTimeFormat("en-TT", {
-      timeZone: "America/Port_of_Spain",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }).format(new Date(saleEndsAt));
-  } catch {
-    return new Date(saleEndsAt).toLocaleDateString();
-  }
-}
-
 function saleCountdownParts(saleEndsAt: number, now = Date.now()) {
   const ms = Math.max(0, Number(saleEndsAt) - now);
   const dayMs = 24 * 60 * 60 * 1000;
@@ -197,9 +184,6 @@ function CheckoutDock({
   discountLabel,
   saleEndsAt,
   now,
-  saleEndsLabel,
-  saleRemainingLabel,
-  lessonCount,
   needsTopUp,
   balanceLabel,
   topUpLabel,
@@ -217,9 +201,6 @@ function CheckoutDock({
   discountLabel?: string | null;
   saleEndsAt?: number | null;
   now?: number;
-  saleEndsLabel?: string | null;
-  saleRemainingLabel?: string | null;
-  lessonCount: number;
   needsTopUp: boolean;
   balanceLabel: string;
   topUpLabel: string;
@@ -229,42 +210,18 @@ function CheckoutDock({
   const paywiseTotalShort = formatTtdShort(totalDueCents);
   const totalDueLabel = formatTtdCents(totalDueCents);
   const feeLabel = formatTtdShort(feeCents);
-  const lessonMeta =
-    lessonCount === 1 ? "1 lesson" : `${lessonCount} lessons`;
   const onSale = Boolean(listPriceLabel && discountLabel);
   const countdown =
-    onSale && saleEndsAt != null && Number.isFinite(saleEndsAt) ? (
+    !owned &&
+    onSale &&
+    saleEndsAt != null &&
+    Number.isFinite(saleEndsAt) ? (
       <SaleCountdownPanel
         saleEndsAt={saleEndsAt}
         now={now ?? Date.now()}
-        discountLabel={discountLabel}
         compact
       />
     ) : null;
-  const saleReceipt = onSale ? (
-    <dl className="studio-academy-checkout-receipt studio-academy-sale-receipt">
-      <div className="studio-academy-checkout-row">
-        <dt>List price</dt>
-        <dd>
-          <s>{listPriceLabel}</s>
-        </dd>
-      </div>
-      <div className="studio-academy-checkout-row is-discount">
-        <dt>Discount</dt>
-        <dd>−{discountLabel}</dd>
-      </div>
-      {saleEndsLabel ? (
-        <div className="studio-academy-checkout-row is-muted">
-          <dt>Until</dt>
-          <dd>{saleEndsLabel}</dd>
-        </div>
-      ) : null}
-      <div className="studio-academy-checkout-row is-total">
-        <dt>You pay</dt>
-        <dd>{priceLabel}</dd>
-      </div>
-    </dl>
-  ) : null;
   const body = (
     <div className="public-offers-rail-detail">
       <section className="studio-academy-checkout" aria-label="Course checkout">
@@ -275,25 +232,17 @@ function CheckoutDock({
           />
           <div className="studio-academy-checkout-hero-copy">
             <span className="studio-academy-checkout-kicker">
-              {needsTopUp && !owned
-                ? "Due today"
-                : onSale && !owned
-                  ? "Sale price"
-                  : "Checkout"}
+              {owned ? "Unlocked" : needsTopUp ? "Top up to unlock" : "Unlock"}
             </span>
             <strong className="studio-academy-checkout-amount">
-              {priceLabel}
+              <span className="studio-academy-checkout-price-now">{priceLabel}</span>
               {onSale && listPriceLabel ? (
-                <>
-                  {" "}
-                  <s className="studio-academy-card-compare">{listPriceLabel}</s>
-                </>
+                <s className="studio-academy-checkout-price-was">{listPriceLabel}</s>
               ) : null}
             </strong>
-            <ul className="studio-academy-checkout-chips" aria-label="Course access">
-              <li>Lifetime</li>
-              <li>{lessonMeta}</li>
-            </ul>
+            {onSale && discountLabel && !owned ? (
+              <p className="studio-academy-checkout-save">Save {discountLabel}</p>
+            ) : null}
           </div>
         </header>
 
@@ -302,10 +251,9 @@ function CheckoutDock({
         ) : needsTopUp ? (
           <>
             {countdown}
-            {saleReceipt}
             <dl className="studio-academy-checkout-receipt">
               <div className="studio-academy-checkout-row">
-                <dt>Available balance</dt>
+                <dt>Wallet</dt>
                 <dd>{balanceLabel}</dd>
               </div>
               <div className="studio-academy-checkout-row">
@@ -319,7 +267,7 @@ function CheckoutDock({
                 </div>
               ) : null}
               <div className="studio-academy-checkout-row is-total">
-                <dt>Extra to pay</dt>
+                <dt>Pay now</dt>
                 <dd>{totalDueLabel}</dd>
               </div>
             </dl>
@@ -350,14 +298,13 @@ function CheckoutDock({
               </button>
               <p className="studio-settings-topup-secure">
                 <Lock aria-hidden="true" />
-                <span>secure checkout · unlocks after payment</span>
+                <span>secure · unlocks after payment</span>
               </p>
             </div>
           </>
         ) : (
           <>
             {countdown}
-            {saleReceipt}
             <div className="studio-academy-checkout-paywise">
               <button
                 type="button"
@@ -383,7 +330,7 @@ function CheckoutDock({
               </button>
               <p className="studio-settings-topup-secure">
                 <Lock aria-hidden="true" />
-                <span>secure checkout · unlocks right away</span>
+                <span>secure · unlocks right away</span>
               </p>
             </div>
           </>
@@ -602,14 +549,6 @@ export function StudioAcademyPane({
     detailDiscountCredits != null
       ? formatTtdFromCredits(detailDiscountCredits, price)
       : null;
-  const saleEndsLabel =
-    detail?.onSale && detail.saleEndsAt
-      ? formatSaleEndDate(detail.saleEndsAt)
-      : null;
-  const saleRemainingLabel =
-    detail?.onSale && detail.saleEndsAt
-      ? formatSaleRemaining(detail.saleEndsAt, now)
-      : null;
 
   const balance = Number(creditBalance ?? 0);
   const priceCredits = detail?.priceCredits ?? 0;
@@ -722,9 +661,6 @@ export function StudioAcademyPane({
     discountLabel,
     saleEndsAt: detail?.onSale ? detail.saleEndsAt : null,
     now,
-    saleEndsLabel,
-    saleRemainingLabel,
-    lessonCount: detail?.lessonCount ?? 0,
     needsTopUp,
     balanceLabel,
     topUpLabel,
