@@ -14581,11 +14581,72 @@ export function StudioShell({
           border-radius: 999px;
           background: var(--cursor-accent);
         }
+        .studio-ops-chat-card-avatar {
+          position: relative;
+          flex: 0 0 auto;
+        }
+        .studio-ops-avatar-wrap {
+          position: relative;
+          display: inline-flex;
+          flex: 0 0 auto;
+        }
+        .studio-ops-presence-dot {
+          position: absolute;
+          right: -1px;
+          bottom: -1px;
+          width: 9px;
+          height: 9px;
+          border-radius: 999px;
+          border: 2px solid var(--mos-page, var(--mos-panel));
+          background: #22c55e;
+        }
+        .studio-ops-presence-dot.is-typing {
+          background: #f59e0b;
+          box-shadow: 0 0 0 1px color-mix(in srgb, #f59e0b 40%, transparent);
+        }
+        .studio-ops-presence-dot.is-online {
+          background: #22c55e;
+        }
+        .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md,
+        .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md .studio-profile-avatar-media,
+        .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
+          width: 30px;
+          height: 30px;
+          min-width: 30px;
+          min-height: 30px;
+        }
+        .studio-ops-chat-main-peer .studio-ops-avatar-wrap.is-head .studio-profile-avatar.is-md .studio-profile-avatar-fallback {
+          font-size: 11px;
+        }
         .studio-ops-chat-main-peer .studio-profile-avatar.is-sm {
           width: 22px;
           height: 22px;
           min-width: 22px;
           min-height: 22px;
+        }
+        .studio-ops-chat-main-peer-copy {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 2px;
+          min-width: 0;
+          overflow: hidden;
+        }
+        .studio-ops-chat-main-peer-title {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          overflow: hidden;
+          white-space: nowrap;
+        }
+        .studio-ops-presence-label {
+          font-size: 10.5px;
+          line-height: 1.2;
+          color: var(--color-cursor-muted);
+        }
+        .studio-ops-presence-label:first-letter {
+          text-transform: none;
         }
         .studio-ops-wa-thread {
           flex: 1 1 0;
@@ -14629,14 +14690,6 @@ export function StudioShell({
           gap: 8px;
           min-width: 0;
         }
-        .studio-ops-chat-main-peer-copy {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          min-width: 0;
-          overflow: hidden;
-          white-space: nowrap;
-        }
         .studio-ops-chat-main-peer strong {
           min-width: 0;
           overflow: hidden;
@@ -14646,7 +14699,7 @@ export function StudioShell({
           font-weight: 600;
           line-height: 1.2;
         }
-        .studio-ops-chat-main-peer-copy .studio-ops-chat-head-action {
+        .studio-ops-chat-main-peer-title .studio-ops-chat-head-action {
           width: 24px;
           min-width: 24px;
           height: 24px;

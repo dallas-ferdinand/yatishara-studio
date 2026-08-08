@@ -21,6 +21,11 @@
   scrollbar-width: none;
 }
 
+.studio-ops-thread-stale {
+  margin: 0 0 8px;
+  font-size: 11px;
+}
+
 .studio-ops-wa-thread .cs-ops-thread-scroll::-webkit-scrollbar {
   display: none;
 }

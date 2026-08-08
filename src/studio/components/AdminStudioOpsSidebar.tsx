@@ -200,13 +200,31 @@ function OpsConversationRow({
       onClick={onSelect}
     >
       <span className="studio-ops-chat-card-avatar">
-        <StudioProfileAvatar
-          size="md"
-          src={avatarSrc}
-          displayName={title}
-          name={session.phone}
-          alt=""
-        />
+        <span
+          className={`studio-ops-avatar-wrap${
+            session.presence?.typing
+              ? " is-typing"
+              : session.presence?.online
+                ? " is-online"
+                : ""
+          }`}
+        >
+          <StudioProfileAvatar
+            size="md"
+            src={avatarSrc}
+            displayName={title}
+            name={session.phone}
+            alt=""
+          />
+          {session.presence?.typing || session.presence?.online ? (
+            <span
+              className={`studio-ops-presence-dot${
+                session.presence?.typing ? " is-typing" : " is-online"
+              }`}
+              aria-hidden
+            />
+          ) : null}
+        </span>
       </span>
       <span className="studio-ops-chat-card-body">
         <span className="studio-ops-chat-card-top">

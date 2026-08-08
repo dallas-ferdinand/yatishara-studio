@@ -142,38 +142,84 @@ export function AdminStudioOpsPane() {
                   <>
                     <header className="studio-ops-chat-main-head">
                       <div className="studio-ops-chat-main-peer">
-                        <StudioProfileAvatar
-                          size="sm"
-                          src={sessionAvatarSrc(selected.phone)}
-                          displayName={sessionTitle(selected)}
-                          name={selected.phone}
-                          alt=""
-                        />
+                        <span
+                          className={`studio-ops-avatar-wrap is-head${
+                            selected.presence?.typing
+                              ? " is-typing"
+                              : selected.presence?.online
+                                ? " is-online"
+                                : ""
+                          }`}
+                        >
+                          <StudioProfileAvatar
+                            size="md"
+                            src={sessionAvatarSrc(selected.phone)}
+                            displayName={sessionTitle(selected)}
+                            name={selected.phone}
+                            alt=""
+                          />
+                          {selected.presence?.typing ||
+                          selected.presence?.online ? (
+                            <span
+                              className={`studio-ops-presence-dot${
+                                selected.presence?.typing
+                                  ? " is-typing"
+                                  : " is-online"
+                              }`}
+                              aria-hidden
+                            />
+                          ) : null}
+                        </span>
                         <div className="studio-ops-chat-main-peer-copy">
-                          <strong>{sessionTitle(selected)}</strong>
-                          <button
-                            type="button"
-                            className="studio-composer-circle-btn studio-ops-chat-head-action"
-                            title="Copy WhatsApp number"
-                            aria-label={`Copy WhatsApp number ${selected.phone_display || selected.phone}`}
-                            onClick={() => {
-                              void navigator.clipboard
-                                .writeText(
-                                  selected.phone_display || selected.phone,
-                                )
-                                .then(() =>
-                                  toast.success("WhatsApp number copied"),
-                                )
-                                .catch(() =>
-                                  toast.error("Could not copy number"),
-                                );
-                            }}
-                          >
-                            <Copy className="h-3.5 w-3.5" aria-hidden />
-                          </button>
-                          {selected.payment_state ? (
-                            <span className="studio-ops-peer-payment">
-                              {selected.payment_state}
+                          <div className="studio-ops-chat-main-peer-title">
+                            <strong>{sessionTitle(selected)}</strong>
+                            <button
+                              type="button"
+                              className="studio-composer-circle-btn studio-ops-chat-head-action"
+                              title="Copy WhatsApp number"
+                              aria-label={`Copy WhatsApp number ${selected.phone_display || selected.phone}`}
+                              onClick={() => {
+                                void navigator.clipboard
+                                  .writeText(
+                                    selected.phone_display || selected.phone,
+                                  )
+                                  .then(() =>
+                                    toast.success("WhatsApp number copied"),
+                                  )
+                                  .catch(() =>
+                                    toast.error("Could not copy number"),
+                                  );
+                              }}
+                            >
+                              <Copy className="h-3.5 w-3.5" aria-hidden />
+                            </button>
+                            {selected.working?.sophie ||
+                            selected.status === "running" ||
+                            (selected.badges || []).includes("sophie") ? (
+                              <span
+                                className="studio-ops-tag is-sophie is-working"
+                                title="Sophie is working"
+                              >
+                                <Loader2
+                                  className="h-2.5 w-2.5 animate-spin"
+                                  aria-hidden
+                                />
+                                <span>Sophie</span>
+                              </span>
+                            ) : null}
+                            {selected.payment_state ? (
+                              <span className="studio-ops-peer-payment">
+                                {selected.payment_state}
+                              </span>
+                            ) : null}
+                          </div>
+                          {selected.presence?.typing ? (
+                            <span className="studio-ops-presence-label">
+                              typing…
+                            </span>
+                          ) : selected.presence?.online ? (
+                            <span className="studio-ops-presence-label">
+                              online
                             </span>
                           ) : null}
                         </div>

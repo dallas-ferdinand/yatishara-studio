@@ -56,6 +56,11 @@ export type SessionRow = {
   badges?: string[];
   working?: { sophie?: boolean; csr?: boolean };
   status?: string | null;
+  presence?: {
+    state?: "typing" | "online" | "offline" | null;
+    typing?: boolean;
+    online?: boolean;
+  } | null;
   context_reset_at?: string | null;
 };
 
@@ -175,8 +180,8 @@ type OpsContextValue = {
   setSelectedPhone: (phone: string | null) => void;
   detail: DetailState | null;
   filteredSessions: SessionRow[];
-  refresh: () => Promise<void>;
-  loadDetail: (phone: string) => Promise<void>;
+  refresh: (opts?: { quiet?: boolean }) => Promise<void>;
+  loadDetail: (phone: string, opts?: { quiet?: boolean }) => Promise<void>;
   afterMutate: () => Promise<void>;
   linkPhone: () => Promise<void>;
   unlink: () => Promise<void>;
@@ -197,6 +202,8 @@ type OpsContextValue = {
   deviceUnlink: () => Promise<unknown>;
   setWebhook: () => Promise<unknown>;
   threadEpoch: number;
+  /** Bumps when SSE says this open chat got a new WhatsApp message. */
+  threadTick: number;
 };
 
 const OpsContext = createContext<OpsContextValue | null>(null);
@@ -218,6 +225,9 @@ export function AdminStudioOpsProvider({
   const setAgentAction = useAction(api.studioCsOpsActions.adminSetAgent);
   const setTakeoverAction = useAction(api.studioCsOpsActions.adminSetTakeover);
   const resetChatAction = useAction(api.studioCsOpsActions.adminResetChat);
+  const subscribePresenceAction = useAction(
+    api.studioCsOpsActions.adminSubscribePresence,
+  );
   const setStatusAction = useAction(api.studioCsOpsActions.adminSetStatus);
   const listPayments = useAction(api.studioCsOpsActions.adminListPayments);
   const decidePaymentAction = useAction(
@@ -239,6 +249,9 @@ export function AdminStudioOpsProvider({
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [detail, setDetail] = useState<DetailState | null>(null);
   const [threadEpoch, setThreadEpoch] = useState(0);
+  const [threadTick, setThreadTick] = useState(0);
+  const selectedPhoneRef = useRef<string | null>(null);
+  selectedPhoneRef.current = selectedPhone;
 
   const pendingByPhone = useMemo(() => {
     const map = new Map<string, number>();
@@ -248,8 +261,9 @@ export function AdminStudioOpsProvider({
     return map;
   }, [pendingPayments]);
 
-  const refresh = useCallback(async () => {
-    setBusy("refresh");
+  const refresh = useCallback(async (opts?: { quiet?: boolean }) => {
+    const quiet = Boolean(opts?.quiet);
+    if (!quiet) setBusy("refresh");
     try {
       const [d, s, p, st] = await Promise.all([
         deviceStatus({}),
@@ -260,9 +274,9 @@ export function AdminStudioOpsProvider({
       const next = d as DeviceStatus;
       setDevice(next);
       if (next.open) setQrSrc(null);
-      setSessions(
-        ((s as { sessions?: SessionRow[] })?.sessions || []) as SessionRow[],
-      );
+      const nextSessions = ((s as { sessions?: SessionRow[] })?.sessions ||
+        []) as SessionRow[];
+      setSessions(nextSessions);
       setPendingPayments(
         ((p as { payments?: PaymentRow[] })?.payments || []) as PaymentRow[],
       );
@@ -270,20 +284,36 @@ export function AdminStudioOpsProvider({
       if (Array.isArray(statuses) && statuses.length) {
         setStatusCatalog(statuses);
       }
+      const sel = selectedPhoneRef.current;
+      if (sel) {
+        const row = nextSessions.find((x) => x.phone === sel);
+        if (row) {
+          setDetail((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  session: { ...(prev.session || {}), ...row },
+                  statuses: row.statuses || prev.statuses,
+                }
+              : prev,
+          );
+        }
+      }
       if (!bootedRef.current) {
         bootedRef.current = true;
         if (!next.open) setOpsTab("settings");
       }
     } catch (err) {
-      toast.error(friendlyConvexError(err, "Could not load Ops"));
+      if (!quiet) toast.error(friendlyConvexError(err, "Could not load Ops"));
     } finally {
-      setBusy(null);
+      if (!quiet) setBusy(null);
     }
   }, [deviceStatus, listSessions, listPayments, serviceStatus]);
 
   const loadDetail = useCallback(
-    async (phone: string) => {
-      setBusy(`detail:${phone}`);
+    async (phone: string, opts?: { quiet?: boolean }) => {
+      const quiet = Boolean(opts?.quiet);
+      if (!quiet) setBusy(`detail:${phone}`);
       try {
         const raw = (await getSession({ phone })) as {
           session?: SessionRow;
@@ -298,9 +328,11 @@ export function AdminStudioOpsProvider({
           payments: raw.payments || [],
         });
       } catch (err) {
-        toast.error(friendlyConvexError(err, "Could not open chat"));
+        if (!quiet) {
+          toast.error(friendlyConvexError(err, "Could not open chat"));
+        }
       } finally {
-        setBusy(null);
+        if (!quiet) setBusy(null);
       }
     },
     [getSession],
@@ -311,21 +343,134 @@ export function AdminStudioOpsProvider({
     void refresh();
   }, [active, refresh]);
 
-  // Poll while Sophie is running so CSR-style working badges clear (Desk parity).
+  // Slow fallback poll — SSE is primary for live updates.
   useEffect(() => {
     if (!active || opsTab !== "chats") return;
-    const anyRunning = sessions.some(
-      (s) =>
-        s.working?.sophie ||
-        s.status === "running" ||
-        (s.badges || []).includes("sophie"),
-    );
-    if (!anyRunning) return;
     const id = window.setInterval(() => {
-      void refresh();
-    }, 4000);
+      void refresh({ quiet: true });
+    }, 45_000);
     return () => window.clearInterval(id);
-  }, [active, opsTab, sessions, refresh]);
+  }, [active, opsTab, refresh]);
+
+  // Push-invalidate via Sophie Ops SSE.
+  useEffect(() => {
+    if (!active || opsTab !== "chats") return;
+    let closed = false;
+    let es: EventSource | null = null;
+    let retryTimer: number | null = null;
+
+    const connect = () => {
+      if (closed) return;
+      es = new EventSource("/api/studio-ops/events");
+      es.onmessage = (ev) => {
+        let data: {
+          type?: string;
+          phone?: string;
+          on?: boolean;
+          state?: string;
+          presence?: SessionRow["presence"];
+        } | null = null;
+        try {
+          data = JSON.parse(String(ev.data || "{}"));
+        } catch {
+          return;
+        }
+        if (!data?.type) return;
+        const phone = String(data.phone || "").replace(/\D/g, "");
+        if (data.type === "presence" && phone) {
+          const presence: SessionRow["presence"] = data.presence || {
+            state:
+              data.state === "typing" ||
+              data.state === "online" ||
+              data.state === "offline"
+                ? data.state
+                : null,
+            typing: data.state === "typing",
+            online: data.state === "typing" || data.state === "online",
+          };
+          setSessions((prev) =>
+            prev.map((s) => (s.phone === phone ? { ...s, presence } : s)),
+          );
+          if (selectedPhoneRef.current === phone) {
+            setDetail((prev) =>
+              prev?.session
+                ? {
+                    ...prev,
+                    session: { ...prev.session, presence },
+                  }
+                : prev,
+            );
+          }
+          return;
+        }
+        if (data.type === "working" && phone) {
+          const on = data.on !== false;
+          setSessions((prev) =>
+            prev.map((s) => {
+              if (s.phone !== phone) return s;
+              const badges = (s.badges || []).filter((b) => b !== "sophie");
+              if (on) badges.unshift("sophie");
+              return {
+                ...s,
+                working: { ...(s.working || {}), sophie: on },
+                status: on ? "running" : "idle",
+                badges,
+              };
+            }),
+          );
+          if (selectedPhoneRef.current === phone) {
+            setDetail((prev) =>
+              prev?.session
+                ? {
+                    ...prev,
+                    session: {
+                      ...prev.session,
+                      working: {
+                        ...(prev.session.working || {}),
+                        sophie: on,
+                      },
+                      status: on ? "running" : "idle",
+                    },
+                  }
+                : prev,
+            );
+          }
+          return;
+        }
+        if (data.type === "message" && phone) {
+          void refresh({ quiet: true });
+          if (selectedPhoneRef.current === phone) {
+            setThreadTick((n) => n + 1);
+          }
+        }
+      };
+      es.onerror = () => {
+        es?.close();
+        es = null;
+        if (closed) return;
+        if (retryTimer) window.clearTimeout(retryTimer);
+        retryTimer = window.setTimeout(connect, 2500);
+      };
+    };
+
+    connect();
+    return () => {
+      closed = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
+      es?.close();
+    };
+  }, [active, opsTab, refresh]);
+
+  // Baileys presence subscribe while a chat is open (Desk 25s pattern).
+  useEffect(() => {
+    if (!active || opsTab !== "chats" || !selectedPhone) return;
+    const phone = selectedPhone;
+    void subscribePresenceAction({ phone }).catch(() => null);
+    const id = window.setInterval(() => {
+      void subscribePresenceAction({ phone }).catch(() => null);
+    }, 25_000);
+    return () => window.clearInterval(id);
+  }, [active, opsTab, selectedPhone, subscribePresenceAction]);
 
   useEffect(() => {
     if (!active || !selectedPhone) {
@@ -478,6 +623,7 @@ export function AdminStudioOpsProvider({
       deviceUnlink,
       setWebhook,
       threadEpoch,
+      threadTick,
     }),
     [
       active,
@@ -509,6 +655,7 @@ export function AdminStudioOpsProvider({
       deviceUnlink,
       setWebhook,
       threadEpoch,
+      threadTick,
     ],
   );
 

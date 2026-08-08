@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { Icon } from "@/desk/components/Icons";
+import { useAdminStudioOps } from "./AdminStudioOpsContext";
 import "./admin-studio-ops-thread.css";
 
 export type WaThreadMessage = {
@@ -461,14 +462,38 @@ export function AdminStudioOpsThread({
   phone: string;
   humanTakeover?: boolean;
 }) {
+  const { threadTick, refresh } = useAdminStudioOps();
   const getMessages = useAction(api.studioCsOpsActions.adminGetMessages);
   const sendMessage = useAction(api.studioCsOpsActions.adminSendMessage);
   const [messages, setMessages] = useState<WaThreadMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stale, setStale] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const failCountRef = useRef(0);
+  const nearBottomRef = useRef(true);
+
+  const mergeMessages = useCallback((prev: WaThreadMessage[], next: WaThreadMessage[]) => {
+    if (!prev.length) return next;
+    if (!next.length) return prev;
+    const byId = new Map<string, WaThreadMessage>();
+    for (const m of prev) {
+      const id = String(m.id || "");
+      if (id) byId.set(id, m);
+    }
+    for (const m of next) {
+      const id = String(m.id || "");
+      if (id) byId.set(id, m);
+    }
+    const merged = Array.from(byId.values());
+    if (merged.length < next.length) return next;
+    merged.sort(
+      (a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0),
+    );
+    return merged;
+  }, []);
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -476,22 +501,33 @@ export function AdminStudioOpsThread({
       const raw = (await getMessages({ phone, limit: 400 })) as {
         messages?: WaThreadMessage[];
       };
-      setMessages(Array.isArray(raw?.messages) ? raw.messages : []);
+      const next = Array.isArray(raw?.messages) ? raw.messages : [];
+      setMessages((prev) => (quiet ? mergeMessages(prev, next) : next));
+      failCountRef.current = 0;
+      setStale(false);
     } catch (err) {
+      failCountRef.current += 1;
       if (!quiet) {
         toast.error(friendlyConvexError(err, "Could not load WhatsApp thread"));
         setMessages([]);
+      } else if (failCountRef.current >= 3) {
+        setStale(true);
       }
     } finally {
       if (!quiet) setLoading(false);
     }
-  }, [getMessages, phone]);
+  }, [getMessages, phone, mergeMessages]);
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => void load(true), 5_000);
+    const timer = window.setInterval(() => void load(true), 45_000);
     return () => window.clearInterval(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (!threadTick) return;
+    void load(true);
+  }, [threadTick, load]);
 
   const folded = useMemo(() => foldThreadReactions(messages), [messages]);
   const timeline = useMemo(() => {
@@ -517,6 +553,7 @@ export function AdminStudioOpsThread({
   }, [folded]);
 
   useLayoutEffect(() => {
+    if (!nearBottomRef.current && !loading) return;
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [timeline.length, phone, loading]);
 
@@ -528,6 +565,7 @@ export function AdminStudioOpsThread({
       await sendMessage({ phone, text });
       setDraft("");
       await load();
+      void refresh({ quiet: true });
     } catch (err) {
       toast.error(friendlyConvexError(err, "Send failed"));
     } finally {
@@ -537,7 +575,21 @@ export function AdminStudioOpsThread({
 
   return (
     <section className="cs-ops-thread studio-ops-wa-thread" aria-label="WhatsApp thread">
-      <div className="cs-ops-thread-scroll" ref={scrollRef}>
+      <div
+        className="cs-ops-thread-scroll"
+        ref={scrollRef}
+        onScroll={() => {
+          const el = scrollRef.current;
+          if (!el) return;
+          nearBottomRef.current =
+            el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        }}
+      >
+        {stale ? (
+          <p className="studio-ops-thread-stale studio-muted">
+            Thread refresh lagging — retrying…
+          </p>
+        ) : null}
         {loading ? (
           <div className="cs-ops-thread-empty" aria-busy="true" aria-label="Loading thread">
             <Loader2 className="h-5 w-5 animate-spin cs-ops-thread-load-spin" />
