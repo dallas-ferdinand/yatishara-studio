@@ -27,14 +27,19 @@ export const LIVE_COURSES = [
     listPriceCredits: ttdToCredits(1500),
     salePriceCredits: ttdToCredits(750),
     saleEndsAt: AD_SIDE_HUSTLE_SALE_ENDS_AT,
-    descriptionMarkdown: `Turn Studio into a paid ads machine — hooks, product locks, and client-ready clips without looking like AI sludge.
+    descriptionMarkdown: `Learn how to make AI ads in Yatishara Studio and turn that into a real side hustle.
 
-### What you get
-- Scroll-stopping hooks that hold gaze and product
-- Prompt stacks you can reuse across SKUs
-- Delivery patterns clients actually pay for
+You build the creative in Studio (flyer, video, music, voiceover, edit), film a simple before / after / ad talkie of yourself, post and boost on TikTok, move serious people from DMs to WhatsApp, then quote and collect a deposit the clean way.
 
-Sale pricing is on the card and checkout — **TT$750** until **1 September 2026**, then **TT$1,500**. Lifetime access once unlocked.
+### What you leave with
+- A repeatable ad-making loop inside Studio
+- Simple filming habits that look real on phone
+- TikTok posting and boost basics that don’t waste money
+- A DM to WhatsApp path for serious buyers
+- A clean quote and deposit close
+
+### Sale
+**TT$750** until **1 September 2026**, then **TT$1,500**. Lifetime access once unlocked.
 `,
   },
   {
@@ -44,10 +49,10 @@ Sale pricing is on the card and checkout — **TT$750** until **1 September 2026
     status: "coming_soon" as const,
     priceCredits: ttdToCredits(2500),
     listPriceCredits: ttdToCredits(2500),
-    descriptionMarkdown: `End-to-end short film workflow inside Yatishara Studio — structure, shots, and export.
+    descriptionMarkdown: `How to plan, shoot-structure, and export short films inside Yatishara Studio.
 
 ### Coming soon
-Price locked at **TT$2,500**. The catalog shows the price; this course stays closed until we publish.
+Price locked at **TT$2,500**. Shown in the catalog; closed until we publish.
 `,
   },
   {
@@ -57,10 +62,10 @@ Price locked at **TT$2,500**. The catalog shows the price; this course stays clo
     status: "coming_soon" as const,
     priceCredits: ttdToCredits(4000),
     listPriceCredits: ttdToCredits(4000),
-    descriptionMarkdown: `Advanced video generation for cinematic looks — lenses, blocking, and grade-aware prompts.
+    descriptionMarkdown: `Deeper cinematic video work in Studio: look, blocking, and prompts that hold a film grade.
 
 ### Coming soon
-Price locked at **TT$4,000**. The catalog shows the price; this course stays closed until we publish.
+Price locked at **TT$4,000**. Shown in the catalog; closed until we publish.
 `,
   },
 ] as const;
