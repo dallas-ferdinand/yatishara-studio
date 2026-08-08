@@ -21010,10 +21010,11 @@ export function StudioShell({
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
         .studio-academy-sale-pan {
-          display: grid;
+          display: flex;
+          align-items: center;
           gap: 8px;
           margin-top: 2px;
-          padding: 8px 10px;
+          padding: 6px 8px;
           border-radius: 12px;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft, var(--mos-border-soft)));
           background:
@@ -21027,22 +21028,17 @@ export function StudioShell({
             0 8px 20px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
         }
         .studio-academy-sale-pan.is-compact {
-          gap: 6px;
-          padding: 7px 9px;
+          gap: 7px;
+          padding: 5px 7px;
           border-radius: 10px;
         }
-        .studio-academy-sale-pan-head {
-          display: flex;
-          align-items: center;
-          justify-content: flex-start;
-          gap: 8px;
-          min-width: 0;
-        }
         .studio-academy-sale-pan-kicker {
+          flex: 0 0 auto;
           font-size: 10px;
           font-weight: 700;
           letter-spacing: 0.06em;
           text-transform: uppercase;
+          white-space: nowrap;
           color: color-mix(in srgb, var(--cursor-accent) 72%, var(--color-cursor-text-bright, var(--mos-text)));
         }
         .studio-academy-price-save {
@@ -21065,16 +21061,18 @@ export function StudioShell({
         }
         .studio-academy-sale-pan-units {
           display: flex;
-          align-items: stretch;
-          justify-content: space-between;
-          gap: 4px;
+          flex: 1 1 auto;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 3px;
+          min-width: 0;
         }
         .studio-academy-sale-pan-unit {
-          flex: 1 1 0;
+          flex: 0 0 auto;
           display: grid;
           place-items: center;
           min-width: 0;
-          padding: 6px 4px;
+          padding: 4px 6px;
           border-radius: 8px;
           background: color-mix(in srgb, var(--mos-page, #f5f5f7) 72%, transparent);
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 22%, transparent);

@@ -136,9 +136,7 @@ function SaleCountdownPanel({
       className={`studio-academy-sale-pan${compact ? " is-compact" : ""}`}
       aria-label={`Sale ends in ${spoken}`}
     >
-      <div className="studio-academy-sale-pan-head">
-        <span className="studio-academy-sale-pan-kicker">Sale ends in</span>
-      </div>
+      <span className="studio-academy-sale-pan-kicker">Sale ends in</span>
       <div className="studio-academy-sale-pan-units">
         {units.map((unit, index) => (
           <Fragment key={unit.label}>
