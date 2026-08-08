@@ -21,16 +21,59 @@ import { OpsFilterPills } from "./AdminStudioOpsExtras";
 import "./studio-messages.css";
 
 function statusTone(id: string): string {
-  const key = id.toLowerCase();
+  const key = String(id || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!key) return "neutral";
+  // Exact first so Sophie / Agent / Intake never collapse into one hue.
+  const exact: Record<string, string> = {
+    sophie: "sophie",
+    working: "working",
+    agent: "agent",
+    human: "human",
+    human_takeover: "human",
+    watch: "watch",
+    new: "new",
+    intake: "intake",
+    signup: "signup",
+    verified: "verified",
+    awaiting_payment: "awaiting_payment",
+    waiting_client: "waiting_client",
+    paid: "paid",
+    course_unlocked: "course_unlocked",
+    topped_up: "topped_up",
+    done: "done",
+    cold: "cold",
+    hot: "hot",
+    escalated: "escalated",
+    approval: "approval",
+    draft_pay: "approval",
+    babysit: "watch",
+    babysit_pending: "approval",
+    inbound: "inbound",
+    outbound: "outbound",
+    outreach: "outbound",
+    owner: "owner",
+    friends: "friends",
+    friends_family: "friends",
+    family: "friends",
+  };
+  if (exact[key]) return exact[key];
   if (key.includes("watch")) return "watch";
-  if (key.includes("inbound") || key === "new") return "inbound";
-  if (key.includes("outbound")) return "outbound";
+  if (key.includes("inbound")) return "inbound";
+  if (key.includes("outbound") || key.includes("outreach")) return "outbound";
   if (key.includes("intake")) return "intake";
-  if (key.includes("await") || key.includes("payment")) return "await";
+  if (key.includes("await") || key.includes("payment")) return "awaiting_payment";
   if (key.includes("owner")) return "owner";
   if (key.includes("friend") || key.includes("family")) return "friends";
   if (key.includes("human")) return "human";
-  if (key.includes("agent") || key.includes("sophie")) return "agent";
+  if (key.includes("sophie") || key.includes("working")) return "sophie";
+  if (key.includes("agent")) return "agent";
+  if (key.includes("escalat") || key.includes("error")) return "escalated";
+  if (key.includes("approv") || key.includes("draft")) return "approval";
+  if (key.includes("done") || key.includes("complete")) return "done";
+  if (key.includes("paid") || key.includes("unlock")) return "paid";
   return "neutral";
 }
 

@@ -14527,33 +14527,77 @@ export function StudioShell({
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .studio-ops-tag.is-watch {
-          background: #64748b;
+        /* Each label keeps its own hue (CS Ops style) — never share Agent/Sophie/Intake. */
+        .studio-ops-tag.is-sophie {
+          background: #7c3aed;
         }
-        .studio-ops-tag.is-inbound,
+        .studio-ops-tag.is-working {
+          background: #6d28d9;
+        }
+        .studio-ops-tag.is-agent {
+          background: #15803d;
+        }
+        .studio-ops-tag.is-human {
+          background: #dc2626;
+        }
+        .studio-ops-tag.is-watch {
+          background: #475569;
+        }
+        .studio-ops-tag.is-new {
+          background: #0e7490;
+        }
         .studio-ops-tag.is-intake {
-          background: #3b82f6;
+          background: #0369a1;
+        }
+        .studio-ops-tag.is-inbound {
+          background: #0284c7;
         }
         .studio-ops-tag.is-outbound {
-          background: #8b5cf6;
+          background: #4f46e5;
+        }
+        .studio-ops-tag.is-signup {
+          background: #2563eb;
+        }
+        .studio-ops-tag.is-verified {
+          background: #0d9488;
+        }
+        .studio-ops-tag.is-awaiting_payment,
+        .studio-ops-tag.is-await {
+          background: #c2410c;
+        }
+        .studio-ops-tag.is-waiting_client {
+          background: #b45309;
+          color: #fff7ed;
+        }
+        .studio-ops-tag.is-paid {
+          background: #047857;
+        }
+        .studio-ops-tag.is-course_unlocked {
+          background: #0f766e;
+        }
+        .studio-ops-tag.is-topped_up {
+          background: #059669;
+        }
+        .studio-ops-tag.is-done {
+          background: #4d7c0f;
+        }
+        .studio-ops-tag.is-cold {
+          background: #64748b;
+        }
+        .studio-ops-tag.is-hot {
+          background: #e11d48;
+        }
+        .studio-ops-tag.is-escalated {
+          background: #dc2626;
+        }
+        .studio-ops-tag.is-approval {
+          background: #b45309;
         }
         .studio-ops-tag.is-owner {
           background: #1d4ed8;
         }
         .studio-ops-tag.is-friends {
-          background: #14b8a6;
-        }
-        .studio-ops-tag.is-await {
-          background: #f59e0b;
-          color: #111827;
-        }
-        .studio-ops-tag.is-human {
-          background: #dc2626;
-        }
-        .studio-ops-tag.is-agent,
-        .studio-ops-tag.is-sophie,
-        .studio-ops-tag.is-working {
-          background: color-mix(in srgb, var(--cursor-accent) 88%, #0f172a);
+          background: #0d9488;
         }
         .studio-ops-tag.is-neutral {
           background: #94a3b8;
