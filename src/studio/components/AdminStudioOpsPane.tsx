@@ -227,11 +227,6 @@ export function AdminStudioOpsPane() {
                                 <span>Sophie</span>
                               </span>
                             ) : null}
-                            {selected.payment_state ? (
-                              <span className="studio-ops-peer-payment">
-                                {selected.payment_state}
-                              </span>
-                            ) : null}
                           </div>
                           {selected.presence?.typing ? (
                             <span className="studio-ops-presence-label">

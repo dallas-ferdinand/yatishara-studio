@@ -1,16 +1,12 @@
 "use client";
 
 import {
-  ArrowDown,
   Bot,
   Eye,
   Loader2,
   UserRound,
-  X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
-import { Icon } from "@/desk/components/Icons";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
   sessionAvatarSrc,
@@ -18,115 +14,11 @@ import {
   statusLabel,
   useAdminStudioOps,
   whenLabel,
-  type ChatFilterId,
   type SessionRow,
   type StatusOpt,
 } from "./AdminStudioOpsContext";
 import { OpsFilterPills } from "./AdminStudioOpsExtras";
 import "./studio-messages.css";
-
-const META_FILTERS: { id: ChatFilterId; label: string }[] = [
-  { id: "all", label: "All chats" },
-  { id: "unanswered", label: "Unanswered" },
-  { id: "working", label: "Working" },
-  { id: "watch", label: "Watch" },
-  { id: "approval", label: "Needs approval" },
-  { id: "escalated", label: "Escalated" },
-  { id: "agent", label: "Agent on" },
-  { id: "human", label: "Human takeover" },
-];
-
-function OpsChatFilter({
-  value,
-  onChange,
-  statuses,
-}: {
-  value: ChatFilterId;
-  onChange: (value: ChatFilterId) => void;
-  statuses: StatusOpt[];
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const options = [
-    ...META_FILTERS,
-    ...statuses.map((s) => ({ id: s.id, label: s.label })),
-  ];
-  const active = options.find((o) => o.id === value) || options[0]!;
-  const filtered = value !== "all";
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (event: MouseEvent) => {
-      if (wrapRef.current?.contains(event.target as Node)) return;
-      setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  return (
-    <div className="desk-explorer-type-filter studio-dm-chat-filter" ref={wrapRef}>
-      <button
-        type="button"
-        className={`desk-explorer-type-filter-trigger${filtered ? " is-active" : ""}${open ? " is-open" : ""}`}
-        title={filtered ? `Filter: ${active.label}` : "Filter chats"}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={filtered ? `Filter: ${active.label}` : "Filter chats"}
-        onClick={() => setOpen((prev) => !prev)}
-      >
-        <Icon name="sliders" size={13} />
-        <span>{active.label}</span>
-        <ArrowDown className="cursor-select-arrow" aria-hidden={true} />
-      </button>
-      {filtered ? (
-        <button
-          type="button"
-          className="desk-explorer-type-filter-clear"
-          title="Clear filter"
-          aria-label="Clear filter"
-          onClick={(event) => {
-            event.stopPropagation();
-            onChange("all");
-            setOpen(false);
-          }}
-        >
-          <X aria-hidden={true} />
-        </button>
-      ) : null}
-      {open ? (
-        <div
-          className="cursor-dropdown cursor-dropdown-down is-end desk-explorer-type-filter-menu studio-dm-chat-filter-menu"
-          role="menu"
-        >
-          {options.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={value === opt.id}
-              className={`cursor-dropdown-item${value === opt.id ? " active" : ""}`}
-              onClick={() => {
-                onChange(opt.id);
-                setOpen(false);
-              }}
-            >
-              <Tags className="h-3.5 w-3.5" aria-hidden={true} />
-              <span>{opt.label}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function statusTone(id: string): string {
   const key = id.toLowerCase();
@@ -318,14 +210,6 @@ export function AdminStudioOpsSidebar() {
           counts={filterCounts}
           statusIds={statusCatalog}
         />
-
-        <div className="studio-dm-rail-row">
-          <OpsChatFilter
-            value={chatFilter}
-            onChange={setChatFilter}
-            statuses={statusCatalog}
-          />
-        </div>
       </div>
 
       <div className="studio-dm-sidebar-body">

@@ -4,8 +4,10 @@
  * Extra Ops boards + controls ported from Desk CS Ops (Academy-safe subset).
  */
 import { Bell, Loader2, OctagonX, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
+import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import {
   money,
   sessionTitle,
@@ -37,6 +39,9 @@ export function OpsFilterPills({
   counts: Record<string, number>;
   statusIds: Array<{ id: string; label: string }>;
 }) {
+  const railRef = useRef<HTMLDivElement | null>(null);
+  useHorizontalWheelScroll(railRef);
+  useHorizontalScrollFade(railRef);
   const pills = [
     { id: "all", label: "All" },
     { id: "unanswered", label: "Unanswered" },
@@ -49,7 +54,12 @@ export function OpsFilterPills({
     ...statusIds.slice(0, 6),
   ];
   return (
-    <div className="studio-ops-filter-pills" role="toolbar" aria-label="Chat filters">
+    <div
+      ref={railRef}
+      className="studio-ops-filter-pills"
+      role="toolbar"
+      aria-label="Chat filters"
+    >
       {pills.map((p) => {
         const n = counts[p.id] || 0;
         return (

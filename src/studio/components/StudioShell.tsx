@@ -14625,9 +14625,16 @@ export function StudioShell({
         }
         .studio-ops-filter-pills {
           display: flex;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
           gap: 4px;
           padding: 0 2px 6px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .studio-ops-filter-pills::-webkit-scrollbar {
+          display: none;
         }
         .studio-ops-filter-pill {
           display: inline-flex;
@@ -14642,6 +14649,8 @@ export function StudioShell({
           font-size: 10px;
           font-weight: 600;
           cursor: pointer;
+          flex: 0 0 auto;
+          white-space: nowrap;
         }
         .studio-ops-filter-pill em {
           font-style: normal;
@@ -23302,8 +23311,7 @@ export function StudioShell({
           effectiveFilesRail ? " is-files-nav" : ""
         }${sharingToPeople ? " is-share-people" : ""}`}
       >
-        <div className={STYLE.panelHead}>
-          <StudioShellSidebarBrand effectiveFilesRail={effectiveFilesRail} />
+        <StudioShellSidebarPanelHead effectiveFilesRail={effectiveFilesRail}>
           <StudioShellSidebarHeadExtras
             showExplorerTools={
               !effectiveSocialRail &&
@@ -23341,7 +23349,7 @@ export function StudioShell({
               event.currentTarget.value = "";
             }}
           />
-        </div>
+        </StudioShellSidebarPanelHead>
         {effectiveMessagesRail ? (
           <StudioMessagesSidebar
             activeConversationId={activeDmConversationId}
@@ -32846,17 +32854,20 @@ function StudioFilesMobileSheet({
   );
 }
 
-/** Brand in the left rail — Ops Chats swaps the Files/Studio title like Messages. */
-function StudioShellSidebarBrand({ effectiveFilesRail }) {
+/** Left-rail title row — hidden for Ops Chats (list chrome starts at search). */
+function StudioShellSidebarPanelHead({ effectiveFilesRail, children }) {
   const ops = useAdminStudioOpsOptional();
-  if (ops?.active && ops.opsTab === "chats") {
-    return (
-      <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-sidebar-brand min-w-0">
-        <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        <span className="studio-sidebar-brand-label truncate">Ops</span>
-      </div>
-    );
-  }
+  if (ops?.active && ops.opsTab === "chats") return null;
+  return (
+    <div className={STYLE.panelHead}>
+      <StudioShellSidebarBrand effectiveFilesRail={effectiveFilesRail} />
+      {children}
+    </div>
+  );
+}
+
+/** Brand in the left rail — Files swaps Studio title; Ops Chats hides the whole head. */
+function StudioShellSidebarBrand({ effectiveFilesRail }) {
   if (effectiveFilesRail) {
     return (
       <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-sidebar-brand min-w-0">
