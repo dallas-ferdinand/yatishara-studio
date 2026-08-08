@@ -187,23 +187,23 @@ export const internalStartPaywiseForCs = internalAction({
     amountCents: number;
   }> => {
     const phone = args.phone.replace(/\D/g, "");
-    let user: StudioCsUser = await ctx.runQuery(
+    const user: StudioCsUser = await ctx.runQuery(
       internal.studioCs.internalFindUserByPhone,
       { phone },
     );
     if (!user) {
-      const created = await ctx.runMutation(
-        internal.studioCs.internalCreateUserFromWa,
-        { phone },
+      throw new Error(
+        "No Studio account yet. Collect name + email, create account, verify OTP, then PayWise.",
       );
-      user = await ctx.runQuery(internal.studioCs.internalFindUserByPhone, {
-        phone: created.phone,
-      });
     }
-    if (!user) throw new Error("Could not create Studio user");
+    if (!user.emailVerified) {
+      throw new Error(
+        "Email not verified yet. Verify OTP in WhatsApp before PayWise.",
+      );
+    }
     if (!user.email || !user.firstName || !user.lastName) {
       throw new Error(
-        "Account needs email and first/last name before PayWise. Collect details or use bank transfer.",
+        "Account needs email and first/last name before PayWise.",
       );
     }
     const clientRequestId = `studio-cs-${phone}-${Date.now()}`;

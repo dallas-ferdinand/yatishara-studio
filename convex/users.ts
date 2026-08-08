@@ -409,8 +409,17 @@ export const adminListCustomers = adminQuery({
   handler: async (ctx) => {
     // Cap admin customer enrichment — full historical N+1 was unbounded.
     const users = await ctx.db.query("users").order("desc").take(250);
+    // Hide phone-only stubs that never signed up (no email, never seen in app).
+    const signedUp = users.filter(
+      (user) =>
+        user.role === "admin" ||
+        user.role === "super_admin" ||
+        Boolean(user.emailVerified) ||
+        Boolean(user.lastSeenAt) ||
+        (Boolean(user.email) && Boolean(user.firstName)),
+    );
     const rows = await Promise.all(
-      users.map(async (user) => {
+      signedUp.map(async (user) => {
         const account = await ctx.db
           .query("billingAccounts")
           .withIndex("by_user", (q) => q.eq("userId", user._id))

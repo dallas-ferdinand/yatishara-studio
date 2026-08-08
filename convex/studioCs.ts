@@ -167,36 +167,61 @@ export const internalCreateUserFromWa = internalMutation({
     if (phone.length < 8 || phone.length > 15) {
       throw new Error("Invalid phone");
     }
+    const firstName = String(args.firstName || "").trim();
+    const lastName = String(args.lastName || "").trim();
+    const email = args.email ? normalizeEmail(args.email) : "";
+    if (!firstName) {
+      throw new Error("firstName required — collect name before creating a Studio account");
+    }
+    if (!lastName) {
+      throw new Error("lastName required — collect full name before creating a Studio account");
+    }
+    if (!email || !email.includes("@")) {
+      throw new Error("email required — collect email before creating a Studio account");
+    }
+
     const existing = await ctx.db
       .query("users")
       .withIndex("by_phone", (q) => q.eq("phone", phone))
       .unique();
     if (existing) {
+      await ctx.db.patch(existing._id, {
+        firstName: firstName || existing.firstName,
+        lastName: lastName || existing.lastName,
+        name: [firstName || existing.firstName, lastName || existing.lastName]
+          .filter(Boolean)
+          .join(" "),
+        email: email || existing.email,
+        // Keep prior verification; new email clears verify.
+        emailVerified:
+          email && email !== existing.email ? false : existing.emailVerified,
+        updatedAt: Date.now(),
+      });
       await ensureBillingAccount(ctx, existing._id);
       return { userId: existing._id, phone, created: false };
     }
-    const now = Date.now();
-    const email = args.email ? normalizeEmail(args.email) : undefined;
-    if (email) {
-      const byEmail = await ctx.db
-        .query("users")
-        .withIndex("email", (q) => q.eq("email", email))
-        .unique();
-      if (byEmail) {
-        await ctx.db.patch(byEmail._id, {
-          phone,
-          phoneVerifiedAt: now,
-          firstName: args.firstName ?? byEmail.firstName,
-          lastName: args.lastName ?? byEmail.lastName,
-          updatedAt: now,
-        });
-        await ensureBillingAccount(ctx, byEmail._id);
-        return { userId: byEmail._id, phone, created: false };
-      }
+    const byEmail = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email))
+      .unique();
+    if (byEmail) {
+      const now = Date.now();
+      await ctx.db.patch(byEmail._id, {
+        phone,
+        phoneVerifiedAt: now,
+        firstName: firstName || byEmail.firstName,
+        lastName: lastName || byEmail.lastName,
+        name:
+          [firstName || byEmail.firstName, lastName || byEmail.lastName]
+            .filter(Boolean)
+            .join(" ") || byEmail.name,
+        updatedAt: now,
+      });
+      await ensureBillingAccount(ctx, byEmail._id);
+      return { userId: byEmail._id, phone, created: false };
     }
-    const firstName = args.firstName?.trim() || undefined;
-    const lastName = args.lastName?.trim() || undefined;
-    const name = [firstName, lastName].filter(Boolean).join(" ") || undefined;
+    const now = Date.now();
+    const name = [firstName, lastName].filter(Boolean).join(" ");
     const userId = await ctx.db.insert("users", {
       phone,
       phoneVerifiedAt: now,
@@ -291,20 +316,13 @@ export const internalVerifyEmailOtp = internalMutation({
         .withIndex("email", (q) => q.eq("email", email))
         .unique();
     }
-    const now = Date.now();
     if (!user) {
-      const userId = await ctx.db.insert("users", {
-        email,
-        emailVerified: true,
-        phone: phone || undefined,
-        phoneVerifiedAt: phone ? now : undefined,
-        role: "user",
-        createdAt: now,
-        updatedAt: now,
-      });
-      await ensureBillingAccount(ctx, userId);
-      return { ok: true, userId };
+      return {
+        ok: false,
+        reason: "signup_first",
+      };
     }
+    const now = Date.now();
     await ctx.db.patch(user._id, {
       email,
       emailVerified: true,
@@ -329,23 +347,20 @@ export const internalUnlockCourseForPhone = internalMutation({
   }),
   handler: async (ctx, args) => {
     const phone = normalizePhone(args.phone);
-    let user = await ctx.db
+    const user = await ctx.db
       .query("users")
       .withIndex("by_phone", (q) => q.eq("phone", phone))
       .unique();
     if (!user) {
-      const now = Date.now();
-      const userId = await ctx.db.insert("users", {
-        phone,
-        phoneVerifiedAt: now,
-        role: "user",
-        createdAt: now,
-        updatedAt: now,
-      });
-      await ensureBillingAccount(ctx, userId);
-      user = await ctx.db.get(userId);
+      throw new Error(
+        "No Studio account for this phone. Finish signup + email verify before unlock.",
+      );
     }
-    if (!user) throw new Error("User missing");
+    if (!user.emailVerified) {
+      throw new Error(
+        "Email not verified. Verify OTP before unlocking a course.",
+      );
+    }
     await ensureBillingAccount(ctx, user._id);
     const result = await purchaseCourseForUser(
       ctx,
