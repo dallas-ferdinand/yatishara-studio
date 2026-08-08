@@ -14624,12 +14624,14 @@ export function StudioShell({
           border: 2px solid var(--mos-page, var(--mos-panel));
         }
         .studio-ops-filter-pills {
+          --cursor-h-scroll-fade-pad: 2px;
+          --cursor-h-scroll-fade-gap: 0px;
           display: flex;
           flex-wrap: nowrap;
           align-items: center;
           gap: 4px;
           min-height: 36px;
-          padding: 7px 8px;
+          padding: 7px 6px 7px 2px;
           box-sizing: border-box;
           overflow-x: auto;
           overflow-y: hidden;
