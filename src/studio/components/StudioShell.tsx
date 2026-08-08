@@ -381,6 +381,10 @@ const AdminAcademyPane = dynamic(
   () => import("./AdminAcademyPane").then((m) => m.AdminAcademyPane),
   { ssr: false },
 );
+const AdminStudioOpsPane = dynamic(
+  () => import("./AdminStudioOpsPane").then((m) => m.AdminStudioOpsPane),
+  { ssr: false },
+);
 const StudioAcademyPane = dynamic(
   () => import("./StudioAcademyPane").then((m) => m.StudioAcademyPane),
   { ssr: false },
@@ -30366,6 +30370,7 @@ function AdminWorkspacePane({
     { id: "jobs", label: "Jobs", Icon: Award },
     { id: "assets", label: "Assets" },
     { id: "academy", label: "Academy", Icon: GraduationCap },
+    { id: "ops", label: "Ops" },
     { id: "payouts", label: "Payouts" },
     { id: "tools", label: "Tools" },
   ];
@@ -30619,6 +30624,8 @@ function AdminWorkspacePane({
           />
         ) : adminSection === "academy" ? (
           <AdminAcademyPane />
+        ) : adminSection === "ops" ? (
+          <AdminStudioOpsPane />
         ) : (
           <div className="studio-admin-stack">
             <section className="studio-admin-section">

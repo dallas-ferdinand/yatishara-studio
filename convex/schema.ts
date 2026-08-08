@@ -1779,4 +1779,13 @@ export default defineSchema({
   })
     .index("by_user_and_comment", ["userId", "commentId"])
     .index("by_comment", ["commentId"]),
+
+  /** Studio Sophie CS — email OTP codes (agent never reads these; verify returns ok only). */
+  studioCsOtps: defineTable({
+    email: v.string(),
+    codeHash: v.string(),
+    phone: v.optional(v.string()),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+  }).index("by_email", ["email"]),
 });
