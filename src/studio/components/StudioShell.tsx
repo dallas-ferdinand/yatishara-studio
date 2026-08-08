@@ -14346,6 +14346,50 @@ export function StudioShell({
           overflow: auto;
           padding: 16px;
         }
+        .studio-admin-ops-fill {
+          display: flex;
+          flex: 1 1 auto;
+          flex-direction: column;
+          min-height: 0;
+          margin: -16px;
+          height: calc(100% + 32px);
+          max-height: calc(100% + 32px);
+        }
+        .studio-admin-ops-fill > .studio-ops-shell {
+          display: flex;
+          flex: 1 1 auto;
+          flex-direction: column;
+          min-height: 0;
+        }
+        .studio-ops-shell > .studio-admin-head {
+          flex: 0 0 auto;
+        }
+        .studio-ops-shell > .studio-admin-body {
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+        .studio-ops-empty {
+          margin: 24px 0 0;
+          color: var(--color-cursor-muted);
+          font-size: 13px;
+          font-weight: 500;
+          text-align: center;
+        }
+        .studio-ops-tab-count {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 16px;
+          height: 16px;
+          margin-left: 4px;
+          padding: 0 5px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent) 22%, transparent);
+          color: var(--color-cursor-text-bright);
+          font-size: 10px;
+          font-weight: 700;
+          line-height: 1;
+        }
         @media (max-width: 760px) {
           .studio-settings-billing-summary,
           .studio-settings-invoices-card,
@@ -30820,7 +30864,9 @@ function AdminWorkspacePane({
         ) : adminSection === "academy" ? (
           <AdminAcademyPane />
         ) : adminSection === "ops" ? (
-          <AdminStudioOpsPane />
+          <div className="studio-admin-ops-fill">
+            <AdminStudioOpsPane />
+          </div>
         ) : (
           <div className="studio-admin-stack">
             <section className="studio-admin-section">

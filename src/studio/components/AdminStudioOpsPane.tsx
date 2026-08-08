@@ -4,15 +4,16 @@ import { useAction } from "convex/react";
 import {
   Loader2,
   RefreshCw,
-  Smartphone,
   UserRoundCheck,
   Bot,
   Ban,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+
+type OpsTab = "chats" | "settings";
 
 type DeviceStatus = {
   ok?: boolean;
@@ -53,6 +54,11 @@ type PaymentRow = {
   notes?: string | null;
 };
 
+const OPS_TABS: { id: OpsTab; label: string }[] = [
+  { id: "chats", label: "Chats" },
+  { id: "settings", label: "Settings" },
+];
+
 function money(cents: number) {
   return `TT$${(Number(cents || 0) / 100).toFixed(0)}`;
 }
@@ -84,6 +90,8 @@ export function AdminStudioOpsPane() {
   const listPayments = useAction(api.studioCsOpsActions.adminListPayments);
   const decidePayment = useAction(api.studioCsOpsActions.adminDecidePayment);
 
+  const [tab, setTab] = useState<OpsTab>("chats");
+  const bootedRef = useRef(false);
   const [device, setDevice] = useState<DeviceStatus | null>(null);
   const [qrSrc, setQrSrc] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
@@ -107,6 +115,10 @@ export function AdminStudioOpsPane() {
       setPayments(
         ((p as { payments?: PaymentRow[] })?.payments || []) as PaymentRow[],
       );
+      if (!bootedRef.current) {
+        bootedRef.current = true;
+        if (!next.open) setTab("settings");
+      }
     } catch (err) {
       toast.error(friendlyConvexError(err, "Could not load Ops"));
     } finally {
@@ -171,181 +183,213 @@ export function AdminStudioOpsPane() {
     .join(" · ");
 
   return (
-    <div className="studio-admin-stack">
-      <section className="studio-admin-section">
-        <div className="studio-admin-section-head">
-          <span className="studio-admin-section-title">
-            <Smartphone className="h-3.5 w-3.5" aria-hidden /> Sophie
-          </span>
-        </div>
-
-        <div className="studio-ops-device">
-          <div className="studio-ops-device-top">
-            <div className="studio-ops-device-copy">
-              <span className={`studio-ops-status ${statusClass}`}>{statusLabel}</span>
-              <p className="studio-ops-device-title">
-                {linked ? "WhatsApp connected" : "WhatsApp for Academy CS"}
-              </p>
-              <p className="studio-ops-device-phone">{phoneLine}</p>
-            </div>
-            <div className="studio-ops-device-actions">
-              <button
-                type="button"
-                className="studio-ops-icon-btn"
-                onClick={() => void refresh()}
-                disabled={busy === "refresh"}
-                aria-label="Refresh status"
-              >
-                {busy === "refresh" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-              </button>
-              {!linked ? (
-                <button
-                  type="button"
-                  className="studio-ops-primary"
-                  disabled={!!busy}
-                  onClick={() => void linkPhone()}
-                >
-                  {busy === "link" ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : null}
-                  {showingQr ? "Refresh QR" : "Link WhatsApp"}
-                </button>
+    <div className="studio-ops-shell">
+      <header className="studio-admin-head">
+        <nav className="studio-admin-head-tabs" aria-label="Ops sections">
+          {OPS_TABS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`studio-admin-head-tab${tab === item.id ? " is-active" : ""}`}
+              onClick={() => setTab(item.id)}
+            >
+              {item.label}
+              {item.id === "chats" && sessions.length > 0 ? (
+                <span className="studio-ops-tab-count">{sessions.length}</span>
               ) : null}
-            </div>
-          </div>
-
-          {showingQr ? (
-            <div className="studio-ops-qr">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qrSrc!} alt="Scan with WhatsApp to link Sophie" />
-              <p className="studio-ops-qr-hint">Open WhatsApp → Linked devices → Scan</p>
-            </div>
-          ) : null}
-
-          <details className="studio-ops-advanced">
-            <summary>Advanced</summary>
-            <div className="studio-ops-advanced-body">
-              <button
-                type="button"
-                className="cursor-settings-action"
-                style={{ width: "auto" }}
-                disabled={!!busy}
-                onClick={() => void unlink()}
-              >
-                Unlink
-              </button>
-            </div>
-          </details>
+              {item.id === "chats" && payments.length > 0 ? (
+                <span className="studio-ops-tab-count" title="Pending approvals">
+                  {payments.length}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </nav>
+        <div className="studio-admin-section-extras" style={{ paddingRight: 8 }}>
+          <button
+            type="button"
+            className="studio-ops-icon-btn"
+            onClick={() => void refresh()}
+            disabled={busy === "refresh"}
+            aria-label="Refresh"
+          >
+            {busy === "refresh" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+          </button>
         </div>
-      </section>
+      </header>
 
-      {sessions.length > 0 ? (
-        <section className="studio-admin-section">
-          <div className="studio-admin-section-head">
-            <span className="studio-admin-section-title">Sessions</span>
-          </div>
-          <ul className="studio-admin-list">
-            {sessions.map((s) => (
-              <li key={s.phone} className="studio-admin-list-row">
-                <div>
-                  <strong>{s.display_name || s.phone}</strong>
-                  <div className="studio-muted">
-                    {(s.statuses || [s.cs_status]).filter(Boolean).join(", ") ||
-                      "new"}
-                    {" · "}
-                    {s.payment_state || "unpaid"}
-                  </div>
+      <div className="studio-admin-body">
+        {tab === "chats" ? (
+          <div className="studio-admin-stack">
+            {payments.length > 0 ? (
+              <section className="studio-admin-section">
+                <div className="studio-admin-section-head">
+                  <span className="studio-admin-section-title">Approvals</span>
                 </div>
-                <div className="studio-admin-row-actions">
-                  <button
-                    type="button"
-                    className="cursor-settings-action"
-                    onClick={() =>
-                      void setAgent({
-                        phone: s.phone,
-                        enabled: !s.agent_enabled,
-                      }).then(refresh)
-                    }
-                  >
-                    <Bot className="h-3.5 w-3.5" />
-                    {s.agent_enabled ? "On" : "Off"}
-                  </button>
-                  <button
-                    type="button"
-                    className="cursor-settings-action"
-                    onClick={() =>
-                      void setTakeover({
-                        phone: s.phone,
-                        on: !s.human_takeover,
-                      }).then(refresh)
-                    }
-                  >
-                    {s.human_takeover ? (
-                      <Ban className="h-3.5 w-3.5" />
-                    ) : (
-                      <UserRoundCheck className="h-3.5 w-3.5" />
-                    )}
-                    {s.human_takeover ? "Human" : "Take over"}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+                <ul className="studio-admin-list">
+                  {payments.map((p) => (
+                    <li key={p.id} className="studio-admin-list-row">
+                      <div>
+                        <strong>
+                          {money(p.amount_cents)} · {p.kind}
+                        </strong>
+                        <div className="studio-muted">
+                          {p.phone}
+                          {p.notes ? ` · ${p.notes}` : ""}
+                        </div>
+                      </div>
+                      <div className="studio-admin-row-actions">
+                        <button
+                          type="button"
+                          className="cursor-settings-action"
+                          onClick={() =>
+                            void decidePayment({
+                              paymentId: p.id,
+                              decision: "approve",
+                            }).then(refresh)
+                          }
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="cursor-settings-action"
+                          onClick={() =>
+                            void decidePayment({
+                              paymentId: p.id,
+                              decision: "reject",
+                            }).then(refresh)
+                          }
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
 
-      {payments.length > 0 ? (
-        <section className="studio-admin-section">
-          <div className="studio-admin-section-head">
-            <span className="studio-admin-section-title">Approvals</span>
+            <section className="studio-admin-section">
+              <div className="studio-admin-section-head">
+                <span className="studio-admin-section-title">Chats</span>
+              </div>
+              {sessions.length === 0 ? (
+                <p className="studio-ops-empty">No chats yet.</p>
+              ) : (
+                <ul className="studio-admin-list">
+                  {sessions.map((s) => (
+                    <li key={s.phone} className="studio-admin-list-row">
+                      <div>
+                        <strong>{s.display_name || s.phone}</strong>
+                        <div className="studio-muted">
+                          {(s.statuses || [s.cs_status])
+                            .filter(Boolean)
+                            .join(", ") || "new"}
+                          {" · "}
+                          {s.payment_state || "unpaid"}
+                        </div>
+                      </div>
+                      <div className="studio-admin-row-actions">
+                        <button
+                          type="button"
+                          className="cursor-settings-action"
+                          onClick={() =>
+                            void setAgent({
+                              phone: s.phone,
+                              enabled: !s.agent_enabled,
+                            }).then(refresh)
+                          }
+                        >
+                          <Bot className="h-3.5 w-3.5" />
+                          {s.agent_enabled ? "On" : "Off"}
+                        </button>
+                        <button
+                          type="button"
+                          className="cursor-settings-action"
+                          onClick={() =>
+                            void setTakeover({
+                              phone: s.phone,
+                              on: !s.human_takeover,
+                            }).then(refresh)
+                          }
+                        >
+                          {s.human_takeover ? (
+                            <Ban className="h-3.5 w-3.5" />
+                          ) : (
+                            <UserRoundCheck className="h-3.5 w-3.5" />
+                          )}
+                          {s.human_takeover ? "Human" : "Take over"}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           </div>
-          <ul className="studio-admin-list">
-            {payments.map((p) => (
-              <li key={p.id} className="studio-admin-list-row">
-                <div>
-                  <strong>
-                    {money(p.amount_cents)} · {p.kind}
-                  </strong>
-                  <div className="studio-muted">
-                    {p.phone}
-                    {p.notes ? ` · ${p.notes}` : ""}
-                  </div>
+        ) : (
+          <div className="studio-admin-stack">
+            <div className="studio-ops-device">
+              <div className="studio-ops-device-top">
+                <div className="studio-ops-device-copy">
+                  <span className={`studio-ops-status ${statusClass}`}>
+                    {statusLabel}
+                  </span>
+                  <p className="studio-ops-device-title">
+                    {linked ? "WhatsApp connected" : "WhatsApp for Academy CS"}
+                  </p>
+                  <p className="studio-ops-device-phone">{phoneLine}</p>
                 </div>
-                <div className="studio-admin-row-actions">
+                <div className="studio-ops-device-actions">
+                  {!linked ? (
+                    <button
+                      type="button"
+                      className="studio-ops-primary"
+                      disabled={!!busy}
+                      onClick={() => void linkPhone()}
+                    >
+                      {busy === "link" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : null}
+                      {showingQr ? "Refresh QR" : "Link WhatsApp"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {showingQr ? (
+                <div className="studio-ops-qr">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={qrSrc!} alt="Scan with WhatsApp to link Sophie" />
+                  <p className="studio-ops-qr-hint">
+                    Open WhatsApp → Linked devices → Scan
+                  </p>
+                </div>
+              ) : null}
+
+              <details className="studio-ops-advanced">
+                <summary>Advanced</summary>
+                <div className="studio-ops-advanced-body">
                   <button
                     type="button"
                     className="cursor-settings-action"
-                    onClick={() =>
-                      void decidePayment({
-                        paymentId: p.id,
-                        decision: "approve",
-                      }).then(refresh)
-                    }
+                    style={{ width: "auto" }}
+                    disabled={!!busy}
+                    onClick={() => void unlink()}
                   >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    className="cursor-settings-action"
-                    onClick={() =>
-                      void decidePayment({
-                        paymentId: p.id,
-                        decision: "reject",
-                      }).then(refresh)
-                    }
-                  >
-                    Reject
+                    Unlink
                   </button>
                 </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+              </details>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
