@@ -806,14 +806,6 @@ export function StudioAcademyPane({
                                   </s>
                                 </>
                               ) : null}
-                              {discountCredits != null ? (
-                                <span className="studio-academy-price-save">
-                                  −
-                                  {formatTtdShort(
-                                    creditsToCents(discountCredits, price),
-                                  )}
-                                </span>
-                              ) : null}
                             </span>
                             <span>
                               {comingSoon
@@ -823,7 +815,7 @@ export function StudioAcademyPane({
                                   }`}
                             </span>
                           </div>
-                          {discountCredits != null && course.saleEndsAt ? (
+                          {course.onSale && course.saleEndsAt ? (
                             <SaleCountdownPanel
                               saleEndsAt={course.saleEndsAt}
                               now={now}
