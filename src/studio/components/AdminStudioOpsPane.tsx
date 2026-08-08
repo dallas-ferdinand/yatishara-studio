@@ -38,7 +38,6 @@ type SessionRow = {
   human_takeover?: number;
   payment_state?: string;
   followup_at?: string | null;
-  last_inbound_at?: string | null;
 };
 
 type PaymentRow = {
@@ -56,6 +55,19 @@ function money(cents: number) {
   return `TT$${(Number(cents || 0) / 100).toFixed(0)}`;
 }
 
+function extractQr(result: unknown): string | null {
+  const r = result as DeviceStatus & {
+    qrcode?: { base64?: string } | string;
+    base64?: string;
+  };
+  const b64 =
+    (typeof r.qrcode === "string" ? r.qrcode : r.qrcode?.base64) ||
+    r.base64 ||
+    null;
+  if (!b64) return null;
+  return b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`;
+}
+
 export function AdminStudioOpsPane() {
   const deviceStatus = useAction(api.studioCsOpsActions.adminDeviceStatus);
   const deviceEnsure = useAction(api.studioCsOpsActions.adminDeviceEnsure);
@@ -67,229 +79,207 @@ export function AdminStudioOpsPane() {
   const setTakeover = useAction(api.studioCsOpsActions.adminSetTakeover);
   const listPayments = useAction(api.studioCsOpsActions.adminListPayments);
   const decidePayment = useAction(api.studioCsOpsActions.adminDecidePayment);
-  const serviceStatus = useAction(api.studioCsOpsActions.adminServiceStatus);
 
   const [device, setDevice] = useState<DeviceStatus | null>(null);
   const [qrSrc, setQrSrc] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
-  const [svc, setSvc] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setBusy("refresh");
     try {
-      const [d, s, p, st] = await Promise.all([
+      const [d, s, p] = await Promise.all([
         deviceStatus({}),
         listSessions({}),
         listPayments({ pending: true }),
-        serviceStatus({}),
       ]);
-      setDevice(d as DeviceStatus);
-      setSessions(((s as { sessions?: SessionRow[] })?.sessions || []) as SessionRow[]);
-      setPayments(((p as { payments?: PaymentRow[] })?.payments || []) as PaymentRow[]);
-      setSvc(st as Record<string, unknown>);
+      const next = d as DeviceStatus;
+      setDevice(next);
+      if (next.open) setQrSrc(null);
+      setSessions(
+        ((s as { sessions?: SessionRow[] })?.sessions || []) as SessionRow[],
+      );
+      setPayments(
+        ((p as { payments?: PaymentRow[] })?.payments || []) as PaymentRow[],
+      );
     } catch (err) {
-      toast.error(friendlyConvexError(err, "Could not load Studio Ops"));
+      toast.error(friendlyConvexError(err, "Could not load Ops"));
     } finally {
       setBusy(null);
     }
-  }, [deviceStatus, listSessions, listPayments, serviceStatus]);
+  }, [deviceStatus, listSessions, listPayments]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  async function run(label: string, fn: () => Promise<unknown>) {
-    setBusy(label);
+  async function linkPhone() {
+    setBusy("link");
     try {
-      const result = await fn();
-      if (label === "connect") {
-        const r = result as DeviceStatus & {
-          qrcode?: { base64?: string };
-          base64?: string;
-        };
-        const b64 =
-          (typeof r.qrcode === "string" ? r.qrcode : r.qrcode?.base64) ||
-          r.base64 ||
-          null;
-        setQrSrc(
-          b64 ? (b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`) : null,
-        );
-        setDevice((prev) => ({ ...(prev || {}), ...(r as DeviceStatus) }));
-      } else {
-        await refresh();
+      await deviceEnsure({});
+      try {
+        await setWebhook({});
+      } catch {
+        /* webhook can retry later */
       }
-      toast.success(`${label} done`);
+      const result = await deviceConnect({ logoutFirst: false });
+      const qr = extractQr(result);
+      setQrSrc(qr);
+      setDevice((prev) => ({ ...(prev || {}), ...(result as DeviceStatus) }));
+      if (!qr) {
+        await refresh();
+        toast.message("No QR yet — refresh in a few seconds");
+      }
     } catch (err) {
-      toast.error(friendlyConvexError(err, `${label} failed`));
+      toast.error(friendlyConvexError(err, "Could not show QR"));
     } finally {
       setBusy(null);
     }
   }
+
+  async function unlink() {
+    if (!confirm("Unlink Sophie’s WhatsApp? You’ll need to scan QR again.")) {
+      return;
+    }
+    setBusy("unlink");
+    try {
+      await deviceUnlink({});
+      setQrSrc(null);
+      await refresh();
+      toast.success("Unlinked");
+    } catch (err) {
+      toast.error(friendlyConvexError(err, "Unlink failed"));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const linked = Boolean(device?.open);
+  const statusLabel = linked
+    ? "Linked"
+    : device?.connecting || qrSrc
+      ? "Scan QR"
+      : "Not linked";
 
   return (
     <div className="studio-admin-stack">
       <section className="studio-admin-section">
         <div className="studio-admin-section-head">
           <span className="studio-admin-section-title">
-            <Smartphone className="h-3.5 w-3.5" aria-hidden /> Sophie device
+            <Smartphone className="h-3.5 w-3.5" aria-hidden /> Sophie
           </span>
-          <button
-            type="button"
-            className="cursor-settings-action"
-            onClick={() => void refresh()}
-            disabled={busy === "refresh"}
-          >
-            {busy === "refresh" ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            Refresh
-          </button>
+          <div className="studio-admin-section-extras">
+            <button
+              type="button"
+              className="cursor-settings-action"
+              onClick={() => void refresh()}
+              disabled={busy === "refresh"}
+              aria-label="Refresh"
+            >
+              {busy === "refresh" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
         </div>
-        <p className="studio-settings-empty" style={{ margin: "0 0 12px" }}>
-          Evolution instance <code>yatishara-studio</code> · bot{" "}
-          <code>18683377338</code> · agent Sophie. Isolated from ads CS (:8794).
-          Reconnect uses status/QR only — do not wipe a live session unless you
-          deliberately choose unlink.
-        </p>
-        <div className="studio-admin-setup-grid">
-          <article className="studio-admin-setup-card">
-            <div>
-              <h4>Connection</h4>
-              <p>
-                <strong>{device?.status || (svc ? "service up" : "…")}</strong>
-                {" — "}
-                {device?.open
-                  ? `Linked${device.phone ? ` · ${device.phone}` : ""}${
-                      device.profileName ? ` · ${device.profileName}` : ""
-                    }`
-                  : device?.connecting
-                    ? "Connecting — scan QR"
-                    : "Not open — track + connect"}
-              </p>
+
+        <div className="studio-admin-list-row" style={{ alignItems: "center" }}>
+          <div>
+            <strong>{statusLabel}</strong>
+            <div className="studio-muted">
+              {device?.hint || "+1 868 337-7338"}
+              {linked && device?.profileName ? ` · ${device.profileName}` : ""}
             </div>
-          </article>
-          <article className="studio-admin-setup-card">
-            <div>
-              <h4>Service</h4>
-              <p>
-                <strong>{svc?.enabled === false ? "Paused" : "Live"}</strong>
-                {" — "}
-                Port {(svc?.port as number) || 8795} ·{" "}
-                {String(svc?.instance || "yatishara-studio")}
-              </p>
-            </div>
-          </article>
+          </div>
+          <div className="studio-admin-row-actions">
+            {!linked ? (
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={!!busy}
+                onClick={() => void linkPhone()}
+              >
+                {busy === "link" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : null}
+                {qrSrc ? "Refresh QR" : "Link WhatsApp"}
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div className="studio-admin-setup-grid" style={{ marginTop: 12 }}>
-          <button
-            type="button"
-            className="cursor-settings-action"
-            disabled={!!busy}
-            onClick={() => void run("ensure", () => deviceEnsure({}))}
-          >
-            Track instance
-          </button>
-          <button
-            type="button"
-            className="cursor-settings-action"
-            disabled={!!busy}
-            onClick={() =>
-              void run("connect", () => deviceConnect({ logoutFirst: false }))
-            }
-          >
-            Show QR / connect
-          </button>
-          <button
-            type="button"
-            className="cursor-settings-action"
-            disabled={!!busy}
-            onClick={() => void run("webhook", () => setWebhook({}))}
-          >
-            Set webhook
-          </button>
-          <button
-            type="button"
-            className="cursor-settings-action"
-            disabled={!!busy}
-            onClick={() => {
-              if (
-                !confirm(
-                  "Unlink Sophie WA session? You will need to scan QR again.",
-                )
-              ) {
-                return;
-              }
-              void run("unlink", () => deviceUnlink({}));
-            }}
-          >
-            Unlink device
-          </button>
-        </div>
-        {qrSrc ? (
-          <div style={{ marginTop: 16 }}>
+
+        {qrSrc && !linked ? (
+          <div style={{ marginTop: 4 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={qrSrc}
               alt="Scan with WhatsApp to link Sophie"
-              width={240}
-              height={240}
+              width={220}
+              height={220}
               style={{ borderRadius: 8, background: "#fff" }}
             />
           </div>
         ) : null}
+
+        <details>
+          <summary className="studio-settings-empty" style={{ cursor: "pointer" }}>
+            Advanced
+          </summary>
+          <div className="studio-admin-row-actions" style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              className="cursor-settings-action"
+              disabled={!!busy}
+              onClick={() => void unlink()}
+            >
+              Unlink
+            </button>
+          </div>
+        </details>
       </section>
 
-      <section className="studio-admin-section">
-        <div className="studio-admin-section-head">
-          <span className="studio-admin-section-title">Sessions</span>
-        </div>
-        {sessions.length === 0 ? (
-          <p className="studio-settings-empty">No chats yet.</p>
-        ) : (
+      {sessions.length > 0 ? (
+        <section className="studio-admin-section">
+          <div className="studio-admin-section-head">
+            <span className="studio-admin-section-title">Sessions</span>
+          </div>
           <ul className="studio-admin-list">
             {sessions.map((s) => (
               <li key={s.phone} className="studio-admin-list-row">
                 <div>
                   <strong>{s.display_name || s.phone}</strong>
                   <div className="studio-muted">
-                    {s.phone} ·{" "}
-                    {(s.statuses || [s.cs_status]).filter(Boolean).join(", ")} ·{" "}
+                    {(s.statuses || [s.cs_status]).filter(Boolean).join(", ") ||
+                      "new"}
+                    {" · "}
                     {s.payment_state || "unpaid"}
-                    {s.followup_at ? ` · follow-up ${s.followup_at}` : ""}
                   </div>
                 </div>
                 <div className="studio-admin-row-actions">
                   <button
                     type="button"
                     className="cursor-settings-action"
-                    title="Agent on/off"
                     onClick={() =>
-                      void run("agent", () =>
-                        setAgent({
-                          phone: s.phone,
-                          enabled: !s.agent_enabled,
-                        }),
-                      )
+                      void setAgent({
+                        phone: s.phone,
+                        enabled: !s.agent_enabled,
+                      }).then(refresh)
                     }
                   >
                     <Bot className="h-3.5 w-3.5" />
-                    {s.agent_enabled ? "Agent on" : "Agent off"}
+                    {s.agent_enabled ? "On" : "Off"}
                   </button>
                   <button
                     type="button"
                     className="cursor-settings-action"
-                    title="Human takeover"
                     onClick={() =>
-                      void run("takeover", () =>
-                        setTakeover({
-                          phone: s.phone,
-                          on: !s.human_takeover,
-                        }),
-                      )
+                      void setTakeover({
+                        phone: s.phone,
+                        on: !s.human_takeover,
+                      }).then(refresh)
                     }
                   >
                     {s.human_takeover ? (
@@ -297,32 +287,29 @@ export function AdminStudioOpsPane() {
                     ) : (
                       <UserRoundCheck className="h-3.5 w-3.5" />
                     )}
-                    {s.human_takeover ? "Takeover" : "Take over"}
+                    {s.human_takeover ? "Human" : "Take over"}
                   </button>
                 </div>
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="studio-admin-section">
-        <div className="studio-admin-section-head">
-          <span className="studio-admin-section-title">Payment approvals</span>
-        </div>
-        {payments.length === 0 ? (
-          <p className="studio-settings-empty">No pending soft-accepts.</p>
-        ) : (
+      {payments.length > 0 ? (
+        <section className="studio-admin-section">
+          <div className="studio-admin-section-head">
+            <span className="studio-admin-section-title">Approvals</span>
+          </div>
           <ul className="studio-admin-list">
             {payments.map((p) => (
               <li key={p.id} className="studio-admin-list-row">
                 <div>
                   <strong>
-                    #{p.id} {money(p.amount_cents)} · {p.kind}
+                    {money(p.amount_cents)} · {p.kind}
                   </strong>
                   <div className="studio-muted">
-                    {p.phone} · {p.method || "?"} · {p.status} · owner{" "}
-                    {p.owner_status}
+                    {p.phone}
                     {p.notes ? ` · ${p.notes}` : ""}
                   </div>
                 </div>
@@ -331,9 +318,10 @@ export function AdminStudioOpsPane() {
                     type="button"
                     className="cursor-settings-action"
                     onClick={() =>
-                      void run("approve", () =>
-                        decidePayment({ paymentId: p.id, decision: "approve" }),
-                      )
+                      void decidePayment({
+                        paymentId: p.id,
+                        decision: "approve",
+                      }).then(refresh)
                     }
                   >
                     Approve
@@ -342,9 +330,10 @@ export function AdminStudioOpsPane() {
                     type="button"
                     className="cursor-settings-action"
                     onClick={() =>
-                      void run("reject", () =>
-                        decidePayment({ paymentId: p.id, decision: "reject" }),
-                      )
+                      void decidePayment({
+                        paymentId: p.id,
+                        decision: "reject",
+                      }).then(refresh)
                     }
                   >
                     Reject
@@ -353,8 +342,8 @@ export function AdminStudioOpsPane() {
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }
