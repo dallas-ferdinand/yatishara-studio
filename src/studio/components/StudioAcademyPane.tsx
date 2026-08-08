@@ -107,6 +107,19 @@ function saleDiscountCredits(
   return compareAtCredits - priceCredits;
 }
 
+/** Drop a leading #/## heading that just repeats the course title. */
+function academyBodyMarkdown(md: string, title: string): string {
+  let text = String(md || "").replace(/^\uFEFF/, "").trim();
+  const name = String(title || "").trim();
+  if (!text || !name) return text;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  text = text.replace(
+    new RegExp(`^#{1,3}[ \\t]+${escaped}[ \\t]*\\n+`, "i"),
+    "",
+  );
+  return text.trim();
+}
+
 function SaleCountdownPanel({
   saleEndsAt,
   now,
@@ -729,9 +742,6 @@ export function StudioAcademyPane({
                   const banner = courseBannerUrl(course);
                   const comingSoon = Boolean(course.comingSoon);
                   const compareAt = course.compareAtCredits;
-                  const discountCredits = course.onSale
-                    ? saleDiscountCredits(course.priceCredits, compareAt)
-                    : null;
                   return (
                     <li key={course._id}>
                       <button
@@ -901,7 +911,10 @@ export function StudioAcademyPane({
               <div className="studio-academy-body-clip">
                 <StudioChatMarkdown
                   className="studio-academy-md"
-                  text={selectedLesson.descriptionMarkdown}
+                  text={academyBodyMarkdown(
+                    selectedLesson.descriptionMarkdown,
+                    selectedLesson.title,
+                  )}
                 />
               </div>
               {!owned ? (
@@ -962,7 +975,10 @@ export function StudioAcademyPane({
               <div className="studio-academy-body-clip">
                 <StudioChatMarkdown
                   className="studio-academy-md"
-                  text={detail.descriptionMarkdown}
+                  text={academyBodyMarkdown(
+                    detail.descriptionMarkdown,
+                    detail.title,
+                  )}
                 />
               </div>
               {!owned ? (

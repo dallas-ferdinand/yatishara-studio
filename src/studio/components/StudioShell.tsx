@@ -21125,6 +21125,27 @@ export function StudioShell({
           justify-items: end;
           text-align: right;
         }
+        .studio-academy-detail-price .public-offers-card-price {
+          display: inline-flex;
+          align-items: baseline;
+          gap: 8px;
+          padding: 0;
+          margin: 0;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          box-shadow: none;
+          font-size: 15px;
+          font-weight: 700;
+          line-height: 1.2;
+          white-space: nowrap;
+        }
+        .studio-academy-detail-price .studio-academy-card-compare {
+          font-size: 12px;
+          font-weight: 550;
+          opacity: 0.5;
+          background: transparent;
+        }
         .studio-academy-card--soon {
           cursor: default;
           opacity: 0.92;

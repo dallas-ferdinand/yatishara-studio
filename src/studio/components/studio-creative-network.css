@@ -68,29 +68,37 @@
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.25;
+  border: 0 !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding-bottom: 0;
 }
 
 .studio-academy-body .studio-academy-md h1 {
-  font-size: 1.2em;
-  margin: 1.35em 0 0.45em;
+  font-size: 1.12em;
+  margin: 1.1em 0 0.4em;
+}
+
+.studio-academy-body .studio-academy-md h1:first-child,
+.studio-academy-body .studio-academy-md h2:first-child {
+  margin-top: 0;
 }
 
 .studio-academy-body .studio-academy-md h2 {
-  font-size: 1.08em;
-  margin: 1.4em 0 0.4em;
-  padding-bottom: 0.28em;
-  border-bottom: 1px solid color-mix(in srgb, var(--academy-md-accent) 22%, var(--color-cursor-border-soft, transparent));
+  font-size: 1.02em;
+  margin: 1.2em 0 0.35em;
 }
 
 .studio-academy-body .studio-academy-md h3 {
-  font-size: 1em;
-  margin: 1.15em 0 0.35em;
-  color: color-mix(in srgb, var(--academy-md-ink) 82%, var(--academy-md-accent)) !important;
+  font-size: 0.98em;
+  margin: 1.05em 0 0.3em;
+  color: color-mix(in srgb, var(--academy-md-ink) 88%, var(--academy-md-muted)) !important;
 }
 
 .studio-academy-body .studio-academy-md h4 {
-  font-size: 0.95em;
-  margin: 1em 0 0.3em;
+  font-size: 0.94em;
+  margin: 0.95em 0 0.28em;
   color: var(--academy-md-muted) !important;
   text-transform: none;
   letter-spacing: -0.01em;
@@ -162,13 +170,13 @@
 }
 
 .studio-academy-body .studio-academy-md blockquote {
-  margin: 1em 0;
-  padding: 10px 14px;
-  border: 1px solid color-mix(in srgb, var(--academy-md-accent) 22%, var(--color-cursor-border-soft, transparent));
-  border-left: 3px solid var(--academy-md-accent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--academy-md-accent) 7%, var(--academy-md-plate));
-  color: var(--academy-md-ink) !important;
+  margin: 0.9em 0;
+  padding: 0 0 0 12px;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--academy-md-accent) 45%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: var(--academy-md-muted) !important;
 }
 
 .studio-academy-body .studio-academy-md blockquote p {

@@ -27,19 +27,14 @@ export const LIVE_COURSES = [
     listPriceCredits: ttdToCredits(1500),
     salePriceCredits: ttdToCredits(750),
     saleEndsAt: AD_SIDE_HUSTLE_SALE_ENDS_AT,
-    descriptionMarkdown: `## Ad Side Hustle Course
-
-Turn Studio into a paid ads machine — hooks, product locks, and client-ready clips without looking like AI sludge.
+    descriptionMarkdown: `Turn Studio into a paid ads machine — hooks, product locks, and client-ready clips without looking like AI sludge.
 
 ### What you get
 - Scroll-stopping hooks that hold gaze and product
 - Prompt stacks you can reuse across SKUs
 - Delivery patterns clients actually pay for
 
-### Price
-**TT$750** until **1 September 2026** (then TT$1,500). Lifetime Studio access once unlocked.
-
-> Published catalog course. Attach intro + lessons in Admin → Academy when ready.
+Sale pricing is on the card and checkout — **TT$750** until **1 September 2026**, then **TT$1,500**. Lifetime access once unlocked.
 `,
   },
   {
@@ -49,12 +44,10 @@ Turn Studio into a paid ads machine — hooks, product locks, and client-ready c
     status: "coming_soon" as const,
     priceCredits: ttdToCredits(2500),
     listPriceCredits: ttdToCredits(2500),
-    descriptionMarkdown: `## How to Create Short Films in Studio
-
-End-to-end short film workflow inside Yatishara Studio — structure, shots, and export.
+    descriptionMarkdown: `End-to-end short film workflow inside Yatishara Studio — structure, shots, and export.
 
 ### Coming soon
-Price locked at **TT$2,500**. Catalog card shows the price; the course does not open until we publish.
+Price locked at **TT$2,500**. The catalog shows the price; this course stays closed until we publish.
 `,
   },
   {
@@ -64,12 +57,10 @@ Price locked at **TT$2,500**. Catalog card shows the price; the course does not 
     status: "coming_soon" as const,
     priceCredits: ttdToCredits(4000),
     listPriceCredits: ttdToCredits(4000),
-    descriptionMarkdown: `## How to Master Cinematic Film Creation
-
-Advanced video generation for cinematic looks — lenses, blocking, and grade-aware prompts.
+    descriptionMarkdown: `Advanced video generation for cinematic looks — lenses, blocking, and grade-aware prompts.
 
 ### Coming soon
-Price locked at **TT$4,000**. Catalog card shows the price; the course does not open until we publish.
+Price locked at **TT$4,000**. The catalog shows the price; this course stays closed until we publish.
 `,
   },
 ] as const;
