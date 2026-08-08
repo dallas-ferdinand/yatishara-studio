@@ -41,7 +41,13 @@ import "./public-offers.css";
 import "./profile-post-viewer.css";
 import "./media-load-frame.css";
 
-function demoCoverUrl(slug: string): string | undefined {
+function localCoverUrl(slug: string): string | undefined {
+  const map: Record<string, string> = {
+    "ad-side-hustle": "/academy/ad-side-hustle.webp",
+    "short-films-studio": "/academy/short-films-studio.webp",
+    "cinematic-film-mastery": "/academy/academy-hero-4k.webp",
+  };
+  if (map[slug]) return map[slug];
   if (!slug.startsWith("demo-")) return undefined;
   return `/academy/${slug}.webp`;
 }
@@ -50,7 +56,7 @@ function courseBannerUrl(course: {
   slug: string;
   coverUrl?: string;
 }): string | undefined {
-  return course.coverUrl || demoCoverUrl(course.slug);
+  return course.coverUrl || localCoverUrl(course.slug);
 }
 
 function newClientRequestId() {
@@ -359,6 +365,12 @@ export function StudioAcademyPane({
     clientRequestIdRef.current = null;
   }, [academy.courseId]);
 
+  // Coming soon / draft courses return null — bounce to catalog.
+  useEffect(() => {
+    if (!academy.courseId || detail === undefined) return;
+    if (detail === null) academy.backToCatalog();
+  }, [academy.courseId, detail, academy]);
+
   useEffect(() => {
     setLessonEmbed(null);
     if (academy.lessonId) {
@@ -581,12 +593,23 @@ export function StudioAcademyPane({
               <ul className="public-offers-grid studio-academy-grid">
                 {list.map((course) => {
                   const banner = courseBannerUrl(course);
+                  const comingSoon = Boolean(course.comingSoon);
+                  const compareAt = course.compareAtCredits;
                   return (
                     <li key={course._id}>
                       <button
                         type="button"
-                        className="public-offers-card studio-academy-card"
-                        onClick={() => academy.openCourse(course._id)}
+                        className={
+                          comingSoon
+                            ? "public-offers-card studio-academy-card studio-academy-card--soon"
+                            : "public-offers-card studio-academy-card"
+                        }
+                        disabled={comingSoon}
+                        aria-disabled={comingSoon}
+                        onClick={() => {
+                          if (comingSoon) return;
+                          academy.openCourse(course._id);
+                        }}
                       >
                         <div className="public-offers-card-media studio-academy-card-media">
                           {banner ? (
@@ -619,6 +642,11 @@ export function StudioAcademyPane({
                           {course.owned ? (
                             <span className="studio-academy-card-owned">Owned</span>
                           ) : null}
+                          {comingSoon ? (
+                            <span className="studio-academy-card-soon">
+                              Coming soon
+                            </span>
+                          ) : null}
                         </div>
                         <div className="public-offers-card-body studio-academy-card-body">
                           <strong className="public-offers-card-title">
@@ -630,10 +658,21 @@ export function StudioAcademyPane({
                           <div className="studio-academy-card-foot">
                             <span className="public-offers-card-price">
                               {formatTtdFromCredits(course.priceCredits, price)}
+                              {compareAt != null && compareAt > course.priceCredits ? (
+                                <>
+                                  {" "}
+                                  <s className="studio-academy-card-compare">
+                                    {formatTtdFromCredits(compareAt, price)}
+                                  </s>
+                                </>
+                              ) : null}
                             </span>
                             <span>
-                              {course.lessonCount} lesson
-                              {course.lessonCount === 1 ? "" : "s"}
+                              {comingSoon
+                                ? "Coming soon"
+                                : `${course.lessonCount} lesson${
+                                    course.lessonCount === 1 ? "" : "s"
+                                  }`}
                             </span>
                           </div>
                         </div>

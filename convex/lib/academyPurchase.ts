@@ -1,6 +1,10 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { getCreditPriceCents } from "./marketplaceEscrow";
+import {
+  courseIsBuyable,
+  effectiveCoursePriceCredits,
+} from "./academyPricing";
 
 function courseIntroVideoId(course: Doc<"academyCourses">): string | undefined {
   return course.introBunnyStreamVideoId || course.bunnyStreamVideoId;
@@ -53,9 +57,12 @@ export async function purchaseCourseForUser(
     .unique();
   if (!account) throw new Error("Billing account not found");
 
-  const priceCredits = course.priceCredits;
+  const priceCredits = effectiveCoursePriceCredits(course);
   if (!Number.isFinite(priceCredits) || priceCredits < 1) {
     throw new Error("Invalid course price");
+  }
+  if (!courseIsBuyable(course)) {
+    throw new Error("Course is not available for purchase yet");
   }
   if (account.creditBalance < priceCredits) {
     const creditPriceCents = await getCreditPriceCents(ctx);

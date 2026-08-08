@@ -1700,13 +1700,24 @@ export default defineSchema({
     title: v.string(),
     slug: v.string(),
     descriptionMarkdown: v.string(),
+    /** Base / list price in credits (TT$0.50 each). */
     priceCredits: v.number(),
+    /** Optional list/compare-at credits when on sale (defaults to priceCredits). */
+    listPriceCredits: v.optional(v.number()),
+    /** Optional sale price in credits while saleEndsAt is in the future. */
+    salePriceCredits: v.optional(v.number()),
+    /** Unix ms — sale ends at this instant (America/Port_of_Spain midnight typically). */
+    saleEndsAt: v.optional(v.number()),
     coverBunnyPath: v.optional(v.string()),
     /** Free preview / intro Stream video (no purchase required). */
     introBunnyStreamVideoId: v.optional(v.string()),
     /** @deprecated Prefer introBunnyStreamVideoId (pre-multi-lesson). */
     bunnyStreamVideoId: v.optional(v.string()),
-    status: v.union(v.literal("draft"), v.literal("published")),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("published"),
+      v.literal("coming_soon"),
+    ),
     sortOrder: v.number(),
     purchaseCount: v.number(),
     /** Top-level + reply comments on the course discussion. */

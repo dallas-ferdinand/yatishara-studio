@@ -20981,6 +20981,32 @@ export function StudioShell({
           background: color-mix(in srgb, var(--mos-page, #f5f5f7) 88%, transparent);
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
+        .studio-academy-card-soon {
+          position: absolute;
+          z-index: 2;
+          top: 8px;
+          right: 8px;
+          padding: 2px 8px;
+          border-radius: 999px;
+          font-size: 10px;
+          font-weight: 650;
+          line-height: 1.4;
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          background: color-mix(in srgb, var(--mos-page, #f5f5f7) 88%, transparent);
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        .studio-academy-card--soon {
+          cursor: default;
+          opacity: 0.92;
+        }
+        .studio-academy-card--soon:disabled {
+          opacity: 0.92;
+        }
+        .studio-academy-card-compare {
+          margin-left: 6px;
+          opacity: 0.55;
+          font-weight: 500;
+        }
         .studio-academy-card-body {
           display: grid;
           gap: 6px;

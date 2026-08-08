@@ -11,6 +11,7 @@
 import type * as ResendOTP from "../ResendOTP.js";
 import type * as academy from "../academy.js";
 import type * as academyActions from "../academyActions.js";
+import type * as academyLiveCatalog from "../academyLiveCatalog.js";
 import type * as aiGatewayActions from "../aiGatewayActions.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as assetActions from "../assetActions.js";
@@ -40,6 +41,7 @@ import type * as guidedVideoActions from "../guidedVideoActions.js";
 import type * as guidedVideoLite from "../guidedVideoLite.js";
 import type * as hashtags from "../hashtags.js";
 import type * as http from "../http.js";
+import type * as lib_academyPricing from "../lib/academyPricing.js";
 import type * as lib_academyPurchase from "../lib/academyPurchase.js";
 import type * as lib_aiGateway from "../lib/aiGateway.js";
 import type * as lib_assetStorePricing from "../lib/assetStorePricing.js";
@@ -154,6 +156,7 @@ declare const fullApi: ApiFromModules<{
   ResendOTP: typeof ResendOTP;
   academy: typeof academy;
   academyActions: typeof academyActions;
+  academyLiveCatalog: typeof academyLiveCatalog;
   aiGatewayActions: typeof aiGatewayActions;
   apiKeys: typeof apiKeys;
   assetActions: typeof assetActions;
@@ -183,6 +186,7 @@ declare const fullApi: ApiFromModules<{
   guidedVideoLite: typeof guidedVideoLite;
   hashtags: typeof hashtags;
   http: typeof http;
+  "lib/academyPricing": typeof lib_academyPricing;
   "lib/academyPurchase": typeof lib_academyPurchase;
   "lib/aiGateway": typeof lib_aiGateway;
   "lib/assetStorePricing": typeof lib_assetStorePricing;

@@ -24,11 +24,14 @@ type CourseRow = {
   slug: string;
   descriptionMarkdown: string;
   priceCredits: number;
+  listPriceCredits?: number;
+  salePriceCredits?: number;
+  saleEndsAt?: number;
   coverUrl?: string;
   introBunnyStreamVideoId?: string;
   bunnyStreamVideoId?: string;
   lessonCount: number;
-  status: "draft" | "published";
+  status: "draft" | "published" | "coming_soon";
   sortOrder: number;
   purchaseCount: number;
   updatedAt: number;
@@ -50,6 +53,9 @@ const emptyCourseForm = {
   slug: "",
   descriptionMarkdown: "",
   priceCredits: "100",
+  listPriceCredits: "",
+  salePriceCredits: "",
+  saleEndsAt: "",
   sortOrder: "100",
 };
 
@@ -123,6 +129,13 @@ export function AdminAcademyPane() {
       slug: course.slug,
       descriptionMarkdown: course.descriptionMarkdown,
       priceCredits: String(course.priceCredits),
+      listPriceCredits:
+        course.listPriceCredits != null ? String(course.listPriceCredits) : "",
+      salePriceCredits:
+        course.salePriceCredits != null ? String(course.salePriceCredits) : "",
+      saleEndsAt: course.saleEndsAt
+        ? new Date(course.saleEndsAt).toISOString().slice(0, 10)
+        : "",
       sortOrder: String(course.sortOrder),
     });
     setGrantUserId("");
@@ -156,12 +169,22 @@ export function AdminAcademyPane() {
   async function saveCourse() {
     setBusy("Saving…");
     try {
+      const listRaw = form.listPriceCredits.trim();
+      const saleRaw = form.salePriceCredits.trim();
+      const endsRaw = form.saleEndsAt.trim();
+      const saleEndsAt = endsRaw
+        ? Date.parse(`${endsRaw}T04:00:00.000Z`)
+        : null;
       const courseId = await upsert({
         courseId: selectedId ?? undefined,
         title: form.title,
         slug: form.slug || undefined,
         descriptionMarkdown: form.descriptionMarkdown,
         priceCredits: Number(form.priceCredits),
+        listPriceCredits: listRaw ? Number(listRaw) : undefined,
+        salePriceCredits: saleRaw ? Number(saleRaw) : undefined,
+        saleEndsAt:
+          endsRaw && Number.isFinite(saleEndsAt) ? saleEndsAt : null,
         sortOrder: Number(form.sortOrder) || 100,
       });
       setSelectedId(courseId);
@@ -199,11 +222,28 @@ export function AdminAcademyPane() {
 
   async function togglePublish() {
     if (!selected) return;
-    const next = selected.status === "published" ? "draft" : "published";
-    setBusy(next === "published" ? "Publishing…" : "Unpublishing…");
+    const next =
+      selected.status === "draft"
+        ? "coming_soon"
+        : selected.status === "coming_soon"
+          ? "published"
+          : "draft";
+    const label =
+      next === "published"
+        ? "Publishing…"
+        : next === "coming_soon"
+          ? "Coming soon…"
+          : "Unpublishing…";
+    setBusy(label);
     try {
       await setStatus({ courseId: selected._id, status: next });
-      toast.success(next === "published" ? "Published" : "Moved to draft");
+      toast.success(
+        next === "published"
+          ? "Published"
+          : next === "coming_soon"
+            ? "Marked coming soon"
+            : "Moved to draft",
+      );
     } catch (error) {
       toast.error(friendlyConvexError(error, "Status change failed"));
     } finally {
@@ -495,6 +535,47 @@ export function AdminAcademyPane() {
               />
             </label>
           </div>
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}
+          >
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>List price (credits)</span>
+              <input
+                className="cursor-input"
+                type="number"
+                min={1}
+                value={form.listPriceCredits}
+                placeholder="optional"
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, listPriceCredits: e.target.value }))
+                }
+              />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Sale price (credits)</span>
+              <input
+                className="cursor-input"
+                type="number"
+                min={1}
+                value={form.salePriceCredits}
+                placeholder="optional"
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, salePriceCredits: e.target.value }))
+                }
+              />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Sale ends (YYYY-MM-DD AST)</span>
+              <input
+                className="cursor-input"
+                type="date"
+                value={form.saleEndsAt}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, saleEndsAt: e.target.value }))
+                }
+              />
+            </label>
+          </div>
           <label style={{ display: "grid", gap: 4 }}>
             <span>Overview (markdown)</span>
             <textarea
@@ -531,9 +612,14 @@ export function AdminAcademyPane() {
                     <PauseCircle className="h-3.5 w-3.5" aria-hidden />{" "}
                     Unpublish
                   </>
-                ) : (
+                ) : selected.status === "coming_soon" ? (
                   <>
                     <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Publish
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Coming
+                    soon
                   </>
                 )}
               </button>

@@ -22,6 +22,11 @@ import {
 } from "./lib/bunny";
 import { purchaseCourseForUser } from "./lib/academyPurchase";
 import {
+  compareAtCoursePriceCredits,
+  effectiveCoursePriceCredits,
+  isCourseSaleActive,
+} from "./lib/academyPricing";
+import {
   commentSortFetchCap,
   normalizeCommentSort,
   sortCommentRows,
@@ -109,18 +114,58 @@ async function listLessonsForCourse(
   return filtered;
 }
 
+const courseStatusValidator = v.union(
+  v.literal("draft"),
+  v.literal("published"),
+  v.literal("coming_soon"),
+);
+
 const catalogCourseReturn = v.object({
   _id: v.id("academyCourses"),
   title: v.string(),
   slug: v.string(),
   blurb: v.string(),
   priceCredits: v.number(),
+  compareAtCredits: v.optional(v.number()),
+  saleEndsAt: v.optional(v.number()),
+  onSale: v.boolean(),
+  comingSoon: v.boolean(),
+  status: courseStatusValidator,
   coverUrl: v.optional(v.string()),
   owned: v.boolean(),
   lessonCount: v.number(),
   sortOrder: v.number(),
   updatedAt: v.number(),
 });
+
+function pricingFieldsForCourse(course: Doc<"academyCourses">, now = Date.now()) {
+  const priceCredits = effectiveCoursePriceCredits(course, now);
+  const compareAt = compareAtCoursePriceCredits(course, now);
+  return {
+    priceCredits,
+    compareAtCredits: compareAt ?? undefined,
+    saleEndsAt: isCourseSaleActive(course, now)
+      ? course.saleEndsAt
+      : undefined,
+    onSale: isCourseSaleActive(course, now),
+    comingSoon: course.status === "coming_soon",
+    status: course.status,
+  };
+}
+
+async function listCatalogCourses(ctx: QueryCtx) {
+  const published = await ctx.db
+    .query("academyCourses")
+    .withIndex("by_status_and_sort", (q) => q.eq("status", "published"))
+    .collect();
+  const soon = await ctx.db
+    .query("academyCourses")
+    .withIndex("by_status_and_sort", (q) => q.eq("status", "coming_soon"))
+    .collect();
+  const rows = [...published, ...soon];
+  rows.sort((a, b) => a.sortOrder - b.sortOrder || b.updatedAt - a.updatedAt);
+  return rows;
+}
 
 const lessonSummaryReturn = v.object({
   _id: v.id("academyLessons"),
@@ -141,13 +186,17 @@ const courseDetailReturn = v.object({
   slug: v.string(),
   descriptionMarkdown: v.string(),
   priceCredits: v.number(),
+  compareAtCredits: v.optional(v.number()),
+  saleEndsAt: v.optional(v.number()),
+  onSale: v.boolean(),
+  comingSoon: v.boolean(),
   coverUrl: v.optional(v.string()),
   owned: v.boolean(),
   hasIntroVideo: v.boolean(),
   lessonCount: v.number(),
   lessons: v.array(lessonSummaryReturn),
   commentCount: v.number(),
-  status: v.union(v.literal("draft"), v.literal("published")),
+  status: courseStatusValidator,
   sortOrder: v.number(),
   updatedAt: v.number(),
 });
@@ -156,11 +205,7 @@ export const listPublishedCourses = authedQuery({
   args: {},
   returns: v.array(catalogCourseReturn),
   handler: async (ctx) => {
-    const rows = await ctx.db
-      .query("academyCourses")
-      .withIndex("by_status_and_sort", (q) => q.eq("status", "published"))
-      .collect();
-    rows.sort((a, b) => a.sortOrder - b.sortOrder || b.updatedAt - a.updatedAt);
+    const rows = await listCatalogCourses(ctx);
 
     const out = [];
     for (const course of rows) {
@@ -173,7 +218,7 @@ export const listPublishedCourses = authedQuery({
         title: course.title,
         slug: course.slug,
         blurb: blurbFromMarkdown(course.descriptionMarkdown),
-        priceCredits: course.priceCredits,
+        ...pricingFieldsForCourse(course),
         coverUrl: await coverUrlFor(course.coverBunnyPath, CN_CARD_TRANSFORM),
         owned: Boolean(purchase),
         lessonCount: lessons.length,
@@ -207,7 +252,7 @@ export const listMyCourses = authedQuery({
         title: course.title,
         slug: course.slug,
         blurb: blurbFromMarkdown(course.descriptionMarkdown),
-        priceCredits: course.priceCredits,
+        ...pricingFieldsForCourse(course),
         coverUrl: await coverUrlFor(course.coverBunnyPath),
         owned: true,
         lessonCount: lessons.length,
@@ -268,14 +313,13 @@ export const getCourse = authedQuery({
       title: course.title,
       slug: course.slug,
       descriptionMarkdown: course.descriptionMarkdown,
-      priceCredits: course.priceCredits,
+      ...pricingFieldsForCourse(course),
       coverUrl: await coverUrlFor(course.coverBunnyPath, PREVIEW_TRANSFORM),
       owned,
       hasIntroVideo: Boolean(courseIntroVideoId(course)),
       lessonCount: lessonDocs.filter((l) => l.status === "published").length,
       lessons,
       commentCount: course.commentCount ?? 0,
-      status: course.status,
       sortOrder: course.sortOrder,
       updatedAt: course.updatedAt,
     };
@@ -394,12 +438,15 @@ const adminCourseReturn = v.object({
   slug: v.string(),
   descriptionMarkdown: v.string(),
   priceCredits: v.number(),
+  listPriceCredits: v.optional(v.number()),
+  salePriceCredits: v.optional(v.number()),
+  saleEndsAt: v.optional(v.number()),
   coverBunnyPath: v.optional(v.string()),
   coverUrl: v.optional(v.string()),
   introBunnyStreamVideoId: v.optional(v.string()),
   bunnyStreamVideoId: v.optional(v.string()),
   lessonCount: v.number(),
-  status: v.union(v.literal("draft"), v.literal("published")),
+  status: courseStatusValidator,
   sortOrder: v.number(),
   purchaseCount: v.number(),
   createdAt: v.number(),
@@ -435,6 +482,9 @@ export const adminListCourses = adminQuery({
         slug: course.slug,
         descriptionMarkdown: course.descriptionMarkdown,
         priceCredits: course.priceCredits,
+        listPriceCredits: course.listPriceCredits,
+        salePriceCredits: course.salePriceCredits,
+        saleEndsAt: course.saleEndsAt,
         coverBunnyPath: course.coverBunnyPath,
         coverUrl: await coverUrlFor(course.coverBunnyPath, THUMB_TRANSFORM),
         introBunnyStreamVideoId: courseIntroVideoId(course),
@@ -484,6 +534,9 @@ export const adminUpsertCourse = adminMutation({
     slug: v.optional(v.string()),
     descriptionMarkdown: v.string(),
     priceCredits: v.number(),
+    listPriceCredits: v.optional(v.number()),
+    salePriceCredits: v.optional(v.number()),
+    saleEndsAt: v.optional(v.union(v.number(), v.null())),
     sortOrder: v.optional(v.number()),
   },
   returns: v.id("academyCourses"),
@@ -494,6 +547,32 @@ export const adminUpsertCourse = adminMutation({
     if (!Number.isFinite(priceCredits) || priceCredits < 1) {
       throw new Error("Price must be at least 1 credit");
     }
+    const listPriceCredits =
+      args.listPriceCredits == null
+        ? undefined
+        : Math.floor(Number(args.listPriceCredits));
+    if (
+      listPriceCredits != null &&
+      (!Number.isFinite(listPriceCredits) || listPriceCredits < 1)
+    ) {
+      throw new Error("List price must be at least 1 credit");
+    }
+    const salePriceCredits =
+      args.salePriceCredits == null
+        ? undefined
+        : Math.floor(Number(args.salePriceCredits));
+    if (
+      salePriceCredits != null &&
+      (!Number.isFinite(salePriceCredits) || salePriceCredits < 1)
+    ) {
+      throw new Error("Sale price must be at least 1 credit");
+    }
+    const saleEndsAt =
+      args.saleEndsAt === null
+        ? undefined
+        : args.saleEndsAt == null
+          ? undefined
+          : Number(args.saleEndsAt);
     let slug = slugify(args.slug?.trim() || title);
     const now = Date.now();
 
@@ -505,6 +584,13 @@ export const adminUpsertCourse = adminMutation({
       slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
     }
 
+    const pricePatch = {
+      priceCredits,
+      listPriceCredits: listPriceCredits ?? priceCredits,
+      salePriceCredits,
+      saleEndsAt,
+    };
+
     if (args.courseId) {
       const existing = await ctx.db.get("academyCourses", args.courseId);
       if (!existing) throw new Error("Course not found");
@@ -512,7 +598,7 @@ export const adminUpsertCourse = adminMutation({
         title,
         slug,
         descriptionMarkdown: args.descriptionMarkdown,
-        priceCredits,
+        ...pricePatch,
         sortOrder: args.sortOrder ?? existing.sortOrder,
         updatedAt: now,
       });
@@ -523,7 +609,7 @@ export const adminUpsertCourse = adminMutation({
       title,
       slug,
       descriptionMarkdown: args.descriptionMarkdown,
-      priceCredits,
+      ...pricePatch,
       status: "draft",
       sortOrder: args.sortOrder ?? 100,
       purchaseCount: 0,
@@ -629,7 +715,7 @@ export const adminDeleteLesson = adminMutation({
 export const adminSetCourseStatus = adminMutation({
   args: {
     courseId: v.id("academyCourses"),
-    status: v.union(v.literal("draft"), v.literal("published")),
+    status: courseStatusValidator,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -644,6 +730,11 @@ export const adminSetCourseStatus = adminMutation({
       });
       if (lessons.length < 1 && !courseIntroVideoId(course)) {
         throw new Error("Add an intro video or at least one published lesson");
+      }
+    }
+    if (args.status === "coming_soon") {
+      if (!course.title.trim() || course.priceCredits < 1) {
+        throw new Error("Title and price are required for coming soon");
       }
     }
     await ctx.db.patch(args.courseId, {
@@ -928,7 +1019,7 @@ export const adminGetCourseInternal = adminQuery({
       title: v.string(),
       introBunnyStreamVideoId: v.optional(v.string()),
       bunnyStreamVideoId: v.optional(v.string()),
-      status: v.union(v.literal("draft"), v.literal("published")),
+      status: courseStatusValidator,
     }),
     v.null(),
   ),
@@ -1009,430 +1100,10 @@ export const internalAttachStreamVideo = internalMutation({
   },
 });
 
-const DEMO_COURSES = [
-  {
-    slug: "demo-seedance-hooks",
-    title: "Seedance Hooks That Sell",
-    priceCredits: 20,
-    sortOrder: 10,
-    descriptionMarkdown: `## What you'll learn
-
-Build **3-second hooks** that stop the scroll — without looking like AI sludge.
-
-You will lock gaze and props, choose when to cut vs hold, and reuse three opening-beat formulas across ad formats.
-
-> Demo course for layout. Replace the intro and lessons in Admin → Academy.
-`,
-    lessons: [
-      {
-        slug: "gaze-anchors",
-        title: "Gaze and prop anchors",
-        sortOrder: 10,
-        descriptionMarkdown: `## Gaze and prop anchors
-
-Seedance drifts when the face or hero prop is soft in the first frame. This lesson locks both so the model stays on the sell.
-
-### What you lock
-- **Eyes** — clear catchlight, looking where the viewer should look next
-- **Prop / product** — one hero object in a fixed screen quadrant
-- **Hands** — if hands enter, they stay on the prop (no wandering)
-
-### Drill
-1. Pick one still with a hard face + product read.
-2. Write a one-line gaze lock (“eyes on product, product lower-right”).
-3. Generate a 3–4s hold. Reject anything that loses the face or product.
-
-### Done when
-A stranger can say what the product is and who is selling it in the first second.
-`,
-      },
-      {
-        slug: "cut-vs-hold",
-        title: "When to cut vs hold",
-        sortOrder: 20,
-        descriptionMarkdown: `## When to cut vs hold
-
-Hooks convert when tension and payoff are timed. Holding sells emotion; cutting sells the product.
-
-### Hold when
-- Face reaction is the story
-- Prop reveal needs one continuous motion
-- Sound / silence is doing the work
-
-### Cut when
-- You need a product insert or pack shot
-- The beat has already paid off and you are looping
-- AI mush starts (blur, morph, duplicate limbs)
-
-### Pattern
-**0.0–1.2s hold** → **hard cut to product** → **0.5–1.0s pack / CTA**.
-
-### Done when
-You can explain, for one ad, why each cut exists — not “because it looked cool.”
-`,
-      },
-      {
-        slug: "hook-formulas",
-        title: "Opening beat formulas",
-        sortOrder: 30,
-        descriptionMarkdown: `## Opening beat formulas
-
-Three reusable openings for Seedance ads. Swap product, keep structure.
-
-### 1. Problem stare
-Face registers pain → prop enters as fix → hold on relief.
-
-### 2. Product first
-Hero object fills frame → hands / face arrive late → cut to use.
-
-### 3. Motion interrupt
-Unexpected move in first 8 frames → settle on brand lock → CTA.
-
-### How to practice
-Run each formula once on the same SKU. Keep prompts short. Compare which stops the scroll for *your* niche.
-
-### Done when
-You have three saved prompt templates with locked gaze, prop, and cut points.
-`,
-      },
-    ],
-  },
-  {
-    slug: "demo-studio-credits",
-    title: "Studio Credits & Cost Control",
-    priceCredits: 80,
-    sortOrder: 20,
-    descriptionMarkdown: `## Keep generation spend sane
-
-How Yatishara Studio credits map to image, video, and audio runs.
-
-*Demo content — safe to delete after you publish real courses.*
-`,
-    lessons: [
-      {
-        slug: "price-map",
-        title: "Credit price vs TTD top-ups",
-        sortOrder: 10,
-        descriptionMarkdown: `## Credit price vs TTD top-ups
-
-Studio spends **credits**. The wallet shows TTD so you can top up without doing mental math.
-
-### Mental model
-- 1 credit ≈ your configured TTD credit price (default TT$0.50)
-- Image / video / audio burns depend on model, resolution, and duration
-- Top-up tiers buy a credit balance, not a single render
-
-### Operator habit
-Before a batch, estimate credits for one good take × retries. Leave headroom for Assistance if you use it.
-
-### Done when
-You can glance at balance and know whether a 15s Seedance pass plus two retries fits.
-`,
-      },
-      {
-        slug: "assistance-burn",
-        title: "When Assistance burns balance",
-        sortOrder: 20,
-        descriptionMarkdown: `## When Assistance burns balance
-
-Assistance is not free chat — tool calls that generate or edit media spend credits like you would.
-
-### What costs
-- Image / video / audio generation tools
-- Heavy edit / export paths that re-render
-- Retries when the agent re-runs a failed job
-
-### What is cheaper
-- Brief edits, folder moves, and planning without generate
-- Confirming model + resolution once before a batch
-
-### Done when
-You know which Assistance asks will touch the wallet — and you approve those on purpose.
-`,
-      },
-    ],
-  },
-  {
-    slug: "demo-creative-network",
-    title: "Creative Network Seller Playbook",
-    priceCredits: 200,
-    sortOrder: 30,
-    descriptionMarkdown: `## Get hired on Creative Network
-
-From KYC to first delivered job — the operator path we use in Studio.
-`,
-    lessons: [
-      {
-        slug: "seller-apply",
-        title: "Seller application",
-        sortOrder: 10,
-        descriptionMarkdown: `## Seller application
-
-Admins approve sellers before offers go live. Your application is a trust packet, not a bio.
-
-### What to show
-- Clear samples that match the services you will sell
-- Honest delivery windows
-- KYC / payout details ready when asked
-
-### What kills trust
-- Stock-only portfolios with no process
-- Vague “I do everything” copy
-- Pricing that does not match your sample quality
-
-### Done when
-Your seller profile reads like a bookable operator, not a wishlist.
-`,
-      },
-      {
-        slug: "offer-packages",
-        title: "Offer packages that convert",
-        sortOrder: 20,
-        descriptionMarkdown: `## Offer packages that convert
-
-Buyers scan packages first. Three clear tiers beat a wall of options.
-
-### Package spine
-- **Basic** — one clear deliverable, short revisions
-- **Standard** — the job most buyers should pick
-- **Premium** — speed, extras, or commercial rights
-
-### Copy rules
-Lead with outcome, then delivery days, then revisions. No fluff paragraphs above the price.
-
-### Done when
-A stranger can pick Standard in under ten seconds without messaging you.
-`,
-      },
-      {
-        slug: "escrow-handoff",
-        title: "Escrow handoff without drama",
-        sortOrder: 30,
-        descriptionMarkdown: `## Escrow handoff without drama
-
-Delivery and release is where reputation sticks. Keep a clean trail.
-
-### Flow
-1. Confirm scope in the job thread
-2. Deliver in-app with the files named clearly
-3. Invite revision once if the package includes it
-4. Ask for accept / release when scope is met
-
-### Avoid
-Silent uploads with no note, scope creep in DMs only, and arguing before documenting the brief.
-
-### Done when
-Buyer can accept without hunting files — and you get paid without a support ticket.
-`,
-      },
-    ],
-  },
-  {
-    slug: "demo-product-photoshoot",
-    title: "Product Photoshoot Prompts",
-    priceCredits: 150,
-    sortOrder: 40,
-    descriptionMarkdown: `## Brand-ready stills from one SKU photo
-
-Prompt stacks for hero, lifestyle, and marketplace cards.
-`,
-    lessons: [
-      {
-        slug: "lighting-locks",
-        title: "Lighting locks",
-        sortOrder: 10,
-        descriptionMarkdown: `## Lighting locks
-
-One SKU across a set only works if lighting language stays fixed.
-
-### Lock language
-- Soft key / hard key
-- Shadow direction (left / right / overhead)
-- Background value (light plate vs dark plate)
-
-### Prompt habit
-Write the light lock once. Paste it into every shot in the set. Change only angle and crop.
-
-### Done when
-Hero and lifestyle frames look like the same shoot day.
-`,
-      },
-      {
-        slug: "marketplace-cards",
-        title: "Marketplace card angles",
-        sortOrder: 20,
-        descriptionMarkdown: `## Marketplace card angles
-
-Listings need a main hero plus supporting crops — not five random pretty shots.
-
-### Set order
-1. **Main** — product fills frame, label readable
-2. **Secondary** — 3/4 or lifestyle context
-3. **Detail** — texture, seal, or feature callout
-
-### Prompt habit
-Same lighting lock; change camera distance and crop intent only.
-
-### Done when
-You can drop the set into a listing template without re-cropping for readability.
-`,
-      },
-    ],
-  },
-  {
-    slug: "demo-whatsapp-cs-voice",
-    title: "WhatsApp CS Voice (Sasha)",
-    priceCredits: 100,
-    sortOrder: 50,
-    descriptionMarkdown: `## Soft-accept without sounding robotic
-
-Tone, pacing, and follow-up patterns for Yatishara CS on WhatsApp.
-`,
-    lessons: [
-      {
-        slug: "soft-accept",
-        title: "Soft-accept examples",
-        sortOrder: 10,
-        descriptionMarkdown: `## Soft-accept examples
-
-Warm interest without locking a quote before you have the brief.
-
-### Pattern
-Acknowledge → one clarifying ask → soft next step. No price dump on message one.
-
-### Voice
-Short, human, Caribbean-friendly. No corporate paragraphs. Name yourself once when the SOP says to.
-
-### Done when
-You can soft-accept three different lead types without sounding like a script bot.
-`,
-      },
-      {
-        slug: "deposit-nudges",
-        title: "Deposit nudges",
-        sortOrder: 20,
-        descriptionMarkdown: `## Deposit nudges
-
-Move chat to deposit without pressure or endless follow-ups.
-
-### Pattern
-Confirm scope → send clear deposit ask + bank block → one polite bump if silent.
-
-### Avoid
-Stacking three nudges in an hour, shaming, or changing the number mid-thread.
-
-### Done when
-A warm lead knows the amount, where to pay, and what happens after — in one clean thread.
-`,
-      },
-    ],
-  },
-] as const;
-
-/**
- * Deploy-key bootstrap — `npx convex run academy:internalSeedDemoCourses`
- * Idempotent by course/lesson slug. Published with placeholder Stream ids.
- */
-export const internalSeedDemoCourses = internalMutation({
-  args: {},
-  returns: v.object({
-    created: v.number(),
-    updated: v.number(),
-    lessonsCreated: v.number(),
-    lessonsUpdated: v.number(),
-  }),
-  handler: async (ctx) => {
-    const admin =
-      (await ctx.db
-        .query("users")
-        .withIndex("by_role", (q) => q.eq("role", "super_admin"))
-        .first()) ||
-      (await ctx.db
-        .query("users")
-        .withIndex("by_role", (q) => q.eq("role", "admin"))
-        .first());
-    if (!admin) {
-      throw new Error("No admin user found to own demo courses");
-    }
-
-    const now = Date.now();
-    let created = 0;
-    let updated = 0;
-    let lessonsCreated = 0;
-    let lessonsUpdated = 0;
-
-    for (const seed of DEMO_COURSES) {
-      const existing = await ctx.db
-        .query("academyCourses")
-        .withIndex("by_slug", (q) => q.eq("slug", seed.slug))
-        .unique();
-
-      const introId = `demo-intro-${seed.slug}`;
-      const fields = {
-        title: seed.title,
-        slug: seed.slug,
-        descriptionMarkdown: seed.descriptionMarkdown,
-        priceCredits: seed.priceCredits,
-        introBunnyStreamVideoId: introId,
-        bunnyStreamVideoId: introId,
-        status: "published" as const,
-        sortOrder: seed.sortOrder,
-        updatedAt: now,
-      };
-
-      let courseId: Id<"academyCourses">;
-      if (existing) {
-        await ctx.db.patch(existing._id, fields);
-        courseId = existing._id;
-        updated += 1;
-      } else {
-        courseId = await ctx.db.insert("academyCourses", {
-          ...fields,
-          purchaseCount: 0,
-          commentCount: 0,
-          createdByAdminId: admin._id,
-          createdAt: now,
-        });
-        created += 1;
-      }
-
-      for (const lessonSeed of seed.lessons) {
-        const siblings = await ctx.db
-          .query("academyLessons")
-          .withIndex("by_course_and_slug", (q) =>
-            q.eq("courseId", courseId).eq("slug", lessonSeed.slug),
-          )
-          .unique();
-        const lessonFields = {
-          title: lessonSeed.title,
-          slug: lessonSeed.slug,
-          descriptionMarkdown: lessonSeed.descriptionMarkdown,
-          bunnyStreamVideoId: `demo-lesson-${seed.slug}-${lessonSeed.slug}`,
-          status: "published" as const,
-          sortOrder: lessonSeed.sortOrder,
-          updatedAt: now,
-        };
-        if (siblings) {
-          await ctx.db.patch(siblings._id, lessonFields);
-          lessonsUpdated += 1;
-        } else {
-          await ctx.db.insert("academyLessons", {
-            courseId,
-            ...lessonFields,
-            createdAt: now,
-          });
-          lessonsCreated += 1;
-        }
-      }
-    }
-
-    return { created, updated, lessonsCreated, lessonsUpdated };
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Course comments (same capabilities as feed post comments)
-// ---------------------------------------------------------------------------
+export {
+  internalSeedLiveCourses,
+  internalSeedLiveCourses as internalSeedDemoCourses,
+} from "./academyLiveCatalog";
 
 const COMMENT_URL_TTL_SEC = 60 * 60;
 const MAX_COMMENT_LEN = 500;
@@ -1618,6 +1289,7 @@ async function hydrateAcademyComments(
     imageUrl: imageUrls[index],
   }));
 }
+
 
 export const listComments = authedQuery({
   args: {

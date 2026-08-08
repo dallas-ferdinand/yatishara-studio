@@ -5,6 +5,11 @@ import type { Id } from "./_generated/dataModel";
 import { purchaseCourseForUser } from "./lib/academyPurchase";
 import type { MutationCtx } from "./_generated/server";
 import { CN_CARD_TRANSFORM, signBunnyThumbUrl } from "./lib/bunny";
+import {
+  compareAtCoursePriceCredits,
+  effectiveCoursePriceCredits,
+  isCourseSaleActive,
+} from "./lib/academyPricing";
 
 const COVER_URL_TTL_SEC = 60 * 60 * 6;
 
@@ -108,23 +113,36 @@ export const internalListPublishedCourses = internalQuery({
       slug: v.string(),
       blurb: v.string(),
       priceCredits: v.number(),
+      compareAtCredits: v.optional(v.number()),
+      onSale: v.boolean(),
+      comingSoon: v.boolean(),
       coverUrl: v.optional(v.string()),
     }),
   ),
   handler: async (ctx) => {
-    const rows = await ctx.db
+    const published = await ctx.db
       .query("academyCourses")
       .withIndex("by_status_and_sort", (q) => q.eq("status", "published"))
       .collect();
+    const soon = await ctx.db
+      .query("academyCourses")
+      .withIndex("by_status_and_sort", (q) => q.eq("status", "coming_soon"))
+      .collect();
+    const rows = [...published, ...soon];
     rows.sort((a, b) => a.sortOrder - b.sortOrder || b.updatedAt - a.updatedAt);
+    const now = Date.now();
     const out = [];
     for (const c of rows) {
+      const compareAt = compareAtCoursePriceCredits(c, now);
       out.push({
         _id: c._id,
         title: c.title,
         slug: c.slug,
         blurb: blurbFromMarkdown(c.descriptionMarkdown),
-        priceCredits: c.priceCredits,
+        priceCredits: effectiveCoursePriceCredits(c, now),
+        compareAtCredits: compareAt ?? undefined,
+        onSale: isCourseSaleActive(c, now),
+        comingSoon: c.status === "coming_soon",
         coverUrl: await courseCoverUrl(c.coverBunnyPath),
       });
     }

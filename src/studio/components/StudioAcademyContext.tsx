@@ -29,6 +29,10 @@ export type AcademyCatalogCourse = {
   slug: string;
   blurb: string;
   priceCredits: number;
+  compareAtCredits?: number;
+  saleEndsAt?: number;
+  onSale?: boolean;
+  comingSoon?: boolean;
   coverUrl?: string;
   owned: boolean;
   lessonCount: number;
