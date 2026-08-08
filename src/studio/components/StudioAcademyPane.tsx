@@ -921,24 +921,6 @@ export function StudioAcademyPane({
                     : `${detail.title} · Buy to unlock`}
                 </p>
               </div>
-              {!owned ? (
-                <div className="studio-academy-detail-price">
-                  <span className="public-offers-card-price">
-                    {listPriceLabel ? (
-                      <>
-                        <s className="studio-academy-card-compare">
-                          {listPriceLabel}
-                        </s>
-                        <span className="studio-academy-card-now">
-                          {priceLabel}
-                        </span>
-                      </>
-                    ) : (
-                      priceLabel
-                    )}
-                  </span>
-                </div>
-              ) : null}
             </div>
             <div className={`studio-academy-body${!owned ? " is-locked" : ""}`}>
               <div className="studio-academy-body-clip">
@@ -988,24 +970,6 @@ export function StudioAcademyPane({
                       : "Course overview"}
                 </p>
               </div>
-              {!owned ? (
-                <div className="studio-academy-detail-price">
-                  <span className="public-offers-card-price">
-                    {listPriceLabel ? (
-                      <>
-                        <s className="studio-academy-card-compare">
-                          {listPriceLabel}
-                        </s>
-                        <span className="studio-academy-card-now">
-                          {priceLabel}
-                        </span>
-                      </>
-                    ) : (
-                      priceLabel
-                    )}
-                  </span>
-                </div>
-              ) : null}
             </div>
             <div className={`studio-academy-body${!owned ? " is-locked" : ""}`}>
               <div className="studio-academy-body-clip">
