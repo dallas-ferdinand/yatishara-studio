@@ -1310,12 +1310,14 @@
   filter: none;
 }
 
-/* Mobile classic: paperclip + rounded input + mic/send (pre-desktop redesign). */
+/* Mobile classic: paperclip + rounded input + mic/send — same height band as chat head. */
 .studio-dm-composer.is-classic {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 8px 12px 10px;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--cursor-head-h, 32px);
+  padding: 0 8px;
+  box-sizing: border-box;
 }
 
 .studio-dm-composer.is-classic textarea {
@@ -1323,16 +1325,20 @@
   min-width: 0;
   max-height: 120px;
   resize: none;
-  padding: 7px 12px;
-  border-radius: 16px;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
   background: var(--cursor-surface-input, var(--mos-surface));
   color: var(--color-cursor-text-bright, var(--mos-text));
   font: inherit;
   font-size: var(--desk-text-ui, 13px);
-  line-height: 1.4;
+  font-weight: 500;
+  line-height: 1.25;
   outline: none;
   scrollbar-width: none;
+  min-height: calc(var(--cursor-head-h, 32px) - 8px);
+  box-sizing: border-box;
 }
 
 .studio-dm-composer.is-classic textarea::-webkit-scrollbar {
@@ -1343,18 +1349,24 @@
   border-color: var(--cursor-border-focus, var(--cursor-accent));
 }
 
+.studio-dm-composer.is-classic .studio-dm-attach,
 .studio-dm-composer.is-classic .studio-dm-send {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
   flex: 0 0 auto;
-  border: 0;
   border-radius: 999px;
+  cursor: pointer;
+}
+
+.studio-dm-composer.is-classic .studio-dm-send {
+  border: 0;
   background: var(--cursor-accent, var(--mos-accent));
   color: #10140a;
-  cursor: pointer;
 }
 
 .studio-dm-composer.is-classic .studio-dm-send:hover:not(:disabled) {
@@ -1378,30 +1390,40 @@
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
+.studio-dm-composer.is-classic .studio-dm-attach svg,
+.studio-dm-composer.is-classic .studio-dm-send svg {
+  width: 13px;
+  height: 13px;
+}
+
 .studio-dm-recording {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
-  height: 32px;
+  min-height: calc(var(--cursor-head-h, 32px) - 8px);
+  height: calc(var(--cursor-head-h, 32px) - 8px);
   padding: 0 4px 0 2px;
-  border-radius: 16px;
+  border-radius: 999px;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
   background: var(--cursor-surface-input, var(--mos-surface));
+  box-sizing: border-box;
 }
 
 .studio-dm-recording .studio-dm-send {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
 }
 
 .studio-dm-rec-cancel {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
   border: 0;
   border-radius: 999px;

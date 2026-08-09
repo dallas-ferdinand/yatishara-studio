@@ -2444,7 +2444,9 @@ export function StudioMessagesPane({
   function autosizeComposerInput(el: HTMLTextAreaElement | null) {
     if (!el) return;
     el.style.height = "0px";
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, 36), 120)}px`;
+    // Desktop split row uses ~36px; mobile classic matches header band via CSS.
+    const minPx = isMobile ? 0 : 36;
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, minPx), 120)}px`;
   }
 
   /** Voice-note recorder — pause/resume supported; extras row stays visible. */
