@@ -1523,12 +1523,17 @@ button.studio-cn-card-btn.public-offers-card {
   min-height: var(--studio-mobile-nav-height, 38px) !important;
   max-height: var(--studio-mobile-nav-height, 38px) !important;
   padding: 0 10px !important;
-  /* Same hairline + plate as CN head / catalog body — not a heavier mos-bg band. */
+  /* Same plate as bottom nav so book bar + nav read as one chrome strip. */
   border: 0 !important;
   border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
-  background: var(--mos-page, var(--mos-panel, var(--color-cursor-bg)));
-  box-shadow: none;
+  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+  box-shadow: none !important;
   box-sizing: border-box;
+}
+
+[data-appearance="light"] .studio-cn-offer-detail.is-mobile .public-offers-mobile-book-nav.studio-cn-book-bar,
+[data-appearance="light"] .studio-academy-pane .public-offers-mobile-book-nav.studio-cn-book-bar {
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-cn-book-bar-price {

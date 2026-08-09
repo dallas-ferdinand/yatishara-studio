@@ -9903,6 +9903,12 @@ textarea.cursor-input {
   contain: none !important;
 }
 
+/* Book bar sits on the same plate — drop the nav’s top hairline so it isn’t a double/thick seam. */
+.studio-polish:has(.studio-cn-book-bar) .studio-mobile-bottom-nav {
+  border-top-color: transparent !important;
+  box-shadow: none !important;
+}
+
 /* --- panel heads / workspace header — solid canvas (no glass) --- */
 .studio-polish .cursor-panel-head,
 .studio-polish .cursor-workspace-head {
@@ -9919,6 +9925,11 @@ textarea.cursor-input {
 [data-appearance="light"] .studio-mobile-bottom-nav {
   background: var(--mos-panel, #f5f5f7) !important;
   border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+}
+
+[data-appearance="light"] .studio-polish:has(.studio-cn-book-bar) .studio-mobile-bottom-nav {
+  border-top-color: transparent !important;
+  box-shadow: none !important;
 }
 
 [data-appearance="light"] .studio-polish .cursor-panel-head,

@@ -8913,6 +8913,11 @@ export function StudioShell({
             isolation: auto !important;
             contain: none !important;
           }
+          /* Academy/CN book bar + nav = one plate; no second top edge on the nav. */
+          .studio-polish.is-studio-mobile:has(.studio-cn-book-bar) .studio-mobile-bottom-nav {
+            border-top-color: transparent !important;
+            box-shadow: none !important;
+          }
           .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box {
             background: var(--studio-composer-glass-strong, var(--studio-composer-glass)) !important;
             backdrop-filter: none !important;
@@ -8970,6 +8975,10 @@ export function StudioShell({
             border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
+          }
+          [data-appearance="light"] .studio-polish.is-studio-mobile:has(.studio-cn-book-bar) .studio-mobile-bottom-nav {
+            border-top-color: transparent !important;
+            box-shadow: none !important;
           }
           .studio-polish.is-studio-mobile :where(
             .cursor-workspace-head,
