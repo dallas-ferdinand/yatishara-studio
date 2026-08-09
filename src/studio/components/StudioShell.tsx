@@ -24234,11 +24234,54 @@ export function StudioShell({
             ) : null}
             {!isMobile ? (
               <>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${activeTab.startsWith("feed:") ? " is-active" : ""}`}
+                  onClick={openFeed}
+                  aria-label="Open feed"
+                  title="Feed"
+                  aria-pressed={activeTab.startsWith("feed:")}
+                >
+                  <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isNetworkRail ? " is-active" : ""}`}
+                  onClick={() => openNetworkTab()}
+                  aria-label="Open Creative Network"
+                  title="Creative Network"
+                  aria-pressed={isNetworkRail}
+                >
+                  <Store className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isMessagesRail ? " is-active" : ""}`}
+                  onClick={openMessages}
+                  aria-label="Open messages"
+                  title="Messages"
+                  aria-pressed={isMessagesRail}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
+                  onClick={openFiles}
+                  aria-label="Open files"
+                  title="Files"
+                  aria-pressed={isFilesTab}
+                >
+                  <Folder className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
                 <CreditPill
                   creditBalance={billingAccount?.creditBalance}
                   creditPriceCents={pricing?.creditPriceCents}
                   onClick={openCreditsPane}
                 />
+                {isAdminUser ? (
+                  <AdminQuickLinks onOpenAdminTab={openAdminTab} />
+                ) : null}
                 <StudioProfileMenu
                   currentUser={currentUser}
                   profile={myPublicProfile}
@@ -24246,22 +24289,6 @@ export function StudioShell({
                   isProfileTabActive={activeTab.startsWith("profile:")}
                   onViewProfile={openOwnProfile}
                 />
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
-                  onClick={() => {
-                    void toggleBrowserFullscreen();
-                  }}
-                  aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
-                  title={browserFullscreen ? "Exit full screen" : "Full screen"}
-                  aria-pressed={browserFullscreen}
-                >
-                  {browserFullscreen ? (
-                    <Shrink className="h-3.5 w-3.5" aria-hidden="true" />
-                  ) : (
-                    <Expand className="h-3.5 w-3.5" aria-hidden="true" />
-                  )}
-                </button>
                 <button
                   type="button"
                   className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
@@ -24278,6 +24305,22 @@ export function StudioShell({
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                   ) : (
                     <Menu className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
+                  onClick={() => {
+                    void toggleBrowserFullscreen();
+                  }}
+                  aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
+                  title={browserFullscreen ? "Exit full screen" : "Full screen"}
+                  aria-pressed={browserFullscreen}
+                >
+                  {browserFullscreen ? (
+                    <Shrink className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <Expand className="h-3.5 w-3.5" aria-hidden="true" />
                   )}
                 </button>
               </>
