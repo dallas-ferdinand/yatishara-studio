@@ -8698,6 +8698,7 @@ export function StudioShell({
           border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
           /* Same solid plate as .cursor-workspace-head — not frosted glass. */
           background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+          box-shadow: none !important;
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
           /* KB lift for nav (outside stage). Composer uses stage padding instead. */
@@ -8903,6 +8904,7 @@ export function StudioShell({
           .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
             background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
             border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+            box-shadow: none !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
             /* Keep KB translate — do not force transform:none (jumps the lift). */

@@ -9894,6 +9894,7 @@ textarea.cursor-input {
 .studio-mobile-bottom-nav {
   background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
   border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+  box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   transform: none !important;
