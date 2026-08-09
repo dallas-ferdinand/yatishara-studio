@@ -10185,6 +10185,34 @@ export function StudioShell({
           gap: 6px;
           flex: 0 0 auto;
         }
+        /* Desktop header: Create | History dual pill (mobile bottom-nav cluster language). */
+        .studio-header-create-cluster {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          flex: 0 0 auto;
+        }
+        .studio-header-create-cluster.is-linked {
+          gap: 2px;
+          padding: 2px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, transparent));
+        }
+        .studio-header-create-cluster.is-linked .studio-settings-pill {
+          width: calc(var(--studio-chrome-control, 28px) - 2px) !important;
+          min-width: calc(var(--studio-chrome-control, 28px) - 2px) !important;
+          height: calc(var(--studio-chrome-control, 28px) - 2px) !important;
+          min-height: calc(var(--studio-chrome-control, 28px) - 2px) !important;
+          border-radius: 999px !important;
+        }
+        .studio-header-create-cluster.is-linked .studio-settings-pill.is-active {
+          background: color-mix(in srgb, var(--cursor-accent) 22%, var(--mos-panel, transparent)) !important;
+        }
+        [data-appearance="light"] .studio-header-create-cluster.is-linked {
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, #f5f5f7));
+        }
         /* Desktop: same app grid as mobile, tuck under Menu control (no dim overlay). */
         .studio-mobile-app-menu-sheet.is-desktop-popover {
           /* One inset for header gap + right edge — must stay equal. */
@@ -24274,29 +24302,87 @@ export function StudioShell({
                 >
                   <Folder className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${
-                    isComposerContextTabKey(activeTab) ||
-                    String(activeTab || "").startsWith("create:")
-                      ? " is-active"
-                      : ""
-                  }`}
-                  onClick={() => {
-                    setHistoryOpen(false);
-                    setSettingsOpen(false);
-                    setMobileAppMenuOpen(false);
-                    openTab(lastChatTabRef.current || COMPOSER_TAB);
-                  }}
-                  aria-label="Open create"
-                  title="Create"
-                  aria-pressed={
-                    isComposerContextTabKey(activeTab) ||
-                    String(activeTab || "").startsWith("create:")
-                  }
-                >
-                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
+                {showHistory ? (
+                  <div
+                    className={`studio-header-create-cluster${
+                      isComposerContextTabKey(activeTab) ||
+                      String(activeTab || "").startsWith("create:") ||
+                      historyOpen
+                        ? " is-linked"
+                        : ""
+                    }`}
+                    role="group"
+                    aria-label="Create and History"
+                  >
+                    <button
+                      type="button"
+                      className={`studio-settings-pill studio-settings-trigger${
+                        isComposerContextTabKey(activeTab) ||
+                        String(activeTab || "").startsWith("create:")
+                          ? " is-active"
+                          : ""
+                      }`}
+                      onClick={() => {
+                        setHistoryOpen(false);
+                        setSettingsOpen(false);
+                        setMobileAppMenuOpen(false);
+                        openTab(lastChatTabRef.current || COMPOSER_TAB);
+                      }}
+                      aria-label="Open create"
+                      title="Create"
+                      aria-pressed={
+                        isComposerContextTabKey(activeTab) ||
+                        String(activeTab || "").startsWith("create:")
+                      }
+                    >
+                      <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
+                      onClick={() => {
+                        setMobileAppMenuOpen(false);
+                        setSettingsOpen(false);
+                        if (
+                          !isComposerContextTabKey(activeTab) &&
+                          !String(activeTab || "").startsWith("create:")
+                        ) {
+                          openTab(lastChatTabRef.current || COMPOSER_TAB);
+                        }
+                        setHistoryOpen((open) => !open);
+                      }}
+                      aria-label={historyOpen ? "Close history" : "Open history"}
+                      title="History"
+                      aria-pressed={historyOpen}
+                    >
+                      <History className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={`studio-settings-pill studio-settings-trigger${
+                      isComposerContextTabKey(activeTab) ||
+                      String(activeTab || "").startsWith("create:")
+                        ? " is-active"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      setHistoryOpen(false);
+                      setSettingsOpen(false);
+                      setMobileAppMenuOpen(false);
+                      openTab(lastChatTabRef.current || COMPOSER_TAB);
+                    }}
+                    aria-label="Open create"
+                    title="Create"
+                    aria-pressed={
+                      isComposerContextTabKey(activeTab) ||
+                      String(activeTab || "").startsWith("create:")
+                    }
+                  >
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                )}
                 {isAdminUser ? (
                   <AdminQuickLinks
                     onOpenAdminTab={openAdminTab}

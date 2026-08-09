@@ -89,8 +89,10 @@ function NavButton({
 
 /**
  * Permanent sections: Feed | Network | Academy | Messages | Create.
- * Generate: Create expands with Files + History.
- * Files dock open: Files + Extras (Places sidepanel sheet); History hidden.
+ * Generate: Create expands as a dual/linked pill with History (+ Files).
+ * Order: Create | History | Files — History sits next to Generate like the
+ * credit pill sits next to Create in header tools.
+ * Files dock open: Files + Extras (Places); History hidden.
  */
 export function StudioMobileBottomNav({
   section,
@@ -117,9 +119,11 @@ export function StudioMobileBottomNav({
   const showHistory = Boolean(historyAction) && !filesOpen;
   const networkLinked =
     section === "network" && (linkFilesToNetwork || showExtras);
+  // Always link Create when History is available on Generate — dual pill even
+  // if the Files action is briefly unset.
   const createLinked =
     section === "composer" &&
-    (linkFilesToCreate || showExtras || showHistory);
+    (showHistory || linkFilesToCreate || showExtras);
 
   const filesBtn = (linked) =>
     filesAction ? (
@@ -238,7 +242,11 @@ export function StudioMobileBottomNav({
             aria-label={
               showExtras
                 ? "Create, Files, and Extras"
-                : "Create, Files, and History"
+                : showHistory && linkFilesToCreate
+                  ? "Create, History, and Files"
+                  : showHistory
+                    ? "Create and History"
+                    : "Create and Files"
             }
           >
             <NavButton
@@ -251,9 +259,9 @@ export function StudioMobileBottomNav({
             >
               <Sparkles aria-hidden="true" />
             </NavButton>
+            {historyBtn(true)}
             {filesBtn(true)}
             {extrasBtn(true)}
-            {historyBtn(true)}
           </div>
         ) : (
           <NavButton
