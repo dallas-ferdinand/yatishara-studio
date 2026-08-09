@@ -1757,6 +1757,14 @@
     align-items: center;
   }
 
+  .public-offers-hero-icon {
+    right: -28px;
+    bottom: -22px;
+    width: min(52vw, 160px);
+    height: min(52vw, 160px);
+    opacity: 0.18;
+  }
+
   .public-offers-grid {
     grid-template-columns: minmax(0, 1fr);
   }
