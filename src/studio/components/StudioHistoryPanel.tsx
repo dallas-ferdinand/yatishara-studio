@@ -1,21 +1,24 @@
 // @ts-nocheck
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "convex/react";
 import {
   Clock3,
   FileText,
+  MessageSquare,
+  MessagesSquare,
+  Music,
   Play,
   Image as ImageIcon,
-  MessageSquare,
-  Music,
-  Search,
+  SearchX,
   Sparkles,
   X,
 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
+import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
+import { ExplorerTypeFilter } from "@/desk/components/ExplorerTypeFilter";
 import { ResizableSideSheet } from "./ResizableSideSheet";
 import {
   historyRangeCacheKey,
@@ -27,6 +30,14 @@ import {
   orbSeedForVoice,
   StudioOrbAvatar,
 } from "@/studio/components/StudioOrbPlayButton";
+
+/** Media-type filter — same chrome language as Files / Messages filters. */
+export const HISTORY_TYPE_FILTERS = [
+  { id: "all", label: "All", icon: "layoutGrid" },
+  { id: "image", label: "Images", icon: "image" },
+  { id: "video", label: "Videos", icon: "play" },
+  { id: "audio", label: "Audio", icon: "music" },
+];
 
 function formatHistoryWhen(ts) {
   const diff = Date.now() - ts;
@@ -56,6 +67,14 @@ function cleanHistoryTitle(thread) {
 
 function isVideoThumbUrl(url) {
   return typeof url === "string" && /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
+}
+
+function threadMatchesKindFilter(thread, kindFilter) {
+  if (!kindFilter || kindFilter === "all") return true;
+  const thumbs = thread.resultThumbs ?? [];
+  if (thumbs.some((thumb) => thumb.kind === kindFilter)) return true;
+  // Fallback: reference chips sometimes carry media kind.
+  return (thread.previewChips ?? []).some((chip) => chip.kind === kindFilter);
 }
 
 function HistoryChip({ chip }) {
@@ -192,6 +211,20 @@ function HistoryThreadCard({ thread, active, onSelect }) {
   );
 }
 
+function HistorySearchSection({ title, count, icon, children }) {
+  if (!count) return null;
+  return (
+    <section className="studio-history-search-section">
+      <header className="studio-history-search-section-head">
+        {icon}
+        <span>{title}</span>
+        <span className="studio-history-search-section-count">{count}</span>
+      </header>
+      <div className="studio-history-search-section-body">{children}</div>
+    </section>
+  );
+}
+
 function useHistoryRange(range, enabled, expiresUnix) {
   const [cursor, setCursor] = useState(undefined);
   const [items, setItems] = useState(() =>
@@ -256,12 +289,27 @@ function HistoryPanelBody({
   expiresUnix,
   query,
   setQuery,
-  searchRef,
+  kindFilter,
+  setKindFilter,
 }) {
+  const deferredQuery = useDeferredValue(query.trim());
+  const searching = deferredQuery.length > 0;
+
   // Flat chronological list — no Open/Today/Week accordion containers.
-  const recent = useHistoryRange("recent", true, expiresUnix);
-  const week = useHistoryRange("this_week", true, expiresUnix);
-  const older = useHistoryRange("older", true, expiresUnix);
+  const recent = useHistoryRange("recent", !searching, expiresUnix);
+  const week = useHistoryRange("this_week", !searching, expiresUnix);
+  const older = useHistoryRange("older", !searching, expiresUnix);
+
+  const deepSearch = useQuery(
+    api.generation.searchHistoryThreads,
+    searching
+      ? {
+          query: deferredQuery,
+          kind: kindFilter,
+          expiresUnix,
+        }
+      : "skip",
+  );
 
   const indexSorted = useMemo(
     () =>
@@ -286,23 +334,16 @@ function HistoryPanelBody({
     );
   }, [recent.items, week.items, older.items, indexSorted]);
 
-  const q = query.trim().toLowerCase();
-  const items = useMemo(() => {
-    if (!q) return threads;
-    return threads.filter((thread) => {
-      const title = cleanHistoryTitle(thread).toLowerCase();
-      const snippet = String(thread.previewSnippet ?? "").toLowerCase();
-      const chipText = (thread.previewChips ?? [])
-        .map((chip) => chip.label)
-        .join(" ")
-        .toLowerCase();
-      return title.includes(q) || snippet.includes(q) || chipText.includes(q);
-    });
-  }, [threads, q]);
+  const filteredThreads = useMemo(
+    () => threads.filter((thread) => threadMatchesKindFilter(thread, kindFilter)),
+    [threads, kindFilter],
+  );
 
   const loading =
-    (recent.loading || week.loading || older.loading) && items.length === 0;
-  const hasMore = !q && (week.hasMore || older.hasMore);
+    !searching &&
+    (recent.loading || week.loading || older.loading) &&
+    filteredThreads.length === 0;
+  const hasMore = !searching && (week.hasMore || older.hasMore);
   const loadingMore =
     (week.loading && week.items.length > 0) ||
     (older.loading && older.items.length > 0);
@@ -313,34 +354,94 @@ function HistoryPanelBody({
   }
 
   const emptyIndex = !(indexThreads?.length || recent.items.length || week.items.length);
+  const searchBusy = searching && deepSearch === undefined;
+  const searchThreads = deepSearch?.threads ?? [];
+  const searchMessages = deepSearch?.messages ?? [];
+  const searchEmpty =
+    searching &&
+    !searchBusy &&
+    searchThreads.length === 0 &&
+    searchMessages.length === 0;
 
   return (
     <>
-      <div className="studio-history-search-wrap">
-        <Search className="studio-history-search-icon" aria-hidden="true" />
-        <input
-          ref={searchRef}
-          className="studio-history-search"
-          type="search"
+      <div className="studio-history-chrome">
+        <PanelSearchBar
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search history…"
-          aria-label="Search history"
+          onChange={setQuery}
+          placeholder="Search chats & messages"
+          aria-label="Search history chats and messages"
+          end={
+            <ExplorerTypeFilter
+              value={kindFilter}
+              onChange={setKindFilter}
+              options={HISTORY_TYPE_FILTERS}
+              ariaLabel="Filter history type"
+            />
+          }
         />
-        {query ? (
-          <button
-            type="button"
-            className="studio-history-search-clear"
-            onClick={() => setQuery("")}
-            aria-label="Clear search"
-          >
-            <X aria-hidden="true" />
-          </button>
-        ) : null}
       </div>
 
       <div className="studio-history-list">
-        {emptyIndex && !loading ? (
+        {searching ? (
+          searchBusy ? (
+            <div className="studio-history-list-loading" aria-busy="true" aria-hidden="true" />
+          ) : searchEmpty ? (
+            <div className="studio-history-search-empty">
+              <SearchX aria-hidden="true" />
+              <strong>No results</strong>
+              <span>Try words from a prompt, or clear the type filter.</span>
+            </div>
+          ) : (
+            <div className="studio-history-search-results">
+              <HistorySearchSection
+                title="Chats"
+                count={searchThreads.length}
+                icon={<MessageSquare aria-hidden="true" />}
+              >
+                {searchThreads.map((thread) => (
+                  <HistoryThreadCard
+                    key={thread._id}
+                    thread={thread}
+                    active={thread._id === activeThreadId}
+                    onSelect={(id) => {
+                      setQuery("");
+                      onSelectThread(id);
+                    }}
+                  />
+                ))}
+              </HistorySearchSection>
+              <HistorySearchSection
+                title="Messages"
+                count={searchMessages.length}
+                icon={<MessagesSquare aria-hidden="true" />}
+              >
+                {searchMessages.map((message) => (
+                  <button
+                    key={message.eventId}
+                    type="button"
+                    className="studio-history-search-message"
+                    onClick={() => {
+                      setQuery("");
+                      onSelectThread(message.threadId);
+                    }}
+                  >
+                    <span className="studio-history-search-message-title">
+                      {message.threadTitle}
+                    </span>
+                    <span className="studio-history-search-message-body">
+                      {message.body}
+                    </span>
+                    <span className="studio-history-item-date">
+                      <Clock3 className="studio-history-item-date-icon" aria-hidden="true" />
+                      {formatHistoryWhen(message.createdAt)}
+                    </span>
+                  </button>
+                ))}
+              </HistorySearchSection>
+            </div>
+          )
+        ) : emptyIndex && !loading ? (
           <div className="studio-history-empty">
             <MessageSquare className="studio-history-empty-icon" aria-hidden="true" />
             <p className="studio-history-empty-title">No generations yet</p>
@@ -348,9 +449,9 @@ function HistoryPanelBody({
           </div>
         ) : loading ? (
           <div className="studio-history-list-loading" aria-busy="true" aria-hidden="true" />
-        ) : items.length ? (
+        ) : filteredThreads.length ? (
           <>
-            {items.map((thread) => (
+            {filteredThreads.map((thread) => (
               <HistoryThreadCard
                 key={thread._id}
                 thread={thread}
@@ -370,7 +471,9 @@ function HistoryPanelBody({
             ) : null}
           </>
         ) : (
-          <p className="studio-history-list-empty">No matches.</p>
+          <p className="studio-history-list-empty">
+            {kindFilter !== "all" ? "No matching chats for this filter." : "No matches."}
+          </p>
         )}
       </div>
     </>
@@ -577,6 +680,7 @@ export function StudioHistoryPanel({
   isMobile = false,
 }) {
   const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState("all");
   const [portalRoot, setPortalRoot] = useState(null);
   const searchRef = useRef(null);
 
@@ -585,7 +689,10 @@ export function StudioHistoryPanel({
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => searchRef.current?.focus(), 0);
+    const timer = window.setTimeout(() => {
+      const input = searchRef.current?.querySelector?.("input") ?? searchRef.current;
+      input?.focus?.();
+    }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -598,15 +705,18 @@ export function StudioHistoryPanel({
   }, [onClose]);
 
   const body = (
-    <HistoryPanelBody
-      indexThreads={indexThreads}
-      activeThreadId={activeThreadId}
-      onSelectThread={onSelectThread}
-      expiresUnix={expiresUnix}
-      query={query}
-      setQuery={setQuery}
-      searchRef={searchRef}
-    />
+    <div ref={searchRef} className="studio-history-panel-body">
+      <HistoryPanelBody
+        indexThreads={indexThreads}
+        activeThreadId={activeThreadId}
+        onSelectThread={onSelectThread}
+        expiresUnix={expiresUnix}
+        query={query}
+        setQuery={setQuery}
+        kindFilter={kindFilter}
+        setKindFilter={setKindFilter}
+      />
+    </div>
   );
 
   if (isMobile) {

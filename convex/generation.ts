@@ -349,6 +349,167 @@ export const listHistoryThreads = authedQuery({
   },
 });
 
+const HISTORY_SEARCH_EVENT_SCAN = 500;
+const HISTORY_SEARCH_THREAD_SCAN = 240;
+const HISTORY_SEARCH_MESSAGE_MAX = 24;
+const HISTORY_SEARCH_THREAD_MAX = 24;
+
+const historyKindFilter = v.union(
+  v.literal("all"),
+  v.literal("image"),
+  v.literal("video"),
+  v.literal("audio"),
+);
+
+const historySearchMessageReturn = v.object({
+  eventId: v.id("generationEvents"),
+  threadId: v.id("generationThreads"),
+  body: v.string(),
+  createdAt: v.number(),
+  threadTitle: v.string(),
+});
+
+/**
+ * Deep History search (Messages-sidebar style): title matches as Chats,
+ * prompt/assistant text matches as Messages. Optional image/video/audio filter
+ * uses the thread's latest generation job mode.
+ */
+export const searchHistoryThreads = authedQuery({
+  args: {
+    query: v.string(),
+    kind: v.optional(historyKindFilter),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.object({
+    threads: v.array(threadReturn),
+    messages: v.array(historySearchMessageReturn),
+  }),
+  handler: async (ctx, args) => {
+    const needle = args.query.trim().toLowerCase().slice(0, 80);
+    if (!needle) {
+      return { threads: [], messages: [] };
+    }
+    const kindFilter =
+      args.kind && args.kind !== "all" ? args.kind : null;
+    const kindCache = new Map<string, boolean>();
+
+    async function threadMatchesKind(threadId: Id<"generationThreads">) {
+      if (!kindFilter) return true;
+      const key = String(threadId);
+      if (kindCache.has(key)) return kindCache.get(key)!;
+      const job = await ctx.db
+        .query("generationJobs")
+        .withIndex("by_thread", (q) => q.eq("threadId", threadId))
+        .order("desc")
+        .first();
+      const ok = job?.mode === kindFilter;
+      kindCache.set(key, ok);
+      return ok;
+    }
+
+    const events = await ctx.db
+      .query("generationEvents")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
+      .order("desc")
+      .take(HISTORY_SEARCH_EVENT_SCAN);
+
+    const messageHits: Array<{
+      event: Doc<"generationEvents">;
+      body: string;
+    }> = [];
+    const messageThreadIds = new Set<string>();
+    for (const event of events) {
+      if (
+        event.kind !== "prompt" &&
+        event.kind !== "assistant" &&
+        event.kind !== "question"
+      ) {
+        continue;
+      }
+      const raw = String(event.prompt ?? event.message ?? "");
+      const body = raw
+        .replace(/\n\nReferences:\n[\s\S]*$/i, "")
+        .replace(/\uFFFC/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!body || !body.toLowerCase().includes(needle)) continue;
+      if (!(await threadMatchesKind(event.threadId))) continue;
+      messageThreadIds.add(String(event.threadId));
+      if (messageHits.length < HISTORY_SEARCH_MESSAGE_MAX) {
+        messageHits.push({ event, body: body.slice(0, 160) });
+      }
+    }
+
+    const ownedThreads = await ctx.db
+      .query("generationThreads")
+      .withIndex("by_owner_and_archived", (q) =>
+        q.eq("ownerId", ctx.user._id).eq("archivedAt", undefined),
+      )
+      .order("desc")
+      .take(HISTORY_SEARCH_THREAD_SCAN);
+
+    const threadById = new Map(
+      ownedThreads.map((thread) => [String(thread._id), thread]),
+    );
+
+    const titleHitThreads: Doc<"generationThreads">[] = [];
+    for (const thread of ownedThreads) {
+      const title = String(thread.title ?? "").toLowerCase();
+      if (!title.includes(needle)) continue;
+      if (!(await threadMatchesKind(thread._id))) continue;
+      titleHitThreads.push(thread);
+      if (titleHitThreads.length >= HISTORY_SEARCH_THREAD_MAX) break;
+    }
+
+    // Prefer title hits; also include threads that only matched via message body.
+    const threadHits: Doc<"generationThreads">[] = [...titleHitThreads];
+    const seen = new Set(titleHitThreads.map((thread) => String(thread._id)));
+    for (const threadId of messageThreadIds) {
+      if (seen.has(threadId)) continue;
+      const thread = threadById.get(threadId);
+      if (!thread || thread.archivedAt) continue;
+      threadHits.push(thread);
+      seen.add(threadId);
+      if (threadHits.length >= HISTORY_SEARCH_THREAD_MAX) break;
+    }
+
+    const threads = [];
+    for (let index = 0; index < threadHits.length; index += 1) {
+      threads.push(
+        await enrichHistoryThread(
+          ctx,
+          threadHits[index]!,
+          args.expiresUnix,
+          index < 8,
+        ),
+      );
+    }
+
+    const messages = [];
+    for (const hit of messageHits) {
+      const thread =
+        threadById.get(String(hit.event.threadId)) ??
+        (await ctx.db.get("generationThreads", hit.event.threadId));
+      if (!thread || thread.archivedAt || thread.ownerId !== ctx.user._id) {
+        continue;
+      }
+      const cleanedTitle =
+        thread.title?.trim() && thread.title.trim() !== "[object Object]"
+          ? sanitizeThreadTitle(thread.title, "")
+          : "";
+      messages.push({
+        eventId: hit.event._id,
+        threadId: thread._id,
+        body: hit.body,
+        createdAt: hit.event.createdAt ?? hit.event._creationTime,
+        threadTitle: cleanedTitle || "Untitled",
+      });
+    }
+
+    return { threads, messages };
+  },
+});
+
 const eventReturn = v.object({
   _id: v.id("generationEvents"),
   _creationTime: v.number(),

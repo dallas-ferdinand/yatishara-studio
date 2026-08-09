@@ -21889,9 +21889,13 @@ export function StudioShell({
           min-height: 0;
           overflow: hidden;
         }
-        .studio-history-mobile-sheet .studio-history-search-wrap {
+        .studio-history-mobile-sheet .studio-history-chrome {
           margin: 0;
           flex: 0 0 auto;
+        }
+        .studio-history-mobile-sheet .studio-history-panel-body {
+          flex: 1 1 auto;
+          min-height: 0;
         }
         .studio-history-mobile-sheet .studio-history-list {
           flex: 1 1 0%;
@@ -21922,91 +21926,115 @@ export function StudioShell({
           line-height: 1.2;
           letter-spacing: -0.02em;
         }
-        /* Full-width sidebar search strip — same language as .cursor-panel-search. */
-        .studio-history-search-wrap {
-          position: relative;
+        /* History search chrome — PanelSearchBar + type filter (Messages/Files language). */
+        .studio-history-panel-body {
           display: flex;
-          align-items: center;
-          gap: 8px;
+          flex-direction: column;
+          flex: 1 1 0%;
+          min-height: 0;
+        }
+        .studio-history-chrome {
           flex: 0 0 auto;
-          margin: 0;
-          min-height: 32px;
-          height: 32px;
-          padding: 0 8px 0 10px;
-          border: 0;
           border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
           border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
-          border-radius: 0;
-          background: transparent;
-          transition: none;
         }
-        .studio-history-search-wrap:focus-within {
-          border-color: var(--studio-chrome-divider, var(--color-cursor-border));
-          box-shadow: none;
-        }
-        .studio-history-search-icon {
+        .studio-history-chrome .cursor-panel-search {
           margin: 0;
-          width: 14px;
-          height: 14px;
-          flex-shrink: 0;
-          color: var(--color-cursor-muted);
-          pointer-events: none;
-        }
-        .studio-history-search {
-          flex: 1;
-          min-width: 0;
-          width: 100%;
-          height: 100%;
-          margin: 0;
-          padding: 0;
           border: 0;
           border-radius: 0;
+          min-height: 32px;
+          height: 32px;
           background: transparent;
-          color: var(--color-cursor-text);
+        }
+        .studio-history-chrome .desk-explorer-type-filter {
+          flex-shrink: 0;
+        }
+        .studio-history-search-results {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+        .studio-history-search-section-head {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 0 2px 6px;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.02em;
+          text-transform: uppercase;
+        }
+        .studio-history-search-section-head svg {
+          width: 12px;
+          height: 12px;
+        }
+        .studio-history-search-section-count {
+          margin-left: auto;
+          font-variant-numeric: tabular-nums;
+        }
+        .studio-history-search-section-body {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .studio-history-search-message {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 4px;
+          width: 100%;
+          padding: 10px 12px;
+          border: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          border-radius: 12px;
+          background: var(--mos-panel, transparent);
+          color: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .studio-history-search-message:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-panel, transparent));
+        }
+        .studio-history-search-message-title {
           font-size: 12px;
-          font-weight: 500;
-          line-height: 1;
-          outline: none;
-          box-shadow: none;
-          -webkit-appearance: none;
-          appearance: none;
+          font-weight: 650;
+          color: var(--color-cursor-text);
         }
-        .studio-history-search::placeholder {
-          color: color-mix(in srgb, var(--color-cursor-text) 36%, transparent);
-          opacity: 1;
+        .studio-history-search-message-body {
+          font-size: 12px;
+          line-height: 1.35;
+          color: color-mix(in srgb, var(--color-cursor-text) 78%, transparent);
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
-        .studio-history-search:focus,
-        .studio-history-search:focus-visible {
-          outline: none;
-          box-shadow: none;
-        }
-        .studio-history-search::-webkit-search-decoration,
-        .studio-history-search::-webkit-search-cancel-button {
-          -webkit-appearance: none;
-          appearance: none;
-        }
-        .studio-history-search-clear {
-          display: inline-flex;
+        .studio-history-search-empty {
+          display: flex;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
-          width: 24px;
-          height: 24px;
-          margin: 0;
-          padding: 0;
-          border: 0;
-          border-radius: var(--cursor-radius-sm, 6px);
-          background: transparent;
+          gap: 6px;
+          min-height: 160px;
+          padding: 24px 16px;
+          text-align: center;
           color: var(--color-cursor-muted);
-          cursor: pointer;
-          flex-shrink: 0;
         }
-        .studio-history-search-clear svg {
-          width: 14px;
-          height: 14px;
+        .studio-history-search-empty svg {
+          width: 22px;
+          height: 22px;
+          opacity: 0.7;
         }
-        .studio-history-search-clear:hover {
+        .studio-history-search-empty strong {
           color: var(--color-cursor-text);
-          background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+          font-size: 13px;
+          font-weight: 650;
+        }
+        .studio-history-search-empty span {
+          font-size: 12px;
+          max-width: 220px;
+          line-height: 1.35;
         }
         .studio-history-list {
           flex: 1 1 0%;
