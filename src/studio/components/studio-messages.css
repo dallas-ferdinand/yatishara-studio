@@ -10,13 +10,17 @@
   min-height: 0;
   min-width: 0;
   width: 100%;
-  /* Same as Create stage — let shell wallpaper/backdrop show through. */
-  background: transparent;
+  /* Conversation list stays solid; opened chat clears this for wallpaper. */
+  background: var(--mos-page, var(--mos-bg));
   color: var(--color-cursor-text, var(--mos-text));
   font-family: var(--font-onest), system-ui, sans-serif;
   /* Match other Studio chrome circles (pathbar/settings feel); mobile = nav control. */
   --studio-dm-chrome-circle: 28px;
   --studio-dm-chrome-glyph: 14px;
+}
+
+[data-appearance="light"] .studio-dm-pane {
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-polish.is-studio-mobile .studio-dm-pane {
@@ -27,11 +31,25 @@
 /* Mobile Messages tab inbox — sidebar chrome fills the main pane. */
 .studio-dm-pane.is-inbox {
   overflow: hidden;
+  background: var(--mos-page, var(--mos-bg));
+}
+
+[data-appearance="light"] .studio-dm-pane.is-inbox {
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-dm-pane.is-inbox .studio-dm-sidebar {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* Opened chat (not the list): Create-stage wallpaper shows through. */
+.studio-dm-pane:not(.is-inbox) {
+  background: transparent;
+}
+
+.studio-dm-pane.is-split {
+  background: transparent;
 }
 
 /* CN Messages rail / mobile sheet: chat fills the sidebar, Back stays there. */
@@ -62,6 +80,7 @@
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  background: transparent;
 }
 
 /* Match other workspace panel heads (--cursor-head-h: 32px). */
@@ -2669,6 +2688,12 @@
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+  /* List rail always solid — never wallpaper (desktop split + mobile inbox). */
+  background: var(--mos-page, var(--mos-bg));
+}
+
+[data-appearance="light"] .studio-dm-sidebar {
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-dm-sidebar-chrome {
