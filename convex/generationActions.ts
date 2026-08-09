@@ -201,9 +201,8 @@ const failJobRef = internalMutationRef<
 const chargeTextGenerationRef = publicMutationRef<
   {
     folderId: Id<"folders">;
-    imageReferenceCount?: number;
-    videoReferenceCount?: number;
-    audioReferenceCount?: number;
+    inputTokens: number;
+    outputTokens: number;
   },
   Id<"creditTransactions">
 >("generation:chargeTextGeneration");
@@ -229,9 +228,9 @@ const chargeTextForApiRef = internalMutationRef<
   {
     userId: Id<"users">;
     folderId: Id<"folders">;
-    imageReferenceCount?: number;
-    videoReferenceCount?: number;
-    audioReferenceCount?: number;
+    sandboxFolderId: Id<"folders">;
+    inputTokens: number;
+    outputTokens: number;
   },
   { transactionId: Id<"creditTransactions">; cost: number }
 >("studioApiInternal:chargeTextGenerationForApi");
@@ -366,55 +365,60 @@ export const generateScript = action({
             renderMode: styleSheet.renderMode,
           })
         : preset.systemInstructions;
-    const transactionId = await ctx.runMutation(chargeTextGenerationRef, {
-      folderId: args.folderId,
-      imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
-      videoReferenceCount: referenceInputs.filter((input) => input.kind === "video").length,
-      audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
+    const skipEnhancement = shouldSkipPromptEnhancement({
+      skipPromptEnhancement: args.skipPromptEnhancement,
+      presetSlug: preset.slug,
+      styleSheetElementId: args.styleSheetElementId,
     });
-    try {
-      const skipEnhancement = shouldSkipPromptEnhancement({
-        skipPromptEnhancement: args.skipPromptEnhancement,
+    let contentMarkdown: string;
+    let chargeKey = `${Date.now()}`;
+    if (skipEnhancement) {
+      contentMarkdown = args.userPrompt.trim();
+    } else {
+      const affordability = await ctx.runQuery(
+        api.generation.assertTextGenerationAffordable,
+        {},
+      );
+      if (!affordability.ok) {
+        throw new Error(
+          "You need a small credit balance to generate a script. Top up to continue.",
+        );
+      }
+      const generated = await generateScriptWithGateway({
+        userPrompt: args.userPrompt,
+        presetName: styleSheet?.name ?? preset.name,
+        presetInstructions,
+        scriptInstructions: preset.scriptInstructions,
+        scriptType: normalizeScriptType(args.scriptType),
         presetSlug: preset.slug,
         styleSheetElementId: args.styleSheetElementId,
+        referenceIntent: normalizeReferenceIntent(args.referenceIntent),
+        storytellingEnabled: preset.storytelling,
+        negativePrompt: preset.negativePrompt,
+        attachedScriptMarkdown: args.attachedScriptMarkdown,
+        referenceInputs,
+        hasRawImageReference: args.hasRawImageReference,
+        hasElementReference: args.hasElementReference,
       });
-      const contentMarkdown = skipEnhancement
-        ? args.userPrompt.trim()
-        : await generateScriptWithGateway({
-            userPrompt: args.userPrompt,
-            presetName: styleSheet?.name ?? preset.name,
-            presetInstructions,
-            scriptInstructions: preset.scriptInstructions,
-            scriptType: normalizeScriptType(args.scriptType),
-            presetSlug: preset.slug,
-            styleSheetElementId: args.styleSheetElementId,
-            referenceIntent: normalizeReferenceIntent(args.referenceIntent),
-            storytellingEnabled: preset.storytelling,
-            negativePrompt: preset.negativePrompt,
-            attachedScriptMarkdown: args.attachedScriptMarkdown,
-            referenceInputs,
-            hasRawImageReference: args.hasRawImageReference,
-            hasElementReference: args.hasElementReference,
-          });
-      const documentId = await ctx.runMutation(createDocumentRef, {
+      contentMarkdown = generated.text;
+      const transactionId = await ctx.runMutation(chargeTextGenerationRef, {
         folderId: args.folderId,
-        title: scriptDocumentTitle(
-          normalizeScriptType(args.scriptType),
-          args.userPrompt,
-          contentMarkdown,
-          String(transactionId),
-        ),
-        contentMarkdown,
+        inputTokens: generated.usage.inputTokens ?? 0,
+        outputTokens: generated.usage.outputTokens ?? 0,
       });
-      return { documentId };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Script generation failed";
-      await ctx.runMutation(refundTextGenerationRef, {
-        transactionId,
-        reason: message,
-      });
-      throw error;
+      chargeKey = String(transactionId);
     }
+    const documentId = await ctx.runMutation(createDocumentRef, {
+      folderId: args.folderId,
+      title: scriptDocumentTitle(
+        normalizeScriptType(args.scriptType),
+        args.userPrompt,
+        contentMarkdown,
+        chargeKey,
+      ),
+      contentMarkdown,
+    });
+    return { documentId };
   },
 });
 
@@ -939,6 +943,7 @@ export const runScriptForApi = internalAction({
   args: {
     userId: v.id("users"),
     folderId: v.id("folders"),
+    sandboxFolderId: v.id("folders"),
     apiKeyId: v.optional(v.id("apiKeys")),
     stylePresetId: v.id("stylePresets"),
     styleSheetElementId: v.optional(v.id("elements")),
@@ -987,62 +992,60 @@ export const runScriptForApi = internalAction({
             renderMode: styleSheet.renderMode,
           })
         : preset.systemInstructions;
-    const charged = await ctx.runMutation(chargeTextForApiRef, {
-      userId: args.userId,
-      folderId: args.folderId,
-      imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
-      videoReferenceCount: referenceInputs.filter((input) => input.kind === "video").length,
-      audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
+    const skipScript = shouldSkipPromptEnhancement({
+      skipPromptEnhancement: args.skipScriptEnhancement,
+      presetSlug: preset.slug,
+      styleSheetElementId: args.styleSheetElementId,
     });
-    try {
-      const skipScript = shouldSkipPromptEnhancement({
-        skipPromptEnhancement: args.skipScriptEnhancement,
+    let contentMarkdown: string;
+    let creditsSpent = 0;
+    let chargeKey = `${Date.now()}`;
+    if (skipScript) {
+      contentMarkdown = args.userPrompt.trim();
+    } else {
+      const generated = await generateScriptWithGateway({
+        userPrompt: args.userPrompt,
+        presetName: styleSheet?.name ?? preset.name,
+        presetInstructions,
+        scriptInstructions: preset.scriptInstructions,
+        scriptType: normalizeScriptType(args.scriptType),
         presetSlug: preset.slug,
         styleSheetElementId: args.styleSheetElementId,
+        referenceIntent: normalizeReferenceIntent(args.referenceIntent),
+        storytellingEnabled: preset.storytelling,
+        negativePrompt: preset.negativePrompt,
+        referenceInputs,
+        hasRawImageReference: args.hasRawImageReference,
+        hasElementReference: args.hasElementReference,
       });
-      const contentMarkdown = skipScript
-        ? args.userPrompt.trim()
-        : await generateScriptWithGateway({
-            userPrompt: args.userPrompt,
-            presetName: styleSheet?.name ?? preset.name,
-            presetInstructions,
-            scriptInstructions: preset.scriptInstructions,
-            scriptType: normalizeScriptType(args.scriptType),
-            presetSlug: preset.slug,
-            styleSheetElementId: args.styleSheetElementId,
-            referenceIntent: normalizeReferenceIntent(args.referenceIntent),
-            storytellingEnabled: preset.storytelling,
-            negativePrompt: preset.negativePrompt,
-            referenceInputs,
-            hasRawImageReference: args.hasRawImageReference,
-            hasElementReference: args.hasElementReference,
-          });
-      const title = scriptDocumentTitle(
-        normalizeScriptType(args.scriptType),
-        args.userPrompt,
-        contentMarkdown,
-        String(charged.transactionId ?? Date.now()),
-      );
-      const documentId = await ctx.runMutation(createDocumentForApiRef, {
+      contentMarkdown = generated.text;
+      const charged = await ctx.runMutation(chargeTextForApiRef, {
         userId: args.userId,
         folderId: args.folderId,
-        title,
-        contentMarkdown,
+        sandboxFolderId: args.sandboxFolderId,
+        inputTokens: generated.usage.inputTokens ?? 0,
+        outputTokens: generated.usage.outputTokens ?? 0,
       });
-      return {
-        documentId,
-        title,
-        creditsSpent: charged.cost,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Script generation failed";
-      await ctx.runMutation(refundTextForApiRef, {
-        userId: args.userId,
-        transactionId: charged.transactionId,
-        reason: message,
-      });
-      throw error;
+      creditsSpent = charged.cost;
+      chargeKey = String(charged.transactionId ?? Date.now());
     }
+    const title = scriptDocumentTitle(
+      normalizeScriptType(args.scriptType),
+      args.userPrompt,
+      contentMarkdown,
+      chargeKey,
+    );
+    const documentId = await ctx.runMutation(createDocumentForApiRef, {
+      userId: args.userId,
+      folderId: args.folderId,
+      title,
+      contentMarkdown,
+    });
+    return {
+      documentId,
+      title,
+      creditsSpent,
+    };
   },
 });
 
@@ -1213,7 +1216,7 @@ async function enhancePromptWithFallback(args: {
       referenceSummaries: args.referenceSummaries ?? [],
       referenceInputs,
       startFrameUrl: args.startFrameUrl,
-    });
+    }).then((result) => result.text);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown enhancement error";
     console.warn("Prompt enhancement failed; using raw prompt with preset hints", {

@@ -25,9 +25,25 @@ import {
   normalizeSeedanceAspectRatio,
   normalizeSeedanceResolution,
 } from "./seedanceResolution";
-import { normalizeImageQuality } from "./generationPricing";
+import {
+  measuredTextUsageFromGateway,
+  normalizeImageQuality,
+  type MeasuredTextUsage,
+} from "./generationPricing";
 
 export type GenerationMode = "image" | "video";
+
+export type TextModelResult = {
+  text: string;
+  usage: MeasuredTextUsage;
+};
+
+function usageFromGenerateTextResult(result: {
+  usage?: { inputTokens?: number; outputTokens?: number };
+  totalUsage?: { inputTokens?: number; outputTokens?: number };
+}): MeasuredTextUsage {
+  return measuredTextUsageFromGateway(result.totalUsage ?? result.usage ?? {});
+}
 
 export type EnhancementInput = CreativeDirectionContext & {
   modelId?: string;
@@ -106,7 +122,9 @@ function dmImproveModelId(): string {
   );
 }
 
-export async function enhancePrompt(input: EnhancementInput): Promise<string> {
+export async function enhancePrompt(
+  input: EnhancementInput,
+): Promise<TextModelResult> {
   const model = input.modelId ?? textModelId();
   const referenceInputs = input.referenceInputs ?? [];
   const hasStartFrame = Boolean(input.startFrameUrl?.trim());
@@ -168,11 +186,16 @@ export async function enhancePrompt(input: EnhancementInput): Promise<string> {
       : { prompt: userText }),
   });
   const enhanced = result.text.trim();
-  return enhanced || context.userPrompt;
+  return {
+    text: enhanced || context.userPrompt,
+    usage: usageFromGenerateTextResult(result),
+  };
 }
 
 /** Short DM / composer polish — instruction or spelling/grammar only. */
-export async function improveMessageDraft(text: string): Promise<string> {
+export async function improveMessageDraft(
+  text: string,
+): Promise<TextModelResult> {
   const draft = text.trim();
   if (!draft) {
     throw new Error("Type a message first");
@@ -194,7 +217,10 @@ export async function improveMessageDraft(text: string): Promise<string> {
   if (!improved) {
     throw new Error("Could not improve that text");
   }
-  return improved;
+  return {
+    text: improved,
+    usage: usageFromGenerateTextResult(result),
+  };
 }
 
 export type ElementSheetInput = {
@@ -204,7 +230,9 @@ export type ElementSheetInput = {
   referenceInputs: ReferenceInput[];
 };
 
-export async function generateElementSheet(input: ElementSheetInput): Promise<string> {
+export async function generateElementSheet(
+  input: ElementSheetInput,
+): Promise<TextModelResult> {
   const result = await generateText({
     model: gateway.languageModel(textModelId()),
     system: buildElementSheetSystemPrompt(input.elementType),
@@ -225,13 +253,19 @@ export async function generateElementSheet(input: ElementSheetInput): Promise<st
       },
     ],
   });
+  const usage = usageFromGenerateTextResult(result);
   const sheet = result.text.trim();
-  if (sheet) return sheet;
+  if (sheet) return { text: sheet, usage };
   const fallbackTitle = input.name.trim() || "Element";
-  return `# ${fallbackTitle}\n\n${input.existingNotes?.trim() ?? "No sheet generated."}`;
+  return {
+    text: `# ${fallbackTitle}\n\n${input.existingNotes?.trim() ?? "No sheet generated."}`,
+    usage,
+  };
 }
 
-export async function generateScript(input: ScriptGenerationInput): Promise<string> {
+export async function generateScript(
+  input: ScriptGenerationInput,
+): Promise<TextModelResult> {
   const hasAudioReference = input.referenceInputs.some((reference) => reference.kind === "audio");
   const hasImageReference =
     input.referenceInputs.some((reference) => reference.kind === "image") ||
@@ -270,7 +304,10 @@ export async function generateScript(input: ScriptGenerationInput): Promise<stri
       },
     ],
   });
-  return result.text.trim() || `# Script\n\n${input.userPrompt}`;
+  return {
+    text: result.text.trim() || `# Script\n\n${input.userPrompt}`,
+    usage: usageFromGenerateTextResult(result),
+  };
 }
 
 export async function generateImage(

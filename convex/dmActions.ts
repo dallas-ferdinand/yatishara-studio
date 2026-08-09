@@ -14,25 +14,15 @@ const chargeTextGenerationRef = makeFunctionReference<
   "mutation",
   {
     folderId: Id<"folders">;
-    imageReferenceCount?: number;
-    videoReferenceCount?: number;
-    audioReferenceCount?: number;
+    inputTokens: number;
+    outputTokens: number;
   },
   Id<"creditTransactions">
 >("generation:chargeTextGeneration");
 
-const refundTextGenerationRef = makeFunctionReference<
-  "mutation",
-  {
-    transactionId: Id<"creditTransactions">;
-    reason?: string;
-  },
-  null
->("generation:refundTextGeneration");
-
 /**
  * Polish a DM composer draft (instruction or spelling/grammar).
- * Charges the same text-generation floor as other Studio text work.
+ * Charges from measured gateway tokens after the model returns.
  */
 export const improveDraft = action({
   args: {
@@ -51,25 +41,28 @@ export const improveDraft = action({
       throw new Error("Message is too long to improve");
     }
 
+    const affordability = await ctx.runQuery(
+      api.generation.assertTextGenerationAffordable,
+      {},
+    );
+    if (!affordability.ok) {
+      throw new Error("You need a small credit balance to improve text. Top up to continue.");
+    }
+
     const folderId = await ctx.runMutation(
       api.folders.ensureMessagesFolderForMe,
       {},
     );
-    const creditsSpent = textCreditCost({});
-    const transactionId = await ctx.runMutation(chargeTextGenerationRef, {
-      folderId,
+    const improved = await improveMessageDraft(draft);
+    const creditsSpent = textCreditCost({
+      inputTokens: improved.usage.inputTokens ?? 0,
+      outputTokens: improved.usage.outputTokens ?? 0,
     });
-    try {
-      const text = await improveMessageDraft(draft);
-      return { text, creditsSpent };
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Could not improve that text";
-      await ctx.runMutation(refundTextGenerationRef, {
-        transactionId,
-        reason: message,
-      });
-      throw new Error(message);
-    }
+    await ctx.runMutation(chargeTextGenerationRef, {
+      folderId,
+      inputTokens: improved.usage.inputTokens ?? 0,
+      outputTokens: improved.usage.outputTokens ?? 0,
+    });
+    return { text: improved.text, creditsSpent };
   },
 });

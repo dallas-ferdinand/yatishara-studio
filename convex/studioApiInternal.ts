@@ -1613,6 +1613,8 @@ export const chargeTextGenerationForApi = internalMutation({
     userId: v.id("users"),
     sandboxFolderId: v.id("folders"),
     folderId: v.id("folders"),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
     imageReferenceCount: v.optional(v.number()),
     videoReferenceCount: v.optional(v.number()),
     audioReferenceCount: v.optional(v.number()),
@@ -1627,7 +1629,13 @@ export const chargeTextGenerationForApi = internalMutation({
       .query("billingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .unique();
-    const cost = textCreditCost(args);
+    void args.imageReferenceCount;
+    void args.videoReferenceCount;
+    void args.audioReferenceCount;
+    const cost = textCreditCost({
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+    });
     const now = Date.now();
     if (!account || account.creditBalance < cost) {
       throw new Error(`Generation needs ${cost} credits. Top up to continue.`);

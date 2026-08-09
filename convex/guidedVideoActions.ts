@@ -405,9 +405,8 @@ const chargeTextGenerationForApiRef = internalMutationRef<
     userId: Id<"users">;
     sandboxFolderId: Id<"folders">;
     folderId: Id<"folders">;
-    imageReferenceCount?: number;
-    videoReferenceCount?: number;
-    audioReferenceCount?: number;
+    inputTokens: number;
+    outputTokens: number;
   },
   { transactionId: Id<"creditTransactions">; cost: number }
 >("studioApiInternal:chargeTextGenerationForApi");
@@ -445,9 +444,8 @@ const markBriefTerminalRef = internalMutationRef<
 const chargeTextGenerationRef = publicMutationRef<
   {
     folderId: Id<"folders">;
-    imageReferenceCount?: number;
-    videoReferenceCount?: number;
-    audioReferenceCount?: number;
+    inputTokens: number;
+    outputTokens: number;
   },
   Id<"creditTransactions">
 >("generation:chargeTextGeneration");
@@ -1538,19 +1536,7 @@ export const approveAndGenerate = action({
         const scriptType = normalizeScriptType(
           claim.payload.production.scriptType ?? "production",
         );
-        scriptChargeId = await ctx.runMutation(chargeTextGenerationRef, {
-          folderId: args.folderId,
-          imageReferenceCount: referenceInputs.filter(
-            (reference) => reference.kind === "image",
-          ).length,
-          videoReferenceCount: referenceInputs.filter(
-            (reference) => reference.kind === "video",
-          ).length,
-          audioReferenceCount: referenceInputs.filter(
-            (reference) => reference.kind === "audio",
-          ).length,
-        });
-        const markdown = await generateScriptWithGateway({
+        const markdownResult = await generateScriptWithGateway({
           userPrompt: plan.finalPrompt,
           presetName: preset.name,
           presetInstructions,
@@ -1558,6 +1544,12 @@ export const approveAndGenerate = action({
           referenceInputs,
           scriptType,
         });
+        scriptChargeId = await ctx.runMutation(chargeTextGenerationRef, {
+          folderId: args.folderId,
+          inputTokens: markdownResult.usage.inputTokens ?? 0,
+          outputTokens: markdownResult.usage.outputTokens ?? 0,
+        });
+        const markdown = markdownResult.text;
         const title = scriptDocumentTitle(
           scriptType,
           claim.payload.subject ?? plan.finalPrompt,
@@ -1805,22 +1797,7 @@ export const approveAndGenerateForApi = internalAction({
         const scriptType = normalizeScriptType(
           claim.payload.production.scriptType ?? "production",
         );
-        const charged = await ctx.runMutation(chargeTextGenerationForApiRef, {
-          userId,
-          sandboxFolderId: args.sandboxFolderId,
-          folderId,
-          imageReferenceCount: referenceInputs.filter(
-            (reference) => reference.kind === "image",
-          ).length,
-          videoReferenceCount: referenceInputs.filter(
-            (reference) => reference.kind === "video",
-          ).length,
-          audioReferenceCount: referenceInputs.filter(
-            (reference) => reference.kind === "audio",
-          ).length,
-        });
-        scriptChargeId = charged.transactionId;
-        const markdown = await generateScriptWithGateway({
+        const markdownResult = await generateScriptWithGateway({
           userPrompt: plan.finalPrompt,
           presetName: preset.name,
           presetInstructions,
@@ -1828,6 +1805,15 @@ export const approveAndGenerateForApi = internalAction({
           referenceInputs,
           scriptType,
         });
+        const charged = await ctx.runMutation(chargeTextGenerationForApiRef, {
+          userId,
+          sandboxFolderId: args.sandboxFolderId,
+          folderId,
+          inputTokens: markdownResult.usage.inputTokens ?? 0,
+          outputTokens: markdownResult.usage.outputTokens ?? 0,
+        });
+        scriptChargeId = charged.transactionId;
+        const markdown = markdownResult.text;
         const title = scriptDocumentTitle(
           scriptType,
           claim.payload.subject ?? plan.finalPrompt,

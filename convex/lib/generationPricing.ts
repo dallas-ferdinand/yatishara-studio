@@ -20,7 +20,9 @@
  *
  * Text / Assistance (`google/gemini-3.5-flash`): $1.50/M input (text/image/video),
  * $3/M audio input (2× text), $9/M output — customer price is 2× measured provider
- * COGS, rounded up to TT$0.01 (Assistance settles after the turn from usage).
+ * COGS, rounded up to TT$0.01. Dedicated text turns (Assistance, scripts, element
+ * notes, DM Improve) charge after the model from measured tokens. Estimates from
+ * ref counts are for UI/API quotes only.
  */
 
 export const CREDIT_PRICE_TTD = 0.5;

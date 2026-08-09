@@ -1694,6 +1694,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         const result = await ctx.runAction(internal.generationActions.runScriptForApi, {
           userId: auth.userId,
           folderId,
+          sandboxFolderId: auth.sandboxFolderId,
           apiKeyId: auth.apiKeyId,
           stylePresetId: preset.id,
           styleSheetElementId,

@@ -10,6 +10,7 @@ import {
   CREDIT_PRICE_TTD,
   creditCostForGeneration,
   imageCreditCost,
+  TEXT_MIN_SELL_TTD,
   textCreditCost,
 } from "./lib/generationPricing";
 import {
@@ -2525,14 +2526,36 @@ async function requireThreadForUser(
   return thread;
 }
 
+export const assertTextGenerationAffordable = authedQuery({
+  args: {},
+  returns: v.object({
+    ok: v.boolean(),
+    creditBalance: v.number(),
+    minimumCredits: v.number(),
+  }),
+  handler: async (ctx) => {
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+      .unique();
+    const minimumCredits = TEXT_MIN_SELL_TTD / CREDIT_PRICE_TTD;
+    const creditBalance = account?.creditBalance ?? 0;
+    return {
+      ok: creditBalance >= minimumCredits,
+      creditBalance,
+      minimumCredits,
+    };
+  },
+});
+
 export const chargeTextGeneration = authedMutation({
   args: {
     folderId: v.id("folders"),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
     imageReferenceCount: v.optional(v.number()),
     videoReferenceCount: v.optional(v.number()),
     audioReferenceCount: v.optional(v.number()),
-    inputTokens: v.optional(v.number()),
-    outputTokens: v.optional(v.number()),
   },
   returns: v.id("creditTransactions"),
   handler: async (ctx, args) => {
@@ -2541,7 +2564,14 @@ export const chargeTextGeneration = authedMutation({
       .query("billingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
       .unique();
-    const cost = textCreditCost(args);
+    // Measured gateway tokens only — estimates are for UI quotes, not ledger charges.
+    void args.imageReferenceCount;
+    void args.videoReferenceCount;
+    void args.audioReferenceCount;
+    const cost = textCreditCost({
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+    });
     const now = Date.now();
     if (!account || account.creditBalance < cost) {
       throw new Error(insufficientCreditsMessage(cost));

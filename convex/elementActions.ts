@@ -18,9 +18,8 @@ const chargeTextGenerationRef = makeFunctionReference<
   "mutation",
   {
     folderId: Id<"folders">;
-    imageReferenceCount?: number;
-    videoReferenceCount?: number;
-    audioReferenceCount?: number;
+    inputTokens: number;
+    outputTokens: number;
   },
   Id<"creditTransactions">
 >("generation:chargeTextGeneration");
@@ -171,33 +170,32 @@ async function generateElementTextSheetCore(
     throw new Error("Add reference media or notes before generating a sheet.");
   }
 
-  const transactionId = await ctx.runMutation(chargeTextGenerationRef, {
-    folderId: element.folderId,
-    imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
-    videoReferenceCount: referenceInputs.filter((input) => input.kind === "video").length,
-    audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
-  });
-
-  try {
-    const description = await generateElementSheet({
-      elementType: element.type,
-      name: element.name,
-      existingNotes: args.existingNotes ?? element.description,
-      referenceInputs,
-    });
-    await ctx.runMutation(api.elements.update, {
-      elementId: element._id,
-      description,
-    });
-    return description;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Sheet generation failed";
-    await ctx.runMutation(refundTextGenerationRef, {
-      transactionId,
-      reason: message,
-    });
-    throw error;
+  const affordability = await ctx.runQuery(
+    api.generation.assertTextGenerationAffordable,
+    {},
+  );
+  if (!affordability.ok) {
+    throw new Error(
+      "You need a small credit balance to generate a sheet. Top up to continue.",
+    );
   }
+
+  const generated = await generateElementSheet({
+    elementType: element.type,
+    name: element.name,
+    existingNotes: args.existingNotes ?? element.description,
+    referenceInputs,
+  });
+  await ctx.runMutation(chargeTextGenerationRef, {
+    folderId: element.folderId,
+    inputTokens: generated.usage.inputTokens ?? 0,
+    outputTokens: generated.usage.outputTokens ?? 0,
+  });
+  await ctx.runMutation(api.elements.update, {
+    elementId: element._id,
+    description: generated.text,
+  });
+  return generated.text;
 }
 
 export const generateSheet = action({
@@ -341,45 +339,29 @@ export const generateElementTextSheetForApi = action({
       throw new Error("Add reference media or notes before generating a sheet.");
     }
 
-    const { transactionId } = await ctx.runMutation(
-      internal.studioApiInternal.chargeTextGenerationForApi,
-      {
-        userId: args.userId,
-        sandboxFolderId: args.sandboxFolderId,
-        folderId: element.folderId as Id<"folders">,
-        imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
-        videoReferenceCount: referenceInputs.filter((input) => input.kind === "video").length,
-        audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
-      },
-    );
-
-    let description: string;
-    try {
-      description = await generateElementSheet({
-        elementType: element.type,
-        name: element.name,
-        existingNotes: element.description,
-        referenceInputs,
-      });
-      await ctx.runMutation(internal.studioApiInternal.updateElementForApi, {
-        userId: args.userId,
-        sandboxFolderId: args.sandboxFolderId,
-        elementId: args.elementId,
-        description,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Text sheet generation failed";
-      await ctx.runMutation(internal.generation.refundCreditTransactionForUser, {
-        userId: args.userId,
-        transactionId,
-        reason: message,
-      });
-      throw error;
-    }
+    const generated = await generateElementSheet({
+      elementType: element.type,
+      name: element.name,
+      existingNotes: element.description,
+      referenceInputs,
+    });
+    await ctx.runMutation(internal.studioApiInternal.chargeTextGenerationForApi, {
+      userId: args.userId,
+      sandboxFolderId: args.sandboxFolderId,
+      folderId: element.folderId as Id<"folders">,
+      inputTokens: generated.usage.inputTokens ?? 0,
+      outputTokens: generated.usage.outputTokens ?? 0,
+    });
+    await ctx.runMutation(internal.studioApiInternal.updateElementForApi, {
+      userId: args.userId,
+      sandboxFolderId: args.sandboxFolderId,
+      elementId: args.elementId,
+      description: generated.text,
+    });
 
     return {
       elementId: args.elementId,
-      description,
+      description: generated.text,
     };
   },
 });

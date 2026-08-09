@@ -43,7 +43,8 @@ export const enhancePromptInternal = internalAction({
   },
   returns: v.string(),
   handler: async (_ctx, args) => {
-    return await enhancePrompt(args);
+    const result = await enhancePrompt(args);
+    return result.text;
   },
 });
 
