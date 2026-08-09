@@ -57,7 +57,6 @@ import {
   Maximize2,
   Expand,
   Shrink,
-  Menu,
   MessageCircle,
   Mic,
   Package,
@@ -9627,6 +9626,13 @@ export function StudioShell({
           width: 18px;
           height: 18px;
         }
+        .studio-polish .studio-menu-logo-icon {
+          width: 14px;
+          height: 14px;
+          display: block;
+          object-fit: contain;
+          flex: 0 0 auto;
+        }
         .studio-sidebar-brand {
           display: inline-flex;
           align-items: center;
@@ -10767,7 +10773,8 @@ export function StudioShell({
         /* Ghost circle icon controls — no fill, soft grey ring, no glow/shadow. */
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-settings-trigger,
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-select-toggle,
-        .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-view-toggle {
+        .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-view-toggle,
+        .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-add-toggle {
           width: 26px !important;
           min-width: 26px !important;
           height: 26px !important;
@@ -10781,7 +10788,9 @@ export function StudioShell({
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-settings-trigger:hover,
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-select-toggle:hover,
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-view-toggle:hover,
+        .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-add-toggle:hover,
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-settings-trigger[aria-expanded="true"],
+        .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-add-toggle[aria-expanded="true"],
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-select-toggle.is-active,
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-view-toggle.is-active {
           border-color: var(--color-cursor-border, var(--mos-border)) !important;
@@ -10791,7 +10800,8 @@ export function StudioShell({
         }
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-settings-trigger svg,
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-select-toggle svg,
-        .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-view-toggle svg {
+        .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-view-toggle svg,
+        .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-add-toggle svg {
           width: 14px !important;
           height: 14px !important;
         }
@@ -23751,45 +23761,44 @@ export function StudioShell({
           effectiveFilesRail ? " is-files-nav" : ""
         }${sharingToPeople ? " is-share-people" : ""}`}
       >
-        <StudioShellSidebarPanelHead effectiveFilesRail={effectiveFilesRail}>
-          <StudioShellSidebarHeadExtras
-            showExplorerTools={
-              !effectiveSocialRail &&
-              !effectiveMessagesRail &&
-              !effectiveNetworkRail &&
-              !effectiveAcademyRail &&
-              !effectiveFilesRail &&
-              !sharingToPeople
-            }
-          >
-            <div className="flex items-center gap-1">
-              <StudioAddMenu
-                open={addMenuOpen}
-                setOpen={setAddMenuOpen}
-                onAction={runCreateAction}
+        {(() => {
+          // File explorer chrome: no Studio title row — Add + view live in the pathbar.
+          const explorerChrome =
+            !effectiveSocialRail &&
+            !effectiveMessagesRail &&
+            !effectiveNetworkRail &&
+            !effectiveAcademyRail &&
+            !effectiveFilesRail &&
+            !sharingToPeople;
+          if (explorerChrome) {
+            return (
+              <input
+                ref={fileInputRef}
+                className="hidden"
+                type="file"
+                multiple
+                onChange={(event) => {
+                  void uploadFiles(event.currentTarget.files);
+                  event.currentTarget.value = "";
+                }}
               />
-              <button
-                type="button"
-                className="studio-settings-pill studio-settings-trigger"
-                title={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
-                aria-label={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
-                onClick={() => setViewMode((mode) => (mode === "grid" ? "list" : "grid"))}
-              >
-                {viewMode === "grid" ? <List className="h-3.5 w-3.5" /> : <LayoutGrid className="h-3.5 w-3.5" />}
-              </button>
-            </div>
-          </StudioShellSidebarHeadExtras>
-          <input
-            ref={fileInputRef}
-            className="hidden"
-            type="file"
-            multiple
-            onChange={(event) => {
-              void uploadFiles(event.currentTarget.files);
-              event.currentTarget.value = "";
-            }}
-          />
-        </StudioShellSidebarPanelHead>
+            );
+          }
+          return (
+            <StudioShellSidebarPanelHead effectiveFilesRail={effectiveFilesRail}>
+              <input
+                ref={fileInputRef}
+                className="hidden"
+                type="file"
+                multiple
+                onChange={(event) => {
+                  void uploadFiles(event.currentTarget.files);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </StudioShellSidebarPanelHead>
+          );
+        })()}
         {effectiveMessagesRail ? (
           <StudioMessagesSidebar
             activeConversationId={activeDmConversationId}
@@ -23993,6 +24002,28 @@ export function StudioShell({
               void openPurchasedFolder(buyerAssetId);
             }}
             onNeedTopUp={openCreditsPane}
+            pathbarTools={
+              <>
+                <StudioAddMenu
+                  open={addMenuOpen}
+                  setOpen={setAddMenuOpen}
+                  onAction={runCreateAction}
+                />
+                <button
+                  type="button"
+                  className="studio-settings-pill studio-settings-trigger studio-file-view-toggle"
+                  title={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
+                  aria-label={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
+                  onClick={() => setViewMode((mode) => (mode === "grid" ? "list" : "grid"))}
+                >
+                  {viewMode === "grid" ? (
+                    <List className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                </button>
+              </>
+            }
           />
           </>
         )}
@@ -24474,7 +24505,7 @@ export function StudioShell({
                   {mobileAppMenuOpen ? (
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                   ) : (
-                    <Menu className="h-3.5 w-3.5" aria-hidden="true" />
+                    <StudioMenuLogoIcon />
                   )}
                 </button>
                 <button
@@ -25411,7 +25442,7 @@ export function StudioShell({
                 {mobileAppMenuOpen ? (
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 ) : (
-                  <Menu className="h-3.5 w-3.5" aria-hidden="true" />
+                  <StudioMenuLogoIcon />
                 )}
               </button>
             </>
@@ -28009,6 +28040,24 @@ function StudioSidebarBrand() {
       </span>
       <span className="studio-sidebar-brand-label truncate">Studio</span>
     </div>
+  );
+}
+
+/** π mark for Menu controls (header / mobile bottom nav) — replaces hamburger. */
+function StudioMenuLogoIcon({ className = "h-3.5 w-3.5" }) {
+  const sidebarLogo = useMercurySidebarLogo();
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={sidebarLogo}
+      alt=""
+      width={14}
+      height={14}
+      decoding="async"
+      loading="eager"
+      className={`studio-menu-logo-icon ${className}`.trim()}
+      aria-hidden="true"
+    />
   );
 }
 
@@ -33376,6 +33425,9 @@ function StudioFilesMobileSheet({
               onDropFiles={onUploadFiles}
               pathbarTools={(
                 <>
+                  {!picking ? (
+                    <StudioAddMenu open={addMenuOpen} setOpen={setAddMenuOpen} onAction={onCreateAction} />
+                  ) : null}
                   {onToggleViewMode ? (
                     <button
                       type="button"
@@ -33390,9 +33442,6 @@ function StudioFilesMobileSheet({
                         <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
                       )}
                     </button>
-                  ) : null}
-                  {!picking ? (
-                    <StudioAddMenu open={addMenuOpen} setOpen={setAddMenuOpen} onAction={onCreateAction} />
                   ) : null}
                   <input
                     ref={fileInputRef}
@@ -33438,13 +33487,6 @@ function StudioShellSidebarBrand({ effectiveFilesRail }) {
     );
   }
   return <StudioSidebarBrand />;
-}
-
-function StudioShellSidebarHeadExtras({ showExplorerTools, children }) {
-  const ops = useAdminStudioOpsOptional();
-  if (ops?.active && ops.opsTab === "chats") return null;
-  if (!showExplorerTools) return null;
-  return children;
 }
 
 /** When Admin → Ops → Chats is open, replace the file explorer with Sophie chat list. */
