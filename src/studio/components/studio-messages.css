@@ -2,6 +2,14 @@
 
 /* —— Pane —— */
 
+.studio-dm-pane,
+.studio-dm-sidebar {
+  /* Match other Studio chrome circles (pathbar/settings feel); mobile = nav control.
+     Vars must live on sidebar too — desktop Messages rail is outside .studio-dm-pane. */
+  --studio-dm-chrome-circle: 28px;
+  --studio-dm-chrome-glyph: 14px;
+}
+
 .studio-dm-pane {
   position: relative;
   display: flex;
@@ -14,16 +22,14 @@
   background: var(--mos-page, var(--mos-bg));
   color: var(--color-cursor-text, var(--mos-text));
   font-family: var(--font-onest), system-ui, sans-serif;
-  /* Match other Studio chrome circles (pathbar/settings feel); mobile = nav control. */
-  --studio-dm-chrome-circle: 28px;
-  --studio-dm-chrome-glyph: 14px;
 }
 
 [data-appearance="light"] .studio-dm-pane {
   background: var(--mos-panel, #f5f5f7);
 }
 
-.studio-polish.is-studio-mobile .studio-dm-pane {
+.studio-polish.is-studio-mobile .studio-dm-pane,
+.studio-polish.is-studio-mobile .studio-dm-sidebar {
   --studio-dm-chrome-circle: var(--studio-mobile-chrome-control, 30px);
   --studio-dm-chrome-glyph: 14px;
 }
@@ -102,12 +108,12 @@
 .studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back,
 .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle,
 .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-open-full {
-  width: var(--studio-dm-chrome-circle) !important;
-  min-width: var(--studio-dm-chrome-circle) !important;
-  max-width: var(--studio-dm-chrome-circle) !important;
-  height: var(--studio-dm-chrome-circle) !important;
-  min-height: var(--studio-dm-chrome-circle) !important;
-  max-height: var(--studio-dm-chrome-circle) !important;
+  width: var(--studio-dm-chrome-circle, 28px) !important;
+  min-width: var(--studio-dm-chrome-circle, 28px) !important;
+  max-width: var(--studio-dm-chrome-circle, 28px) !important;
+  height: var(--studio-dm-chrome-circle, 28px) !important;
+  min-height: var(--studio-dm-chrome-circle, 28px) !important;
+  max-height: var(--studio-dm-chrome-circle, 28px) !important;
   flex: 0 0 auto;
   box-sizing: border-box !important;
   border-radius: 999px !important;
@@ -146,8 +152,8 @@
 .studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back svg,
 .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle svg,
 .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-open-full svg {
-  width: var(--studio-dm-chrome-glyph) !important;
-  height: var(--studio-dm-chrome-glyph) !important;
+  width: var(--studio-dm-chrome-glyph, 14px) !important;
+  height: var(--studio-dm-chrome-glyph, 14px) !important;
 }
 
 .studio-dm-chat-peer {
@@ -174,12 +180,12 @@
 .studio-dm-chat-peer-avatar-wrap {
   position: relative;
   flex: 0 0 auto;
-  width: var(--studio-dm-chrome-circle);
-  min-width: var(--studio-dm-chrome-circle);
-  max-width: var(--studio-dm-chrome-circle);
-  height: var(--studio-dm-chrome-circle);
-  min-height: var(--studio-dm-chrome-circle);
-  max-height: var(--studio-dm-chrome-circle);
+  width: var(--studio-dm-chrome-circle, 28px);
+  min-width: var(--studio-dm-chrome-circle, 28px);
+  max-width: var(--studio-dm-chrome-circle, 28px);
+  height: var(--studio-dm-chrome-circle, 28px);
+  min-height: var(--studio-dm-chrome-circle, 28px);
+  max-height: var(--studio-dm-chrome-circle, 28px);
 }
 
 .studio-dm-chat-peer-copy {
@@ -242,12 +248,12 @@
 /* Head + list avatars share the same chrome circle size (light/dark tokens). */
 .studio-dm-chat-head .studio-profile-avatar,
 .studio-dm-row-avatar-wrap .studio-profile-avatar {
-  width: var(--studio-dm-chrome-circle) !important;
-  min-width: var(--studio-dm-chrome-circle) !important;
-  max-width: var(--studio-dm-chrome-circle) !important;
-  height: var(--studio-dm-chrome-circle) !important;
-  min-height: var(--studio-dm-chrome-circle) !important;
-  max-height: var(--studio-dm-chrome-circle) !important;
+  width: var(--studio-dm-chrome-circle, 28px) !important;
+  min-width: var(--studio-dm-chrome-circle, 28px) !important;
+  max-width: var(--studio-dm-chrome-circle, 28px) !important;
+  height: var(--studio-dm-chrome-circle, 28px) !important;
+  min-height: var(--studio-dm-chrome-circle, 28px) !important;
+  max-height: var(--studio-dm-chrome-circle, 28px) !important;
   font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.01em !important;
@@ -265,18 +271,38 @@
   background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent);
 }
 
-[data-appearance="light"] .studio-dm-chat-head .studio-profile-avatar,
-[data-appearance="light"] .studio-dm-row-avatar-wrap .studio-profile-avatar {
+/* Photo chips: solid chrome plate. Letter chips: transparent shell so gradients show. */
+.studio-dm-chat-head .studio-profile-avatar:has(> .studio-profile-avatar-media),
+.studio-dm-row-avatar-wrap .studio-profile-avatar:has(> .studio-profile-avatar-media) {
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7)) !important;
+}
+
+.studio-dm-chat-head .studio-profile-avatar:not(:has(> .studio-profile-avatar-media)),
+.studio-dm-row-avatar-wrap .studio-profile-avatar:not(:has(> .studio-profile-avatar-media)) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+[data-appearance="light"] .studio-dm-chat-head .studio-profile-avatar:has(> .studio-profile-avatar-media),
+[data-appearance="light"] .studio-dm-row-avatar-wrap .studio-profile-avatar:has(> .studio-profile-avatar-media) {
   background: var(--mos-page, #f5f5f7) !important;
   border-color: var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
   color: var(--color-cursor-text, #1b1f24) !important;
 }
 
-[data-appearance="dark"] .studio-dm-chat-head .studio-profile-avatar,
-[data-appearance="dark"] .studio-dm-row-avatar-wrap .studio-profile-avatar {
+[data-appearance="dark"] .studio-dm-chat-head .studio-profile-avatar:has(> .studio-profile-avatar-media),
+[data-appearance="dark"] .studio-dm-row-avatar-wrap .studio-profile-avatar:has(> .studio-profile-avatar-media) {
   background: var(--mos-page, var(--color-cursor-panel, #12141a)) !important;
   border-color: var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
   color: var(--color-cursor-text, var(--mos-text)) !important;
+}
+
+/* Beat global light wash so list letter chips keep their hue + white initials. */
+[data-appearance="light"] .studio-dm-chat-head .studio-profile-avatar-fallback:not(.is-placeholder),
+[data-appearance="light"] .studio-dm-row-avatar-wrap .studio-profile-avatar-fallback:not(.is-placeholder) {
+  background: unset;
+  color: #fff !important;
 }
 
 /* Typing pulse on avatar (replaces online dot while drafting). */
@@ -2575,12 +2601,12 @@
 .studio-dm-row-avatar-wrap {
   position: relative;
   flex: 0 0 auto;
-  width: var(--studio-dm-chrome-circle);
-  min-width: var(--studio-dm-chrome-circle);
-  max-width: var(--studio-dm-chrome-circle);
-  height: var(--studio-dm-chrome-circle);
-  min-height: var(--studio-dm-chrome-circle);
-  max-height: var(--studio-dm-chrome-circle);
+  width: var(--studio-dm-chrome-circle, 28px);
+  min-width: var(--studio-dm-chrome-circle, 28px);
+  max-width: var(--studio-dm-chrome-circle, 28px);
+  height: var(--studio-dm-chrome-circle, 28px);
+  min-height: var(--studio-dm-chrome-circle, 28px);
+  max-height: var(--studio-dm-chrome-circle, 28px);
 }
 
 .studio-dm-online-dot {
@@ -2713,12 +2739,12 @@
 }
 
 .studio-dm-sidebar .cursor-panel-search-end .studio-composer-circle-btn.studio-dm-open-full {
-  width: var(--studio-dm-chrome-circle) !important;
-  min-width: var(--studio-dm-chrome-circle) !important;
-  max-width: var(--studio-dm-chrome-circle) !important;
-  height: var(--studio-dm-chrome-circle) !important;
-  min-height: var(--studio-dm-chrome-circle) !important;
-  max-height: var(--studio-dm-chrome-circle) !important;
+  width: var(--studio-dm-chrome-circle, 28px) !important;
+  min-width: var(--studio-dm-chrome-circle, 28px) !important;
+  max-width: var(--studio-dm-chrome-circle, 28px) !important;
+  height: var(--studio-dm-chrome-circle, 28px) !important;
+  min-height: var(--studio-dm-chrome-circle, 28px) !important;
+  max-height: var(--studio-dm-chrome-circle, 28px) !important;
   flex: 0 0 auto;
   box-sizing: border-box !important;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
@@ -2728,8 +2754,8 @@
 }
 
 .studio-dm-sidebar .cursor-panel-search-end .studio-composer-circle-btn.studio-dm-open-full svg {
-  width: var(--studio-dm-chrome-glyph) !important;
-  height: var(--studio-dm-chrome-glyph) !important;
+  width: var(--studio-dm-chrome-glyph, 14px) !important;
+  height: var(--studio-dm-chrome-glyph, 14px) !important;
 }
 
 /* Brand head already draws the divider above — don't stack a second top border.
