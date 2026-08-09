@@ -3,6 +3,7 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
+  Clock,
   GraduationCap,
   Library,
   Loader2,
@@ -818,7 +819,7 @@ export function StudioAcademyPane({
                           ) : null}
                           {comingSoon ? (
                             <span className="studio-academy-card-soon">
-                              <Lock aria-hidden="true" />
+                              <Clock aria-hidden="true" />
                               Coming soon
                             </span>
                           ) : percentOff != null ? (
@@ -859,7 +860,7 @@ export function StudioAcademyPane({
                             <span className="studio-academy-card-meta-tag">
                               {comingSoon ? (
                                 <>
-                                  <Lock aria-hidden="true" />
+                                  <Clock aria-hidden="true" />
                                   Coming soon
                                 </>
                               ) : (

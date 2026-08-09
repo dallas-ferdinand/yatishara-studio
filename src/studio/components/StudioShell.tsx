@@ -8696,8 +8696,8 @@ export function StudioShell({
             max(6px, env(safe-area-inset-left, 0px));
           border: 0 !important;
           border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
-          /* Same solid plate as .cursor-workspace-head — not frosted glass. */
-          background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+          /* Same page grey as catalog / content — not the darker mos-bg band. */
+          background: var(--mos-page, var(--mos-panel, var(--color-cursor-bg, #05080f)));
           box-shadow: none !important;
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
@@ -8902,7 +8902,7 @@ export function StudioShell({
             contain: none !important;
           }
           .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
-            background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
+            background: var(--mos-page, var(--mos-panel, var(--color-cursor-bg, #05080f))) !important;
             border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
             box-shadow: none !important;
             backdrop-filter: none !important;
@@ -8965,13 +8965,13 @@ export function StudioShell({
             --studio-mobile-chrome-blur: saturate(160%) blur(18px);
           }
           [data-appearance="light"] .studio-polish.is-studio-mobile {
-            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
-            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
+            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-page, var(--mos-panel, #f5f5f7)) 84%, transparent);
+            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-page, var(--mos-panel, #f5f5f7)) 84%, transparent);
             --studio-mobile-chrome-border: var(--color-cursor-border, var(--mos-border));
             --studio-mobile-chrome-blur: saturate(160%) blur(16px);
           }
           [data-appearance="light"] .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
-            background: var(--mos-panel, #f5f5f7) !important;
+            background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
             border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
@@ -11790,7 +11790,7 @@ export function StudioShell({
             -webkit-backdrop-filter: none !important;
           }
           [data-appearance="light"] .studio-mobile-bottom-nav {
-            background: var(--mos-panel, #f5f5f7) !important;
+            background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
             border: 0 !important;
             border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
             box-shadow: none !important;
