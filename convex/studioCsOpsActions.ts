@@ -1,18 +1,14 @@
 "use node";
 
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, type ActionCtx } from "./_generated/server";
 import { api } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
-async function requireAdmin(ctx: {
-  runQuery: (query: unknown, args?: Record<string, unknown>) => Promise<unknown>;
-}) {
-  const userId = await getAuthUserId(ctx as never);
+async function requireAdmin(ctx: ActionCtx) {
+  const userId = await getAuthUserId(ctx);
   if (!userId) throw new Error("Not authenticated");
-  const me = (await ctx.runQuery(api.users.current, {})) as
-    | { role?: string }
-    | null;
+  const me = await ctx.runQuery(api.users.current, {});
   if (!me || (me.role !== "admin" && me.role !== "super_admin")) {
     throw new Error("Admin access required");
   }
