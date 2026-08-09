@@ -220,7 +220,7 @@ function CheckoutDock({
   listPriceLabel?: string | null;
   discountLabel?: string | null;
   saleEndsAt?: number | null;
-  now?: number;
+  now: number;
   needsTopUp: boolean;
   balanceLabel: string;
   topUpLabel: string;
@@ -238,7 +238,7 @@ function CheckoutDock({
     Number.isFinite(saleEndsAt) ? (
       <SaleCountdownPanel
         saleEndsAt={saleEndsAt}
-        now={now ?? Date.now()}
+        now={now}
         compact
       />
     ) : null;
