@@ -9572,27 +9572,44 @@ export function StudioShell({
         .studio-polish.is-studio-mobile .desk-file-preview-item.is-pressed {
           transform: scale(var(--studio-press-scale));
         }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill) {
+        .studio-polish :where(
+          .cursor-icon-btn,
+          .cursor-toolbar-icon,
+          .studio-pill-btn,
+          .studio-settings-pill,
+          .studio-settings-trigger,
+          .studio-composer-circle-btn
+        ) {
           position: relative;
           transform-origin: center center;
         }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):hover:not(:disabled) {
+        /* Hover must not kill press — mouse-down is :hover:active. */
+        .studio-polish :where(
+          .cursor-icon-btn,
+          .cursor-toolbar-icon,
+          .studio-pill-btn,
+          .studio-settings-pill,
+          .studio-settings-trigger,
+          .studio-composer-circle-btn
+        ):hover:not(:disabled):not(:active) {
           transform: none;
           box-shadow: none;
         }
         /*
           Global button push: shrink while held, grow back on release.
-          Buttons only — not workspace tabs / section switches.
+          Includes chrome circle icons. Not workspace tabs / section switches.
         */
         .studio-polish :is(
           button,
           [role="button"],
           .studio-settings-pill,
+          .studio-settings-trigger,
           .studio-pill-btn,
           .studio-composer-circle-btn,
           .cursor-icon-btn,
           .cursor-toolbar-icon,
           .studio-balance-chip-topup,
+          .studio-credit-balance-ring,
           .studio-credit-balance-ring > button
         ):not(:disabled):not([aria-disabled="true"]):not([data-studio-no-press]) {
           transform-origin: center center;
@@ -9607,14 +9624,21 @@ export function StudioShell({
           button,
           [role="button"],
           .studio-settings-pill,
+          .studio-settings-trigger,
           .studio-pill-btn,
           .studio-composer-circle-btn,
           .cursor-icon-btn,
           .cursor-toolbar-icon,
-          .studio-balance-chip-topup,
-          .studio-credit-balance-ring > button
+          .studio-balance-chip-topup
         ):not(:disabled):not([aria-disabled="true"]):not([data-studio-no-press]):active {
-          transform: scale(var(--studio-press-scale));
+          transform: scale(var(--studio-press-scale)) !important;
+        }
+        /* Menu ring + button press as one unit (avoid double-shrink). */
+        .studio-polish .studio-credit-balance-ring:has(> :is(button, [role="button"]):active) {
+          transform: scale(var(--studio-press-scale)) !important;
+        }
+        .studio-polish .studio-credit-balance-ring > :is(button, [role="button"]):active {
+          transform: none !important;
         }
         /* Tab / section switches stay flat — no press squash. */
         .studio-polish :is(
@@ -11715,7 +11739,7 @@ export function StudioShell({
           .studio-credit-pill,
           .cursor-icon-btn,
           .studio-pill-btn
-        ):hover:not(:disabled) {
+        ):hover:not(:disabled):not(:active) {
           background: var(--mos-hover, var(--color-cursor-hover)) !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
@@ -11798,7 +11822,7 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .studio-settings-pill.is-active {
           box-shadow: none !important;
         }
-        [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) :where(.cursor-icon-btn, .studio-pill-btn):hover:not(:disabled) {
+        [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) :where(.cursor-icon-btn, .studio-pill-btn, .studio-settings-trigger):hover:not(:disabled):not(:active) {
           box-shadow: none !important;
           transform: none;
         }
@@ -18860,7 +18884,7 @@ export function StudioShell({
           stroke: #ffffff;
           filter: drop-shadow(0 1px 1px color-mix(in srgb, #000 40%, transparent));
         }
-        .studio-composer-circle-btn.studio-composer-send-btn:hover:not(:disabled) {
+        .studio-composer-circle-btn.studio-composer-send-btn:hover:not(:disabled):not(:active) {
           filter: none;
           transform: none;
           border-color: color-mix(in srgb, var(--cursor-accent-hover) 58%, var(--cursor-accent) 42%);
@@ -18907,7 +18931,8 @@ export function StudioShell({
         .studio-composer-circle-btn.studio-composer-send-btn:active:not(:disabled),
         .studio-composer-circle-btn.studio-composer-send-btn:hover:active:not(:disabled) {
           filter: none;
-          transform: translateY(1px) scale(0.99);
+          /* Same global press squash as other circle chrome. */
+          transform: scale(var(--studio-press-scale)) !important;
           border-color: color-mix(in srgb, var(--cursor-accent) 58%, #000 20%);
           border-bottom-color: color-mix(in srgb, var(--cursor-accent) 55%, #000 30%);
           box-shadow:
@@ -18916,7 +18941,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn:active:not(:disabled),
         [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn:hover:active:not(:disabled) {
-          transform: translateY(1px) scale(0.99);
+          transform: scale(var(--studio-press-scale)) !important;
           box-shadow:
             inset 0 2px 3px rgba(15, 23, 42, 0.22),
             0 1px 2px rgba(15, 23, 42, 0.12);
