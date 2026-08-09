@@ -1088,7 +1088,12 @@ export function StudioAcademyPane({
           aria-label={owned ? "Course actions" : "Buy this course"}
         >
           {!owned ? (
-            <span className="studio-cn-book-bar-price">{priceLabel}</span>
+            <span className="studio-cn-book-bar-price">
+              {listPriceLabel ? (
+                <s className="studio-cn-book-bar-compare">{listPriceLabel}</s>
+              ) : null}
+              <span>{priceShort || priceLabel}</span>
+            </span>
           ) : (
             <span className="studio-cn-book-bar-price">Discussion</span>
           )}
@@ -1103,11 +1108,7 @@ export function StudioAcademyPane({
               }
               onClick={() => setCommentsOpen(true)}
             >
-              <MessageCircle
-                aria-hidden="true"
-                fill="currentColor"
-                strokeWidth={0}
-              />
+              <MessageCircle aria-hidden="true" strokeWidth={2} />
               <span>{commentCount}</span>
             </button>
             {!owned ? (

@@ -1710,11 +1710,7 @@ export function ProfileCommentsPanel({
               className="studio-academy-comments-meta"
               aria-label={`${formatCount(commentCount)} comments`}
             >
-              <MessageCircle
-                aria-hidden="true"
-                fill="currentColor"
-                strokeWidth={0}
-              />
+              <MessageCircle aria-hidden="true" strokeWidth={2} />
               <span>{formatCount(commentCount)}</span>
             </span>
           </div>

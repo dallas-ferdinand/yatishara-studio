@@ -1512,7 +1512,8 @@ button.studio-cn-card-btn.public-offers-card {
 /* Mobile book bar sits ABOVE Studio bottom nav (main-panels already clear
    nav + safe-area). Match nav content height only — do not add safe-area again
    or the bar reads too tall in Capacitor / fullscreen. */
-.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-nav.studio-cn-book-bar {
+.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-nav.studio-cn-book-bar,
+.studio-academy-pane .public-offers-mobile-book-nav.studio-cn-book-bar {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -1530,13 +1531,30 @@ button.studio-cn-card-btn.public-offers-card {
 .studio-cn-book-bar-price {
   min-width: 0;
   flex: 1 1 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-cn-book-bar-price > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-cn-book-bar-compare {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  text-decoration: line-through;
 }
 
 .studio-cn-book-bar-actions {
@@ -1547,13 +1565,13 @@ button.studio-cn-card-btn.public-offers-card {
   min-width: 0;
 }
 
-/* Match Studio header chrome circles (24px, mos-page + soft ring). */
+/* Border-style chrome circles — outline icons, not flat fills. */
 .studio-cn-book-bar-msg,
 .studio-cn-book-sidebar-head .public-offers-btn.is-icon {
-  width: 24px !important;
-  min-width: 24px !important;
-  height: 24px !important;
-  min-height: 24px !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
   padding: 0 !important;
   border-radius: 999px !important;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
@@ -1570,34 +1588,40 @@ button.studio-cn-card-btn.public-offers-card {
 
 .studio-cn-book-bar-msg svg,
 .studio-cn-book-sidebar-head .public-offers-btn.is-icon svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   stroke-width: 2;
+  fill: none !important;
 }
 
+/* Comments control — same height band as Pay with PayWise. */
 .studio-cn-book-bar-msg.is-with-count {
   width: auto !important;
-  min-width: 24px !important;
-  padding: 0 8px !important;
-  gap: 4px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 10px !important;
+  gap: 5px !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
 }
 
 .studio-cn-book-bar-msg.is-with-count span {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   line-height: 1;
 }
 
 .studio-cn-book-bar-msg.is-with-count svg {
-  width: 13px;
-  height: 13px;
-  stroke-width: 0;
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+  fill: none !important;
 }
 
-.studio-cn-offer-detail.is-mobile .studio-cn-book-bar .public-offers-btn {
+.studio-cn-offer-detail.is-mobile .studio-cn-book-bar .public-offers-btn,
+.studio-academy-pane .studio-cn-book-bar .public-offers-btn {
   min-height: 0 !important;
 }
 
@@ -1613,6 +1637,12 @@ button.studio-cn-card-btn.public-offers-card {
 .studio-cn-book-bar-cta svg {
   width: 13px;
   height: 13px;
+}
+
+/* Academy comments head — outline bubble, not flat fill. */
+.studio-academy-comments-meta svg {
+  fill: none !important;
+  stroke-width: 2;
 }
 
 /* Bottom sheet — Settings / menu language (grab + L2 plate). */
@@ -1657,10 +1687,10 @@ button.studio-cn-card-btn.public-offers-card {
   animation: studio-cn-book-sheet-in 220ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
-/* Academy PayWise checkout is short — don’t open at full book-sheet height. */
+/* Academy PayWise — size to content; cap only so it can’t eat the screen. */
 .studio-cn-book-sheet.is-academy-checkout .studio-cn-book-sheet-panel {
-  height: auto;
-  max-height: min(48dvh, 380px);
+  height: max-content;
+  max-height: min(72dvh, 640px);
 }
 
 .studio-cn-book-sheet.is-academy-checkout .studio-cn-book-sheet-body {
