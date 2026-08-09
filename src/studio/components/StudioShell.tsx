@@ -21346,10 +21346,10 @@ export function StudioShell({
         }
         .studio-academy-hero-bg.public-offers-hero-bg {
           background-image: url("/academy/academy-hero-4k.webp");
-          opacity: 0.5;
+          opacity: 0.58;
         }
         [data-appearance="dark"] .studio-academy-hero-bg.public-offers-hero-bg {
-          opacity: 0.58;
+          opacity: 0.64;
         }
         .studio-academy-card-fallback {
           display: grid;
