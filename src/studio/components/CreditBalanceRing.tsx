@@ -36,10 +36,12 @@ export function CreditBalanceRing({
       ? creditBalanceHigh
       : Math.max(balance, 0);
   const progress = creditBalanceProgress(balance, high);
-  const r = size === "chip" ? 7 : 14;
+  // Inset ring: radius clears half the stroke so the arc sits inside the edge.
+  const vb = size === "chip" ? 18 : 36;
+  const stroke = size === "chip" ? 2.5 : 3.5;
+  const r = vb / 2 - stroke / 2 - (size === "chip" ? 0.5 : 0.75);
   const c = 2 * Math.PI * r;
   const offset = c * (1 - progress);
-  const vb = size === "chip" ? 18 : 36;
   const cx = vb / 2;
 
   return (
@@ -57,12 +59,14 @@ export function CreditBalanceRing({
           cx={cx}
           cy={cx}
           r={r}
+          strokeWidth={stroke}
         />
         <circle
           className="studio-credit-balance-ring-arc"
           cx={cx}
           cy={cx}
           r={r}
+          strokeWidth={stroke}
           strokeDasharray={c}
           strokeDashoffset={offset}
         />

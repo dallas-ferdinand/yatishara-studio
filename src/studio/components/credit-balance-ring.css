@@ -14,12 +14,14 @@
 
 .studio-credit-balance-ring-svg {
   position: absolute;
-  inset: -3px;
-  width: auto;
-  height: auto;
+  /* Inset on the button face — one ring, not a second outer border. */
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
   transform: rotate(-90deg);
   overflow: visible;
+  z-index: 1;
 }
 
 /* Match sibling chrome circles (desktop 24 / mobile 30). */
@@ -32,6 +34,9 @@
   min-height: var(--studio-mobile-chrome-control, 24px);
   max-height: var(--studio-mobile-chrome-control, 24px);
   box-sizing: border-box;
+  /* Progress ring owns the edge — drop the default pill border (was double). */
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
 .studio-polish:not(.is-studio-mobile) .studio-credit-balance-ring > .studio-settings-trigger,
@@ -56,20 +61,27 @@
 
 .studio-credit-balance-ring-track {
   fill: none;
-  stroke: color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border-soft)) 90%, transparent);
-  stroke-width: 2.25;
+  stroke: color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border-soft)) 85%, transparent);
+  stroke-linecap: butt;
 }
 
 .studio-credit-balance-ring-arc {
   fill: none;
   stroke: var(--color-cursor-text-bright, var(--mos-text));
-  stroke-width: 2.25;
   stroke-linecap: round;
   transition: stroke-dashoffset 220ms ease;
 }
 
+[data-appearance="light"] .studio-credit-balance-ring-track {
+  stroke: color-mix(in srgb, #12141a 18%, transparent);
+}
+
 [data-appearance="light"] .studio-credit-balance-ring-arc {
   stroke: #12141a;
+}
+
+[data-appearance="dark"] .studio-credit-balance-ring-track {
+  stroke: color-mix(in srgb, #f2f2f4 22%, transparent);
 }
 
 [data-appearance="dark"] .studio-credit-balance-ring-arc {
@@ -80,11 +92,6 @@
   padding: 0;
   width: 18px;
   height: 18px;
-}
-
-.studio-credit-balance-ring.is-chip .studio-credit-balance-ring-track,
-.studio-credit-balance-ring.is-chip .studio-credit-balance-ring-arc {
-  stroke-width: 2;
 }
 
 /* Balance card — match Settings billing hero gradient + menu-grid insets. */
