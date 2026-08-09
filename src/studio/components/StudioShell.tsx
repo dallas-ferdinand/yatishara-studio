@@ -24225,8 +24225,8 @@ export function StudioShell({
                   type="button"
                   className="studio-settings-pill studio-settings-trigger studio-new-tab-btn"
                   onClick={openNewComposerTab}
-                  aria-label="New generate tab"
-                  title="New generate tab"
+                  aria-label="New create tab"
+                  title="New create tab"
                 >
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
@@ -24273,6 +24273,29 @@ export function StudioShell({
                   aria-pressed={isFilesTab}
                 >
                   <Folder className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${
+                    isComposerContextTabKey(activeTab) ||
+                    String(activeTab || "").startsWith("create:")
+                      ? " is-active"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    setHistoryOpen(false);
+                    setSettingsOpen(false);
+                    setMobileAppMenuOpen(false);
+                    openTab(lastChatTabRef.current || COMPOSER_TAB);
+                  }}
+                  aria-label="Open create"
+                  title="Create"
+                  aria-pressed={
+                    isComposerContextTabKey(activeTab) ||
+                    String(activeTab || "").startsWith("create:")
+                  }
+                >
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
                 <CreditPill
                   creditBalance={billingAccount?.creditBalance}
