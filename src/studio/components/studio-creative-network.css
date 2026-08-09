@@ -1555,7 +1555,7 @@ button.studio-cn-card-btn.public-offers-card {
 .studio-cn-book-bar-compare {
   flex: 0 0 auto;
   margin: 0;
-  font-size: 0.78em;
+  font-size: 0.9em;
   font-weight: 700;
   letter-spacing: 0;
   color: var(--cursor-accent, var(--mos-accent, #5b8cff));
