@@ -29,7 +29,8 @@ const replyContextValidator = v.object({
 });
 
 /**
- * Polish a DM composer draft, or draft a reply from reply-to / photo context.
+ * Polish a DM composer draft with intent/context awareness, or draft a reply
+ * from reply-to / photo context when the composer is empty or tone-only.
  * Charges from measured gateway tokens after the model returns.
  */
 export const improveDraft = action({

@@ -252,9 +252,90 @@ function buildDmImproveUserPrompt(input: DmImproveInput): string {
   return lines.join("\n\n").trim();
 }
 
+function buildDmPolishUserPrompt(input: DmImproveInput): string {
+  const draft = (input.text ?? "").trim();
+  const lines: string[] = [];
+  const reply = input.replyContext;
+  if (reply) {
+    const who = reply.fromMe ? "me (my earlier message)" : "them (peer message)";
+    const body = reply.body.trim();
+    lines.push(`Thread context — draft is a reply to ${who} [${reply.kind}]:`);
+    if (body) {
+      lines.push(body);
+    } else if (reply.kind === "image") {
+      lines.push("(image message — see attached image)");
+    } else if (reply.kind === "voice") {
+      lines.push("(voice note)");
+    } else {
+      lines.push(`(${reply.kind} message)`);
+    }
+  }
+  const photoCount = Math.max(0, Math.floor(input.attachedPhotoCount ?? 0));
+  if (photoCount > 0) {
+    lines.push(
+      `Composer has ${photoCount} photo${photoCount === 1 ? "" : "s"} staged with this message.`,
+    );
+  }
+  lines.push(`Draft to improve:\n${draft}`);
+  return lines.join("\n\n").trim();
+}
+
+/** Short vibe / rewrite instruction — not a real chat draft. */
+function looksLikeToneOrInstruction(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (t.length > 96) return false;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (
+    /^(make|rewrite|fix|shorten|expand|write|turn|keep|be|more|less)\b/i.test(t) &&
+    words.length <= 12
+  ) {
+    return true;
+  }
+  if (
+    /^(cool|cold|angry|angrier|short|funny|formal|casual|sweet|mean|soft|warm|polite|rude|flirty|professional|nicer|friendlier|warmer|colder)(!|\.)?$/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /^(make (it |this )?).{0,48}$/i.test(t) &&
+    words.length <= 8
+  ) {
+    return true;
+  }
+  return false;
+}
+
+const DM_DRAFT_SYSTEM = [
+  "You draft short chat replies for a direct-message composer.",
+  "Use the attached reply context and/or images to write one natural reply the user can send.",
+  "If the user note includes a tone or instruction (cool, cold, angry, short, funny, formal, etc.), apply it.",
+  "If there is no tone note, write a natural, concise reply that fits the context.",
+  "Keep language variety (including Trinidad / Caribbean English when present in the context or note).",
+  "Do not invent facts, names, prices, links, @handles, or phone numbers.",
+  "Do not add greetings unless they fit, quotes, labels, markdown fences, or explanations.",
+  "Return plain text only — the reply body alone.",
+].join(" ");
+
+const DM_POLISH_SYSTEM = [
+  "You improve short chat-message drafts so they read as what the writer meant to say.",
+  "Read the draft (and any thread/image context) for intent, tone, relationship, and topic — do not only run a spellchecker.",
+  "Fix spelling, punctuation, grammar, homophones, wrong-word mixups, and awkward phrasing when they obscure meaning.",
+  "Prefer the wording that fits the conversation context (e.g. reply-to message, photos) when the draft is ambiguous.",
+  "If the input clearly includes an instruction (make this friendlier, shorten this, rewrite as…), apply that instruction and return ONLY the resulting message.",
+  "Keep the same meaning, intent, energy, and language variety (including Trinidad / Caribbean English, slang, and informal chat voice when present).",
+  "Do not sanitize personality into corporate English. Do not add new ideas, jokes, questions, or details the draft did not imply.",
+  "Do not change facts, names, prices, links, @handles, phone numbers, or emoji meaning.",
+  "Do not add greetings, quotes, labels, markdown fences, or explanations.",
+  "Return plain text only — the improved message body alone.",
+].join(" ");
+
 /**
  * Short DM polish, or draft a reply from reply-to / attached image context.
- * With context: optional text is tone/instruction. Without context: polish text only.
+ * Typed draft + optional thread context → intelligent polish.
+ * Empty / tone-only + context → draft a new reply.
  */
 export async function improveMessageDraft(
   input: DmImproveInput | string,
@@ -278,27 +359,9 @@ export async function improveMessageDraft(
     throw new Error("Type a message first");
   }
 
-  const draftMode = hasContext;
-  const system = draftMode
-    ? [
-        "You draft short chat replies for a direct-message composer.",
-        "Use the attached reply context and/or images to write one natural reply the user can send.",
-        "If the user note includes a tone or instruction (cool, cold, angry, short, funny, formal, etc.), apply it.",
-        "If there is no tone note, write a natural, concise reply that fits the context.",
-        "Keep language variety (including Trinidad / Caribbean English when present in the context or note).",
-        "Do not invent facts, names, prices, links, @handles, or phone numbers.",
-        "Do not add greetings unless they fit, quotes, labels, markdown fences, or explanations.",
-        "Return plain text only — the reply body alone.",
-      ].join(" ")
-    : [
-        "You improve short chat-message drafts for clarity.",
-        "If the input includes an instruction (e.g. make this friendlier, shorten this, rewrite as…), apply that instruction to the message and return ONLY the improved message text.",
-        "If there is no clear instruction, fix spelling, punctuation, grammar, and light clarity only.",
-        "Keep the same meaning, intent, and language variety (including Trinidad / Caribbean English when present).",
-        "Do not change facts, names, prices, links, @handles, phone numbers, or emoji meaning.",
-        "Do not add greetings, quotes, labels, markdown fences, or explanations.",
-        "Return plain text only.",
-      ].join(" ");
+  const draftMode =
+    hasContext && (!draft || looksLikeToneOrInstruction(draft));
+  const system = draftMode ? DM_DRAFT_SYSTEM : DM_POLISH_SYSTEM;
 
   const mediaParts = imageUrls.flatMap((url) =>
     contentPartForReference({ kind: "image", url }),
@@ -310,7 +373,14 @@ export async function improveMessageDraft(
         imageUrls,
         attachedPhotoCount,
       })
-    : draft;
+    : hasContext
+      ? buildDmPolishUserPrompt({
+          text: draft,
+          replyContext: reply,
+          imageUrls,
+          attachedPhotoCount,
+        })
+      : draft;
 
   const result = await generateText({
     model: gateway.languageModel(dmImproveModelId()),
