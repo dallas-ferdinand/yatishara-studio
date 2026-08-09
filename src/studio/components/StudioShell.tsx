@@ -10655,8 +10655,8 @@ export function StudioShell({
             env(safe-area-inset-bottom, 0px) + var(--studio-fullscreen-bottom-extra)
           );
           /* Slight extra side inset in fullscreen (beyond safe-area). */
-          padding-left: max(12px, calc(env(safe-area-inset-left, 0px) + 6px));
-          padding-right: max(12px, calc(env(safe-area-inset-right, 0px) + 6px));
+          padding-left: max(9px, calc(env(safe-area-inset-left, 0px) + 3px));
+          padding-right: max(9px, calc(env(safe-area-inset-right, 0px) + 3px));
         }
         .studio-polish.is-studio-mobile.is-browser-fullscreen .studio-main-panels {
           padding-bottom: var(--studio-mobile-bottom-chrome);
