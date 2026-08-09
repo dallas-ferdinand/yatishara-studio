@@ -1313,7 +1313,7 @@
 /* Mobile classic: paperclip + rounded input + mic/send — same height band as chat head. */
 .studio-dm-composer.is-classic {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
   min-height: var(--cursor-head-h, 32px);
   padding: 0 8px;
