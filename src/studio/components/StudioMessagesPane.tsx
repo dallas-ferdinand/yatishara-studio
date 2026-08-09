@@ -3946,6 +3946,26 @@ export function StudioMessagesPane({
                     fadeEdges
                     fadeWidth={20}
                   />
+                  <button
+                    type="button"
+                    className="studio-composer-circle-btn studio-dm-composer-circle"
+                    onClick={() =>
+                      recState === "paused" ? resumeRecording() : pauseRecording()
+                    }
+                    disabled={recState === "sending"}
+                    aria-label={
+                      recState === "paused"
+                        ? "Resume recording"
+                        : "Pause recording"
+                    }
+                    title={recState === "paused" ? "Resume" : "Pause"}
+                  >
+                    {recState === "paused" ? (
+                      <Play aria-hidden="true" />
+                    ) : (
+                      <Pause aria-hidden="true" />
+                    )}
+                  </button>
                 </>
               ) : (
                 <textarea
@@ -4013,129 +4033,102 @@ export function StudioMessagesPane({
             <div
               className="studio-dm-composer-row is-extras"
               role="toolbar"
-              aria-label={
-                recState !== "idle" ? "Recording controls" : "Message actions"
-              }
+              aria-label="Message actions"
             >
+              <button
+                type="button"
+                className="studio-settings-pill studio-dm-extra-pill"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={filesPickBusy || recState !== "idle"}
+                aria-label="Upload photos"
+                title="Upload photos"
+              >
+                <Upload aria-hidden="true" />
+                <span className="studio-dm-extra-pill-label">Upload</span>
+              </button>
+              <button
+                type="button"
+                className="studio-settings-pill studio-dm-extra-pill"
+                onClick={openChooseStudioFiles}
+                disabled={filesPickBusy || recState !== "idle"}
+                aria-label="Choose from Studio Files"
+                title="Choose from Studio Files"
+              >
+                {filesPickBusy ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <FolderOpen aria-hidden="true" />
+                )}
+                <span className="studio-dm-extra-pill-label">Choose</span>
+              </button>
+              <button
+                ref={shareExtrasBtnRef}
+                type="button"
+                className="studio-settings-pill studio-dm-extra-pill"
+                onClick={openShareStudioFiles}
+                disabled={filesPickBusy || recState !== "idle"}
+                aria-label="Share from Studio Files"
+                title="Share from Studio Files"
+              >
+                <Share2 aria-hidden="true" />
+                <span className="studio-dm-extra-pill-label">Share</span>
+              </button>
+              <span className="studio-dm-extras-spacer" aria-hidden="true" />
               {recState !== "idle" ? (
-                <>
-                  <button
-                    type="button"
-                    className="studio-composer-circle-btn studio-dm-composer-circle"
-                    onClick={() => finishRecording("cancel")}
-                    disabled={recState === "sending"}
-                    aria-label="Discard recording"
-                    title="Delete"
-                  >
-                    <Trash2 aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="studio-composer-circle-btn studio-dm-composer-circle"
-                    onClick={() =>
-                      recState === "paused" ? resumeRecording() : pauseRecording()
-                    }
-                    disabled={recState === "sending"}
-                    aria-label={
-                      recState === "paused"
-                        ? "Resume recording"
-                        : "Pause recording"
-                    }
-                    title={recState === "paused" ? "Resume" : "Pause"}
-                  >
-                    {recState === "paused" ? (
-                      <Play aria-hidden="true" />
-                    ) : (
-                      <Pause aria-hidden="true" />
-                    )}
-                  </button>
-                  <span className="studio-dm-extras-spacer" aria-hidden="true" />
-                  <button
-                    type="button"
-                    className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
-                    data-studio-sfx="send"
-                    onClick={() => finishRecording("send")}
-                    disabled={recState === "sending"}
-                    aria-label="Send voice note"
-                    title="Send"
-                  >
-                    {recState === "sending" ? (
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <SendHorizontal aria-hidden="true" />
-                    )}
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="studio-composer-circle-btn studio-dm-composer-circle is-discard"
+                  onClick={() => finishRecording("cancel")}
+                  disabled={recState === "sending"}
+                  aria-label="Discard recording"
+                  title="Delete"
+                >
+                  <Trash2 aria-hidden="true" />
+                </button>
               ) : (
-                <>
-                  <button
-                    type="button"
-                    className="studio-settings-pill studio-dm-extra-pill"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={filesPickBusy}
-                    aria-label="Upload photos"
-                    title="Upload photos"
-                  >
-                    <Upload aria-hidden="true" />
-                    <span className="studio-dm-extra-pill-label">Upload</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="studio-settings-pill studio-dm-extra-pill"
-                    onClick={openChooseStudioFiles}
-                    disabled={filesPickBusy}
-                    aria-label="Choose from Studio Files"
-                    title="Choose from Studio Files"
-                  >
-                    {filesPickBusy ? (
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <FolderOpen aria-hidden="true" />
-                    )}
-                    <span className="studio-dm-extra-pill-label">Choose</span>
-                  </button>
-                  <button
-                    ref={shareExtrasBtnRef}
-                    type="button"
-                    className="studio-settings-pill studio-dm-extra-pill"
-                    onClick={openShareStudioFiles}
-                    disabled={filesPickBusy}
-                    aria-label="Share from Studio Files"
-                    title="Share from Studio Files"
-                  >
-                    <Share2 aria-hidden="true" />
-                    <span className="studio-dm-extra-pill-label">Share</span>
-                  </button>
-                  <span className="studio-dm-extras-spacer" aria-hidden="true" />
-                  <button
-                    type="button"
-                    className="studio-composer-circle-btn studio-dm-composer-circle"
-                    onClick={() => void startRecording()}
-                    disabled={filesPickBusy}
-                    aria-label="Record a voice note"
-                    title="Record"
-                  >
-                    <Mic aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
-                    data-studio-sfx="send"
-                    onClick={() => void handleSend()}
-                    disabled={!canSend}
-                    aria-label={
-                      pendingImages.length > 1
-                        ? "Send photos"
-                        : pendingImages.length === 1
-                          ? "Send photo"
-                          : "Send message"
-                    }
-                    title="Send"
-                  >
-                    <SendHorizontal aria-hidden="true" />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="studio-composer-circle-btn studio-dm-composer-circle"
+                  onClick={() => void startRecording()}
+                  disabled={filesPickBusy}
+                  aria-label="Record a voice note"
+                  title="Record"
+                >
+                  <Mic aria-hidden="true" />
+                </button>
               )}
+              <button
+                type="button"
+                className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
+                data-studio-sfx="send"
+                onClick={() => {
+                  if (recState !== "idle") {
+                    finishRecording("send");
+                    return;
+                  }
+                  void handleSend();
+                }}
+                disabled={
+                  recState === "sending" ||
+                  (recState === "idle" && !canSend)
+                }
+                aria-label={
+                  recState !== "idle"
+                    ? "Send voice note"
+                    : pendingImages.length > 1
+                      ? "Send photos"
+                      : pendingImages.length === 1
+                        ? "Send photo"
+                        : "Send message"
+                }
+                title="Send"
+              >
+                {recState === "sending" ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <SendHorizontal aria-hidden="true" />
+                )}
+              </button>
             </div>
           </>
         )}

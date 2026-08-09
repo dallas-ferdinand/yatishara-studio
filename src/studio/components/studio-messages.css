@@ -1262,8 +1262,16 @@
 
 .studio-dm-composer.is-split .studio-dm-composer-row.is-recording {
   gap: 8px;
-  padding: 0 10px 0 12px;
+  padding: 0 6px 0 12px;
   min-height: var(--cursor-head-h, 36px);
+}
+
+.studio-dm-composer.is-split .studio-dm-composer-row.is-recording .studio-composer-circle-btn {
+  flex: 0 0 auto;
+}
+
+.studio-dm-composer.is-split .studio-composer-circle-btn.is-discard {
+  color: var(--mos-danger, #f87171);
 }
 
 .studio-dm-composer.is-split textarea {
