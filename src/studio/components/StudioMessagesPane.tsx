@@ -3381,21 +3381,59 @@ export function StudioMessagesPane({
   const canSend = Boolean(
     pendingImages.length > 0 || pendingFeedShare || draft.trim(),
   );
-  const canImprove = Boolean(draft.trim()) && recState === "idle" && !improveBusy;
+  const hasImproveContext = Boolean(replyTo) || pendingImages.length > 0;
+  const canImprove =
+    (Boolean(draft.trim()) || hasImproveContext) &&
+    recState === "idle" &&
+    !improveBusy;
+  const improveLabel = hasImproveContext
+    ? "Improve or draft reply"
+    : "Improve text";
 
   async function handleImproveDraft() {
     const body = draft.trim();
-    if (!body || improveBusy || recState !== "idle") return;
+    const reply = replyTo;
+    if (
+      (!body && !reply && pendingImages.length === 0) ||
+      improveBusy ||
+      recState !== "idle"
+    ) {
+      return;
+    }
     setSendError("");
     setImproveBusy(true);
     try {
-      const result = await improveDraft({ text: body });
+      const imageUrls = [
+        ...(reply?.imageUrl ? [reply.imageUrl] : []),
+        ...pendingImages.map((item) => item.previewUrl),
+      ].filter((url) => /^https?:\/\//i.test(url.trim()));
+      const result = await improveDraft({
+        text: body,
+        replyContext: reply
+          ? {
+              kind: reply.kind,
+              body: reply.body,
+              fromMe: reply.fromMe,
+              imageUrl: reply.imageUrl,
+            }
+          : undefined,
+        imageUrls: imageUrls.length ? imageUrls : undefined,
+        attachedPhotoCount:
+          pendingImages.length > 0 ? pendingImages.length : undefined,
+      });
       setDraft(result.text);
       pingTyping(result.text.trim().length > 0);
       requestAnimationFrame(() => autosizeComposerInput(inputRef.current));
     } catch (error) {
       playUiSound("error");
-      setSendError(friendlyConvexError(error, "Could not improve message"));
+      setSendError(
+        friendlyConvexError(
+          error,
+          hasImproveContext
+            ? "Could not draft reply"
+            : "Could not improve message",
+        ),
+      );
     } finally {
       setImproveBusy(false);
     }
@@ -3912,8 +3950,8 @@ export function StudioMessagesPane({
                 className="studio-dm-send is-mic studio-dm-improve"
                 onClick={() => void handleImproveDraft()}
                 disabled={!canImprove}
-                aria-label="Improve message text"
-                title="Improve text"
+                aria-label={improveLabel}
+                title={improveLabel}
               >
                 {improveBusy ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -4115,8 +4153,8 @@ export function StudioMessagesPane({
                 className="studio-composer-circle-btn studio-dm-composer-circle"
                 onClick={() => void handleImproveDraft()}
                 disabled={!canImprove || filesPickBusy}
-                aria-label="Improve message text"
-                title="Improve text"
+                aria-label={improveLabel}
+                title={improveLabel}
               >
                 {improveBusy ? (
                   <Loader2 className="animate-spin" aria-hidden="true" />

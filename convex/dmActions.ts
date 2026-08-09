@@ -9,6 +9,7 @@ import { improveMessageDraft } from "./lib/aiGateway";
 import { textCreditCost } from "./lib/generationPricing";
 
 const MAX_IMPROVE_CHARS = 4000;
+const MAX_IMPROVE_IMAGES = 4;
 
 const chargeTextGenerationRef = makeFunctionReference<
   "mutation",
@@ -20,13 +21,23 @@ const chargeTextGenerationRef = makeFunctionReference<
   Id<"creditTransactions">
 >("generation:chargeTextGeneration");
 
+const replyContextValidator = v.object({
+  kind: v.string(),
+  body: v.string(),
+  fromMe: v.boolean(),
+  imageUrl: v.optional(v.string()),
+});
+
 /**
- * Polish a DM composer draft (instruction or spelling/grammar).
+ * Polish a DM composer draft, or draft a reply from reply-to / photo context.
  * Charges from measured gateway tokens after the model returns.
  */
 export const improveDraft = action({
   args: {
     text: v.string(),
+    replyContext: v.optional(replyContextValidator),
+    imageUrls: v.optional(v.array(v.string())),
+    attachedPhotoCount: v.optional(v.number()),
   },
   returns: v.object({
     text: v.string(),
@@ -34,7 +45,27 @@ export const improveDraft = action({
   }),
   handler: async (ctx, args) => {
     const draft = args.text.trim();
-    if (!draft) {
+    const reply = args.replyContext
+      ? {
+          kind: args.replyContext.kind.trim() || "text",
+          body: args.replyContext.body,
+          fromMe: args.replyContext.fromMe,
+          imageUrl: args.replyContext.imageUrl?.trim() || undefined,
+        }
+      : undefined;
+    const imageUrls = (args.imageUrls ?? [])
+      .map((url) => url.trim())
+      .filter((url) => /^https?:\/\//i.test(url))
+      .filter((url, index, all) => all.indexOf(url) === index)
+      .slice(0, MAX_IMPROVE_IMAGES);
+    const attachedPhotoCount = Math.max(
+      0,
+      Math.min(20, Math.floor(args.attachedPhotoCount ?? 0)),
+    );
+    const hasContext = Boolean(
+      reply || imageUrls.length > 0 || attachedPhotoCount > 0,
+    );
+    if (!draft && !hasContext) {
       throw new Error("Type a message first");
     }
     if (draft.length > MAX_IMPROVE_CHARS) {
@@ -46,14 +77,21 @@ export const improveDraft = action({
       {},
     );
     if (!affordability.ok) {
-      throw new Error("You need a small credit balance to improve text. Top up to continue.");
+      throw new Error(
+        "You need a small credit balance to improve text. Top up to continue.",
+      );
     }
 
     const folderId = await ctx.runMutation(
       api.folders.ensureMessagesFolderForMe,
       {},
     );
-    const improved = await improveMessageDraft(draft);
+    const improved = await improveMessageDraft({
+      text: draft,
+      replyContext: reply,
+      imageUrls,
+      attachedPhotoCount,
+    });
     const creditsSpent = textCreditCost({
       inputTokens: improved.usage.inputTokens ?? 0,
       outputTokens: improved.usage.outputTokens ?? 0,

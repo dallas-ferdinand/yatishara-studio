@@ -192,30 +192,148 @@ export async function enhancePrompt(
   };
 }
 
-/** Short DM / composer polish — instruction or spelling/grammar only. */
+export type DmImproveReplyContext = {
+  kind: string;
+  body: string;
+  fromMe: boolean;
+  imageUrl?: string;
+};
+
+export type DmImproveInput = {
+  text?: string;
+  replyContext?: DmImproveReplyContext;
+  imageUrls?: string[];
+  /** Local/blob staged photos the model cannot fetch. */
+  attachedPhotoCount?: number;
+};
+
+const MAX_DM_IMPROVE_IMAGES = 4;
+
+function httpImageUrls(urls: string[] | undefined): string[] {
+  const out: string[] = [];
+  for (const raw of urls ?? []) {
+    const url = raw.trim();
+    if (!url) continue;
+    if (!/^https?:\/\//i.test(url)) continue;
+    if (out.includes(url)) continue;
+    out.push(url);
+    if (out.length >= MAX_DM_IMPROVE_IMAGES) break;
+  }
+  return out;
+}
+
+function buildDmImproveUserPrompt(input: DmImproveInput): string {
+  const draft = (input.text ?? "").trim();
+  const lines: string[] = [];
+  const reply = input.replyContext;
+  if (reply) {
+    const who = reply.fromMe ? "me (my earlier message)" : "them (peer message)";
+    const body = reply.body.trim();
+    lines.push(`Replying to ${who} [${reply.kind}]:`);
+    if (body) {
+      lines.push(body);
+    } else if (reply.kind === "image") {
+      lines.push("(image message — see attached image)");
+    } else if (reply.kind === "voice") {
+      lines.push("(voice note)");
+    } else {
+      lines.push(`(${reply.kind} message)`);
+    }
+  }
+  const photoCount = Math.max(0, Math.floor(input.attachedPhotoCount ?? 0));
+  if (photoCount > 0) {
+    lines.push(
+      `Composer has ${photoCount} photo${photoCount === 1 ? "" : "s"} staged to send with this reply.`,
+    );
+  }
+  if (draft) {
+    lines.push(`User note / tone / draft:\n${draft}`);
+  }
+  return lines.join("\n\n").trim();
+}
+
+/**
+ * Short DM polish, or draft a reply from reply-to / attached image context.
+ * With context: optional text is tone/instruction. Without context: polish text only.
+ */
 export async function improveMessageDraft(
-  text: string,
+  input: DmImproveInput | string,
 ): Promise<TextModelResult> {
-  const draft = text.trim();
-  if (!draft) {
+  const normalized: DmImproveInput =
+    typeof input === "string" ? { text: input } : input;
+  const draft = (normalized.text ?? "").trim();
+  const reply = normalized.replyContext;
+  const imageUrls = httpImageUrls([
+    ...(reply?.imageUrl ? [reply.imageUrl] : []),
+    ...(normalized.imageUrls ?? []),
+  ]);
+  const attachedPhotoCount = Math.max(
+    0,
+    Math.floor(normalized.attachedPhotoCount ?? 0),
+  );
+  const hasContext = Boolean(
+    reply || imageUrls.length > 0 || attachedPhotoCount > 0,
+  );
+  if (!draft && !hasContext) {
     throw new Error("Type a message first");
   }
+
+  const draftMode = hasContext;
+  const system = draftMode
+    ? [
+        "You draft short chat replies for a direct-message composer.",
+        "Use the attached reply context and/or images to write one natural reply the user can send.",
+        "If the user note includes a tone or instruction (cool, cold, angry, short, funny, formal, etc.), apply it.",
+        "If there is no tone note, write a natural, concise reply that fits the context.",
+        "Keep language variety (including Trinidad / Caribbean English when present in the context or note).",
+        "Do not invent facts, names, prices, links, @handles, or phone numbers.",
+        "Do not add greetings unless they fit, quotes, labels, markdown fences, or explanations.",
+        "Return plain text only — the reply body alone.",
+      ].join(" ")
+    : [
+        "You improve short chat-message drafts for clarity.",
+        "If the input includes an instruction (e.g. make this friendlier, shorten this, rewrite as…), apply that instruction to the message and return ONLY the improved message text.",
+        "If there is no clear instruction, fix spelling, punctuation, grammar, and light clarity only.",
+        "Keep the same meaning, intent, and language variety (including Trinidad / Caribbean English when present).",
+        "Do not change facts, names, prices, links, @handles, phone numbers, or emoji meaning.",
+        "Do not add greetings, quotes, labels, markdown fences, or explanations.",
+        "Return plain text only.",
+      ].join(" ");
+
+  const mediaParts = imageUrls.flatMap((url) =>
+    contentPartForReference({ kind: "image", url }),
+  );
+  const userText = draftMode
+    ? buildDmImproveUserPrompt({
+        text: draft,
+        replyContext: reply,
+        imageUrls,
+        attachedPhotoCount,
+      })
+    : draft;
+
   const result = await generateText({
     model: gateway.languageModel(dmImproveModelId()),
-    system: [
-      "You improve short chat-message drafts for clarity.",
-      "If the input includes an instruction (e.g. make this friendlier, shorten this, rewrite as…), apply that instruction to the message and return ONLY the improved message text.",
-      "If there is no clear instruction, fix spelling, punctuation, grammar, and light clarity only.",
-      "Keep the same meaning, intent, and language variety (including Trinidad / Caribbean English when present).",
-      "Do not change facts, names, prices, links, @handles, phone numbers, or emoji meaning.",
-      "Do not add greetings, quotes, labels, markdown fences, or explanations.",
-      "Return plain text only.",
-    ].join(" "),
-    prompt: draft,
+    system,
+    ...(mediaParts.length
+      ? {
+          messages: [
+            {
+              role: "user" as const,
+              content: [
+                { type: "text" as const, text: userText },
+                ...mediaParts,
+              ],
+            },
+          ],
+        }
+      : { prompt: userText }),
   });
   const improved = result.text.trim();
   if (!improved) {
-    throw new Error("Could not improve that text");
+    throw new Error(
+      draftMode ? "Could not draft a reply" : "Could not improve that text",
+    );
   }
   return {
     text: improved,
