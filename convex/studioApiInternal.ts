@@ -30,6 +30,7 @@ import { compactElementPromptLine } from "./lib/klingGatewayPrompt";
 import { applyStorageBytesDelta, assertUploadsAllowed } from "./lib/storageBilling";
 import { normalizeScopes } from "./lib/studioApi/crypto";
 import { validateVideoModelCapabilities } from "./lib/videoModels";
+import { nextCreditBalanceHigh } from "./lib/creditBalanceHigh";
 
 /** Admin/CLI helper: grant scopes on an API key (e.g. add messages for MCP DMs). */
 export const adminSetApiKeyScopes = internalMutation({
@@ -2182,6 +2183,11 @@ export const refundTextGenerationForApi = internalMutation({
     const balanceAfter = account.creditBalance + refundAmount;
     await ctx.db.patch(account._id, {
       creditBalance: balanceAfter,
+      creditBalanceHigh: nextCreditBalanceHigh({
+        previousHigh: account.creditBalanceHigh,
+        balanceAfter,
+        mode: "max",
+      }),
       updatedAt: now,
     });
     await ctx.db.insert("creditTransactions", {

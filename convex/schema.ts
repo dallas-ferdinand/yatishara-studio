@@ -808,6 +808,8 @@ export default defineSchema({
     userId: v.id("users"),
     creditBalance: v.number(),
     reservedCredits: v.number(),
+    /** Balance after last top-up / positive grant — ring 100%. Resets on next grant. */
+    creditBalanceHigh: v.optional(v.number()),
     activeSubscriptionId: v.optional(v.id("subscriptions")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -921,6 +923,8 @@ export default defineSchema({
     externalPaymentId: v.optional(v.string()),
     clientRequestId: v.optional(v.string()),
     checkoutUrl: v.optional(v.string()),
+    /** Short public id for studio.yatishara.com/pay/<code> (Sophie + hosted checkout). */
+    publicPayCode: v.optional(v.string()),
     providerRequestId: v.optional(v.string()),
     providerStatus: v.optional(v.string()),
     lastStatusCheckedAt: v.optional(v.number()),
@@ -942,6 +946,7 @@ export default defineSchema({
     .index("by_method_and_status", ["method", "status"])
     .index("by_client_request", ["clientRequestId"])
     .index("by_external_payment", ["externalPaymentId"])
+    .index("by_public_pay_code", ["publicPayCode"])
     .index("by_status_and_next_check", ["status", "nextStatusCheckAt"])
     .index("by_method_status_and_next_check", ["method", "status", "nextStatusCheckAt"]),
 

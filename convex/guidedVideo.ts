@@ -56,6 +56,7 @@ import {
 import { resolveVideoModel } from "./lib/videoModels";
 import { styleSheetSystemInstructions } from "./lib/styleSheetGuides";
 import { isFolderInSandbox } from "./lib/studioApi/folderScope";
+import { nextCreditBalanceHigh } from "./lib/creditBalanceHigh";
 
 const briefReturn = v.object({
   _id: v.id("guidedBriefs"),
@@ -2655,6 +2656,11 @@ async function refundAssistanceCreditTransaction(
   const balanceAfter = account.creditBalance + refundAmount;
   await ctx.db.patch(account._id, {
     creditBalance: balanceAfter,
+    creditBalanceHigh: nextCreditBalanceHigh({
+      previousHigh: account.creditBalanceHigh,
+      balanceAfter,
+      mode: "max",
+    }),
     updatedAt: now,
   });
   await ctx.db.insert("creditTransactions", {

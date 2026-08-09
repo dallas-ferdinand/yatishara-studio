@@ -24,6 +24,7 @@ import {
 } from "./lib/customFunctions";
 import { audioCreditCost } from "./lib/generationPricing";
 import { getCreditPriceCents } from "./lib/marketplaceEscrow";
+import { nextCreditBalanceHigh } from "./lib/creditBalanceHigh";
 import {
   applyListingProfitToStorageDebt,
   applyStorageBytesDelta,
@@ -1423,6 +1424,11 @@ export const failPurchaseCopy = authedMutation({
         const balanceAfter = account.creditBalance + purchase.priceCredits;
         await ctx.db.patch(account._id, {
           creditBalance: balanceAfter,
+          creditBalanceHigh: nextCreditBalanceHigh({
+            previousHigh: account.creditBalanceHigh,
+            balanceAfter,
+            mode: "max",
+          }),
           updatedAt: now,
         });
         await ctx.db.insert("creditTransactions", {
@@ -2490,6 +2496,11 @@ export const failPurchaseCopyForApi = internalMutation({
         const balanceAfter = account.creditBalance + purchase.priceCredits;
         await ctx.db.patch(account._id, {
           creditBalance: balanceAfter,
+          creditBalanceHigh: nextCreditBalanceHigh({
+            previousHigh: account.creditBalanceHigh,
+            balanceAfter,
+            mode: "max",
+          }),
           updatedAt: now,
         });
         await ctx.db.insert("creditTransactions", {

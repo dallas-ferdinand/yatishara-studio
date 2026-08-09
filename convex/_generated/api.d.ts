@@ -57,6 +57,7 @@ import type * as lib_bunnyStream from "../lib/bunnyStream.js";
 import type * as lib_commentSort from "../lib/commentSort.js";
 import type * as lib_composerScriptTypes from "../lib/composerScriptTypes.js";
 import type * as lib_creativeDirection from "../lib/creativeDirection.js";
+import type * as lib_creditBalanceHigh from "../lib/creditBalanceHigh.js";
 import type * as lib_customFunctions from "../lib/customFunctions.js";
 import type * as lib_deepgram from "../lib/deepgram.js";
 import type * as lib_editorEffectContract from "../lib/editorEffectContract.js";
@@ -204,6 +205,7 @@ declare const fullApi: ApiFromModules<{
   "lib/commentSort": typeof lib_commentSort;
   "lib/composerScriptTypes": typeof lib_composerScriptTypes;
   "lib/creativeDirection": typeof lib_creativeDirection;
+  "lib/creditBalanceHigh": typeof lib_creditBalanceHigh;
   "lib/customFunctions": typeof lib_customFunctions;
   "lib/deepgram": typeof lib_deepgram;
   "lib/editorEffectContract": typeof lib_editorEffectContract;

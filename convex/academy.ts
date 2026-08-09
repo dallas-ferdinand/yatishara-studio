@@ -21,6 +21,7 @@ import {
   type BunnyImageTransform,
 } from "./lib/bunny";
 import { purchaseCourseForUser } from "./lib/academyPurchase";
+import { nextCreditBalanceHigh } from "./lib/creditBalanceHigh";
 import {
   compareAtCoursePriceCredits,
   effectiveCoursePriceCredits,
@@ -950,6 +951,11 @@ async function revokeCoursePurchaseWithRefund(
           const balanceAfter = account.creditBalance + refundedCredits;
           await ctx.db.patch(account._id, {
             creditBalance: balanceAfter,
+            creditBalanceHigh: nextCreditBalanceHigh({
+              previousHigh: account.creditBalanceHigh,
+              balanceAfter,
+              mode: "max",
+            }),
             updatedAt: now,
           });
           await ctx.db.insert("creditTransactions", {

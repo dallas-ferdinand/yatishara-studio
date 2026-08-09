@@ -27,6 +27,10 @@ import { purchaseCourseForUser } from "./lib/academyPurchase";
 import { PAYWISE_CURRENCY } from "./lib/paywise";
 import { settleOutstandingStorage } from "./lib/storageBilling";
 import { createNotificationAndPush } from "./lib/notify";
+import {
+  effectiveCreditBalanceHigh,
+  nextCreditBalanceHigh,
+} from "./lib/creditBalanceHigh";
 
 const paymentMethod = v.union(v.literal("bank"), v.literal("card"), v.literal("paywise"));
 
@@ -187,6 +191,7 @@ export const currentAccount = authedQuery({
   args: {},
   returns: v.object({
     creditBalance: v.number(),
+    creditBalanceHigh: v.number(),
     reservedCredits: v.number(),
     subscription: v.union(
       v.object({
@@ -217,8 +222,13 @@ export const currentAccount = authedQuery({
           .withIndex("by_user_and_status", (q) => q.eq("userId", ctx.user._id).eq("status", "active"))
           .first();
     const plan = subscription ? await ctx.db.get(subscription.planId) : null;
+    const creditBalance = account?.creditBalance ?? 0;
     return {
-      creditBalance: account?.creditBalance ?? 0,
+      creditBalance,
+      creditBalanceHigh: effectiveCreditBalanceHigh(
+        creditBalance,
+        account?.creditBalanceHigh,
+      ),
       reservedCredits: account?.reservedCredits ?? 0,
       subscription: subscription
         ? {
@@ -437,6 +447,7 @@ export const currentAccountForApi = internalQuery({
   args: { userId: v.id("users") },
   returns: v.object({
     creditBalance: v.number(),
+    creditBalanceHigh: v.number(),
     reservedCredits: v.number(),
     subscription: accountSubscriptionReturn,
   }),
@@ -455,8 +466,13 @@ export const currentAccountForApi = internalQuery({
           )
           .first();
     const plan = subscription ? await ctx.db.get(subscription.planId) : null;
+    const creditBalance = account?.creditBalance ?? 0;
     return {
-      creditBalance: account?.creditBalance ?? 0,
+      creditBalance,
+      creditBalanceHigh: effectiveCreditBalanceHigh(
+        creditBalance,
+        account?.creditBalanceHigh,
+      ),
       reservedCredits: account?.reservedCredits ?? 0,
       subscription: subscription
         ? {
@@ -575,6 +591,34 @@ function randomCallbackToken(): string {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Crockford-ish — no 0/O/1/I ambiguity. */
+const PUBLIC_PAY_CODE_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
+
+function generatePublicPayCode(len = 10): string {
+  const n = Math.min(16, Math.max(8, Number(len) || 10));
+  const bytes = new Uint8Array(n);
+  crypto.getRandomValues(bytes);
+  let out = "";
+  for (let i = 0; i < n; i++) {
+    out += PUBLIC_PAY_CODE_ALPHABET[bytes[i]! % PUBLIC_PAY_CODE_ALPHABET.length]!;
+  }
+  return out;
+}
+
+function normalizePublicPayCode(raw: string): string {
+  return String(raw || "")
+    .trim()
+    .toLowerCase();
+}
+
+function studioPayShortUrl(code: string): string {
+  const base = (process.env.SITE_URL || "https://studio.yatishara.com").replace(
+    /\/+$/,
+    "",
+  );
+  return `${base}/pay/${code}`;
 }
 
 export const getCheckoutUser = internalQuery({
@@ -743,15 +787,109 @@ export const attachPaywiseCheckout = internalMutation({
       throw new Error("PayWise payment id is already linked to another checkout");
     }
     const now = Date.now();
+    let publicPayCode = payment.publicPayCode
+      ? normalizePublicPayCode(payment.publicPayCode)
+      : "";
+    if (!publicPayCode) {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const candidate = generatePublicPayCode(10);
+        const clash = await ctx.db
+          .query("payments")
+          .withIndex("by_public_pay_code", (q) =>
+            q.eq("publicPayCode", candidate),
+          )
+          .unique();
+        if (!clash) {
+          publicPayCode = candidate;
+          break;
+        }
+      }
+      if (!publicPayCode) {
+        throw new Error("Could not allocate a public pay code");
+      }
+    }
     await ctx.db.patch(payment._id, {
       externalPaymentId: args.externalPaymentId,
       checkoutUrl: args.checkoutUrl,
+      publicPayCode,
       providerRequestId: args.providerRequestId,
       providerStatus: args.providerStatus,
       nextStatusCheckAt: now + PAYWISE_INITIAL_CHECK_DELAY_MS,
       updatedAt: now,
     });
     return null;
+  },
+});
+
+/** Ensure an existing checkout has a short public pay code (idempotent). */
+export const ensurePublicPayCode = internalMutation({
+  args: { paymentId: v.id("payments") },
+  returns: v.object({
+    publicPayCode: v.string(),
+    shortUrl: v.string(),
+    checkoutUrl: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment || payment.method !== "paywise") {
+      throw new Error("Payment not found");
+    }
+    let code = payment.publicPayCode
+      ? normalizePublicPayCode(payment.publicPayCode)
+      : "";
+    if (!code) {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const candidate = generatePublicPayCode(10);
+        const clash = await ctx.db
+          .query("payments")
+          .withIndex("by_public_pay_code", (q) =>
+            q.eq("publicPayCode", candidate),
+          )
+          .unique();
+        if (!clash) {
+          code = candidate;
+          break;
+        }
+      }
+      if (!code) throw new Error("Could not allocate a public pay code");
+      await ctx.db.patch(payment._id, {
+        publicPayCode: code,
+        updatedAt: Date.now(),
+      });
+    }
+    return {
+      publicPayCode: code,
+      shortUrl: studioPayShortUrl(code),
+      checkoutUrl: payment.checkoutUrl,
+    };
+  },
+});
+
+/**
+ * Public lookup for studio.yatishara.com/pay/<code> → hosted PayWise checkout.
+ * Returns only what the redirect needs (no payer PII).
+ */
+export const resolvePublicPayLink = query({
+  args: { code: v.string() },
+  returns: v.union(
+    v.object({
+      checkoutUrl: v.string(),
+      status: paymentStatus,
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const code = normalizePublicPayCode(args.code);
+    if (!/^[a-z0-9]{8,16}$/.test(code)) return null;
+    const payment = await ctx.db
+      .query("payments")
+      .withIndex("by_public_pay_code", (q) => q.eq("publicPayCode", code))
+      .unique();
+    if (!payment?.checkoutUrl) return null;
+    return {
+      checkoutUrl: payment.checkoutUrl,
+      status: payment.status,
+    };
   },
 });
 
@@ -1652,10 +1790,22 @@ export const internalSetCreditsByPhone = internalMutation({
         amount: 0,
       };
     }
-    await ctx.db.patch(accountId, {
+    const patch: {
+      creditBalance: number;
+      updatedAt: number;
+      creditBalanceHigh?: number;
+    } = {
       creditBalance,
       updatedAt: now,
-    });
+    };
+    if (amount > 0) {
+      patch.creditBalanceHigh = nextCreditBalanceHigh({
+        previousHigh: existing?.creditBalanceHigh,
+        balanceAfter: creditBalance,
+        mode: "reset",
+      });
+    }
+    await ctx.db.patch(accountId, patch);
     await ctx.db.insert("creditTransactions", {
       userId: user._id,
       billingAccountId: accountId,
@@ -1770,6 +1920,7 @@ export const internalWipeUserBillingByPhone = internalMutation({
     if (account) {
       await ctx.db.patch(account._id, {
         creditBalance: 0,
+        creditBalanceHigh: 0,
         reservedCredits: 0,
         activeSubscriptionId: undefined,
         updatedAt: now,
@@ -1778,6 +1929,7 @@ export const internalWipeUserBillingByPhone = internalMutation({
       await ctx.db.insert("billingAccounts", {
         userId: user._id,
         creditBalance: 0,
+        creditBalanceHigh: 0,
         reservedCredits: 0,
         createdAt: now,
         updatedAt: now,
@@ -2101,10 +2253,23 @@ async function grantCredits(
   if (balanceAfter < 0) {
     throw new Error("Credit adjustment cannot make the balance negative");
   }
-  await ctx.db.patch(accountId, {
+  const patch: {
+    creditBalance: number;
+    updatedAt: number;
+    creditBalanceHigh?: number;
+  } = {
     creditBalance: balanceAfter,
     updatedAt: now,
-  });
+  };
+  // Positive grants reset the ring high to the new balance (ElevenLabs-style).
+  if (args.amount > 0) {
+    patch.creditBalanceHigh = nextCreditBalanceHigh({
+      previousHigh: account.creditBalanceHigh,
+      balanceAfter,
+      mode: "reset",
+    });
+  }
+  await ctx.db.patch(accountId, patch);
   await ctx.db.insert("creditTransactions", {
     userId: args.userId,
     billingAccountId: accountId,

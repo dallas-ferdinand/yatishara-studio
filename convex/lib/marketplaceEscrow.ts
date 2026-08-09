@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { nextCreditBalanceHigh } from "./creditBalanceHigh";
 
 const DEFAULT_CREDIT_PRICE_CENTS = 50;
 
@@ -204,6 +205,11 @@ export async function refundMarketplaceEscrow(
   const balanceAfter = account.creditBalance + hold.credits;
   await ctx.db.patch(account._id, {
     creditBalance: balanceAfter,
+    creditBalanceHigh: nextCreditBalanceHigh({
+      previousHigh: account.creditBalanceHigh,
+      balanceAfter,
+      mode: "max",
+    }),
     updatedAt: now,
   });
   const refundId = await ctx.db.insert("creditTransactions", {

@@ -24,6 +24,7 @@ import {
 } from "./lib/assistanceGenerationPlan";
 import { applyStorageBytesDelta } from "./lib/storageBilling";
 import { createNotificationAndPush } from "./lib/notify";
+import { nextCreditBalanceHigh } from "./lib/creditBalanceHigh";
 
 const generationMode = v.union(
   v.literal("image"),
@@ -2663,6 +2664,11 @@ export const refundTextGeneration = authedMutation({
     const balanceAfter = account.creditBalance + refundAmount;
     await ctx.db.patch(account._id, {
       creditBalance: balanceAfter,
+      creditBalanceHigh: nextCreditBalanceHigh({
+        previousHigh: account.creditBalanceHigh,
+        balanceAfter,
+        mode: "max",
+      }),
       updatedAt: now,
     });
     await ctx.db.insert("creditTransactions", {
@@ -2788,6 +2794,11 @@ async function refundReservedCredits(
   const balanceAfter = account.creditBalance + cost;
   await ctx.db.patch(account._id, {
     creditBalance: balanceAfter,
+    creditBalanceHigh: nextCreditBalanceHigh({
+      previousHigh: account.creditBalanceHigh,
+      balanceAfter,
+      mode: "max",
+    }),
     reservedCredits: account.reservedCredits - cost,
     updatedAt: now,
   });
@@ -2880,6 +2891,11 @@ export const refundCreditTransactionForUser = internalMutation({
     const balanceAfter = account.creditBalance + refundAmount;
     await ctx.db.patch(account._id, {
       creditBalance: balanceAfter,
+      creditBalanceHigh: nextCreditBalanceHigh({
+        previousHigh: account.creditBalanceHigh,
+        balanceAfter,
+        mode: "max",
+      }),
       updatedAt: now,
     });
     await ctx.db.insert("creditTransactions", {
