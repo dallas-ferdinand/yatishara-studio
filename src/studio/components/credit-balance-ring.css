@@ -199,19 +199,23 @@
 
 /*
   Shared side inset: Balance card + app grid align to the same edge.
-  Short under-card mask — first row clears it at rest; only covers on scroll.
+  Soft under-card mask starts BELOW the border (so it isn’t clipped) and
+  only softens on scroll — keep default gap tight with the first app row.
 */
 .studio-mobile-app-menu-scroll:has(.studio-balance-chip) {
   --studio-menu-edge: 16px;
-  --studio-menu-balance-mask-h: 12px;
+  --studio-menu-balance-mask-h: 8px;
+  --studio-menu-balance-gap: 8px;
 }
 
 .studio-mobile-app-menu-scroll .studio-balance-chip {
   position: relative;
   z-index: 3;
-  margin: 8px var(--studio-menu-edge, 16px) 4px;
+  /* 1px under the card so overflow:hidden doesn't chew the bottom border. */
+  margin: 8px var(--studio-menu-edge, 16px) 1px;
   width: auto;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .studio-mobile-app-menu-scroll .studio-balance-chip::after {
@@ -219,14 +223,14 @@
   position: absolute;
   left: calc(-1 * var(--studio-menu-edge, 16px));
   right: calc(-1 * var(--studio-menu-edge, 16px));
-  top: 100%;
-  height: var(--studio-menu-balance-mask-h, 12px);
+  /* Sit under the border — solid plate at top:100% was covering it. */
+  top: calc(100% + 1px);
+  height: var(--studio-menu-balance-mask-h, 8px);
   pointer-events: none;
   z-index: 2;
   background: linear-gradient(
     to bottom,
-    var(--mos-plate, var(--mos-panel, #ececf0)) 0%,
-    color-mix(in srgb, var(--mos-plate, #ececf0) 55%, transparent) 55%,
+    color-mix(in srgb, var(--mos-plate, #ececf0) 65%, transparent) 0%,
     transparent 100%
   );
 }
@@ -240,7 +244,7 @@
   position: sticky;
   top: 0;
   z-index: 3;
-  margin: 0 0 4px;
+  margin: 0;
   flex-shrink: 0;
   /* Solid plate so scrolled apps don't show through the card. */
   background:
@@ -269,8 +273,8 @@
 }
 
 .studio-mobile-app-menu-scroll:has(.studio-balance-chip) .studio-mobile-app-menu-body.is-app-grid {
-  /* Top pad ≥ mask so first row is clear until you scroll. Sides = Balance. */
-  padding: calc(var(--studio-menu-balance-mask-h, 12px) + 2px)
+  /* Even gap to first row (~grid gap); mask softens only as items scroll up. */
+  padding: var(--studio-menu-balance-gap, 8px)
     var(--studio-menu-edge, 16px)
     28px;
   flex: 1 1 auto;
@@ -281,5 +285,5 @@
 .studio-mobile-app-menu-sheet.is-desktop-popover
   .studio-mobile-app-menu-scroll:has(.studio-balance-chip)
   .studio-mobile-app-menu-body.is-app-grid {
-  padding: calc(var(--studio-menu-balance-mask-h, 12px) + 2px) 0 0;
+  padding: var(--studio-menu-balance-gap, 8px) 0 0;
 }
