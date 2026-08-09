@@ -11,6 +11,10 @@ import { ensureProfileForUser } from "./lib/profileEnsure";
 import { toNameCase } from "./lib/profileIdentity";
 import { userHasPassword } from "./passwordAuth";
 import { normalizePhone } from "./phonePasswordAuth";
+import {
+  CREDIT_GRANT_KINDS,
+  resolveCreditBalanceHigh,
+} from "./lib/creditBalanceHigh";
 
 function accountHasRequiredContacts(user: {
   email?: string;
@@ -312,12 +316,13 @@ export const ensureStudioDefaults = authedMutation({
   }),
   handler: async (ctx) => {
     const now = Date.now();
+    // Cap the scan — collecting every root folder can blow the 1s isolate budget.
     const topFolders = await ctx.db
       .query("folders")
       .withIndex("by_owner_and_parent", (q) =>
         q.eq("ownerId", ctx.user._id).eq("parentId", undefined),
       )
-      .collect();
+      .take(64);
     // Prefer a normal workspace root — never treat system folders as the Studio root.
     const existingRoot = topFolders.find(
       (folder) =>
@@ -350,15 +355,42 @@ export const ensureStudioDefaults = authedMutation({
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
       .unique();
 
-    const billingAccountId =
-      existingBilling?._id ??
-      (await ctx.db.insert("billingAccounts", {
+    let billingAccountId = existingBilling?._id;
+    if (!billingAccountId) {
+      billingAccountId = await ctx.db.insert("billingAccounts", {
         userId: ctx.user._id,
         creditBalance: 0,
         reservedCredits: 0,
         createdAt: now,
         updatedAt: now,
-      }));
+      });
+    } else {
+      // Persist ring Total from last top-up when missing/collapsed to Remaining.
+      const rows = await ctx.db
+        .query("creditTransactions")
+        .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+        .order("desc")
+        .take(48);
+      let lastGrantBalanceAfter: number | null = null;
+      for (const row of rows) {
+        if (row.amount > 0 && CREDIT_GRANT_KINDS.has(row.kind)) {
+          lastGrantBalanceAfter = row.balanceAfter;
+          break;
+        }
+      }
+      const nextHigh = resolveCreditBalanceHigh({
+        creditBalance: existingBilling.creditBalance,
+        creditBalanceHigh: existingBilling.creditBalanceHigh,
+        lastGrantBalanceAfter,
+      });
+      const prevHigh = existingBilling.creditBalanceHigh ?? 0;
+      if (nextHigh > 0 && nextHigh !== prevHigh) {
+        await ctx.db.patch(existingBilling._id, {
+          creditBalanceHigh: nextHigh,
+          updatedAt: now,
+        });
+      }
+    }
 
     return { rootFolderId, billingAccountId };
   },

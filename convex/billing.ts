@@ -28,9 +28,28 @@ import { PAYWISE_CURRENCY } from "./lib/paywise";
 import { settleOutstandingStorage } from "./lib/storageBilling";
 import { createNotificationAndPush } from "./lib/notify";
 import {
-  effectiveCreditBalanceHigh,
+  CREDIT_GRANT_KINDS,
   nextCreditBalanceHigh,
+  resolveCreditBalanceHigh,
 } from "./lib/creditBalanceHigh";
+
+/** Last top-up / subscription / admin credit peak (balanceAfter). */
+async function lastGrantBalanceAfterForUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<number | null> {
+  const rows = await ctx.db
+    .query("creditTransactions")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .order("desc")
+    .take(48);
+  for (const row of rows) {
+    if (row.amount > 0 && CREDIT_GRANT_KINDS.has(row.kind)) {
+      return row.balanceAfter;
+    }
+  }
+  return null;
+}
 
 const paymentMethod = v.union(v.literal("bank"), v.literal("card"), v.literal("paywise"));
 
@@ -223,12 +242,16 @@ export const currentAccount = authedQuery({
           .first();
     const plan = subscription ? await ctx.db.get(subscription.planId) : null;
     const creditBalance = account?.creditBalance ?? 0;
+    const lastGrantBalanceAfter = account
+      ? await lastGrantBalanceAfterForUser(ctx, ctx.user._id)
+      : null;
     return {
       creditBalance,
-      creditBalanceHigh: effectiveCreditBalanceHigh(
+      creditBalanceHigh: resolveCreditBalanceHigh({
         creditBalance,
-        account?.creditBalanceHigh,
-      ),
+        creditBalanceHigh: account?.creditBalanceHigh,
+        lastGrantBalanceAfter,
+      }),
       reservedCredits: account?.reservedCredits ?? 0,
       subscription: subscription
         ? {
@@ -467,12 +490,17 @@ export const currentAccountForApi = internalQuery({
           .first();
     const plan = subscription ? await ctx.db.get(subscription.planId) : null;
     const creditBalance = account?.creditBalance ?? 0;
+    const lastGrantBalanceAfter = await lastGrantBalanceAfterForUser(
+      ctx,
+      args.userId,
+    );
     return {
       creditBalance,
-      creditBalanceHigh: effectiveCreditBalanceHigh(
+      creditBalanceHigh: resolveCreditBalanceHigh({
         creditBalance,
-        account?.creditBalanceHigh,
-      ),
+        creditBalanceHigh: account?.creditBalanceHigh,
+        lastGrantBalanceAfter,
+      }),
       reservedCredits: account?.reservedCredits ?? 0,
       subscription: subscription
         ? {
