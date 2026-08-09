@@ -1988,6 +1988,96 @@ export function StudioShell({
     setFilesNavSheetOpen(false);
   }, [isMobile, mobileSection]);
 
+  /*
+    Mobile keyboard inset lives on the shell — not only Create composer.
+    Messages / fullscreen DM need the same --studio-keyboard-inset so stage
+    padding + bottom nav lift clear the composer (Create already worked).
+  */
+  useEffect(() => {
+    const root = shellRef.current;
+    if (!isMobile) {
+      if (root instanceof HTMLElement) {
+        root.style.removeProperty("--studio-keyboard-inset");
+        root.removeAttribute("data-keyboard-open");
+      }
+      return undefined;
+    }
+    let rafId = 0;
+    let lastInset = -1;
+    const syncKeyboardInset = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        const el = shellRef.current;
+        if (!(el instanceof HTMLElement)) return;
+        const vv = window.visualViewport;
+        let inset = 0;
+        if (vv) {
+          const raw = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+          inset = raw < 6 ? 0 : Math.round(raw);
+        }
+        if (inset === lastInset) return;
+        lastInset = inset;
+        el.style.setProperty("--studio-keyboard-inset", `${inset}px`);
+        if (inset > 0) el.setAttribute("data-keyboard-open", "1");
+        else el.removeAttribute("data-keyboard-open");
+      });
+    };
+    window.visualViewport?.addEventListener("resize", syncKeyboardInset);
+    window.visualViewport?.addEventListener("scroll", syncKeyboardInset);
+    window.addEventListener("resize", syncKeyboardInset);
+    syncKeyboardInset();
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      window.visualViewport?.removeEventListener("resize", syncKeyboardInset);
+      window.visualViewport?.removeEventListener("scroll", syncKeyboardInset);
+      window.removeEventListener("resize", syncKeyboardInset);
+      const el = shellRef.current;
+      if (el instanceof HTMLElement) {
+        el.style.removeProperty("--studio-keyboard-inset");
+        el.removeAttribute("data-keyboard-open");
+      }
+    };
+  }, [isMobile]);
+
+  /* One-shot press squash when a control initiates (not only while :active). */
+  useEffect(() => {
+    const root = shellRef.current;
+    if (!(root instanceof HTMLElement)) return undefined;
+    const skipSel =
+      '.cursor-unified-tab, .cursor-tab, [role="tab"], .studio-mobile-nav-btn, .studio-admin-head-tab, .studio-settings-horizontal-menu button, .studio-feed-mode-menu button, [data-studio-nav], [data-studio-no-press]';
+    const hitSel =
+      'button, [role="button"], .studio-settings-pill, .studio-settings-trigger, .studio-pill-btn, .studio-composer-circle-btn, .cursor-icon-btn, .cursor-toolbar-icon, .studio-balance-chip-topup, .studio-credit-balance-ring';
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(skipSel)) return;
+      let el = target.closest(hitSel);
+      if (!(el instanceof Element) || !root.contains(el)) return;
+      const ring = el.closest(".studio-credit-balance-ring");
+      if (ring instanceof Element) el = ring;
+      if (el instanceof HTMLButtonElement && el.disabled) return;
+      if (el.getAttribute("aria-disabled") === "true") return;
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+      el.classList.remove("is-press-pulse");
+      void (el as HTMLElement).offsetWidth;
+      el.classList.add("is-press-pulse");
+    };
+    const onAnimationEnd = (event: AnimationEvent) => {
+      if (event.animationName !== "studio-press-pulse") return;
+      if (event.target instanceof Element) {
+        event.target.classList.remove("is-press-pulse");
+      }
+    };
+    root.addEventListener("pointerdown", onPointerDown, true);
+    root.addEventListener("animationend", onAnimationEnd, true);
+    return () => {
+      root.removeEventListener("pointerdown", onPointerDown, true);
+      root.removeEventListener("animationend", onAnimationEnd, true);
+    };
+  }, []);
+
   // Files open on Generate + composer input / keyboard → hide dock; restore on KB dismiss.
   // IMPORTANT: do not listen to focusin — programmatic focus would re-enter and ping-pong.
   useEffect(() => {
@@ -8462,6 +8552,7 @@ export function StudioShell({
           /* Global button push — shrink on press, spring back on release. */
           --studio-press-scale: 0.94;
           --studio-press-duration: 140ms;
+          --studio-press-pulse-duration: 180ms;
           --studio-press-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
           --studio-composer-glass: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent);
@@ -9640,6 +9731,18 @@ export function StudioShell({
         .studio-polish .studio-credit-balance-ring > :is(button, [role="button"]):active {
           transform: none !important;
         }
+        /* One-shot proactive pulse when a control starts an action. */
+        @keyframes studio-press-pulse {
+          0% { transform: scale(1); }
+          40% { transform: scale(var(--studio-press-scale)); }
+          100% { transform: scale(1); }
+        }
+        .studio-polish .is-press-pulse {
+          animation: studio-press-pulse var(--studio-press-pulse-duration) var(--studio-press-ease) 1;
+        }
+        .studio-polish .studio-credit-balance-ring.is-press-pulse > :is(button, [role="button"]) {
+          transform: none !important;
+        }
         /* Tab / section switches stay flat — no press squash. */
         .studio-polish :is(
           .cursor-unified-tab,
@@ -9662,13 +9765,29 @@ export function StudioShell({
           .studio-feed-mode-menu button,
           [data-studio-nav],
           [data-studio-no-press]
-        ).is-pressed {
+        ).is-pressed,
+        .studio-polish :is(
+          .cursor-unified-tab,
+          .cursor-tab,
+          [role="tab"],
+          .studio-mobile-nav-btn,
+          .studio-admin-head-tab,
+          .studio-settings-horizontal-menu button,
+          .studio-feed-mode-menu button,
+          [data-studio-nav],
+          [data-studio-no-press]
+        ).is-press-pulse {
           transform: none !important;
+          animation: none !important;
         }
         @media (prefers-reduced-motion: reduce) {
           .studio-polish {
             --studio-press-scale: 1;
             --studio-press-duration: 0ms;
+            --studio-press-pulse-duration: 0ms;
+          }
+          .studio-polish .is-press-pulse {
+            animation: none !important;
           }
         }
         .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item, .desk-file-breadcrumbs-chip):focus-visible {
@@ -26546,36 +26665,17 @@ function StudioComposer({
     if (!root) return;
 
     let rafId = 0;
-    let keyboardRafId = 0;
-    let lastKeyboardInset = -1;
     let keyboardSettledTimer = 0;
 
-    // Lightweight — tracks OS keyboard every frame. No React state.
-    // Nav rides compositor transform; composer clears via stage padding-bottom.
-    const syncKeyboardInset = () => {
-      if (keyboardRafId) return;
-      keyboardRafId = window.requestAnimationFrame(() => {
-        keyboardRafId = 0;
-        const vv = window.visualViewport;
-        let inset = 0;
-        if (isMobile && vv) {
-          const raw = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-          // Noise floor only — no 80px cliff (that caused the jump mid-animation).
-          inset = raw < 6 ? 0 : Math.round(raw);
-        }
-        if (inset === lastKeyboardInset) return;
-        lastKeyboardInset = inset;
-        root.style.setProperty("--studio-keyboard-inset", `${inset}px`);
-        if (inset > 0) root.setAttribute("data-keyboard-open", "1");
-        else root.removeAttribute("data-keyboard-open");
-        // Clearance layout can wait until the KB motion settles — running it every
-        // vv tick reflows chat padding and fights the lift.
-        if (keyboardSettledTimer) window.clearTimeout(keyboardSettledTimer);
-        keyboardSettledTimer = window.setTimeout(() => {
-          keyboardSettledTimer = 0;
-          syncClearance();
-        }, inset > 0 ? 120 : 0);
-      });
+    // Keyboard inset CSS var is owned by StudioShell (all tabs). Here we only
+    // remeasure Create clearance after the OS keyboard settles.
+    const onKeyboardViewport = () => {
+      if (keyboardSettledTimer) window.clearTimeout(keyboardSettledTimer);
+      const open = root.getAttribute("data-keyboard-open") === "1";
+      keyboardSettledTimer = window.setTimeout(() => {
+        keyboardSettledTimer = 0;
+        syncClearance();
+      }, open ? 120 : 0);
     };
 
     const syncClearance = () => {
@@ -26666,10 +26766,9 @@ function StudioComposer({
     const modeSwitcher = composer.querySelector(".studio-mode-switcher");
     if (modeSwitcher) observer.observe(modeSwitcher);
     window.addEventListener("resize", syncClearance);
-    window.visualViewport?.addEventListener("resize", syncKeyboardInset);
-    window.visualViewport?.addEventListener("scroll", syncKeyboardInset);
-    window.addEventListener("resize", syncKeyboardInset);
-    syncKeyboardInset();
+    window.visualViewport?.addEventListener("resize", onKeyboardViewport);
+    window.visualViewport?.addEventListener("scroll", onKeyboardViewport);
+    window.addEventListener("resize", onKeyboardViewport);
     syncClearance();
     const raf = window.requestAnimationFrame(syncClearance);
     // Chat mount can lag the composer on tab switches — resync a couple frames later.
@@ -26681,18 +26780,16 @@ function StudioComposer({
       window.cancelAnimationFrame(raf);
       window.cancelAnimationFrame(raf2);
       if (rafId) window.cancelAnimationFrame(rafId);
-      if (keyboardRafId) window.cancelAnimationFrame(keyboardRafId);
       if (keyboardSettledTimer) window.clearTimeout(keyboardSettledTimer);
       observer.disconnect();
       window.removeEventListener("resize", syncClearance);
-      window.removeEventListener("resize", syncKeyboardInset);
-      window.visualViewport?.removeEventListener("resize", syncKeyboardInset);
-      window.visualViewport?.removeEventListener("scroll", syncKeyboardInset);
+      window.removeEventListener("resize", onKeyboardViewport);
+      window.visualViewport?.removeEventListener("resize", onKeyboardViewport);
+      window.visualViewport?.removeEventListener("scroll", onKeyboardViewport);
       root.style.removeProperty("--studio-chat-empty-clearance");
       root.style.removeProperty("--studio-chat-stream-end-pad");
       root.style.removeProperty("--studio-composer-stack-height");
-      root.style.removeProperty("--studio-keyboard-inset");
-      root.removeAttribute("data-keyboard-open");
+      /* Keep --studio-keyboard-inset — shell owns it for Messages + other tabs. */
       const chatEl = root.querySelector(".studio-chat-render-area");
       if (chatEl instanceof HTMLElement) chatEl.style.removeProperty("padding-bottom");
       setOverlayPanelBox(null);
