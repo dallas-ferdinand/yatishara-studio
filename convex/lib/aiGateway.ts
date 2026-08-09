@@ -163,6 +163,32 @@ export async function enhancePrompt(input: EnhancementInput): Promise<string> {
   return enhanced || context.userPrompt;
 }
 
+/** Short DM / composer polish — instruction or spelling/grammar only. */
+export async function improveMessageDraft(text: string): Promise<string> {
+  const draft = text.trim();
+  if (!draft) {
+    throw new Error("Type a message first");
+  }
+  const result = await generateText({
+    model: gateway.languageModel(textModelId()),
+    system: [
+      "You improve short chat-message drafts for clarity.",
+      "If the input includes an instruction (e.g. make this friendlier, shorten this, rewrite as…), apply that instruction to the message and return ONLY the improved message text.",
+      "If there is no clear instruction, fix spelling, punctuation, grammar, and light clarity only.",
+      "Keep the same meaning, intent, and language variety (including Trinidad / Caribbean English when present).",
+      "Do not change facts, names, prices, links, @handles, phone numbers, or emoji meaning.",
+      "Do not add greetings, quotes, labels, markdown fences, or explanations.",
+      "Return plain text only.",
+    ].join(" "),
+    prompt: draft,
+  });
+  const improved = result.text.trim();
+  if (!improved) {
+    throw new Error("Could not improve that text");
+  }
+  return improved;
+}
+
 export type ElementSheetInput = {
   elementType: ElementSheetType;
   name: string;

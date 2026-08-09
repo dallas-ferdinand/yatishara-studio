@@ -32,6 +32,7 @@ import {
   Trash2,
   Upload,
   Video,
+  Wand2,
   X,
   ZoomIn,
   ZoomOut,
@@ -2187,8 +2188,10 @@ export function StudioMessagesPane({
   const editMessage = useMutation(api.dms.editMessage);
   const deleteMessageForMe = useMutation(api.dms.deleteMessageForMe);
   const deleteMessageForEveryone = useMutation(api.dms.deleteMessageForEveryone);
+  const improveDraft = useAction(api.dmActions.improveDraft);
 
   const [draft, setDraft] = useState("");
+  const [improveBusy, setImproveBusy] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<Id<"dmMessages"> | null>(
     null,
   );
@@ -3378,6 +3381,25 @@ export function StudioMessagesPane({
   const canSend = Boolean(
     pendingImages.length > 0 || pendingFeedShare || draft.trim(),
   );
+  const canImprove = Boolean(draft.trim()) && recState === "idle" && !improveBusy;
+
+  async function handleImproveDraft() {
+    const body = draft.trim();
+    if (!body || improveBusy || recState !== "idle") return;
+    setSendError("");
+    setImproveBusy(true);
+    try {
+      const result = await improveDraft({ text: body });
+      setDraft(result.text);
+      pingTyping(result.text.trim().length > 0);
+      requestAnimationFrame(() => autosizeComposerInput(inputRef.current));
+    } catch (error) {
+      playUiSound("error");
+      setSendError(friendlyConvexError(error, "Could not improve message"));
+    } finally {
+      setImproveBusy(false);
+    }
+  }
 
   if (!conversationId) {
     if (showChatListWhenEmpty) {
@@ -3885,6 +3907,20 @@ export function StudioMessagesPane({
                   }
                 }}
               />
+              <button
+                type="button"
+                className="studio-dm-send is-mic studio-dm-improve"
+                onClick={() => void handleImproveDraft()}
+                disabled={!canImprove}
+                aria-label="Improve message text"
+                title="Improve text"
+              >
+                {improveBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Wand2 className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
               {canSend ? (
                 <button
                   type="button"
@@ -4074,6 +4110,20 @@ export function StudioMessagesPane({
                 <span className="studio-dm-extra-pill-label">Share</span>
               </button>
               <span className="studio-dm-extras-spacer" aria-hidden="true" />
+              <button
+                type="button"
+                className="studio-composer-circle-btn studio-dm-composer-circle"
+                onClick={() => void handleImproveDraft()}
+                disabled={!canImprove || filesPickBusy}
+                aria-label="Improve message text"
+                title="Improve text"
+              >
+                {improveBusy ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <Wand2 aria-hidden="true" />
+                )}
+              </button>
               {recState !== "idle" ? (
                 <button
                   type="button"
@@ -4090,7 +4140,7 @@ export function StudioMessagesPane({
                   type="button"
                   className="studio-composer-circle-btn studio-dm-composer-circle"
                   onClick={() => void startRecording()}
-                  disabled={filesPickBusy}
+                  disabled={filesPickBusy || improveBusy}
                   aria-label="Record a voice note"
                   title="Record"
                 >
@@ -4109,6 +4159,7 @@ export function StudioMessagesPane({
                   void handleSend();
                 }}
                 disabled={
+                  improveBusy ||
                   recState === "sending" ||
                   (recState === "idle" && !canSend)
                 }
