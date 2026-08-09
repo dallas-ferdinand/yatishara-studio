@@ -48,10 +48,6 @@
   background: transparent;
 }
 
-.studio-dm-pane.is-split {
-  background: transparent;
-}
-
 /* CN Messages rail / mobile sheet: chat fills the sidebar, Back stays there. */
 .studio-dm-pane.is-rail-embedded {
   flex: 1 1 auto;
@@ -64,6 +60,7 @@
 
 .studio-dm-pane.is-split {
   overflow: hidden;
+  background: transparent;
 }
 
 .studio-dm-peer-panels {
