@@ -10578,6 +10578,29 @@ export function StudioShell({
             0 -10px 32px rgba(15, 23, 42, 0.12),
             0 -2px 8px rgba(15, 23, 42, 0.06);
         }
+        /* Desktop: full-width head above left/right rails (not beside them). */
+        .studio-polish > .studio-desktop-stage {
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          align-self: stretch;
+          width: 100%;
+          height: 100%;
+          min-width: 0;
+          min-height: 0;
+          overflow: hidden;
+        }
+        .studio-desktop-stage > .studio-main-panels {
+          flex: 1 1 0% !important;
+          min-height: 0 !important;
+          height: auto !important;
+          max-height: none !important;
+        }
+        .studio-desktop-workspace-head {
+          width: 100%;
+          flex: 0 0 auto;
+          z-index: 5;
+        }
         .studio-mobile-stage {
           display: flex;
           flex-direction: column;
@@ -23751,7 +23774,275 @@ export function StudioShell({
           }
         }
       `}</style>
-      <StudioMobileStage enabled={isMobile}>
+      <StudioMobileStage enabled={isMobile} top={!isMobile ? (
+        <header className="cursor-panel-head cursor-workspace-head studio-desktop-workspace-head shrink-0">
+          <UnifiedTabStrip
+            tabs={tabs}
+            activeKey={activeTab}
+            onSelect={handleTabSelect}
+            onReselect={handleFeedTabReselect}
+            onClose={closeTab}
+            onSetTabOrder={setOpenTabs}
+            onTabContextAction={handleTabContextAction}
+            onCommitTabRename={commitTabRename}
+            disableDrag={isMobile}
+          />
+          {feedModeMenuOpen && typeof document !== "undefined"
+            ? createPortal(
+                <div
+                  ref={feedModeMenuRef}
+                  data-feed-mode-menu
+                  className="studio-feed-mode-menu"
+                  role="menu"
+                  aria-label="Feed type"
+                  style={{
+                    left: feedModeMenuPos?.left ?? -9999,
+                    top: feedModeMenuPos?.top ?? -9999,
+                    minWidth: feedModeMenuPos?.minWidth ?? 132,
+                    visibility: feedModeMenuPos ? "visible" : "hidden",
+                  }}
+                >
+                  {(
+                    [
+                      { mode: "forYou", label: "For You" },
+                      { mode: "following", label: "Following" },
+                    ]
+                  ).map((item) => {
+                    const current = parseFeedTabKey(activeTab)?.mode ?? "forYou";
+                    const selected = current === item.mode;
+                    return (
+                      <button
+                        key={item.mode}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        className={selected ? "is-selected" : undefined}
+                        onClick={() => setFeedMode(item.mode)}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>,
+                document.body,
+              )
+            : null}
+          <div className="cursor-panel-head-tools cursor-workspace-tools">
+            {isComposerContextTabKey(activeTab) ? (
+              <div className="studio-new-tab-cluster">
+                <button
+                  type="button"
+                  className="studio-settings-pill studio-settings-trigger studio-new-tab-btn"
+                  onClick={openNewComposerTab}
+                  aria-label="New create tab"
+                  title="New create tab"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+            {!isMobile ? (
+              <>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${activeTab.startsWith("feed:") ? " is-active" : ""}`}
+                  onClick={openFeed}
+                  aria-label="Open feed"
+                  title="Feed"
+                  aria-pressed={activeTab.startsWith("feed:")}
+                >
+                  <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isNetworkRail ? " is-active" : ""}`}
+                  onClick={() => openNetworkTab()}
+                  aria-label="Open Creative Network"
+                  title="Creative Network"
+                  aria-pressed={isNetworkRail}
+                >
+                  <Store className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isMessagesRail ? " is-active" : ""}`}
+                  onClick={openMessages}
+                  aria-label="Open messages"
+                  title="Messages"
+                  aria-pressed={isMessagesRail}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
+                  onClick={openFiles}
+                  aria-label="Open files"
+                  title="Files"
+                  aria-pressed={isFilesTab}
+                >
+                  <Folder className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                {showHistory ? (
+                  <div
+                    className={`studio-header-create-cluster${
+                      isComposerContextTabKey(activeTab) ||
+                      String(activeTab || "").startsWith("create:") ||
+                      historyOpen
+                        ? " is-linked"
+                        : ""
+                    }`}
+                    role="group"
+                    aria-label="Create and History"
+                  >
+                    <button
+                      type="button"
+                      className={`studio-settings-pill studio-settings-trigger${
+                        isComposerContextTabKey(activeTab) ||
+                        String(activeTab || "").startsWith("create:")
+                          ? " is-active"
+                          : ""
+                      }`}
+                      onClick={() => {
+                        setHistoryOpen(false);
+                        setSettingsOpen(false);
+                        setMobileAppMenuOpen(false);
+                        openTab(lastChatTabRef.current || COMPOSER_TAB);
+                      }}
+                      aria-label="Open create"
+                      title="Create"
+                      aria-pressed={
+                        isComposerContextTabKey(activeTab) ||
+                        String(activeTab || "").startsWith("create:")
+                      }
+                    >
+                      <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
+                      onClick={() => {
+                        setMobileAppMenuOpen(false);
+                        setSettingsOpen(false);
+                        if (
+                          !historyOpen &&
+                          !isComposerContextTabKey(activeTab) &&
+                          !String(activeTab || "").startsWith("create:")
+                        ) {
+                          openTab(lastChatTabRef.current || COMPOSER_TAB);
+                        }
+                        setHistoryOpen((open) => !open);
+                      }}
+                      aria-label={historyOpen ? "Close history" : "Open history"}
+                      title={historyOpen ? "Close history" : "History"}
+                      aria-pressed={historyOpen}
+                    >
+                      {historyOpen ? (
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <History className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={`studio-settings-pill studio-settings-trigger${
+                      isComposerContextTabKey(activeTab) ||
+                      String(activeTab || "").startsWith("create:")
+                        ? " is-active"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      setHistoryOpen(false);
+                      setSettingsOpen(false);
+                      setMobileAppMenuOpen(false);
+                      openTab(lastChatTabRef.current || COMPOSER_TAB);
+                    }}
+                    aria-label="Open create"
+                    title="Create"
+                    aria-pressed={
+                      isComposerContextTabKey(activeTab) ||
+                      String(activeTab || "").startsWith("create:")
+                    }
+                  >
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                )}
+                {isAdminUser ? (
+                  <AdminQuickLinks
+                    onOpenAdminTab={openAdminTab}
+                    active={Boolean(activeAdminTab)}
+                  />
+                ) : null}
+                <CreditPill
+                  creditBalance={billingAccount?.creditBalance}
+                  creditPriceCents={pricing?.creditPriceCents}
+                  onClick={openCreditsPane}
+                />
+                <StudioProfileMenu
+                  currentUser={currentUser}
+                  profile={myPublicProfile}
+                  username={myPublicProfile?.username || sharedProfileAssets?.username}
+                  isProfileTabActive={activeTab.startsWith("profile:")}
+                  onViewProfile={openOwnProfile}
+                />
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
+                  onClick={() => {
+                    setHistoryOpen(false);
+                    setSettingsOpen(false);
+                    setMobileAppMenuOpen((open) => !open);
+                  }}
+                  aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
+                  title="Menu"
+                  aria-expanded={mobileAppMenuOpen}
+                >
+                  {mobileAppMenuOpen ? (
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <StudioMenuLogoIcon />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
+                  onClick={() => {
+                    void toggleBrowserFullscreen();
+                  }}
+                  aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
+                  title={browserFullscreen ? "Exit full screen" : "Full screen"}
+                  aria-pressed={browserFullscreen}
+                >
+                  {browserFullscreen ? (
+                    <Shrink className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <Expand className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
+                onClick={() => {
+                  void toggleBrowserFullscreen();
+                }}
+                aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
+                title={browserFullscreen ? "Exit full screen" : "Full screen"}
+                aria-pressed={browserFullscreen}
+              >
+                {browserFullscreen ? (
+                  <Shrink className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Expand className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </button>
+            )}
+          </div>
+        </header>
+      ) : null}>
       <PanelGroup
         direction="horizontal"
         autoSaveId={isMobile ? "studio-main-h-mobile" : "studio-main-h"}
@@ -24261,6 +24552,7 @@ export function StudioShell({
         historyPanelProps={historyPanelProps}
       >
       <main className={`${STYLE.main} studio-composer-bg`}>
+        {isMobile ? (
         <header className="cursor-panel-head cursor-workspace-head shrink-0">
           <UnifiedTabStrip
             tabs={tabs}
@@ -24528,6 +24820,7 @@ export function StudioShell({
             )}
           </div>
         </header>
+        ) : null}
         <section className="relative flex min-h-0 flex-1 overflow-hidden">
           {isFilesTab ? (
             <div className="studio-files-workspace-tab" data-tab="files">
@@ -33117,8 +33410,15 @@ function StudioFilesExplorerBody({
   );
 }
 
-function StudioMobileStage({ enabled, children }) {
-  if (!enabled) return children;
+function StudioMobileStage({ enabled, top = null, children }) {
+  if (!enabled) {
+    return (
+      <div className="studio-desktop-stage">
+        {top}
+        {children}
+      </div>
+    );
+  }
   return <div className="studio-mobile-stage">{children}</div>;
 }
 
