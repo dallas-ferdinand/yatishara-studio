@@ -192,6 +192,11 @@ function NetworkBrowse({
         <main className="public-offers-body">
           <section className="public-offers-hero">
             <div className="public-offers-hero-bg" aria-hidden="true" />
+            <Store
+              className="public-offers-hero-icon"
+              aria-hidden="true"
+              strokeWidth={1.25}
+            />
             <div className="public-offers-hero-copy">
               <h1>{heroTitle}</h1>
               <p>

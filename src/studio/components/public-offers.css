@@ -859,9 +859,30 @@
     );
 }
 
+/* Large relative watermark — same idea as Balance / billing hero icon. */
+.public-offers-hero-icon {
+  position: absolute;
+  right: -36px;
+  bottom: -28px;
+  width: min(48vw, 220px);
+  height: min(48vw, 220px);
+  transform: rotate(-12deg);
+  color: var(--cursor-accent);
+  opacity: 0.2;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.public-offers-hero-icon svg,
+.public-offers-hero > svg.public-offers-hero-icon {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .public-offers-hero-copy {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   display: grid;
   gap: 8px;
   justify-items: center;

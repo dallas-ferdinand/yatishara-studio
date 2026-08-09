@@ -722,6 +722,11 @@ export function StudioAcademyPane({
               className="public-offers-hero-bg studio-academy-hero-bg"
               aria-hidden="true"
             />
+            <GraduationCap
+              className="public-offers-hero-icon"
+              aria-hidden="true"
+              strokeWidth={1.25}
+            />
             <div className="public-offers-hero-copy">
               <h1>{academy.listTab === "mine" ? "My courses" : "Academy"}</h1>
               <p>
