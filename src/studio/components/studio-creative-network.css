@@ -1533,12 +1533,14 @@ button.studio-cn-card-btn.public-offers-card {
   flex: 1 1 auto;
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 7px;
   overflow: hidden;
   white-space: nowrap;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 750;
   letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
@@ -1548,13 +1550,30 @@ button.studio-cn-card-btn.public-offers-card {
   text-overflow: ellipsis;
 }
 
+/* Same 2-color sale stack as Academy cards/checkout: accent strike + bright now. */
+.studio-cn-book-bar-price .studio-academy-card-compare,
 .studio-cn-book-bar-compare {
   flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 600;
+  margin: 0;
+  font-size: 0.78em;
+  font-weight: 700;
   letter-spacing: 0;
-  color: var(--color-cursor-muted, var(--mos-muted));
+  color: var(--cursor-accent, var(--mos-accent, #5b8cff));
   text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: color-mix(
+    in srgb,
+    var(--cursor-accent, #5b8cff) 70%,
+    transparent
+  );
+  opacity: 1;
+}
+
+.studio-cn-book-bar-price .studio-academy-card-now {
+  font-size: 1.12em;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
 .studio-cn-book-bar-actions {

@@ -1090,9 +1090,11 @@ export function StudioAcademyPane({
           {!owned ? (
             <span className="studio-cn-book-bar-price">
               {listPriceLabel ? (
-                <s className="studio-cn-book-bar-compare">{listPriceLabel}</s>
+                <s className="studio-academy-card-compare studio-cn-book-bar-compare">
+                  {listPriceLabel}
+                </s>
               ) : null}
-              <span>{priceShort || priceLabel}</span>
+              <span className="studio-academy-card-now">{priceShort || priceLabel}</span>
             </span>
           ) : (
             <span className="studio-cn-book-bar-price">Discussion</span>
