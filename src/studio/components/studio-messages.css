@@ -1313,6 +1313,23 @@
   border: none;
 }
 
+/* Message band: accent top+bottom when the textarea is focused. */
+.studio-dm-composer.is-split {
+  transition: border-top-color 160ms ease;
+}
+
+.studio-dm-composer.is-split .studio-dm-composer-row.is-message {
+  transition: border-bottom-color 160ms ease;
+}
+
+.studio-dm-composer.is-split:has(.studio-dm-composer-row.is-message:focus-within) {
+  border-top-color: var(--cursor-accent, var(--mos-accent));
+}
+
+.studio-dm-composer.is-split .studio-dm-composer-row.is-message:focus-within {
+  border-bottom-color: var(--cursor-accent, var(--mos-accent));
+}
+
 .studio-polish .studio-dm-composer.is-split .studio-composer-circle-btn.studio-dm-composer-circle:hover:not(:disabled) :where(svg, .icon-inline) {
   color: inherit !important;
   filter: none;
