@@ -1694,8 +1694,15 @@ button.studio-cn-card-btn.public-offers-card {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: min(72dvh, 640px);
-  max-height: calc(100dvh - 12px - env(safe-area-inset-top, 0px));
+  /* Height set in JS (peek ↔ full), same language as History / menu sheets. */
+  height: min(
+    var(--studio-mobile-app-menu-sheet-height, 55dvh),
+    640px
+  );
+  max-height: min(
+    var(--studio-mobile-app-menu-sheet-full, 72dvh),
+    calc(100dvh - 12px - env(safe-area-inset-top, 0px))
+  );
   overflow: hidden;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
   border-bottom: 0;
@@ -1707,16 +1714,36 @@ button.studio-cn-card-btn.public-offers-card {
   );
   padding-bottom: env(safe-area-inset-bottom, 0px);
   animation: studio-cn-book-sheet-in 220ms cubic-bezier(0.2, 0, 0.2, 1);
+  transition:
+    height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 120ms ease;
+  will-change: height;
 }
 
-/* Academy PayWise — size to content; cap only so it can’t eat the screen. */
-.studio-cn-book-sheet.is-academy-checkout .studio-cn-book-sheet-panel {
-  height: max-content;
-  max-height: min(72dvh, 640px);
+.studio-cn-book-sheet.is-entered .studio-cn-book-sheet-panel {
+  animation: none;
 }
 
+.studio-cn-book-sheet.is-full .studio-cn-book-sheet-panel {
+  border-radius: 14px 14px 0 0;
+}
+
+.studio-cn-book-sheet.is-dragging .studio-cn-book-sheet-panel {
+  transition: none !important;
+  animation: none !important;
+}
+
+.studio-cn-book-sheet.is-settling .studio-cn-book-sheet-panel {
+  transition:
+    height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 120ms ease;
+}
+
+/* Academy PayWise — body scrolls only when dragged shorter than content. */
 .studio-cn-book-sheet.is-academy-checkout .studio-cn-book-sheet-body {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   overflow-y: auto;
   padding-bottom: 12px;
 }
@@ -1747,10 +1774,6 @@ button.studio-cn-card-btn.public-offers-card {
 
 .studio-cn-book-sheet.is-dragging .studio-cn-book-sheet-handle {
   cursor: grabbing;
-}
-
-.studio-cn-book-sheet.is-dragging .studio-cn-book-sheet-panel {
-  transition: none !important;
 }
 
 .studio-cn-book-sheet-grab {

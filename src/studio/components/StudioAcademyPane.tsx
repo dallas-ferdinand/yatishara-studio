@@ -1132,6 +1132,7 @@ export function StudioAcademyPane({
             ariaLabel="Course checkout"
             className="is-academy-checkout"
             backLayerId="academy-checkout-sheet"
+            fitContent
           >
             <CheckoutDock showHead={false} {...checkoutDockProps} />
           </StudioCnBookSheet>
