@@ -21937,14 +21937,6 @@ export function StudioShell({
           padding: 10px;
           scrollbar-gutter: auto;
         }
-        .studio-history-head-title {
-          margin: 0;
-          color: var(--color-cursor-text-bright);
-          font-size: 13px;
-          font-weight: 650;
-          line-height: 1.2;
-          letter-spacing: -0.01em;
-        }
         /* History search chrome — PanelSearchBar + type filter (Messages/Files language). */
         .studio-history-panel-body {
           display: flex;
