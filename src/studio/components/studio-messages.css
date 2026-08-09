@@ -1354,10 +1354,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   flex: 0 0 auto;
   border-radius: 999px;
   cursor: pointer;
@@ -1392,8 +1392,8 @@
 
 .studio-dm-composer.is-classic .studio-dm-attach svg,
 .studio-dm-composer.is-classic .studio-dm-send svg {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
 }
 
 .studio-dm-recording {
@@ -1402,8 +1402,8 @@
   gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
-  min-height: calc(var(--cursor-head-h, 32px) - 8px);
-  height: calc(var(--cursor-head-h, 32px) - 8px);
+  min-height: 32px;
+  height: 32px;
   padding: 0 4px 0 2px;
   border-radius: 999px;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
@@ -1412,18 +1412,18 @@
 }
 
 .studio-dm-recording .studio-dm-send {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
 }
 
 .studio-dm-rec-cancel {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
   border: 0;
   border-radius: 999px;
