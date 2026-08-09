@@ -19,16 +19,19 @@
   position: fixed !important;
   color: var(--color-cursor-text-bright, var(--mos-text));
   font-family: var(--font-onest), system-ui, sans-serif;
-  /* Plate + soft glow centered in the notch band (not pinned to the top edge). */
+  /*
+   * User wallpaper in the notch — center/cover so this strip shows the middle
+   * of the image (not the top edge of the full-screen backdrop crop).
+   */
   background:
-    radial-gradient(
-      ellipse 85% 90% at 50% 50%,
-      color-mix(in srgb, #fff 9%, transparent) 0%,
-      transparent 72%
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--mos-bg, #05080f) 38%, transparent),
+      color-mix(in srgb, var(--mos-bg, #05080f) 28%, transparent)
     ),
-    color-mix(in srgb, var(--mos-bg, #05080f) 92%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #333) 55%, transparent);
-  box-shadow: 0 6px 18px color-mix(in srgb, #000 28%, transparent);
+    var(--studio-loaded-bg, var(--studio-active-bg)) center / cover no-repeat;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #333) 40%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 22%, transparent);
 }
 
 .studio-polish.is-studio-mobile.is-browser-fullscreen .studio-fullscreen-status {
@@ -37,28 +40,28 @@
 
 [data-appearance="light"] .studio-fullscreen-status {
   background:
-    radial-gradient(
-      ellipse 85% 90% at 50% 50%,
-      color-mix(in srgb, #fff 55%, transparent) 0%,
-      transparent 72%
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--mos-panel, #f5f5f7) 42%, transparent),
+      color-mix(in srgb, var(--mos-panel, #f5f5f7) 30%, transparent)
     ),
-    color-mix(in srgb, var(--mos-panel, #f5f5f7) 94%, transparent);
+    var(--studio-loaded-bg, var(--studio-active-bg)) center / cover no-repeat;
   border-bottom-color: color-mix(in srgb, #12141a 10%, transparent);
   color: #12141a;
-  box-shadow: 0 6px 16px color-mix(in srgb, #0f172a 10%, transparent);
+  box-shadow: 0 4px 12px color-mix(in srgb, #0f172a 10%, transparent);
 }
 
 [data-appearance="dark"] .studio-fullscreen-status {
   background:
-    radial-gradient(
-      ellipse 85% 90% at 50% 50%,
-      color-mix(in srgb, #fff 10%, transparent) 0%,
-      transparent 72%
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--mos-bg, #05080f) 42%, transparent),
+      color-mix(in srgb, var(--mos-bg, #05080f) 30%, transparent)
     ),
-    color-mix(in srgb, var(--mos-bg, #05080f) 94%, transparent);
+    var(--studio-loaded-bg, var(--studio-active-bg)) center / cover no-repeat;
   border-bottom-color: color-mix(in srgb, #fff 10%, transparent);
   color: #f2f2f4;
-  box-shadow: 0 8px 20px color-mix(in srgb, #000 36%, transparent);
+  box-shadow: 0 6px 16px color-mix(in srgb, #000 28%, transparent);
 }
 
 .studio-fullscreen-status-time {
