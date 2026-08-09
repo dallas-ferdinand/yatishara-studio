@@ -35,6 +35,7 @@ import { useStudioAcademy } from "./StudioAcademyContext";
 import { ProfileCommentsPanel } from "./ProfileCommentsPanel";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
 import { StudioConfirmOverlay } from "./StudioConfirmOverlay";
+import { StudioCnBookSheet } from "./StudioCnBookSheet";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import "./studio-creative-network.css";
 import "./public-offers.css";
@@ -1121,28 +1122,16 @@ export function StudioAcademyPane({
             ) : null}
           </div>
         </nav>
-        {!owned && checkoutSheetOpen ? (
-          <div
-            className="studio-cn-book-sheet is-academy-checkout"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Course checkout"
+        {!owned ? (
+          <StudioCnBookSheet
+            open={checkoutSheetOpen}
+            onClose={() => setCheckoutSheetOpen(false)}
+            ariaLabel="Course checkout"
+            className="is-academy-checkout"
+            backLayerId="academy-checkout-sheet"
           >
-            <button
-              type="button"
-              className="studio-cn-book-sheet-backdrop"
-              aria-label="Close checkout"
-              onClick={() => setCheckoutSheetOpen(false)}
-            />
-            <div className="studio-cn-book-sheet-panel">
-              <div className="studio-cn-book-sheet-handle" aria-hidden="true">
-                <span className="studio-cn-book-sheet-grab" />
-              </div>
-              <div className="studio-cn-book-sheet-body">
-                <CheckoutDock showHead={false} {...checkoutDockProps} />
-              </div>
-            </div>
-          </div>
+            <CheckoutDock showHead={false} {...checkoutDockProps} />
+          </StudioCnBookSheet>
         ) : null}
       </>
     ) : null;

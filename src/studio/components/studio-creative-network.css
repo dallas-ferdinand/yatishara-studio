@@ -1687,6 +1687,18 @@ button.studio-cn-card-btn.public-offers-card {
   flex: 0 0 auto;
   min-height: 28px;
   padding: 10px 0 4px;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.studio-cn-book-sheet.is-dragging .studio-cn-book-sheet-handle {
+  cursor: grabbing;
+}
+
+.studio-cn-book-sheet.is-dragging .studio-cn-book-sheet-panel {
+  transition: none !important;
 }
 
 .studio-cn-book-sheet-grab {
@@ -1694,6 +1706,7 @@ button.studio-cn-card-btn.public-offers-card {
   height: 5px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-cursor-text-bright, #111) 22%, transparent);
+  pointer-events: none;
 }
 
 [data-appearance="light"] .studio-cn-book-sheet-grab {

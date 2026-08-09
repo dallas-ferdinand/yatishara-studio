@@ -48,6 +48,7 @@ import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
+import { StudioCnBookSheet } from "@/studio/components/StudioCnBookSheet";
 import { MediaLoadFrame } from "@/studio/components/media-load-frame";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents, formatTtdFromCredits } from "@/studio/lib/money";
@@ -1799,23 +1800,10 @@ export function StudioOfferDetailEmbed({
     ? (packages[Math.min(pkgIndex, packages.length - 1)] ?? packages[0])
     : null;
 
-  useMobileBackLayer("cn-studio-book-sheet", bookSheetOpen, () => {
-    setBookSheetOpen(false);
-  });
-
   useEffect(() => {
     setPkgIndex(0);
     setBookSheetOpen(false);
   }, [slug]);
-
-  useEffect(() => {
-    if (!bookSheetOpen) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setBookSheetOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [bookSheetOpen]);
 
   useEffect(() => {
     if (!isMobile) setBookSheetOpen(false);
@@ -1984,43 +1972,30 @@ export function StudioOfferDetailEmbed({
             </div>
           </nav>
         ) : null}
-        {bookSheetOpen && offer != null ? (
-          <div
-            className="studio-cn-book-sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Packages and booking"
+        {offer != null ? (
+          <StudioCnBookSheet
+            open={bookSheetOpen}
+            onClose={() => setBookSheetOpen(false)}
+            ariaLabel="Packages and booking"
+            backLayerId="cn-studio-book-sheet"
           >
-            <button
-              type="button"
-              className="studio-cn-book-sheet-backdrop"
-              aria-label="Dismiss booking"
-              onClick={() => setBookSheetOpen(false)}
+            <StudioCnOfferBookSidebar
+              offer={{
+                _id: offer._id,
+                slug: offer.slug,
+                priceCents: offer.priceCents,
+                deliveryDays: offer.deliveryDays,
+                category: offer.category,
+                packages,
+                sellerUsername: offer.sellerUsername,
+              }}
+              pkgIndex={pkgIndex}
+              onPkgIndex={setPkgIndex}
+              isAuthenticated={isAuthenticated}
+              showHead={false}
+              onStartChat={onStartChat}
             />
-            <div className="studio-cn-book-sheet-panel">
-              <div className="studio-cn-book-sheet-handle" aria-hidden="true">
-                <span className="studio-cn-book-sheet-grab" />
-              </div>
-              <div className="studio-cn-book-sheet-body">
-                <StudioCnOfferBookSidebar
-                  offer={{
-                    _id: offer._id,
-                    slug: offer.slug,
-                    priceCents: offer.priceCents,
-                    deliveryDays: offer.deliveryDays,
-                    category: offer.category,
-                    packages,
-                    sellerUsername: offer.sellerUsername,
-                  }}
-                  pkgIndex={pkgIndex}
-                  onPkgIndex={setPkgIndex}
-                  isAuthenticated={isAuthenticated}
-                  showHead={false}
-                  onStartChat={onStartChat}
-                />
-              </div>
-            </div>
-          </div>
+          </StudioCnBookSheet>
         ) : null}
       </div>
     );
