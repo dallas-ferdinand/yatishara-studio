@@ -124,17 +124,20 @@ export function explorerEntryIcon(entry) {
 }
 
 /**
- * Files type filter (All / Images / Videos / Edits / Scripts / Elements / Audio).
- * Folders stay visible so you can still open a project while a type is selected.
- * Edits/elements/scripts match only their studioKind — preview kind on a .studio
- * edit must not make it look like an image or video asset.
+ * Files type filter (All / Folders / Images / Videos / Edits / Scripts / Elements / Audio).
+ * Folders stay visible for media filters so you can still open a project.
+ * Folders filter shows directories only. Edits/elements/scripts match studioKind —
+ * preview kind on a .studio edit must not look like an image/video asset.
  */
 export function matchesExplorerTypeFilter(entry, filterId) {
   if (!filterId || filterId === "all") return true;
   if (!entry || entry.type === "parent" || entry.type === "search-divider") {
     return false;
   }
-  if (entry.type === "dir" || entry.studioKind === "folder") return true;
+  const isFolder = entry.type === "dir" || entry.studioKind === "folder";
+  if (filterId === "folder") return isFolder;
+  // Keep folders visible under other type filters for project navigation.
+  if (isFolder) return true;
 
   const studioKind = entry.studioKind;
   if (studioKind === "videoEdit") return filterId === "videoEdit";

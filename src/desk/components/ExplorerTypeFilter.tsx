@@ -7,6 +7,7 @@ import { Icon } from "./Icons";
 
 export const EXPLORER_TYPE_FILTERS = [
   { id: "all", label: "All", icon: "layoutGrid" },
+  { id: "folder", label: "Folders", icon: "folder" },
   { id: "image", label: "Images", icon: "image" },
   { id: "video", label: "Videos", icon: "play" },
   { id: "videoEdit", label: "Edits", icon: "studioProject" },
