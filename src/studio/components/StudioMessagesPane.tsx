@@ -2448,10 +2448,17 @@ export function StudioMessagesPane({
 
   function autosizeComposerInput(el: HTMLTextAreaElement | null) {
     if (!el) return;
+    // Mobile row is a touch taller so placeholder/text can optically center.
+    const minPx = isMobile ? 40 : 32;
     el.style.height = "0px";
-    // Match --cursor-head-h (32px) for empty/single-line; grow to 120px.
-    const minPx = 32;
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, minPx), 120)}px`;
+    const scroll = el.scrollHeight;
+    const lineCount = el.value.split("\n").length;
+    const singleLine = lineCount <= 1 && scroll <= minPx + 10;
+    const next = singleLine
+      ? minPx
+      : Math.min(Math.max(scroll, minPx), 120);
+    el.style.height = `${next}px`;
+    el.classList.toggle("is-single-line", singleLine);
   }
 
   /** Voice-note recorder — pause/resume supported; extras row stays visible. */
@@ -3881,6 +3888,7 @@ export function StudioMessagesPane({
                   }}
                   value={draft}
                   rows={1}
+                  enterKeyHint={isMobile ? "enter" : "send"}
                   placeholder={
                     pendingFeedShare
                       ? "Add a note…"
@@ -3928,7 +3936,8 @@ export function StudioMessagesPane({
                   onDragOver={onStudioChatDragOver}
                   onDragLeave={onStudioChatDragLeave}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
+                    // Desktop: Enter sends. Mobile: Enter inserts a new line.
+                    if (event.key === "Enter" && !event.shiftKey && !isMobile) {
                       event.preventDefault();
                       void handleSend();
                     }
