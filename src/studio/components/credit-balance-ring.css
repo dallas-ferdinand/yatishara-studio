@@ -99,12 +99,13 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  flex: 0 0 auto;
   box-sizing: border-box;
   width: auto;
   margin: 0;
-  padding: 12px 14px 10px;
-  overflow: hidden;
+  padding: 12px 14px 12px;
+  overflow: visible;
   border-radius: 12px;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   background:
@@ -197,20 +198,25 @@
 }
 
 /*
-  Match app-grid insets: mobile grid uses padding 22px 16px + gap 16px;
-  desktop popover uses gap 12px and sheet edge ~10–12px.
+  Mobile: tight under drag handle (was 22px — too much).
+  Desktop: sheet already pads 12px — only gap below chip to grid.
 */
 .studio-mobile-app-menu-scroll .studio-balance-chip {
-  margin: 22px 16px 16px;
+  margin: 8px 16px 12px;
   width: auto;
+  flex-shrink: 0;
 }
 
 .studio-mobile-app-menu-sheet.is-desktop-popover .studio-balance-chip {
-  margin: 12px 12px 12px;
+  margin: 0 0 12px;
+  flex-shrink: 0;
 }
 
 .studio-mobile-app-menu-scroll:has(.studio-balance-chip) .studio-mobile-app-menu-body.is-app-grid {
   padding-top: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .studio-mobile-app-menu-sheet.is-desktop-popover

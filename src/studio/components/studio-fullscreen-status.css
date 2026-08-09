@@ -19,11 +19,25 @@
   position: fixed !important;
   color: var(--color-cursor-text-bright, var(--mos-text));
   font-family: var(--font-onest), system-ui, sans-serif;
-  background: transparent;
+  /* Light/dark plate behind notch chrome. */
+  background: color-mix(in srgb, var(--mos-bg, #05080f) 92%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #333) 55%, transparent);
 }
 
 .studio-polish.is-studio-mobile.is-browser-fullscreen .studio-fullscreen-status {
   display: flex;
+}
+
+[data-appearance="light"] .studio-fullscreen-status {
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 94%, transparent);
+  border-bottom-color: color-mix(in srgb, #12141a 10%, transparent);
+  color: #12141a;
+}
+
+[data-appearance="dark"] .studio-fullscreen-status {
+  background: color-mix(in srgb, var(--mos-bg, #05080f) 94%, transparent);
+  border-bottom-color: color-mix(in srgb, #fff 10%, transparent);
+  color: #f2f2f4;
 }
 
 .studio-fullscreen-status-time {
@@ -44,8 +58,8 @@
   padding: 0 6px;
   overflow: hidden;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--color-cursor-text-bright, #fff) 28%, transparent);
-  background: color-mix(in srgb, var(--mos-bg, #05080f) 55%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  background: color-mix(in srgb, var(--mos-page, #12141a) 55%, transparent);
   color: var(--color-cursor-text-bright, #fff);
   font-size: 9px;
   font-weight: 750;
@@ -58,17 +72,34 @@
   left: 0;
   top: 0;
   bottom: 0;
-  background: color-mix(in srgb, var(--color-cursor-text-bright, #fff) 22%, transparent);
   border-radius: inherit;
-  transition: width 220ms ease;
+  transition: width 220ms ease, background-color 220ms ease;
+  background: color-mix(in srgb, currentColor 28%, transparent);
+}
+
+/* Color-coded progress by level. */
+.studio-fullscreen-status-battery.is-high .studio-fullscreen-status-battery-fill {
+  background: color-mix(in srgb, #3dd68c 70%, transparent);
+}
+
+.studio-fullscreen-status-battery.is-mid .studio-fullscreen-status-battery-fill {
+  background: color-mix(in srgb, #f5c542 75%, transparent);
+}
+
+.studio-fullscreen-status-battery.is-low .studio-fullscreen-status-battery-fill {
+  background: color-mix(in srgb, #f87171 78%, transparent);
+}
+
+.studio-fullscreen-status-battery.is-critical .studio-fullscreen-status-battery-fill {
+  background: color-mix(in srgb, #ef4444 88%, transparent);
 }
 
 .studio-fullscreen-status-battery.is-charging .studio-fullscreen-status-battery-fill {
-  background: color-mix(in srgb, #3dd68c 55%, transparent);
+  background: color-mix(in srgb, #3dd68c 80%, transparent);
 }
 
-.studio-fullscreen-status-battery.is-low:not(.is-charging) .studio-fullscreen-status-battery-fill {
-  background: color-mix(in srgb, #f87171 50%, transparent);
+.studio-fullscreen-status-battery.is-charging {
+  border-color: color-mix(in srgb, #3dd68c 45%, transparent);
 }
 
 .studio-fullscreen-status-battery-label {
@@ -77,11 +108,7 @@
 }
 
 [data-appearance="light"] .studio-fullscreen-status-battery {
-  border-color: color-mix(in srgb, #12141a 22%, transparent);
-  background: color-mix(in srgb, #f5f5f7 70%, transparent);
+  border-color: color-mix(in srgb, #12141a 16%, transparent);
+  background: color-mix(in srgb, #fff 72%, transparent);
   color: #12141a;
-}
-
-[data-appearance="light"] .studio-fullscreen-status-battery-fill {
-  background: color-mix(in srgb, #12141a 14%, transparent);
 }

@@ -69,13 +69,25 @@ export function StudioFullscreenStatusBar({ active }: { active: boolean }) {
 
   const pct = batteryPct;
   const fill = pct == null ? 0 : Math.min(100, Math.max(0, pct));
+  const levelClass =
+    pct == null
+      ? "is-unknown"
+      : charging
+        ? "is-charging"
+        : fill >= 70
+          ? "is-high"
+          : fill >= 40
+            ? "is-mid"
+            : fill >= 15
+              ? "is-low"
+              : "is-critical";
 
   return (
     <div className="studio-fullscreen-status" role="status" aria-live="polite">
       <span className="studio-fullscreen-status-time">{formatStatusTime(now)}</span>
       {pct != null ? (
         <span
-          className={`studio-fullscreen-status-battery${charging ? " is-charging" : ""}${fill <= 20 ? " is-low" : ""}`}
+          className={`studio-fullscreen-status-battery ${levelClass}`}
           title={charging ? `Charging ${pct}%` : `${pct}%`}
         >
           <span
