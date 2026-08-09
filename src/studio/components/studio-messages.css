@@ -1163,10 +1163,11 @@
 
 .studio-dm-composer {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   flex: 0 0 auto;
-  padding: 8px 12px 10px;
+  padding: 0;
   border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
   background: var(--mos-bg, var(--color-cursor-bg, #05080f));
 }
@@ -1175,47 +1176,90 @@
   background: var(--mos-panel, #f5f5f7);
 }
 
+.studio-dm-composer-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-dm-composer-row.is-message {
+  min-height: var(--cursor-head-h, 36px);
+  padding: 0;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+}
+
+.studio-dm-composer-row.is-extras {
+  min-height: 34px;
+  padding: 0 4px;
+  gap: 2px;
+}
+
+.studio-dm-composer-row.is-recording {
+  gap: 8px;
+  padding: 0 8px 0 4px;
+  min-height: var(--cursor-head-h, 36px);
+}
+
 .studio-dm-composer textarea {
   flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
   max-height: 120px;
   resize: none;
-  padding: 7px 12px;
-  border-radius: 16px;
-  border: 1px solid var(--color-cursor-border, var(--mos-border));
-  background: var(--cursor-surface-input, var(--mos-surface));
+  margin: 0;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: var(--color-cursor-text-bright, var(--mos-text));
   font: inherit;
   font-size: var(--desk-text-ui, 13px);
-  line-height: 1.4;
+  font-weight: 500;
+  line-height: 1.35;
   outline: none;
+  box-shadow: none;
   scrollbar-width: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.studio-dm-composer textarea::placeholder {
+  color: var(--color-cursor-muted, var(--mos-muted));
+  opacity: 1;
 }
 
 .studio-dm-composer textarea::-webkit-scrollbar {
   display: none;
 }
 
+.studio-dm-composer textarea:focus,
 .studio-dm-composer textarea:focus-visible {
-  border-color: var(--cursor-border-focus, var(--cursor-accent));
+  outline: none;
+  box-shadow: none;
+  border: none;
 }
 
 .studio-dm-send {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
+  margin: 0;
   flex: 0 0 auto;
+  align-self: stretch;
   border: 0;
-  border-radius: 999px;
-  background: var(--cursor-accent, var(--mos-accent));
-  color: #10140a;
+  border-radius: 0;
+  background: transparent;
+  color: var(--cursor-accent, var(--mos-accent));
   cursor: pointer;
 }
 
 .studio-dm-send:hover:not(:disabled) {
-  filter: brightness(1.05);
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 12%, transparent);
+  filter: none;
 }
 
 .studio-dm-send:disabled {
@@ -1225,35 +1269,62 @@
 
 /* Mic button (shown while the draft is empty) — quiet until pressed. */
 .studio-dm-send.is-mic {
-  background: var(--cursor-surface-input, var(--mos-surface));
-  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  background: transparent;
+  border: 0;
   color: var(--color-cursor-text, var(--mos-text));
 }
 
 .studio-dm-send.is-mic:hover:not(:disabled) {
   filter: none;
-  border-color: var(--cursor-border-focus, var(--cursor-accent));
+  background: color-mix(in srgb, var(--color-cursor-text, var(--mos-text)) 8%, transparent);
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
-/* —— Voice-note recording row (replaces the textarea while recording) —— */
-
-.studio-dm-recording {
-  display: flex;
+.studio-dm-extra-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 32px;
-  padding: 0 4px 0 2px;
-  border-radius: 16px;
-  border: 1px solid var(--color-cursor-border, var(--mos-border));
-  background: var(--cursor-surface-input, var(--mos-surface));
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
 }
 
-.studio-dm-recording .studio-dm-send {
-  width: 26px;
-  height: 26px;
+.studio-dm-extra-btn:hover:not(:disabled) {
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  background: color-mix(in srgb, var(--color-cursor-text, var(--mos-text)) 6%, transparent);
+}
+
+.studio-dm-extra-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.studio-dm-extra-btn svg {
+  flex: 0 0 auto;
+}
+
+.studio-polish .studio-dm-composer .studio-dm-send:hover:not(:disabled) :where(svg, .icon-inline),
+.studio-polish .studio-dm-composer .studio-dm-send.is-mic:hover:not(:disabled) :where(svg, .icon-inline),
+.studio-polish .studio-dm-composer .studio-dm-extra-btn:hover:not(:disabled) :where(svg, .icon-inline) {
+  color: inherit !important;
+}
+
+/* —— Voice-note recording row (message row while recording) —— */
+
+.studio-dm-composer-row.is-recording .studio-dm-send {
+  width: 32px;
+  height: 32px;
+  align-self: center;
 }
 
 .studio-dm-rec-cancel {
@@ -1264,7 +1335,7 @@
   height: 28px;
   flex: 0 0 auto;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
   cursor: pointer;
@@ -1591,27 +1662,7 @@
 
 /* Same footprint as .studio-dm-send, bordered quiet style (like .is-mic). */
 .studio-dm-attach {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 auto;
-  border: 1px solid var(--color-cursor-border, var(--mos-border));
-  border-radius: 999px;
-  background: var(--cursor-surface-input, var(--mos-surface));
-  color: var(--color-cursor-text, var(--mos-text));
-  cursor: pointer;
-}
-
-.studio-dm-attach:hover:not(:disabled) {
-  border-color: var(--cursor-border-focus, var(--cursor-accent));
-  color: var(--color-cursor-text-bright, var(--mos-text));
-}
-
-.studio-dm-attach:disabled {
-  opacity: 0.55;
-  cursor: default;
+  display: none;
 }
 
 .studio-dm-attach-preview {

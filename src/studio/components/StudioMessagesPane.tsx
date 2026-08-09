@@ -21,7 +21,6 @@ import {
   Mic,
   Copy,
   Music,
-  Paperclip,
   Pencil,
   Reply,
   SendHorizontal,
@@ -3679,7 +3678,7 @@ export function StudioMessagesPane({
         />
         {recState !== "idle" ? (
           <div
-            className="studio-dm-recording"
+            className="studio-dm-composer-row is-message is-recording"
             role="status"
             aria-label="Recording voice note"
           >
@@ -3705,10 +3704,10 @@ export function StudioMessagesPane({
               className="studio-dm-rec-wave"
               active={recState === "recording"}
               processing={recState === "sending"}
-              height={32}
+              height={28}
               barWidth={3}
               barGap={2}
-              barRadius={999}
+              barRadius={1}
               barColor="gray"
               sensitivity={1.6}
               fadeEdges
@@ -3731,165 +3730,137 @@ export function StudioMessagesPane({
           </div>
         ) : (
           <>
-            <button
-              ref={attachBtnRef}
-              type="button"
-              className="studio-dm-attach"
-              onClick={openAttachMenu}
-              disabled={filesPickBusy}
-              aria-label="Attach a photo"
-              aria-haspopup="menu"
-              aria-expanded={attachMenu != null}
-            >
-              {filesPickBusy ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Paperclip className="h-4 w-4" aria-hidden="true" />
-              )}
-            </button>
-            <textarea
-              ref={inputRef}
-              value={draft}
-              rows={1}
-              placeholder={
-                pendingFeedShare
-                  ? "Add a note…"
-                  : pendingImages.length > 0
-                    ? "Add a caption…"
-                    : "Message…"
-              }
-              aria-label={`Message ${peerLabel}`}
-              onChange={(event) => {
-                const next = looksLikeFeedShareJson(event.target.value)
-                  ? ""
-                  : event.target.value;
-                setDraft(next);
-                pingTyping(next.trim().length > 0);
-              }}
-              onBlur={() => pingTyping(false)}
-              onPaste={(event) => {
-                const text = event.clipboardData.getData("text/plain");
-                if (looksLikeFeedShareJson(text)) {
-                  event.preventDefault();
-                  const payload = parseFeedSharePayload(text.trim());
-                  if (payload && conversationId) {
-                    clearPendingImages();
-                    setPendingDmFeedShare({ conversationId, payload });
-                  }
-                  return;
+            <div className="studio-dm-composer-row is-message">
+              <textarea
+                ref={(el) => {
+                  inputRef.current = el;
+                  autosizeComposerInput(el);
+                }}
+                value={draft}
+                rows={1}
+                placeholder={
+                  pendingFeedShare
+                    ? "Add a note…"
+                    : pendingImages.length > 0
+                      ? "Add a caption…"
+                      : "Message…"
                 }
-                const items = event.clipboardData?.items;
-                if (!items) return;
-                for (const item of items) {
-                  if (item.type.startsWith("image/")) {
-                    const file = item.getAsFile();
-                    if (file) {
-                      event.preventDefault();
-                      pickImageFile(file);
-                      return;
+                aria-label={`Message ${peerLabel}`}
+                onChange={(event) => {
+                  const next = looksLikeFeedShareJson(event.target.value)
+                    ? ""
+                    : event.target.value;
+                  setDraft(next);
+                  pingTyping(next.trim().length > 0);
+                  autosizeComposerInput(event.currentTarget);
+                }}
+                onBlur={() => pingTyping(false)}
+                onPaste={(event) => {
+                  const text = event.clipboardData.getData("text/plain");
+                  if (looksLikeFeedShareJson(text)) {
+                    event.preventDefault();
+                    const payload = parseFeedSharePayload(text.trim());
+                    if (payload && conversationId) {
+                      clearPendingImages();
+                      setPendingDmFeedShare({ conversationId, payload });
+                    }
+                    return;
+                  }
+                  const items = event.clipboardData?.items;
+                  if (!items) return;
+                  for (const item of items) {
+                    if (item.type.startsWith("image/")) {
+                      const file = item.getAsFile();
+                      if (file) {
+                        event.preventDefault();
+                        pickImageFile(file);
+                        return;
+                      }
                     }
                   }
-                }
-              }}
-              onDrop={(event) => {
-                void onStudioChatDrop(event);
-              }}
-              onDragOver={onStudioChatDragOver}
-              onDragLeave={onStudioChatDragLeave}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void handleSend();
-                }
-              }}
-            />
-            {canSend ? (
+                }}
+                onDrop={(event) => {
+                  void onStudioChatDrop(event);
+                }}
+                onDragOver={onStudioChatDragOver}
+                onDragLeave={onStudioChatDragLeave}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void handleSend();
+                  }
+                }}
+              />
+              {canSend ? (
+                <button
+                  type="button"
+                  className="studio-dm-send"
+                  data-studio-sfx="send"
+                  onClick={() => void handleSend()}
+                  aria-label={
+                    pendingImages.length > 1
+                      ? "Send photos"
+                      : pendingImages.length === 1
+                        ? "Send photo"
+                        : "Send message"
+                  }
+                >
+                  <SendHorizontal className="h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="studio-dm-send is-mic"
+                  onClick={() => void startRecording()}
+                  aria-label="Record a voice note"
+                >
+                  <Mic className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <div className="studio-dm-composer-row is-extras" role="toolbar" aria-label="Message actions">
               <button
                 type="button"
-                className="studio-dm-send"
-                data-studio-sfx="send"
-                onClick={() => void handleSend()}
-                aria-label={
-                  pendingImages.length > 1
-                    ? "Send photos"
-                    : pendingImages.length === 1
-                      ? "Send photo"
-                      : "Send message"
-                }
+                className="studio-dm-extra-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={filesPickBusy}
+                aria-label="Upload photos"
+                title="Upload photos"
               >
-                <SendHorizontal className="h-4 w-4" aria-hidden="true" />
+                <Upload className="h-4 w-4" aria-hidden="true" />
+                <span>Upload</span>
               </button>
-            ) : (
               <button
                 type="button"
-                className="studio-dm-send is-mic"
-                onClick={() => void startRecording()}
-                aria-label="Record a voice note"
+                className="studio-dm-extra-btn"
+                onClick={openChooseStudioFiles}
+                disabled={filesPickBusy}
+                aria-label="Choose from Studio Files"
+                title="Choose from Studio Files"
               >
-                <Mic className="h-4 w-4" aria-hidden="true" />
+                {filesPickBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <FolderOpen className="h-4 w-4" aria-hidden="true" />
+                )}
+                <span>Choose</span>
               </button>
-            )}
+              <button
+                ref={shareExtrasBtnRef}
+                type="button"
+                className="studio-dm-extra-btn"
+                onClick={openShareStudioFiles}
+                disabled={filesPickBusy}
+                aria-label="Share from Studio Files"
+                title="Share from Studio Files"
+              >
+                <Share2 className="h-4 w-4" aria-hidden="true" />
+                <span>Share</span>
+              </button>
+            </div>
           </>
         )}
       </footer>
-
-      {attachMenu ? (
-        <StudioDmContextMenu
-          x={attachMenu.x}
-          y={attachMenu.y}
-          placement="above"
-          onClose={() => setAttachMenu(null)}
-          items={[
-            {
-              key: "upload",
-              label: "Upload photos",
-              icon: <Upload className="h-3.5 w-3.5" aria-hidden="true" />,
-              onSelect: () => fileInputRef.current?.click(),
-            },
-            {
-              key: "choose-studio-files",
-              label: "Choose from Studio Files",
-              icon: <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />,
-              onSelect: () => {
-                if (onRequestPickAsset) {
-                  onRequestPickAsset({
-                    pickMode: "choose",
-                    kinds: ["image", "video", "audio", "document"],
-                    pickAnyStudio: false,
-                    title: "Choose Studio files",
-                    maxSelected: MAX_PENDING_IMAGES,
-                    onConfirm: (picked) => {
-                      void sendStudioPicks(picked, { delivery: "file" });
-                    },
-                  });
-                  return;
-                }
-                openMobileStudioPick("choose");
-              },
-            },
-            {
-              key: "share-studio-files",
-              label: "Share from Studio Files",
-              icon: <Share2 className="h-3.5 w-3.5" aria-hidden="true" />,
-              onSelect: () => {
-                if (onRequestPickAsset) {
-                  onRequestPickAsset({
-                    pickMode: "share",
-                    pickAnyStudio: true,
-                    title: "Share Studio files",
-                    maxSelected: MAX_PENDING_IMAGES,
-                    onConfirm: (picked, opts) => {
-                      void sendStudioPicks(picked, opts);
-                    },
-                  });
-                  return;
-                }
-                openMobileStudioPick("share");
-              },
-            },
-          ]}
-        />
-      ) : null}
 
       {filesPickerOpen ? (
         <StudioAssetPickerSheet

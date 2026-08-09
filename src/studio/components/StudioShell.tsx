@@ -29831,7 +29831,7 @@ const STUDIO_TAP_SFX_SELECTOR = [
   ".studio-settings-pill",
   ".studio-credit-pill",
   ".studio-dm-send",
-  ".studio-dm-attach",
+  ".studio-dm-extra-btn",
   ".studio-dm-row",
   ".profile-post-rail-btn",
   ".profile-post-rail-follow",
