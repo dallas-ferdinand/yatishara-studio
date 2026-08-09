@@ -386,7 +386,8 @@ export const ensureStudioDefaults = authedMutation({
         lastGrantBalanceAfter,
       });
       const prevHigh = billing.creditBalanceHigh ?? 0;
-      if (nextHigh > 0 && nextHigh !== prevHigh) {
+      // Only raise / repair Total — never collapse it down to Remaining.
+      if (nextHigh > prevHigh) {
         await ctx.db.patch(billing._id, {
           creditBalanceHigh: nextHigh,
           updatedAt: now,

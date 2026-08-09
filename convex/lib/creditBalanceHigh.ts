@@ -16,7 +16,10 @@ export function nextCreditBalanceHigh(args: {
       ? Math.max(0, args.previousHigh)
       : 0;
   const after = Math.max(0, args.balanceAfter);
+  // Top-up / grant: Total = balance after credit (prior remaining + this top-up).
   if (args.mode === "reset") return after;
+  // Refund / raise: never drop Total below the stored peak.
+  if (prev <= 0) return after;
   return Math.max(prev, after);
 }
 
@@ -33,11 +36,13 @@ export function effectiveCreditBalanceHigh(
 }
 
 /**
- * Prefer persisted high; else last grant txn balanceAfter (top-up / subscription /
- * admin credit). That is the “Total” ring denominator until the next top-up.
+ * Prefer last grant txn balanceAfter (top-up / subscription / admin credit) as
+ * the ring Total. That is prior remaining + top-up amount (e.g. 10 + 30 = 40)
+ * and stays fixed while Remaining drops on spend.
  *
- * Also repairs a collapsed high (stored === remaining after spends) when the
- * ledger still knows a taller last top-up peak.
+ * Stored high is kept when taller than the ledger peek (e.g. mid-refund race),
+ * but a collapsed stored high (stuck to Remaining after spends) is repaired
+ * whenever the last grant peak is taller.
  */
 export function resolveCreditBalanceHigh(args: {
   creditBalance: number;
@@ -58,9 +63,9 @@ export function resolveCreditBalanceHigh(args: {
       ? args.lastGrantBalanceAfter
       : 0;
 
-  if (grant > 0 && (stored <= 0 || (stored <= balance && grant > balance))) {
-    return Math.max(grant, balance);
+  // Last top-up peak always wins when present — fixes Total===Remaining after spends.
+  if (grant > 0 || stored > 0) {
+    return Math.max(grant, stored, balance);
   }
-  if (stored > 0) return Math.max(stored, balance);
   return balance;
 }
