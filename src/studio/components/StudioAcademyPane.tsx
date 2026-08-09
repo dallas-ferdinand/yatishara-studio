@@ -8,6 +8,7 @@ import {
   Loader2,
   Lock,
   MessageCircle,
+  Tag,
   Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState, Fragment } from "react";
@@ -817,10 +818,12 @@ export function StudioAcademyPane({
                           ) : null}
                           {comingSoon ? (
                             <span className="studio-academy-card-soon">
+                              <Lock aria-hidden="true" />
                               Coming soon
                             </span>
                           ) : percentOff != null ? (
                             <span className="studio-academy-card-sale">
+                              <Tag aria-hidden="true" />
                               {percentOff}% off
                             </span>
                           ) : null}
@@ -854,11 +857,16 @@ export function StudioAcademyPane({
                               )}
                             </span>
                             <span className="studio-academy-card-meta-tag">
-                              {comingSoon
-                                ? "Coming soon"
-                                : `${course.lessonCount} lesson${
-                                    course.lessonCount === 1 ? "" : "s"
-                                  }`}
+                              {comingSoon ? (
+                                <>
+                                  <Lock aria-hidden="true" />
+                                  Coming soon
+                                </>
+                              ) : (
+                                `${course.lessonCount} lesson${
+                                  course.lessonCount === 1 ? "" : "s"
+                                }`
+                              )}
                             </span>
                           </div>
                           {course.onSale && course.saleEndsAt ? (

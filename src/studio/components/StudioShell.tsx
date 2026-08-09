@@ -21432,6 +21432,9 @@ export function StudioShell({
           z-index: 2;
           top: 8px;
           right: 8px;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
           padding: 2px 8px;
           border-radius: 999px;
           font-size: 10px;
@@ -21441,11 +21444,19 @@ export function StudioShell({
           background: color-mix(in srgb, var(--mos-page, #f5f5f7) 88%, transparent);
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
+        .studio-academy-card-soon svg {
+          width: 11px;
+          height: 11px;
+          flex: 0 0 auto;
+        }
         .studio-academy-card-sale {
           position: absolute;
           z-index: 2;
           top: 8px;
           right: 8px;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
           padding: 4px 10px;
           border-radius: 999px;
           font-size: 10px;
@@ -21459,6 +21470,11 @@ export function StudioShell({
           box-shadow:
             0 1px 0 color-mix(in srgb, #fff 16%, transparent),
             0 6px 14px color-mix(in srgb, #16a34a 28%, transparent);
+        }
+        .studio-academy-card-sale svg {
+          width: 11px;
+          height: 11px;
+          flex: 0 0 auto;
         }
         .studio-academy-sale-pan {
           display: flex;
@@ -21663,6 +21679,7 @@ export function StudioShell({
           flex: 0 0 auto;
           display: inline-flex;
           align-items: center;
+          gap: 4px;
           min-height: 22px;
           padding: 0 8px;
           border-radius: 999px;
@@ -21674,6 +21691,11 @@ export function StudioShell({
           letter-spacing: 0.01em;
           line-height: 1;
           white-space: nowrap;
+        }
+        .studio-academy-card-meta-tag svg {
+          width: 11px;
+          height: 11px;
+          flex: 0 0 auto;
         }
         .studio-academy-detail {
           display: grid;
