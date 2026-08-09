@@ -10210,7 +10210,7 @@ export function StudioShell({
           gap: 6px;
           flex: 0 0 auto;
         }
-        /* Desktop header: Create | History dual pill (mobile bottom-nav cluster language). */
+        /* Desktop header: Create | History dual pill — same 24px as .studio-settings-trigger. */
         .studio-header-create-cluster {
           display: inline-flex;
           align-items: center;
@@ -10225,16 +10225,24 @@ export function StudioShell({
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, transparent));
           box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
           box-sizing: border-box;
-          height: var(--studio-chrome-control, 28px);
-          max-height: var(--studio-chrome-control, 28px);
+          height: 24px;
+          max-height: 24px;
+          align-items: center;
         }
         .studio-header-create-cluster.is-linked .studio-settings-pill {
-          width: var(--studio-chrome-control, 28px) !important;
-          min-width: var(--studio-chrome-control, 28px) !important;
-          height: var(--studio-chrome-control, 28px) !important;
-          min-height: var(--studio-chrome-control, 28px) !important;
+          width: 24px !important;
+          min-width: 24px !important;
+          max-width: 24px !important;
+          height: 24px !important;
+          min-height: 24px !important;
+          max-height: 24px !important;
+          padding: 0 !important;
           border-radius: 999px !important;
           box-sizing: border-box !important;
+        }
+        .studio-header-create-cluster.is-linked .studio-settings-pill svg {
+          width: 12px !important;
+          height: 12px !important;
         }
         .studio-header-create-cluster.is-linked .studio-settings-pill.is-active {
           background: color-mix(in srgb, var(--cursor-accent) 22%, var(--mos-panel, transparent)) !important;
