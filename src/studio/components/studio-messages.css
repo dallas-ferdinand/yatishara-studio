@@ -1192,8 +1192,8 @@
 
 .studio-dm-composer-row.is-extras {
   min-height: 34px;
-  padding: 0 4px;
-  gap: 2px;
+  padding: 4px 6px;
+  gap: 6px;
 }
 
 .studio-dm-extras-spacer {
@@ -1201,15 +1201,43 @@
   min-width: 8px;
 }
 
-.studio-dm-composer-row.is-extras .studio-dm-send {
-  width: 34px;
-  height: 30px;
-  align-self: center;
+/* Match DM chat-head / header chrome: 24px round glass circles. */
+.studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  flex: 0 0 auto;
+}
+
+.studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.25;
+}
+
+.studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle.is-send {
+  color: var(--cursor-accent, var(--mos-accent));
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 42%,
+    var(--color-cursor-border-soft, var(--color-cursor-border))
+  );
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 10%,
+    var(--mos-page, var(--color-cursor-panel))
+  );
+}
+
+.studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .studio-dm-composer-row.is-recording {
   gap: 8px;
-  padding: 0 8px 0 4px;
+  padding: 0 10px 0 12px;
   min-height: var(--cursor-head-h, 36px);
 }
 
@@ -1252,114 +1280,12 @@
   border: none;
 }
 
-.studio-dm-send {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  margin: 0;
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--cursor-accent, var(--mos-accent));
-  cursor: pointer;
-}
-
-.studio-dm-send:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 12%, transparent);
-  filter: none;
-}
-
-.studio-dm-send:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-/* Mic button (shown while the draft is empty) — quiet until pressed. */
-.studio-dm-send.is-mic {
-  background: transparent;
-  border: 0;
-  color: var(--color-cursor-text, var(--mos-text));
-}
-
-.studio-dm-send.is-mic:hover:not(:disabled) {
-  filter: none;
-  background: color-mix(in srgb, var(--color-cursor-text, var(--mos-text)) 8%, transparent);
-  color: var(--color-cursor-text-bright, var(--mos-text));
-}
-
-.studio-dm-extra-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 10px;
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.studio-dm-extra-btn:hover:not(:disabled) {
-  color: var(--color-cursor-text-bright, var(--mos-text));
-  background: color-mix(in srgb, var(--color-cursor-text, var(--mos-text)) 6%, transparent);
-}
-
-.studio-dm-extra-btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.studio-dm-extra-btn svg {
-  flex: 0 0 auto;
-}
-
-.studio-polish .studio-dm-composer .studio-dm-send:hover:not(:disabled) :where(svg, .icon-inline),
-.studio-polish .studio-dm-composer .studio-dm-send.is-mic:hover:not(:disabled) :where(svg, .icon-inline),
-.studio-polish .studio-dm-composer .studio-dm-extra-btn:hover:not(:disabled) :where(svg, .icon-inline) {
+.studio-polish .studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle:hover:not(:disabled) :where(svg, .icon-inline) {
   color: inherit !important;
+  filter: none;
 }
 
 /* —— Voice-note recording row (message row while recording) —— */
-
-.studio-dm-composer-row.is-recording .studio-dm-send {
-  width: 32px;
-  height: 32px;
-  align-self: center;
-}
-
-.studio-dm-rec-cancel {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  cursor: pointer;
-}
-
-.studio-dm-rec-cancel:hover:not(:disabled) {
-  color: var(--mos-danger, #f87171);
-  background: color-mix(in srgb, var(--mos-danger, #f87171) 12%, transparent);
-}
-
-.studio-dm-rec-cancel:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
 
 .studio-dm-rec-meta {
   display: inline-flex;

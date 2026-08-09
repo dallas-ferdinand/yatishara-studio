@@ -21,7 +21,9 @@ import {
   Mic,
   Copy,
   Music,
+  Pause,
   Pencil,
+  Play,
   Reply,
   SendHorizontal,
   Share2,
@@ -2425,38 +2427,95 @@ export function StudioMessagesPane({
     el.style.height = `${Math.min(Math.max(el.scrollHeight, 36), 120)}px`;
   }
 
-  /** Voice-note recorder (WhatsApp-style: mic replaces send while draft is empty). */
-  const [recState, setRecState] = useState<"idle" | "recording" | "sending">(
-    "idle",
-  );
+  /** Voice-note recorder — pause/resume supported; extras row stays visible. */
+  const [recState, setRecState] = useState<
+    "idle" | "recording" | "paused" | "sending"
+  >("idle");
   const [recSeconds, setRecSeconds] = useState(0);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recChunksRef = useRef<Blob[]>([]);
   const recStreamRef = useRef<MediaStream | null>(null);
   const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recStartedAtRef = useRef(0);
+  const recElapsedMsRef = useRef(0);
+  const recTickStartRef = useRef(0);
+  const recFinalDurationRef = useRef(0);
   const recIntentRef = useRef<"send" | "cancel">("cancel");
 
-  const teardownRecorder = useCallback(() => {
+  const clearRecTimer = useCallback(() => {
     if (recTimerRef.current) {
       clearInterval(recTimerRef.current);
       recTimerRef.current = null;
     }
+  }, []);
+
+  const teardownRecorder = useCallback(() => {
+    clearRecTimer();
     recStreamRef.current?.getTracks().forEach((track) => track.stop());
     recStreamRef.current = null;
     recorderRef.current = null;
-  }, []);
+  }, [clearRecTimer]);
+
+  const finishRecordingRef = useRef<((intent: "send" | "cancel") => void) | null>(
+    null,
+  );
+
+  const startRecTimer = useCallback(() => {
+    clearRecTimer();
+    recTickStartRef.current = Date.now();
+    recTimerRef.current = setInterval(() => {
+      const elapsed = (recElapsedMsRef.current + (Date.now() - recTickStartRef.current)) / 1000;
+      setRecSeconds(elapsed);
+      if (elapsed >= VOICE_NOTE_MAX_SECONDS) finishRecordingRef.current?.("send");
+    }, 250);
+  }, [clearRecTimer]);
 
   const finishRecording = useCallback(
     (intent: "send" | "cancel") => {
       const recorder = recorderRef.current;
       if (!recorder || recorder.state === "inactive") return;
+      if (recorder.state === "recording") {
+        recElapsedMsRef.current += Date.now() - recTickStartRef.current;
+      }
+      clearRecTimer();
+      recFinalDurationRef.current = Math.min(
+        VOICE_NOTE_MAX_SECONDS,
+        recElapsedMsRef.current / 1000,
+      );
       recIntentRef.current = intent;
       setRecState(intent === "send" ? "sending" : "idle");
       recorder.stop();
     },
-    [],
+    [clearRecTimer],
   );
+  finishRecordingRef.current = finishRecording;
+
+  const pauseRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    try {
+      recorder.pause();
+    } catch {
+      setSendError("Pause is not supported on this device");
+      return;
+    }
+    recElapsedMsRef.current += Date.now() - recTickStartRef.current;
+    clearRecTimer();
+    setRecSeconds(recElapsedMsRef.current / 1000);
+    setRecState("paused");
+  }, [clearRecTimer]);
+
+  const resumeRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== "paused") return;
+    try {
+      recorder.resume();
+    } catch {
+      setSendError("Could not resume recording");
+      return;
+    }
+    setRecState("recording");
+    startRecTimer();
+  }, [startRecTimer]);
 
   const startRecording = useCallback(async () => {
     if (!conversationId || recState !== "idle") return;
@@ -2477,7 +2536,8 @@ export function StudioMessagesPane({
     recorderRef.current = recorder;
     recChunksRef.current = [];
     recIntentRef.current = "cancel";
-    recStartedAtRef.current = Date.now();
+    recElapsedMsRef.current = 0;
+    recFinalDurationRef.current = 0;
     setRecSeconds(0);
 
     recorder.ondataavailable = (event) => {
@@ -2486,7 +2546,7 @@ export function StudioMessagesPane({
     recorder.onstop = () => {
       const durationSec = Math.min(
         VOICE_NOTE_MAX_SECONDS,
-        (Date.now() - recStartedAtRef.current) / 1000,
+        recFinalDurationRef.current || recElapsedMsRef.current / 1000,
       );
       const blob = new Blob(recChunksRef.current, {
         type: recorder.mimeType || "audio/webm",
@@ -2556,22 +2616,18 @@ export function StudioMessagesPane({
 
     recorder.start(250);
     setRecState("recording");
-    recTimerRef.current = setInterval(() => {
-      const elapsed = (Date.now() - recStartedAtRef.current) / 1000;
-      setRecSeconds(elapsed);
-      if (elapsed >= VOICE_NOTE_MAX_SECONDS) finishRecording("send");
-    }, 250);
+    startRecTimer();
   }, [
     conversationId,
     commitStagingUpload,
     dropOptimistic,
     ensureMessagesFolder,
-    finishRecording,
     markOptimisticSent,
     pushOptimistic,
     recState,
     reserveUpload,
     sendVoiceMessage,
+    startRecTimer,
     teardownRecorder,
   ]);
 
@@ -3676,175 +3732,206 @@ export function StudioMessagesPane({
             event.target.value = "";
           }}
         />
-        {recState !== "idle" ? (
-          <div
-            className="studio-dm-composer-row is-message is-recording"
-            role="status"
-            aria-label="Recording voice note"
-          >
-            <button
-              type="button"
-              className="studio-dm-rec-cancel"
-              onClick={() => finishRecording("cancel")}
-              disabled={recState === "sending"}
-              aria-label="Discard recording"
-            >
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-            </button>
-            <span className="studio-dm-rec-meta">
-              <span
-                className={`studio-dm-rec-dot${recState === "recording" ? " is-live" : ""}`}
-                aria-hidden="true"
-              />
-              <span className="studio-dm-rec-time">
-                {recordingTimeLabel(recSeconds)}
+        <div
+          className={`studio-dm-composer-row is-message${recState !== "idle" ? " is-recording" : ""}`}
+          {...(recState !== "idle"
+            ? { role: "status", "aria-label": "Recording voice note" }
+            : {})}
+        >
+          {recState !== "idle" ? (
+            <>
+              <span className="studio-dm-rec-meta">
+                <span
+                  className={`studio-dm-rec-dot${recState === "recording" ? " is-live" : ""}`}
+                  aria-hidden="true"
+                />
+                <span className="studio-dm-rec-time">
+                  {recordingTimeLabel(recSeconds)}
+                  {recState === "paused" ? " · paused" : ""}
+                </span>
               </span>
-            </span>
-            <MicrophoneWaveform
-              className="studio-dm-rec-wave"
-              active={recState === "recording"}
-              processing={recState === "sending"}
-              height={28}
-              barWidth={3}
-              barGap={2}
-              barRadius={1}
-              barColor="gray"
-              sensitivity={1.6}
-              fadeEdges
-              fadeWidth={20}
-            />
-            <button
-              type="button"
-              className="studio-dm-send"
-              data-studio-sfx="send"
-              onClick={() => finishRecording("send")}
-              disabled={recState === "sending"}
-              aria-label="Send voice note"
-            >
-              {recState === "sending" ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <SendHorizontal className="h-4 w-4" aria-hidden="true" />
-              )}
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="studio-dm-composer-row is-message">
-              <textarea
-                ref={(el) => {
-                  inputRef.current = el;
-                  autosizeComposerInput(el);
-                }}
-                value={draft}
-                rows={1}
-                placeholder={
-                  pendingFeedShare
-                    ? "Add a note…"
-                    : pendingImages.length > 0
-                      ? "Add a caption…"
-                      : "Message…"
-                }
-                aria-label={`Message ${peerLabel}`}
-                onChange={(event) => {
-                  const next = looksLikeFeedShareJson(event.target.value)
-                    ? ""
-                    : event.target.value;
-                  setDraft(next);
-                  pingTyping(next.trim().length > 0);
-                  autosizeComposerInput(event.currentTarget);
-                }}
-                onBlur={() => pingTyping(false)}
-                onPaste={(event) => {
-                  const text = event.clipboardData.getData("text/plain");
-                  if (looksLikeFeedShareJson(text)) {
-                    event.preventDefault();
-                    const payload = parseFeedSharePayload(text.trim());
-                    if (payload && conversationId) {
-                      clearPendingImages();
-                      setPendingDmFeedShare({ conversationId, payload });
-                    }
-                    return;
-                  }
-                  const items = event.clipboardData?.items;
-                  if (!items) return;
-                  for (const item of items) {
-                    if (item.type.startsWith("image/")) {
-                      const file = item.getAsFile();
-                      if (file) {
-                        event.preventDefault();
-                        pickImageFile(file);
-                        return;
-                      }
-                    }
-                  }
-                }}
-                onDrop={(event) => {
-                  void onStudioChatDrop(event);
-                }}
-                onDragOver={onStudioChatDragOver}
-                onDragLeave={onStudioChatDragLeave}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void handleSend();
-                  }
-                }}
+              <MicrophoneWaveform
+                className="studio-dm-rec-wave"
+                active={recState === "recording"}
+                processing={recState === "sending"}
+                height={28}
+                barWidth={3}
+                barGap={2}
+                barRadius={1}
+                barColor="gray"
+                sensitivity={1.6}
+                fadeEdges
+                fadeWidth={20}
               />
-            </div>
-            <div className="studio-dm-composer-row is-extras" role="toolbar" aria-label="Message actions">
+            </>
+          ) : (
+            <textarea
+              ref={(el) => {
+                inputRef.current = el;
+                autosizeComposerInput(el);
+              }}
+              value={draft}
+              rows={1}
+              placeholder={
+                pendingFeedShare
+                  ? "Add a note…"
+                  : pendingImages.length > 0
+                    ? "Add a caption…"
+                    : "Message…"
+              }
+              aria-label={`Message ${peerLabel}`}
+              onChange={(event) => {
+                const next = looksLikeFeedShareJson(event.target.value)
+                  ? ""
+                  : event.target.value;
+                setDraft(next);
+                pingTyping(next.trim().length > 0);
+                autosizeComposerInput(event.currentTarget);
+              }}
+              onBlur={() => pingTyping(false)}
+              onPaste={(event) => {
+                const text = event.clipboardData.getData("text/plain");
+                if (looksLikeFeedShareJson(text)) {
+                  event.preventDefault();
+                  const payload = parseFeedSharePayload(text.trim());
+                  if (payload && conversationId) {
+                    clearPendingImages();
+                    setPendingDmFeedShare({ conversationId, payload });
+                  }
+                  return;
+                }
+                const items = event.clipboardData?.items;
+                if (!items) return;
+                for (const item of items) {
+                  if (item.type.startsWith("image/")) {
+                    const file = item.getAsFile();
+                    if (file) {
+                      event.preventDefault();
+                      pickImageFile(file);
+                      return;
+                    }
+                  }
+                }
+              }}
+              onDrop={(event) => {
+                void onStudioChatDrop(event);
+              }}
+              onDragOver={onStudioChatDragOver}
+              onDragLeave={onStudioChatDragLeave}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void handleSend();
+                }
+              }}
+            />
+          )}
+        </div>
+        <div
+          className="studio-dm-composer-row is-extras"
+          role="toolbar"
+          aria-label={
+            recState !== "idle" ? "Recording controls" : "Message actions"
+          }
+        >
+          {recState !== "idle" ? (
+            <>
               <button
                 type="button"
-                className="studio-dm-extra-btn"
+                className="studio-composer-circle-btn studio-dm-composer-circle"
+                onClick={() => finishRecording("cancel")}
+                disabled={recState === "sending"}
+                aria-label="Discard recording"
+                title="Delete"
+              >
+                <Trash2 aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="studio-composer-circle-btn studio-dm-composer-circle"
+                onClick={() =>
+                  recState === "paused" ? resumeRecording() : pauseRecording()
+                }
+                disabled={recState === "sending"}
+                aria-label={
+                  recState === "paused" ? "Resume recording" : "Pause recording"
+                }
+                title={recState === "paused" ? "Resume" : "Pause"}
+              >
+                {recState === "paused" ? (
+                  <Play aria-hidden="true" />
+                ) : (
+                  <Pause aria-hidden="true" />
+                )}
+              </button>
+              <span className="studio-dm-extras-spacer" aria-hidden="true" />
+              <button
+                type="button"
+                className="studio-composer-circle-btn studio-dm-composer-circle is-send"
+                data-studio-sfx="send"
+                onClick={() => finishRecording("send")}
+                disabled={recState === "sending"}
+                aria-label="Send voice note"
+                title="Send"
+              >
+                {recState === "sending" ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <SendHorizontal aria-hidden="true" />
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="studio-composer-circle-btn studio-dm-composer-circle"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={filesPickBusy}
                 aria-label="Upload photos"
                 title="Upload photos"
               >
-                <Upload className="h-4 w-4" aria-hidden="true" />
-                <span>Upload</span>
+                <Upload aria-hidden="true" />
               </button>
               <button
                 type="button"
-                className="studio-dm-extra-btn"
+                className="studio-composer-circle-btn studio-dm-composer-circle"
                 onClick={openChooseStudioFiles}
                 disabled={filesPickBusy}
                 aria-label="Choose from Studio Files"
                 title="Choose from Studio Files"
               >
                 {filesPickBusy ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Loader2 className="animate-spin" aria-hidden="true" />
                 ) : (
-                  <FolderOpen className="h-4 w-4" aria-hidden="true" />
+                  <FolderOpen aria-hidden="true" />
                 )}
-                <span>Choose</span>
               </button>
               <button
                 ref={shareExtrasBtnRef}
                 type="button"
-                className="studio-dm-extra-btn"
+                className="studio-composer-circle-btn studio-dm-composer-circle"
                 onClick={openShareStudioFiles}
                 disabled={filesPickBusy}
                 aria-label="Share from Studio Files"
                 title="Share from Studio Files"
               >
-                <Share2 className="h-4 w-4" aria-hidden="true" />
-                <span>Share</span>
+                <Share2 aria-hidden="true" />
               </button>
               <span className="studio-dm-extras-spacer" aria-hidden="true" />
               <button
                 type="button"
-                className="studio-dm-send is-mic"
+                className="studio-composer-circle-btn studio-dm-composer-circle"
                 onClick={() => void startRecording()}
                 disabled={filesPickBusy}
                 aria-label="Record a voice note"
                 title="Record"
               >
-                <Mic className="h-4 w-4" aria-hidden="true" />
+                <Mic aria-hidden="true" />
               </button>
               <button
                 type="button"
-                className="studio-dm-send"
+                className="studio-composer-circle-btn studio-dm-composer-circle is-send"
                 data-studio-sfx="send"
                 onClick={() => void handleSend()}
                 disabled={!canSend}
@@ -3857,11 +3944,11 @@ export function StudioMessagesPane({
                 }
                 title="Send"
               >
-                <SendHorizontal className="h-4 w-4" aria-hidden="true" />
+                <SendHorizontal aria-hidden="true" />
               </button>
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </footer>
 
       {filesPickerOpen ? (
