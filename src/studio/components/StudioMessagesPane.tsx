@@ -2104,8 +2104,10 @@ export function StudioMessagesPane({
     () => Math.floor(Date.now() / 1000) + 60 * 60 * 12,
   );
   const [peerSidebarOpen, setPeerSidebarOpen] = useState(() => {
-    if (typeof window === "undefined") return true;
+    if (typeof window === "undefined") return false;
     if (embeddedInRail) return false;
+    // Mobile chats always start with Action closed (ignore stored desktop preference).
+    if (isMobile) return false;
     const stored = window.localStorage.getItem(PEER_SIDEBAR_OPEN_KEY);
     if (stored === null) return true;
     return stored === "1";
@@ -2116,12 +2118,19 @@ export function StudioMessagesPane({
       setPeerSidebarOpen(false);
       return;
     }
+    if (isMobile) return;
     if (typeof window === "undefined") return;
     window.localStorage.setItem(
       PEER_SIDEBAR_OPEN_KEY,
       peerSidebarOpen ? "1" : "0",
     );
-  }, [embeddedInRail, peerSidebarOpen]);
+  }, [embeddedInRail, isMobile, peerSidebarOpen]);
+
+  // Every mobile chat open starts with Action closed (switching chats too).
+  useEffect(() => {
+    if (!isMobile || embeddedInRail) return;
+    setPeerSidebarOpen(false);
+  }, [conversationId, embeddedInRail, isMobile]);
   const me = useQuery(api.users.current, {});
   const cacheReady = Boolean(me?.userId);
   useLayoutEffect(() => {
@@ -2270,10 +2279,7 @@ export function StudioMessagesPane({
   const [showJumpDown, setShowJumpDown] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const attachBtnRef = useRef<HTMLButtonElement | null>(null);
-  const [attachMenu, setAttachMenu] = useState<{ x: number; y: number } | null>(
-    null,
-  );
+  const shareExtrasBtnRef = useRef<HTMLButtonElement | null>(null);
   const [filesPickerOpen, setFilesPickerOpen] = useState(false);
   const [filesPickMode, setFilesPickMode] = useState<"choose" | "share">("choose");
   const [filesPickBusy, setFilesPickBusy] = useState(false);
@@ -2304,9 +2310,6 @@ export function StudioMessagesPane({
   useMobileBackLayer("dm-lightbox", Boolean(lightbox), () => {
     setLightbox(null);
   });
-  useMobileBackLayer("dm-attach-menu", Boolean(attachMenu), () => {
-    setAttachMenu(null);
-  });
   useMobileBackLayer("dm-share-type", shareTypeOpen, () => {
     if (filesPickBusy) return;
     setShareTypeOpen(false);
@@ -2315,7 +2318,7 @@ export function StudioMessagesPane({
 
   useEffect(() => {
     if (!shareTypeOpen || isMobile) return undefined;
-    const btn = attachBtnRef.current;
+    const btn = shareExtrasBtnRef.current;
     if (!btn) return undefined;
     const place = () => {
       const next = placeShareConfirmNearButton(btn, shareTypeMenuRef.current);
@@ -2336,7 +2339,7 @@ export function StudioMessagesPane({
     if (!shareTypeOpen || isMobile) return undefined;
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node;
-      if (attachBtnRef.current?.contains(t)) return;
+      if (shareExtrasBtnRef.current?.contains(t)) return;
       if (shareTypeMenuRef.current?.contains(t)) return;
       if (filesPickBusy) return;
       setShareTypeOpen(false);
@@ -2384,16 +2387,43 @@ export function StudioMessagesPane({
     });
   }, []);
 
-  function openAttachMenu() {
-    const btn = attachBtnRef.current;
-    if (!btn) {
-      setAttachMenu({ x: 16, y: window.innerHeight - 120 });
+  function openChooseStudioFiles() {
+    if (onRequestPickAsset) {
+      onRequestPickAsset({
+        pickMode: "choose",
+        kinds: ["image", "video", "audio", "document"],
+        pickAnyStudio: false,
+        title: "Choose Studio files",
+        maxSelected: MAX_PENDING_IMAGES,
+        onConfirm: (picked) => {
+          void sendStudioPicks(picked, { delivery: "file" });
+        },
+      });
       return;
     }
-    const rect = btn.getBoundingClientRect();
-    // Anchor at the paperclip top — StudioDmContextMenu placement="above"
-    // measures itself and sits fully above the composer.
-    setAttachMenu({ x: rect.left, y: rect.top });
+    openMobileStudioPick("choose");
+  }
+
+  function openShareStudioFiles() {
+    if (onRequestPickAsset) {
+      onRequestPickAsset({
+        pickMode: "share",
+        pickAnyStudio: true,
+        title: "Share Studio files",
+        maxSelected: MAX_PENDING_IMAGES,
+        onConfirm: (picked, opts) => {
+          void sendStudioPicks(picked, opts);
+        },
+      });
+      return;
+    }
+    openMobileStudioPick("share");
+  }
+
+  function autosizeComposerInput(el: HTMLTextAreaElement | null) {
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 36), 120)}px`;
   }
 
   /** Voice-note recorder (WhatsApp-style: mic replaces send while draft is empty). */
