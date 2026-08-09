@@ -13,6 +13,14 @@
   background: var(--mos-page, var(--mos-bg));
   color: var(--color-cursor-text, var(--mos-text));
   font-family: var(--font-onest), system-ui, sans-serif;
+  /* Match other Studio chrome circles (pathbar/settings feel); mobile = nav control. */
+  --studio-dm-chrome-circle: 28px;
+  --studio-dm-chrome-glyph: 14px;
+}
+
+.studio-polish.is-studio-mobile .studio-dm-pane {
+  --studio-dm-chrome-circle: var(--studio-mobile-chrome-control, 30px);
+  --studio-dm-chrome-glyph: 14px;
 }
 
 /* Mobile Messages tab inbox — sidebar chrome fills the main pane. */
@@ -73,20 +81,56 @@
   background: var(--mos-panel, #f5f5f7);
 }
 
-/* Match chrome head icon controls (24px settings triggers), not composer 30px.
-   Need head + circle-btn specificity so StudioShell .studio-composer-circle-btn
-   (30px, later) cannot win — same nesting as .studio-dm-peer-toggle. */
-.studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back {
-  width: 24px !important;
-  min-width: 24px !important;
-  height: 24px !important;
-  min-height: 24px !important;
+/* Match other Studio chrome circles — full min/max so shell 30px rules cannot win. */
+.studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back,
+.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle,
+.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-open-full {
+  width: var(--studio-dm-chrome-circle) !important;
+  min-width: var(--studio-dm-chrome-circle) !important;
+  max-width: var(--studio-dm-chrome-circle) !important;
+  height: var(--studio-dm-chrome-circle) !important;
+  min-height: var(--studio-dm-chrome-circle) !important;
+  max-height: var(--studio-dm-chrome-circle) !important;
   flex: 0 0 auto;
+  box-sizing: border-box !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7)) !important;
+  color: var(--color-cursor-muted, var(--mos-muted)) !important;
+  box-shadow: none !important;
 }
 
-.studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back svg {
-  width: 13px !important;
-  height: 13px !important;
+.studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back:hover,
+.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle:hover,
+.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-open-full:hover {
+  border-color: var(--color-cursor-border, var(--mos-border)) !important;
+  background: var(--mos-hover, var(--color-cursor-hover)) !important;
+  color: var(--color-cursor-text-bright, var(--mos-text)) !important;
+}
+
+[data-appearance="light"] .studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back,
+[data-appearance="light"] .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle,
+[data-appearance="light"] .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-open-full,
+[data-appearance="light"] .studio-dm-sidebar .cursor-panel-search-end .studio-composer-circle-btn.studio-dm-open-full {
+  background: var(--mos-page, #f5f5f7) !important;
+  border-color: var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+  color: var(--color-cursor-muted, #5c6570) !important;
+}
+
+[data-appearance="dark"] .studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back,
+[data-appearance="dark"] .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle,
+[data-appearance="dark"] .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-open-full,
+[data-appearance="dark"] .studio-dm-sidebar .cursor-panel-search-end .studio-composer-circle-btn.studio-dm-open-full {
+  background: var(--mos-page, var(--color-cursor-panel, #12141a)) !important;
+  border-color: var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+  color: var(--color-cursor-muted, var(--mos-muted)) !important;
+}
+
+.studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back svg,
+.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle svg,
+.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-open-full svg {
+  width: var(--studio-dm-chrome-glyph) !important;
+  height: var(--studio-dm-chrome-glyph) !important;
 }
 
 .studio-dm-chat-peer {
@@ -113,6 +157,12 @@
 .studio-dm-chat-peer-avatar-wrap {
   position: relative;
   flex: 0 0 auto;
+  width: var(--studio-dm-chrome-circle);
+  min-width: var(--studio-dm-chrome-circle);
+  max-width: var(--studio-dm-chrome-circle);
+  height: var(--studio-dm-chrome-circle);
+  min-height: var(--studio-dm-chrome-circle);
+  max-height: var(--studio-dm-chrome-circle);
 }
 
 .studio-dm-chat-peer-copy {
@@ -145,33 +195,18 @@
   margin-left: auto;
 }
 
-/* Nest 24px hammer / open-full circles in 32px head; accent when Action panel is open. */
-.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle,
-.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-open-full {
-  width: 24px !important;
-  min-width: 24px !important;
-  height: 24px !important;
-  min-height: 24px !important;
-}
-
-.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle svg,
-.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-open-full svg {
-  width: 13px;
-  height: 13px;
-}
-
 .studio-dm-chat-head-tools .studio-dm-peer-toggle.is-on {
   border-color: color-mix(
     in srgb,
     var(--cursor-accent, var(--mos-accent)) 48%,
     var(--color-cursor-border-soft, var(--mos-border))
-  );
+  ) !important;
   background: color-mix(
     in srgb,
     var(--cursor-accent, var(--mos-accent)) 16%,
-    var(--studio-composer-glass-muted, var(--mos-plate-strong, var(--mos-raised)))
-  );
-  color: var(--color-cursor-text-bright, var(--mos-text));
+    var(--mos-page, var(--color-cursor-panel, #f5f5f7))
+  ) !important;
+  color: var(--color-cursor-text-bright, var(--mos-text)) !important;
 }
 
 .studio-dm-chat-head-tools .studio-dm-peer-toggle.is-on:hover {
@@ -187,22 +222,44 @@
   );
 }
 
-/* Same 24px circle as header back / hammer / settings triggers. */
-.studio-dm-chat-head .studio-profile-avatar {
-  width: 24px !important;
-  height: 24px !important;
-  font-size: 10px !important;
+/* Head + list avatars share the same chrome circle size (light/dark tokens). */
+.studio-dm-chat-head .studio-profile-avatar,
+.studio-dm-row-avatar-wrap .studio-profile-avatar {
+  width: var(--studio-dm-chrome-circle) !important;
+  min-width: var(--studio-dm-chrome-circle) !important;
+  max-width: var(--studio-dm-chrome-circle) !important;
+  height: var(--studio-dm-chrome-circle) !important;
+  min-height: var(--studio-dm-chrome-circle) !important;
+  max-height: var(--studio-dm-chrome-circle) !important;
+  font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.01em !important;
-  border: 0 !important;
-  background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent) !important;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7)) !important;
+  color: var(--color-cursor-text, var(--mos-text)) !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+  box-sizing: border-box !important;
 }
 
-.studio-dm-chat-head .studio-profile-avatar-media {
+.studio-dm-chat-head .studio-profile-avatar-media,
+.studio-dm-row-avatar-wrap .studio-profile-avatar-media {
   background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent);
+}
+
+[data-appearance="light"] .studio-dm-chat-head .studio-profile-avatar,
+[data-appearance="light"] .studio-dm-row-avatar-wrap .studio-profile-avatar {
+  background: var(--mos-page, #f5f5f7) !important;
+  border-color: var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+  color: var(--color-cursor-text, #1b1f24) !important;
+}
+
+[data-appearance="dark"] .studio-dm-chat-head .studio-profile-avatar,
+[data-appearance="dark"] .studio-dm-row-avatar-wrap .studio-profile-avatar {
+  background: var(--mos-page, var(--color-cursor-panel, #12141a)) !important;
+  border-color: var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+  color: var(--color-cursor-text, var(--mos-text)) !important;
 }
 
 /* Typing pulse on avatar (replaces online dot while drafting). */
@@ -2483,20 +2540,12 @@
 .studio-dm-row-avatar-wrap {
   position: relative;
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-}
-
-/* Conversation list avatars = same 24px chrome circles as chat-head tools. */
-.studio-dm-row-avatar-wrap .studio-profile-avatar {
-  width: 24px !important;
-  height: 24px !important;
-  font-size: 10px !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent) !important;
+  width: var(--studio-dm-chrome-circle);
+  min-width: var(--studio-dm-chrome-circle);
+  max-width: var(--studio-dm-chrome-circle);
+  height: var(--studio-dm-chrome-circle);
+  min-height: var(--studio-dm-chrome-circle);
+  max-height: var(--studio-dm-chrome-circle);
 }
 
 .studio-dm-online-dot {
@@ -2623,16 +2672,23 @@
 }
 
 .studio-dm-sidebar .cursor-panel-search-end .studio-composer-circle-btn.studio-dm-open-full {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  min-height: 24px;
+  width: var(--studio-dm-chrome-circle) !important;
+  min-width: var(--studio-dm-chrome-circle) !important;
+  max-width: var(--studio-dm-chrome-circle) !important;
+  height: var(--studio-dm-chrome-circle) !important;
+  min-height: var(--studio-dm-chrome-circle) !important;
+  max-height: var(--studio-dm-chrome-circle) !important;
   flex: 0 0 auto;
+  box-sizing: border-box !important;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7)) !important;
+  color: var(--color-cursor-muted, var(--mos-muted)) !important;
+  box-shadow: none !important;
 }
 
 .studio-dm-sidebar .cursor-panel-search-end .studio-composer-circle-btn.studio-dm-open-full svg {
-  width: 13px;
-  height: 13px;
+  width: var(--studio-dm-chrome-glyph) !important;
+  height: var(--studio-dm-chrome-glyph) !important;
 }
 
 /* Brand head already draws the divider above — don't stack a second top border.
