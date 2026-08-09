@@ -2447,8 +2447,8 @@ export function StudioMessagesPane({
   function autosizeComposerInput(el: HTMLTextAreaElement | null) {
     if (!el) return;
     el.style.height = "0px";
-    // Desktop split ~36px; mobile classic pill matches 32px circle controls.
-    const minPx = isMobile ? 32 : 36;
+    // Match --cursor-head-h (32px) for empty/single-line; grow to 120px.
+    const minPx = 32;
     el.style.height = `${Math.min(Math.max(el.scrollHeight, minPx), 120)}px`;
   }
 
