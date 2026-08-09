@@ -4308,6 +4308,18 @@ export function StudioShell({
     openTab(`composer:${composerTabIndexRef.current}`);
   }
 
+  /** Create control: open create, or open another create tab if already there. */
+  function activateCreateControl() {
+    setHistoryOpen(false);
+    setSettingsOpen(false);
+    setMobileAppMenuOpen(false);
+    if (isComposerContextTabKey(activeTab)) {
+      openNewComposerTab();
+      return;
+    }
+    openTab(lastChatTabRef.current || COMPOSER_TAB);
+  }
+
   function openHistoryThread(threadId) {
     openTab(`thread:${threadId}`);
     setActiveTab(`thread:${threadId}`);
@@ -8665,9 +8677,9 @@ export function StudioShell({
           background: transparent;
           box-sizing: border-box;
         }
-        /* Pill hugs circles — regular outer border; slots stay borderless. */
+        /* Pill: regular border; 1px inset so slots don’t paint over the stroke. */
         .studio-mobile-nav-cluster.is-linked {
-          padding: 0;
+          padding: 1px;
           gap: 2px;
           height: var(--studio-mobile-chrome-control, 30px);
           max-height: var(--studio-mobile-chrome-control, 30px);
@@ -8680,12 +8692,12 @@ export function StudioShell({
         }
         .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-btn.is-cluster-slot {
           flex: 0 0 auto !important;
-          width: var(--studio-mobile-chrome-control, 30px) !important;
-          min-width: var(--studio-mobile-chrome-control, 30px) !important;
-          max-width: var(--studio-mobile-chrome-control, 30px) !important;
-          height: var(--studio-mobile-chrome-control, 30px) !important;
-          min-height: var(--studio-mobile-chrome-control, 30px) !important;
-          max-height: var(--studio-mobile-chrome-control, 30px) !important;
+          width: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          min-width: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          max-width: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          height: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          min-height: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          max-height: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
           padding: 0 !important;
           border: 0 !important;
           border-radius: 999px !important;
@@ -10219,7 +10231,7 @@ export function StudioShell({
         }
         .studio-header-create-cluster.is-linked {
           gap: 2px;
-          padding: 0;
+          padding: 1px;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
           border-radius: 999px;
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, transparent));
@@ -10230,12 +10242,12 @@ export function StudioShell({
           align-items: center;
         }
         .studio-header-create-cluster.is-linked .studio-settings-pill {
-          width: 24px !important;
-          min-width: 24px !important;
-          max-width: 24px !important;
-          height: 24px !important;
-          min-height: 24px !important;
-          max-height: 24px !important;
+          width: 20px !important;
+          min-width: 20px !important;
+          max-width: 20px !important;
+          height: 20px !important;
+          min-height: 20px !important;
+          max-height: 20px !important;
           padding: 0 !important;
           border: 0 !important;
           border-radius: 999px !important;
@@ -23828,19 +23840,6 @@ export function StudioShell({
               )
             : null}
           <div className="cursor-panel-head-tools cursor-workspace-tools">
-            {isComposerContextTabKey(activeTab) ? (
-              <div className="studio-new-tab-cluster">
-                <button
-                  type="button"
-                  className="studio-settings-pill studio-settings-trigger studio-new-tab-btn"
-                  onClick={openNewComposerTab}
-                  aria-label="New create tab"
-                  title="New create tab"
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            ) : null}
             {!isMobile ? (
               <>
                 <button
@@ -23903,14 +23902,17 @@ export function StudioShell({
                           ? " is-active"
                           : ""
                       }`}
-                      onClick={() => {
-                        setHistoryOpen(false);
-                        setSettingsOpen(false);
-                        setMobileAppMenuOpen(false);
-                        openTab(lastChatTabRef.current || COMPOSER_TAB);
-                      }}
-                      aria-label="Open create"
-                      title="Create"
+                      onClick={activateCreateControl}
+                      aria-label={
+                        isComposerContextTabKey(activeTab)
+                          ? "New create tab"
+                          : "Open create"
+                      }
+                      title={
+                        isComposerContextTabKey(activeTab)
+                          ? "New create tab"
+                          : "Create"
+                      }
                       aria-pressed={
                         isComposerContextTabKey(activeTab) ||
                         String(activeTab || "").startsWith("create:")
@@ -23953,14 +23955,17 @@ export function StudioShell({
                         ? " is-active"
                         : ""
                     }`}
-                    onClick={() => {
-                      setHistoryOpen(false);
-                      setSettingsOpen(false);
-                      setMobileAppMenuOpen(false);
-                      openTab(lastChatTabRef.current || COMPOSER_TAB);
-                    }}
-                    aria-label="Open create"
-                    title="Create"
+                    onClick={activateCreateControl}
+                    aria-label={
+                      isComposerContextTabKey(activeTab)
+                        ? "New create tab"
+                        : "Open create"
+                    }
+                    title={
+                      isComposerContextTabKey(activeTab)
+                        ? "New create tab"
+                        : "Create"
+                    }
                     aria-pressed={
                       isComposerContextTabKey(activeTab) ||
                       String(activeTab || "").startsWith("create:")
@@ -24606,19 +24611,6 @@ export function StudioShell({
               )
             : null}
           <div className="cursor-panel-head-tools cursor-workspace-tools">
-            {isComposerContextTabKey(activeTab) ? (
-              <div className="studio-new-tab-cluster">
-                <button
-                  type="button"
-                  className="studio-settings-pill studio-settings-trigger studio-new-tab-btn"
-                  onClick={openNewComposerTab}
-                  aria-label="New create tab"
-                  title="New create tab"
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            ) : null}
             {!isMobile ? (
               <>
                 <button
@@ -24681,14 +24673,17 @@ export function StudioShell({
                           ? " is-active"
                           : ""
                       }`}
-                      onClick={() => {
-                        setHistoryOpen(false);
-                        setSettingsOpen(false);
-                        setMobileAppMenuOpen(false);
-                        openTab(lastChatTabRef.current || COMPOSER_TAB);
-                      }}
-                      aria-label="Open create"
-                      title="Create"
+                      onClick={activateCreateControl}
+                      aria-label={
+                        isComposerContextTabKey(activeTab)
+                          ? "New create tab"
+                          : "Open create"
+                      }
+                      title={
+                        isComposerContextTabKey(activeTab)
+                          ? "New create tab"
+                          : "Create"
+                      }
                       aria-pressed={
                         isComposerContextTabKey(activeTab) ||
                         String(activeTab || "").startsWith("create:")
@@ -24731,14 +24726,17 @@ export function StudioShell({
                         ? " is-active"
                         : ""
                     }`}
-                    onClick={() => {
-                      setHistoryOpen(false);
-                      setSettingsOpen(false);
-                      setMobileAppMenuOpen(false);
-                      openTab(lastChatTabRef.current || COMPOSER_TAB);
-                    }}
-                    aria-label="Open create"
-                    title="Create"
+                    onClick={activateCreateControl}
+                    aria-label={
+                      isComposerContextTabKey(activeTab)
+                        ? "New create tab"
+                        : "Open create"
+                    }
+                    title={
+                      isComposerContextTabKey(activeTab)
+                        ? "New create tab"
+                        : "Create"
+                    }
                     aria-pressed={
                       isComposerContextTabKey(activeTab) ||
                       String(activeTab || "").startsWith("create:")
@@ -25644,7 +25642,18 @@ export function StudioShell({
       {isMobile ? (
         <StudioMobileBottomNav
           section={resolveMobileBottomNavSection(activeTab, mobileSection)}
-          onSelect={openMobileSection}
+          onSelect={(section) => {
+            if (
+              section === "composer" &&
+              resolveMobileBottomNavSection(activeTab, mobileSection) ===
+                "composer" &&
+              isComposerContextTabKey(activeTab)
+            ) {
+              activateCreateControl();
+              return;
+            }
+            openMobileSection(section);
+          }}
           onPrefetch={prefetchStudioSurface}
           action={
             // Sheet dock on Generate / My Assets; full Files tab also highlights Folder.

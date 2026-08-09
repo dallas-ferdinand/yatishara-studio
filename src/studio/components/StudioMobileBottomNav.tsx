@@ -256,8 +256,8 @@ export function StudioMobileBottomNav({
             <NavButton
               className={`studio-mobile-nav-btn is-icon-only is-cluster-slot is-active`}
               ariaCurrent="page"
-              ariaLabel="Create"
-              title="Create"
+              ariaLabel="New create tab"
+              title="New create tab"
               onActivate={() => onSelect("composer")}
               onIntent={() => onPrefetch?.("composer")}
             >
