@@ -870,8 +870,6 @@
 .studio-dm-reply-snippet {
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 11px;
   font-weight: 500;
   color: var(--color-cursor-muted, var(--mos-muted));
@@ -879,7 +877,7 @@
 
 .studio-dm-reply-snippet {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
   min-width: 0;
   max-width: 100%;
@@ -890,8 +888,15 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Match bubble width — wrap up to 3 lines, then ellipsis. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.35;
 }
 
 .studio-dm-reply-snippet > :not(svg):not(.studio-dm-reply-snippet-text) {
@@ -905,6 +910,7 @@
   flex: 0 0 auto;
   width: 12px;
   height: 12px;
+  margin-top: 1px;
   opacity: 0.9;
 }
 
@@ -1240,6 +1246,41 @@
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
+}
+
+/* Mobile: same two-row layout; extras are icon-only (no Upload/Choose/Share labels). */
+.studio-dm-composer.is-split.is-mobile-icons .studio-dm-extra-pill-label {
+  display: none;
+}
+
+.studio-dm-composer.is-split.is-mobile-icons .studio-settings-pill.studio-dm-extra-pill {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.studio-dm-composer.is-split.is-mobile-icons .studio-settings-pill.studio-dm-extra-pill svg {
+  width: 14px;
+  height: 14px;
+}
+
+.studio-dm-composer.is-split.is-mobile-icons .studio-composer-circle-btn.studio-dm-composer-circle,
+.studio-dm-composer.is-split.is-mobile-icons .studio-composer-circle-btn.studio-composer-send-btn {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+}
+
+.studio-dm-composer.is-split.is-mobile-icons .studio-dm-composer-row.is-extras {
+  min-height: 36px;
+  padding: 4px 8px;
+  gap: 8px;
 }
 
 .studio-dm-composer.is-split .studio-settings-pill.studio-dm-extra-pill svg {
