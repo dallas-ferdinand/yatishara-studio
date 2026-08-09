@@ -849,7 +849,8 @@
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 1;
+  /* Above watermark icon so the wash masks it. */
+  z-index: 2;
   pointer-events: none;
   background:
     linear-gradient(
@@ -870,7 +871,7 @@
     );
 }
 
-/* Large relative watermark — centered, soft. */
+/* Large relative watermark — centered, under the hero wash. */
 .public-offers-hero-icon {
   position: absolute;
   top: 50%;
@@ -879,9 +880,9 @@
   height: min(52vw, 220px);
   transform: translate(-50%, -50%) rotate(-10deg);
   color: var(--cursor-accent);
-  opacity: 0.14;
+  opacity: 0.22;
   pointer-events: none;
-  z-index: 2;
+  z-index: 1;
 }
 
 .public-offers-hero-icon svg,
