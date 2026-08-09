@@ -198,22 +198,69 @@
 }
 
 /*
-  Mobile: tight under drag handle (was 22px — too much).
-  Desktop: sheet already pads 12px — only gap below chip to grid.
+  Mobile: tight under drag handle; small gap to app grid.
+  Fade mask under the card so grid scrolls behind it.
 */
 .studio-mobile-app-menu-scroll .studio-balance-chip {
-  margin: 8px 16px 12px;
+  position: relative;
+  z-index: 3;
+  margin: 8px 16px 4px;
   width: auto;
   flex-shrink: 0;
 }
 
+.studio-mobile-app-menu-scroll .studio-balance-chip::after {
+  content: "";
+  position: absolute;
+  left: -16px;
+  right: -16px;
+  top: 100%;
+  height: 28px;
+  pointer-events: none;
+  z-index: 2;
+  background: linear-gradient(
+    to bottom,
+    var(--mos-plate, var(--mos-panel, #ececf0)) 0%,
+    color-mix(in srgb, var(--mos-plate, #ececf0) 72%, transparent) 42%,
+    transparent 100%
+  );
+}
+
 .studio-mobile-app-menu-sheet.is-desktop-popover .studio-balance-chip {
-  margin: 0 0 12px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0 0 4px;
   flex-shrink: 0;
+  /* Solid plate so scrolled apps don't show through the card. */
+  background:
+    radial-gradient(
+      circle at 88% 0%,
+      color-mix(in srgb, var(--cursor-accent) 22%, transparent),
+      transparent 52%
+    ),
+    radial-gradient(
+      circle at 8% 100%,
+      color-mix(in srgb, var(--cursor-accent) 10%, transparent),
+      transparent 44%
+    ),
+    var(--mos-plate, var(--cursor-surface, var(--mos-panel)));
+}
+
+.studio-mobile-app-menu-sheet.is-desktop-popover .studio-balance-chip::after {
+  left: 0;
+  right: 0;
+}
+
+/* Top sheet fade sits above the chip — replace with the under-card mask. */
+.studio-mobile-app-menu-scroll:has(.studio-balance-chip)::before {
+  content: none;
+  display: none;
 }
 
 .studio-mobile-app-menu-scroll:has(.studio-balance-chip) .studio-mobile-app-menu-body.is-app-grid {
-  padding-top: 0;
+  /* Tight under balance; mask overlaps the first few px of the scroll. */
+  padding-top: 2px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -222,5 +269,5 @@
 .studio-mobile-app-menu-sheet.is-desktop-popover
   .studio-mobile-app-menu-scroll:has(.studio-balance-chip)
   .studio-mobile-app-menu-body.is-app-grid {
-  padding-top: 0;
+  padding-top: 2px;
 }
