@@ -11,17 +11,20 @@
   justify-content: space-between;
   gap: 10px;
   box-sizing: border-box;
-  height: var(--studio-fullscreen-status-h, max(28px, env(safe-area-inset-top, 0px)));
-  /* Extra bottom pad sits content higher in the notch band. */
-  padding: 0 max(14px, env(safe-area-inset-right, 0px)) 10px
+  height: var(--studio-fullscreen-status-h, max(32px, calc(env(safe-area-inset-top, 0px) + 4px)));
+  /* +4px bottom pad so time/battery sit a touch higher in the band. */
+  padding: 0 max(14px, env(safe-area-inset-right, 0px)) 14px
     max(14px, env(safe-area-inset-left, 0px));
   pointer-events: none;
   position: fixed !important;
   color: var(--color-cursor-text-bright, var(--mos-text));
   font-family: var(--font-onest), system-ui, sans-serif;
-  /* Light/dark plate behind notch chrome. */
+  /* Light/dark plate + soft glow under the notch. */
   background: color-mix(in srgb, var(--mos-bg, #05080f) 92%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #333) 55%, transparent);
+  box-shadow:
+    0 6px 18px color-mix(in srgb, #000 28%, transparent),
+    0 1px 0 color-mix(in srgb, #fff 6%, transparent);
 }
 
 .studio-polish.is-studio-mobile.is-browser-fullscreen .studio-fullscreen-status {
@@ -32,12 +35,18 @@
   background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 94%, transparent);
   border-bottom-color: color-mix(in srgb, #12141a 10%, transparent);
   color: #12141a;
+  box-shadow:
+    0 6px 16px color-mix(in srgb, #0f172a 10%, transparent),
+    0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 [data-appearance="dark"] .studio-fullscreen-status {
   background: color-mix(in srgb, var(--mos-bg, #05080f) 94%, transparent);
   border-bottom-color: color-mix(in srgb, #fff 10%, transparent);
   color: #f2f2f4;
+  box-shadow:
+    0 8px 20px color-mix(in srgb, #000 36%, transparent),
+    0 1px 0 color-mix(in srgb, #fff 8%, transparent);
 }
 
 .studio-fullscreen-status-time {
