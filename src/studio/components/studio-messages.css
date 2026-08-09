@@ -1216,21 +1216,17 @@
   stroke-width: 2.25;
 }
 
-.studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle.is-send {
-  color: var(--cursor-accent, var(--mos-accent));
-  border-color: color-mix(
-    in srgb,
-    var(--cursor-accent, var(--mos-accent)) 42%,
-    var(--color-cursor-border-soft, var(--color-cursor-border))
-  );
-  background: color-mix(
-    in srgb,
-    var(--cursor-accent, var(--mos-accent)) 10%,
-    var(--mos-page, var(--color-cursor-panel))
-  );
+/* Active send = Create composer 3D chrome (studio-composer-send-btn); keep 24px. */
+.studio-dm-composer .studio-composer-circle-btn.studio-composer-send-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  gap: 0;
 }
 
-.studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle:disabled {
+.studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle:disabled:not(.studio-composer-send-btn) {
   opacity: 0.55;
   cursor: default;
 }

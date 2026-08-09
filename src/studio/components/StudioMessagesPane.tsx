@@ -3867,7 +3867,7 @@ export function StudioMessagesPane({
               <span className="studio-dm-extras-spacer" aria-hidden="true" />
               <button
                 type="button"
-                className="studio-composer-circle-btn studio-dm-composer-circle is-send"
+                className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
                 data-studio-sfx="send"
                 onClick={() => finishRecording("send")}
                 disabled={recState === "sending"}
@@ -3931,7 +3931,7 @@ export function StudioMessagesPane({
               </button>
               <button
                 type="button"
-                className="studio-composer-circle-btn studio-dm-composer-circle is-send"
+                className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
                 data-studio-sfx="send"
                 onClick={() => void handleSend()}
                 disabled={!canSend}
