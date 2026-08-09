@@ -8666,16 +8666,18 @@ export function StudioShell({
           background: transparent;
           box-sizing: border-box;
         }
-        /* Pill hugs the circles — no inset pad; only the gap between buttons. */
+        /* Pill hugs the circles — ring via shadow so layout height stays = sibling icons. */
         .studio-mobile-nav-cluster.is-linked {
           padding: 0;
           gap: 2px;
-          height: auto;
-          max-height: none;
+          height: var(--studio-mobile-chrome-control, 30px);
+          max-height: var(--studio-mobile-chrome-control, 30px);
           align-self: center;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--studio-mobile-chrome-border));
+          border: 0;
           border-radius: 999px;
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--studio-mobile-chrome-glass-foot));
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 42%, var(--studio-mobile-chrome-border));
+          box-sizing: border-box;
         }
         .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-btn.is-cluster-slot {
           flex: 0 0 auto !important;
@@ -10212,9 +10214,13 @@ export function StudioShell({
         .studio-header-create-cluster.is-linked {
           gap: 2px;
           padding: 0;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          border: 0;
           border-radius: 999px;
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, transparent));
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          box-sizing: border-box;
+          height: var(--studio-chrome-control, 28px);
+          max-height: var(--studio-chrome-control, 28px);
         }
         .studio-header-create-cluster.is-linked .studio-settings-pill {
           width: var(--studio-chrome-control, 28px) !important;
@@ -10228,8 +10234,9 @@ export function StudioShell({
           background: color-mix(in srgb, var(--cursor-accent) 22%, var(--mos-panel, transparent)) !important;
         }
         [data-appearance="light"] .studio-header-create-cluster.is-linked {
-          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+          border: 0;
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, #f5f5f7));
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
         }
         /* Desktop: same app grid as mobile, tuck under Menu control (no dim overlay). */
         .studio-mobile-app-menu-sheet.is-desktop-popover {
@@ -11486,8 +11493,9 @@ export function StudioShell({
             box-shadow: none !important;
           }
           [data-appearance="light"] .studio-mobile-nav-cluster.is-linked {
-            border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--studio-mobile-chrome-border));
+            border: 0;
             background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, #f5f5f7));
+            box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 40%, var(--studio-mobile-chrome-border));
           }
           [data-appearance="light"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-action:not(.is-active),
           [data-appearance="light"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-history:not(.is-active) {
