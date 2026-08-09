@@ -821,19 +821,20 @@
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  opacity: 0.48;
+  opacity: 0.42;
+  /* Softer fade — less harsh cut at the bottom. */
   -webkit-mask-image: linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0.92) 0%,
-    rgba(0, 0, 0, 0.72) 42%,
-    rgba(0, 0, 0, 0.28) 78%,
+    rgba(0, 0, 0, 0.88) 0%,
+    rgba(0, 0, 0, 0.7) 55%,
+    rgba(0, 0, 0, 0.35) 82%,
     transparent 100%
   );
   mask-image: linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0.92) 0%,
-    rgba(0, 0, 0, 0.72) 42%,
-    rgba(0, 0, 0, 0.28) 78%,
+    rgba(0, 0, 0, 0.88) 0%,
+    rgba(0, 0, 0, 0.7) 55%,
+    rgba(0, 0, 0, 0.35) 82%,
     transparent 100%
   );
   -webkit-mask-size: 100% 100%;
@@ -841,7 +842,7 @@
 }
 
 [data-appearance="dark"] .public-offers-hero-bg {
-  opacity: 0.58;
+  opacity: 0.52;
 }
 
 .public-offers-hero::after {
@@ -852,23 +853,33 @@
   pointer-events: none;
   background:
     radial-gradient(
-      120% 90% at 50% 20%,
-      color-mix(in srgb, var(--mos-page, #f5f5f7) 18%, transparent) 0%,
-      color-mix(in srgb, var(--mos-plate, #ececf0) 72%, transparent) 58%,
-      var(--mos-plate, #ececf0) 100%
+      120% 90% at 50% 18%,
+      color-mix(in srgb, var(--mos-page, #f5f5f7) 8%, transparent) 0%,
+      color-mix(in srgb, var(--mos-plate, #ececf0) 42%, transparent) 52%,
+      color-mix(in srgb, var(--mos-plate, #ececf0) 78%, transparent) 100%
     );
 }
 
-/* Large relative watermark — same idea as Balance / billing hero icon. */
+[data-appearance="dark"] .public-offers-hero::after {
+  background:
+    radial-gradient(
+      120% 90% at 50% 18%,
+      color-mix(in srgb, var(--mos-bg, #05080f) 10%, transparent) 0%,
+      color-mix(in srgb, var(--mos-bg, #05080f) 38%, transparent) 52%,
+      color-mix(in srgb, var(--mos-bg, #05080f) 72%, transparent) 100%
+    );
+}
+
+/* Large relative watermark — top-right, like Balance / billing hero. */
 .public-offers-hero-icon {
   position: absolute;
-  right: -36px;
-  bottom: -28px;
-  width: min(48vw, 220px);
-  height: min(48vw, 220px);
-  transform: rotate(-12deg);
+  top: -18px;
+  right: -22px;
+  width: min(46vw, 200px);
+  height: min(46vw, 200px);
+  transform: rotate(-10deg);
   color: var(--cursor-accent);
-  opacity: 0.2;
+  opacity: 0.34;
   pointer-events: none;
   z-index: 2;
 }
@@ -1758,11 +1769,11 @@
   }
 
   .public-offers-hero-icon {
-    right: -28px;
-    bottom: -22px;
-    width: min(52vw, 160px);
-    height: min(52vw, 160px);
-    opacity: 0.18;
+    top: -12px;
+    right: -16px;
+    width: min(48vw, 148px);
+    height: min(48vw, 148px);
+    opacity: 0.3;
   }
 
   .public-offers-grid {
