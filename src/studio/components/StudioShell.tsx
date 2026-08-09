@@ -24351,30 +24351,22 @@ export function StudioShell({
                 </button>
               </>
             ) : (
-              <>
-                {isAdminUser ? (
-                  <AdminQuickLinks
-                    onOpenAdminTab={openAdminTab}
-                    active={Boolean(activeAdminTab)}
-                  />
-                ) : null}
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
-                  onClick={() => {
-                    void toggleBrowserFullscreen();
-                  }}
-                  aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
-                  title={browserFullscreen ? "Exit full screen" : "Full screen"}
-                  aria-pressed={browserFullscreen}
-                >
-                  {browserFullscreen ? (
-                    <Shrink className="h-3.5 w-3.5" aria-hidden="true" />
-                  ) : (
-                    <Expand className="h-3.5 w-3.5" aria-hidden="true" />
-                  )}
-                </button>
-              </>
+              <button
+                type="button"
+                className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
+                onClick={() => {
+                  void toggleBrowserFullscreen();
+                }}
+                aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
+                title={browserFullscreen ? "Exit full screen" : "Full screen"}
+                aria-pressed={browserFullscreen}
+              >
+                {browserFullscreen ? (
+                  <Shrink className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Expand className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </button>
             )}
           </div>
         </header>
