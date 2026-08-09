@@ -8665,17 +8665,17 @@ export function StudioShell({
           background: transparent;
           box-sizing: border-box;
         }
-        /* Pill hugs circles — inset ring so the border doesn’t add outer size. */
+        /* Pill hugs circles — regular outer border; slots stay borderless. */
         .studio-mobile-nav-cluster.is-linked {
           padding: 0;
           gap: 2px;
           height: var(--studio-mobile-chrome-control, 30px);
           max-height: var(--studio-mobile-chrome-control, 30px);
           align-self: center;
-          border: 0;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--studio-mobile-chrome-border));
           border-radius: 999px;
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--studio-mobile-chrome-glass-foot));
-          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 42%, var(--studio-mobile-chrome-border));
+          box-shadow: none;
           box-sizing: border-box;
         }
         .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-btn.is-cluster-slot {
@@ -10220,10 +10220,10 @@ export function StudioShell({
         .studio-header-create-cluster.is-linked {
           gap: 2px;
           padding: 0;
-          border: 0;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
           border-radius: 999px;
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, transparent));
-          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          box-shadow: none;
           box-sizing: border-box;
           height: 24px;
           max-height: 24px;
@@ -10250,9 +10250,9 @@ export function StudioShell({
           background: color-mix(in srgb, var(--cursor-accent) 22%, var(--mos-panel, transparent)) !important;
         }
         [data-appearance="light"] .studio-header-create-cluster.is-linked {
-          border: 0;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, #f5f5f7));
-          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+          box-shadow: none;
         }
         /* Desktop: same app grid as mobile, tuck under Menu control (no dim overlay). */
         .studio-mobile-app-menu-sheet.is-desktop-popover {
@@ -11536,9 +11536,9 @@ export function StudioShell({
             box-shadow: none !important;
           }
           [data-appearance="light"] .studio-mobile-nav-cluster.is-linked {
-            border: 0;
+            border: 1px solid color-mix(in srgb, var(--cursor-accent) 40%, var(--studio-mobile-chrome-border));
             background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, #f5f5f7));
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 40%, var(--studio-mobile-chrome-border));
+            box-shadow: none;
           }
           [data-appearance="light"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-action:not(.is-active),
           [data-appearance="light"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-history:not(.is-active) {
