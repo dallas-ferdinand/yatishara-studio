@@ -131,6 +131,45 @@ function revokePendingPreview(url: string) {
   if (url.startsWith("blob:")) URL.revokeObjectURL(url);
 }
 
+/** Fast DM thread scroll (reply jump + scroll-down FAB). Browser smooth is too slow. */
+const DM_SCROLL_MS = 160;
+
+function animateDmScrollTop(
+  root: HTMLElement,
+  toTop: number,
+  durationMs = DM_SCROLL_MS,
+) {
+  const max = Math.max(0, root.scrollHeight - root.clientHeight);
+  const target = Math.max(0, Math.min(max, toTop));
+  const from = root.scrollTop;
+  const delta = target - from;
+  if (Math.abs(delta) < 1) {
+    root.scrollTop = target;
+    return;
+  }
+  const start = performance.now();
+  const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / durationMs);
+    root.scrollTop = from + delta * easeOutCubic(t);
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function scrollDmElementIntoView(el: HTMLElement, durationMs = DM_SCROLL_MS) {
+  const root = el.closest(".studio-dm-scroll") as HTMLElement | null;
+  if (!root) {
+    el.scrollIntoView({ behavior: "auto", block: "center" });
+    return;
+  }
+  const rootRect = root.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const elTop = elRect.top - rootRect.top + root.scrollTop;
+  const target = elTop - root.clientHeight / 2 + elRect.height / 2;
+  animateDmScrollTop(root, target, durationMs);
+}
+
 type StudioShareDelivery = "access" | "file";
 type StudioSharePermission = "view" | "edit";
 
@@ -1543,7 +1582,8 @@ const DmMessageBubble = memo(function DmMessageBubble({
   const jumpToReply = useCallback(() => {
     if (!message.replyTo) return;
     const el = document.getElementById(`dm-msg-${message.replyTo._id}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!el) return;
+    scrollDmElementIntoView(el);
   }, [message.replyTo]);
 
   const menuItems = buildDmBubbleMenuItems(message, actions);
@@ -2775,13 +2815,18 @@ export function StudioMessagesPane({
     }
   }, [conversationId, dropOptimistic, messages, optimisticMessages]);
 
-  const pinDmScrollBottom = useCallback(() => {
+  const pinDmScrollBottom = useCallback((opts?: { smooth?: boolean }) => {
     const el = scrollRef.current;
     if (!el) return;
     stickToBottomRef.current = true;
-    // Instant pin — smooth scrollTo often sits idle ~0.5–1s on long DM threads
-    // before the glide starts (Chrome/Android).
-    el.scrollTop = el.scrollHeight;
+    const top = Math.max(0, el.scrollHeight - el.clientHeight);
+    if (opts?.smooth) {
+      // Same fast glide as reply-quote scroll (not browser smooth / not instant jump).
+      animateDmScrollTop(el, top);
+    } else {
+      // Instant pin — auto-stick on open / own sends (layout settling).
+      el.scrollTop = el.scrollHeight;
+    }
     setShowJumpDown(false);
   }, []);
 
@@ -3692,8 +3737,8 @@ export function StudioMessagesPane({
             type="button"
             className="studio-dm-jump-down"
             aria-label="Scroll to latest messages"
-            title="Latest"
-            onClick={() => pinDmScrollBottom()}
+            title="Scroll down"
+            onClick={() => pinDmScrollBottom({ smooth: true })}
           >
             <ChevronDown aria-hidden="true" strokeWidth={2.35} />
           </button>
