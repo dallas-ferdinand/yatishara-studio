@@ -4706,6 +4706,17 @@ export function StudioShell({
 
   const rootFolderId = navTrail[0]?.id ?? null;
 
+  const historyPanelProps = {
+    indexThreads: threads ?? [],
+    openThreadIds: openTabs
+      .filter((tab) => tab.startsWith("thread:"))
+      .map((tab) => tab.slice("thread:".length)),
+    activeThreadId,
+    onSelectThread: openHistoryThread,
+    onClose: () => setHistoryOpen(false),
+    expiresUnix: assetUrlExpiresUnix,
+  };
+
   const settingsPanelProps = {
     settingsSection,
     currentUser,
@@ -9580,7 +9591,8 @@ export function StudioShell({
         /* Pixel floors so the resizable rails can't crush card content —
            react-resizable-panels min sizes are % of the group, which gets
            tiny on small windows. The vw guard keeps very narrow windows sane. */
-        .studio-workspace-panels > [data-panel-id="studio-settings-side"] {
+        .studio-workspace-panels > [data-panel-id="studio-settings-side"],
+        .studio-workspace-panels > [data-panel-id="studio-history-side"] {
           min-width: min(320px, 46vw);
         }
         .studio-main-panels > [data-panel-id="studio-sidebar"] {
@@ -21775,9 +21787,20 @@ export function StudioShell({
         .studio-academy-comments-panel {
           background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
         }
-        .studio-history-floating-panel {
+        /* History right rail — same inset language as Settings / left sidebar. */
+        .studio-history-sidebar {
           width: 100%;
-          background: var(--mos-plate, var(--mos-panel));
+          min-width: 0;
+          background: var(--mos-sidebar, var(--mos-panel));
+          overflow: hidden;
+        }
+        .studio-history-sidebar-head {
+          justify-content: space-between;
+          gap: 8px;
+        }
+        .studio-history-sidebar .studio-history-panel-body {
+          flex: 1 1 0%;
+          min-height: 0;
         }
         /* Mobile history: landing-menu-style bottom overlay (handle + height drag). */
         .studio-history-mobile-sheet {
@@ -21908,23 +21931,13 @@ export function StudioShell({
           padding: 10px;
           scrollbar-gutter: auto;
         }
-        .studio-history-floating-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          flex: 0 0 auto;
-          padding: 12px 10px 12px 14px;
-          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
-          background: var(--mos-plate, var(--mos-panel));
-        }
         .studio-history-head-title {
           margin: 0;
           color: var(--color-cursor-text-bright);
-          font-size: 14px;
-          font-weight: 700;
+          font-size: 13px;
+          font-weight: 650;
           line-height: 1.2;
-          letter-spacing: -0.02em;
+          letter-spacing: -0.01em;
         }
         /* History search chrome — PanelSearchBar + type filter (Messages/Files language). */
         .studio-history-panel-body {
@@ -24220,7 +24233,13 @@ export function StudioShell({
           minSize={isMobile ? 100 : STUDIO_MAIN_MAIN_MIN}
           {...(isMobile ? { maxSize: 100 } : {})}
         >
-      <StudioWorkspaceColumn settingsOpen={settingsOpen} isMobile={isMobile} settingsPanelProps={settingsPanelProps}>
+      <StudioWorkspaceColumn
+        settingsOpen={settingsOpen}
+        historyOpen={historyOpen}
+        isMobile={isMobile}
+        settingsPanelProps={settingsPanelProps}
+        historyPanelProps={historyPanelProps}
+      >
       <main className={`${STYLE.main} studio-composer-bg`}>
         <header className="cursor-panel-head cursor-workspace-head shrink-0">
           <UnifiedTabStrip
@@ -25457,19 +25476,6 @@ export function StudioShell({
         />
       ) : null}
 
-      {historyOpen ? (
-        <StudioHistoryPanel
-          indexThreads={threads ?? []}
-          openThreadIds={openTabs
-            .filter((tab) => tab.startsWith("thread:"))
-            .map((tab) => tab.slice("thread:".length))}
-          activeThreadId={activeThreadId}
-          onSelectThread={openHistoryThread}
-          onClose={() => setHistoryOpen(false)}
-          expiresUnix={assetUrlExpiresUnix}
-          isMobile={isMobile}
-        />
-      ) : null}
       {filesConfirm && typeof document !== "undefined"
         ? createPortal(
             <StudioConfirmOverlay
@@ -33549,12 +33555,27 @@ function StudioNetworkLeftRail({
   );
 }
 
-function StudioWorkspaceColumn({ settingsOpen, isMobile, settingsPanelProps, children }) {
+function StudioWorkspaceColumn({
+  settingsOpen,
+  historyOpen = false,
+  isMobile,
+  settingsPanelProps,
+  historyPanelProps = null,
+  children,
+}) {
   if (settingsOpen && isMobile) {
     return (
       <>
         {children}
         <SettingsSidePanel {...settingsPanelProps} isMobile />
+      </>
+    );
+  }
+  if (historyOpen && isMobile && historyPanelProps) {
+    return (
+      <>
+        {children}
+        <StudioHistoryPanel {...historyPanelProps} isMobile />
       </>
     );
   }
@@ -33567,6 +33588,30 @@ function StudioWorkspaceColumn({ settingsOpen, isMobile, settingsPanelProps, chi
         <PanelResizeHandle className="cursor-resize" />
         <Panel id="studio-settings-side" order={2} defaultSize={28} minSize={18} maxSize={42}>
           <SettingsSidePanel {...settingsPanelProps} />
+        </Panel>
+      </PanelGroup>
+    );
+  }
+  if (historyOpen && !isMobile && historyPanelProps) {
+    return (
+      <PanelGroup
+        direction="horizontal"
+        autoSaveId="studio-history-h"
+        className="studio-workspace-panels h-full min-h-0 min-w-0 overflow-hidden"
+      >
+        <Panel id="studio-history-main" order={1} defaultSize={72} minSize={42} className="min-h-0 min-w-0">
+          {children}
+        </Panel>
+        <PanelResizeHandle className="cursor-resize" />
+        <Panel
+          id="studio-history-side"
+          order={2}
+          defaultSize={28}
+          minSize={18}
+          maxSize={42}
+          className="min-h-0 min-w-0"
+        >
+          <StudioHistoryPanel {...historyPanelProps} />
         </Panel>
       </PanelGroup>
     );

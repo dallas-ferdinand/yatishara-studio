@@ -19,7 +19,6 @@ import {
 import { api } from "../../../convex/_generated/api";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { ExplorerTypeFilter } from "@/desk/components/ExplorerTypeFilter";
-import { ResizableSideSheet } from "./ResizableSideSheet";
 import {
   historyRangeCacheKey,
   rememberStudioLive,
@@ -727,29 +726,25 @@ export function StudioHistoryPanel({
     );
   }
 
+  // Desktop: inset right rail (Settings / DM peer language) — not a floating overlay.
   return (
-    <ResizableSideSheet
-      ariaLabel="History"
-      backdropLabel="Close history"
-      onClose={onClose}
-      autoSaveId="studio-history-w"
-      defaultSize={25}
-      minSize={18}
-      maxSize={40}
-      panelClassName="studio-history-floating-panel"
+    <aside
+      className="studio-history-sidebar flex h-full w-full min-w-0 flex-col border-l border-cursor-border-soft"
+      aria-label="History"
     >
-      <header className="studio-history-floating-head">
+      <header className="cursor-panel-head cursor-sidebar-head studio-history-sidebar-head shrink-0">
         <h2 className="studio-history-head-title">History</h2>
         <button
           type="button"
-          className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close"
+          className="studio-share-people-icon-btn is-close"
           onClick={onClose}
           aria-label="Close history"
+          title="Close"
         >
           <X aria-hidden="true" />
         </button>
       </header>
       {body}
-    </ResizableSideSheet>
+    </aside>
   );
 }
