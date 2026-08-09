@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { Cloud, Folder, GraduationCap, History, MessageCircle, PanelLeft, Sparkles, Store } from "lucide-react";
+import { Cloud, Folder, GraduationCap, History, MessageCircle, PanelLeft, Sparkles, Store, X } from "lucide-react";
 import { useRef } from "react";
 
 /** Optional context action — Files linked to Create (Generate) or Network (My Assets). */
@@ -157,13 +157,17 @@ export function StudioMobileBottomNav({
     showHistory ? (
       <NavButton
         className={`studio-mobile-nav-btn studio-mobile-nav-history is-icon-only${historyAction.active ? " is-active" : ""}${linked ? " is-cluster-slot" : ""}`}
-        ariaLabel="History"
-        title="History"
+        ariaLabel={historyAction.active ? "Close history" : "History"}
+        title={historyAction.active ? "Close history" : "History"}
         ariaPressed={historyAction.active ? true : undefined}
         onActivate={() => historyAction.onClick?.()}
         onIntent={() => onPrefetch?.("history")}
       >
-        <HistoryIcon aria-hidden="true" />
+        {historyAction.active ? (
+          <X aria-hidden="true" />
+        ) : (
+          <HistoryIcon aria-hidden="true" />
+        )}
       </NavButton>
     ) : null;
 

@@ -14,7 +14,6 @@ import {
   Image as ImageIcon,
   SearchX,
   Sparkles,
-  X,
 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
@@ -726,24 +725,12 @@ export function StudioHistoryPanel({
     );
   }
 
-  // Desktop: inset right rail (Settings / DM peer language) — not a floating overlay.
+  // Desktop: inset right rail — close via Create|History cluster (History → X).
   return (
     <aside
       className="studio-history-sidebar flex h-full w-full min-w-0 flex-col border-l border-cursor-border-soft"
       aria-label="History"
     >
-      <header className="cursor-panel-head cursor-sidebar-head studio-history-sidebar-head shrink-0">
-        <h2 className="studio-history-head-title">History</h2>
-        <button
-          type="button"
-          className="studio-share-people-icon-btn is-close"
-          onClick={onClose}
-          aria-label="Close history"
-          title="Close"
-        >
-          <X aria-hidden="true" />
-        </button>
-      </header>
       {body}
     </aside>
   );

@@ -21800,13 +21800,13 @@ export function StudioShell({
           background: var(--mos-sidebar, var(--mos-panel));
           overflow: hidden;
         }
-        .studio-history-sidebar-head {
-          justify-content: space-between;
-          gap: 8px;
-        }
         .studio-history-sidebar .studio-history-panel-body {
           flex: 1 1 0%;
           min-height: 0;
+        }
+        /* No title head — search chrome is the top edge. */
+        .studio-history-sidebar .studio-history-chrome {
+          border-top: 0;
         }
         /* Mobile history: landing-menu-style bottom overlay (handle + height drag). */
         .studio-history-mobile-sheet {
@@ -24397,6 +24397,7 @@ export function StudioShell({
                         setMobileAppMenuOpen(false);
                         setSettingsOpen(false);
                         if (
+                          !historyOpen &&
                           !isComposerContextTabKey(activeTab) &&
                           !String(activeTab || "").startsWith("create:")
                         ) {
@@ -24405,10 +24406,14 @@ export function StudioShell({
                         setHistoryOpen((open) => !open);
                       }}
                       aria-label={historyOpen ? "Close history" : "Open history"}
-                      title="History"
+                      title={historyOpen ? "Close history" : "History"}
                       aria-pressed={historyOpen}
                     >
-                      <History className="h-3.5 w-3.5" aria-hidden="true" />
+                      {historyOpen ? (
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <History className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
                     </button>
                   </div>
                 ) : (
