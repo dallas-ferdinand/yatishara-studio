@@ -107,20 +107,20 @@ export function StudioBalanceChip({
         <span className="studio-balance-chip-title">Balance</span>
         <button
           type="button"
-          className="studio-balance-chip-upgrade"
+          className="studio-balance-chip-topup"
           onClick={() => onUpgrade?.()}
         >
-          Upgrade
+          Top up
         </button>
       </div>
       <div className="studio-balance-chip-rows">
+        <div className="studio-balance-chip-row is-remaining">
+          <span>Remaining</span>
+          <strong>{remainingLabel}</strong>
+        </div>
         <div className="studio-balance-chip-row">
           <span>Total</span>
           <strong>{totalLabel}</strong>
-        </div>
-        <div className="studio-balance-chip-row">
-          <span>Remaining</span>
-          <strong>{remainingLabel}</strong>
         </div>
       </div>
     </div>

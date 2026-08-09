@@ -10,7 +10,8 @@
   min-height: 0;
   min-width: 0;
   width: 100%;
-  background: var(--mos-page, var(--mos-bg));
+  /* Same as Create stage — let shell wallpaper/backdrop show through. */
+  background: transparent;
   color: var(--color-cursor-text, var(--mos-text));
   font-family: var(--font-onest), system-ui, sans-serif;
   /* Match other Studio chrome circles (pathbar/settings feel); mobile = nav control. */

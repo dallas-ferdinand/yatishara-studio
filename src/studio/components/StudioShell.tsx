@@ -219,6 +219,7 @@ import {
   CreditBalanceRing,
   StudioBalanceChip,
 } from "./CreditBalanceRing";
+import { StudioFullscreenStatusBar } from "./StudioFullscreenStatusBar";
 import { StudioMessagesPane } from "./StudioMessagesPane";
 import { StudioMessagesSidebar } from "./StudioMessagesSidebar";
 import {
@@ -8414,7 +8415,7 @@ export function StudioShell({
     />
     <div
       ref={shellRef}
-      className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? " is-studio-mobile" : ""}${isMobile && mobileSection === "files" ? " is-mobile-files" : ""}${isMobile && mobileSection === "files" && filesDockExpanded ? " is-mobile-files-composer" : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
+      className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? " is-studio-mobile" : ""}${isMobile && browserFullscreen ? " is-browser-fullscreen" : ""}${isMobile && mobileSection === "files" ? " is-mobile-files" : ""}${isMobile && mobileSection === "files" && filesDockExpanded ? " is-mobile-files-composer" : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
       onPointerDownCapture={(event) => {
         if (event.button !== 0) return;
         const target = event.target;
@@ -8440,6 +8441,7 @@ export function StudioShell({
     >
       <StudioOnlinePresence />
       <StudioBackdrop />
+      <StudioFullscreenStatusBar active={Boolean(isMobile && browserFullscreen)} />
       <StudioPerfHud enabled={Boolean(isAdminUser)} />
       <style jsx global>{`
         .studio-polish {
@@ -8575,7 +8577,7 @@ export function StudioShell({
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -9429,7 +9431,7 @@ export function StudioShell({
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -10563,6 +10565,40 @@ export function StudioShell({
           --studio-mobile-top-chrome: calc(
             var(--studio-mobile-nav-height, 38px) + env(safe-area-inset-top, 0px)
           );
+        }
+        /* Fullscreen: a little extra foot pad + notch status strip height. */
+        .studio-polish.is-studio-mobile.is-browser-fullscreen {
+          --studio-fullscreen-status-h: max(28px, env(safe-area-inset-top, 0px));
+          --studio-fullscreen-bottom-extra: 10px;
+          --studio-mobile-bottom-chrome: calc(
+            var(--studio-mobile-nav-height, 38px)
+              + env(safe-area-inset-bottom, 0px)
+              + var(--studio-fullscreen-bottom-extra)
+          );
+          --studio-mobile-top-chrome: calc(
+            var(--studio-mobile-nav-height, 38px) + var(--studio-fullscreen-status-h)
+          );
+        }
+        .studio-polish.is-studio-mobile.is-browser-fullscreen .studio-mobile-bottom-nav {
+          height: var(--studio-mobile-bottom-chrome) !important;
+          min-height: var(--studio-mobile-bottom-chrome) !important;
+          max-height: var(--studio-mobile-bottom-chrome);
+          padding-bottom: calc(
+            env(safe-area-inset-bottom, 0px) + var(--studio-fullscreen-bottom-extra)
+          );
+        }
+        .studio-polish.is-studio-mobile.is-browser-fullscreen .studio-main-panels {
+          padding-bottom: var(--studio-mobile-bottom-chrome);
+        }
+        .studio-polish.is-studio-mobile.is-browser-fullscreen .cursor-workspace-head {
+          padding-top: 0 !important;
+          /* Status strip owns the notch; keep head under it. */
+          margin-top: var(--studio-fullscreen-status-h);
+          min-height: var(--studio-mobile-nav-height, 38px) !important;
+          height: var(--studio-mobile-nav-height, 38px) !important;
+        }
+        .studio-polish.is-studio-mobile {
+          /* continue mobile tokens below */
           --studio-mobile-files-band: calc(
             100dvh
               - var(--studio-mobile-top-chrome)

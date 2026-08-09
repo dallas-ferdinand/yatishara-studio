@@ -1,0 +1,86 @@
+/* Fake status strip in the notch when mobile browser fullscreen hides OS chrome. */
+
+.studio-fullscreen-status {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 80;
+  display: none;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  box-sizing: border-box;
+  height: var(--studio-fullscreen-status-h, max(28px, env(safe-area-inset-top, 0px)));
+  padding: 0 max(14px, env(safe-area-inset-right, 0px)) 4px
+    max(14px, env(safe-area-inset-left, 0px));
+  pointer-events: none;
+  position: fixed !important;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  font-family: var(--font-onest), system-ui, sans-serif;
+  background: transparent;
+}
+
+.studio-polish.is-studio-mobile.is-browser-fullscreen .studio-fullscreen-status {
+  display: flex;
+}
+
+.studio-fullscreen-status-time {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.studio-fullscreen-status-battery {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 14px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-cursor-text-bright, #fff) 28%, transparent);
+  background: color-mix(in srgb, var(--mos-bg, #05080f) 55%, transparent);
+  color: var(--color-cursor-text-bright, #fff);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.studio-fullscreen-status-battery-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--color-cursor-text-bright, #fff) 22%, transparent);
+  border-radius: inherit;
+  transition: width 220ms ease;
+}
+
+.studio-fullscreen-status-battery.is-charging .studio-fullscreen-status-battery-fill {
+  background: color-mix(in srgb, #3dd68c 55%, transparent);
+}
+
+.studio-fullscreen-status-battery.is-low:not(.is-charging) .studio-fullscreen-status-battery-fill {
+  background: color-mix(in srgb, #f87171 50%, transparent);
+}
+
+.studio-fullscreen-status-battery-label {
+  position: relative;
+  z-index: 1;
+}
+
+[data-appearance="light"] .studio-fullscreen-status-battery {
+  border-color: color-mix(in srgb, #12141a 22%, transparent);
+  background: color-mix(in srgb, #f5f5f7 70%, transparent);
+  color: #12141a;
+}
+
+[data-appearance="light"] .studio-fullscreen-status-battery-fill {
+  background: color-mix(in srgb, #12141a 14%, transparent);
+}

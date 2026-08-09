@@ -54,26 +54,37 @@
   stroke-width: 2;
 }
 
-/* ElevenLabs-style Balance card in app menu. */
+/* Balance card — match Settings billing hero gradient + menu-grid insets. */
 .studio-balance-chip {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: 100%;
   box-sizing: border-box;
-  margin: 0 0 10px;
-  padding: 12px 12px 10px;
+  width: auto;
+  margin: 0;
+  padding: 12px 14px 10px;
+  overflow: hidden;
   border-radius: 12px;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+  background:
+    radial-gradient(
+      circle at 88% 0%,
+      color-mix(in srgb, var(--cursor-accent) 22%, transparent),
+      transparent 52%
+    ),
+    radial-gradient(
+      circle at 8% 100%,
+      color-mix(in srgb, var(--cursor-accent) 10%, transparent),
+      transparent 44%
+    ),
+    var(--mos-plate, var(--cursor-surface, var(--mos-panel)));
   color: var(--color-cursor-text, var(--mos-text));
 }
 
-[data-appearance="dark"] .studio-balance-chip {
-  background: color-mix(in srgb, var(--mos-plate, #1c1c22) 88%, transparent);
-}
-
 .studio-balance-chip-head {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -83,37 +94,35 @@
 .studio-balance-chip-title {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 650;
-  letter-spacing: -0.01em;
-  color: var(--color-cursor-text-bright, var(--mos-text));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-cursor-muted, var(--color-cursor-text-secondary, var(--mos-muted)));
 }
 
-.studio-balance-chip-upgrade {
+.studio-balance-chip-topup {
   flex: 0 0 auto;
   height: 26px;
   min-height: 26px;
   padding: 0 12px;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft, var(--mos-border-soft)));
   border-radius: 999px;
-  background: var(--color-cursor-text-bright, #12141a);
-  color: var(--mos-page, #f5f5f7);
+  background: color-mix(in srgb, var(--cursor-accent) 14%, var(--mos-page, var(--color-cursor-panel)));
+  color: var(--color-cursor-text-bright, var(--mos-text));
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
   cursor: pointer;
 }
 
-[data-appearance="dark"] .studio-balance-chip-upgrade {
-  background: #f2f2f4;
-  color: #12141a;
-}
-
-.studio-balance-chip-upgrade:hover {
-  opacity: 0.92;
+.studio-balance-chip-topup:hover {
+  background: color-mix(in srgb, var(--cursor-accent) 22%, var(--mos-page, var(--color-cursor-panel)));
 }
 
 .studio-balance-chip-rows {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -140,11 +149,32 @@
   text-align: right;
 }
 
+.studio-balance-chip-row.is-remaining strong {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+/*
+  Match app-grid insets: mobile grid uses padding 22px 16px + gap 16px;
+  desktop popover uses gap 12px and sheet edge ~10–12px.
+*/
 .studio-mobile-app-menu-scroll .studio-balance-chip {
-  margin: 4px 10px 6px;
+  margin: 22px 16px 16px;
   width: auto;
 }
 
 .studio-mobile-app-menu-sheet.is-desktop-popover .studio-balance-chip {
-  margin: 8px 10px 4px;
+  margin: 12px 12px 12px;
+}
+
+.studio-mobile-app-menu-scroll:has(.studio-balance-chip) .studio-mobile-app-menu-body.is-app-grid {
+  padding-top: 0;
+}
+
+.studio-mobile-app-menu-sheet.is-desktop-popover
+  .studio-mobile-app-menu-scroll:has(.studio-balance-chip)
+  .studio-mobile-app-menu-body.is-app-grid {
+  padding-top: 0;
 }
