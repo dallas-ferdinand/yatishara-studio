@@ -6,19 +6,52 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  padding: 3px;
-  box-sizing: content-box;
+  /* Ring draws outside — do not shrink the Menu button vs siblings. */
+  padding: 0;
+  box-sizing: border-box;
   line-height: 0;
 }
 
 .studio-credit-balance-ring-svg {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: -3px;
+  width: auto;
+  height: auto;
   pointer-events: none;
   transform: rotate(-90deg);
   overflow: visible;
+}
+
+/* Match sibling chrome circles (desktop 24 / mobile 30). */
+.studio-credit-balance-ring > .studio-settings-trigger,
+.studio-credit-balance-ring > .studio-composer-circle-btn {
+  width: var(--studio-mobile-chrome-control, 24px);
+  min-width: var(--studio-mobile-chrome-control, 24px);
+  max-width: var(--studio-mobile-chrome-control, 24px);
+  height: var(--studio-mobile-chrome-control, 24px);
+  min-height: var(--studio-mobile-chrome-control, 24px);
+  max-height: var(--studio-mobile-chrome-control, 24px);
+  box-sizing: border-box;
+}
+
+.studio-polish:not(.is-studio-mobile) .studio-credit-balance-ring > .studio-settings-trigger,
+.studio-polish:not(.is-studio-mobile) .cursor-workspace-tools .studio-credit-balance-ring > .studio-settings-trigger {
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+}
+
+.studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-credit-balance-ring > .studio-settings-trigger,
+.studio-polish.is-studio-mobile .cursor-workspace-tools .studio-credit-balance-ring > .studio-settings-trigger {
+  width: var(--studio-mobile-chrome-control, 30px) !important;
+  min-width: var(--studio-mobile-chrome-control, 30px) !important;
+  max-width: var(--studio-mobile-chrome-control, 30px) !important;
+  height: var(--studio-mobile-chrome-control, 30px) !important;
+  min-height: var(--studio-mobile-chrome-control, 30px) !important;
+  max-height: var(--studio-mobile-chrome-control, 30px) !important;
 }
 
 .studio-credit-balance-ring-track {

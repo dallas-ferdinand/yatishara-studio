@@ -10636,7 +10636,8 @@ export function StudioShell({
         /* Fullscreen: a little extra foot pad + notch status strip height. */
         .studio-polish.is-studio-mobile.is-browser-fullscreen {
           --studio-fullscreen-status-h: max(28px, env(safe-area-inset-top, 0px));
-          --studio-fullscreen-bottom-extra: 10px;
+          /* Light foot pad only — 10px felt too tall. */
+          --studio-fullscreen-bottom-extra: 3px;
           --studio-mobile-bottom-chrome: calc(
             var(--studio-mobile-nav-height, 38px)
               + env(safe-area-inset-bottom, 0px)

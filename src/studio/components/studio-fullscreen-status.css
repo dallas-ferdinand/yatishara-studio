@@ -12,7 +12,8 @@
   gap: 10px;
   box-sizing: border-box;
   height: var(--studio-fullscreen-status-h, max(28px, env(safe-area-inset-top, 0px)));
-  padding: 0 max(14px, env(safe-area-inset-right, 0px)) 4px
+  /* Extra bottom pad sits content higher in the notch band. */
+  padding: 0 max(14px, env(safe-area-inset-right, 0px)) 10px
     max(14px, env(safe-area-inset-left, 0px));
   pointer-events: none;
   position: fixed !important;
