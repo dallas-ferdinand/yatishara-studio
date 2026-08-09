@@ -215,6 +215,10 @@ import {
 import { threadTitleFromPrompt, collectStudioAssetIdsFromPrompt } from "@/studio/lib/studio-prompt-display.js";
 import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
+import {
+  CreditBalanceRing,
+  StudioBalanceChip,
+} from "./CreditBalanceRing";
 import { StudioMessagesPane } from "./StudioMessagesPane";
 import { StudioMessagesSidebar } from "./StudioMessagesSidebar";
 import {
@@ -23980,11 +23984,6 @@ export function StudioShell({
                     active={Boolean(activeAdminTab)}
                   />
                 ) : null}
-                <CreditPill
-                  creditBalance={billingAccount?.creditBalance}
-                  creditPriceCents={pricing?.creditPriceCents}
-                  onClick={openCreditsPane}
-                />
                 <StudioProfileMenu
                   currentUser={currentUser}
                   profile={myPublicProfile}
@@ -23992,24 +23991,34 @@ export function StudioShell({
                   isProfileTabActive={activeTab.startsWith("profile:")}
                   onViewProfile={openOwnProfile}
                 />
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
-                  onClick={() => {
-                    setHistoryOpen(false);
-                    setSettingsOpen(false);
-                    setMobileAppMenuOpen((open) => !open);
-                  }}
-                  aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
-                  title="Menu"
-                  aria-expanded={mobileAppMenuOpen}
+                <CreditBalanceRing
+                  creditBalance={billingAccount?.creditBalance}
+                  creditBalanceHigh={billingAccount?.creditBalanceHigh}
+                  title={
+                    typeof billingAccount?.creditBalance === "number"
+                      ? `Balance ${formatTtdFromCredits(billingAccount.creditBalance, pricing?.creditPriceCents)}`
+                      : "Balance"
+                  }
                 >
-                  {mobileAppMenuOpen ? (
-                    <X className="h-3.5 w-3.5" aria-hidden="true" />
-                  ) : (
-                    <StudioMenuLogoIcon />
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
+                    onClick={() => {
+                      setHistoryOpen(false);
+                      setSettingsOpen(false);
+                      setMobileAppMenuOpen((open) => !open);
+                    }}
+                    aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
+                    title="Menu"
+                    aria-expanded={mobileAppMenuOpen}
+                  >
+                    {mobileAppMenuOpen ? (
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    ) : (
+                      <StudioMenuLogoIcon />
+                    )}
+                  </button>
+                </CreditBalanceRing>
                 <button
                   type="button"
                   className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
@@ -24751,11 +24760,6 @@ export function StudioShell({
                     active={Boolean(activeAdminTab)}
                   />
                 ) : null}
-                <CreditPill
-                  creditBalance={billingAccount?.creditBalance}
-                  creditPriceCents={pricing?.creditPriceCents}
-                  onClick={openCreditsPane}
-                />
                 <StudioProfileMenu
                   currentUser={currentUser}
                   profile={myPublicProfile}
@@ -24763,24 +24767,34 @@ export function StudioShell({
                   isProfileTabActive={activeTab.startsWith("profile:")}
                   onViewProfile={openOwnProfile}
                 />
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
-                  onClick={() => {
-                    setHistoryOpen(false);
-                    setSettingsOpen(false);
-                    setMobileAppMenuOpen((open) => !open);
-                  }}
-                  aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
-                  title="Menu"
-                  aria-expanded={mobileAppMenuOpen}
+                <CreditBalanceRing
+                  creditBalance={billingAccount?.creditBalance}
+                  creditBalanceHigh={billingAccount?.creditBalanceHigh}
+                  title={
+                    typeof billingAccount?.creditBalance === "number"
+                      ? `Balance ${formatTtdFromCredits(billingAccount.creditBalance, pricing?.creditPriceCents)}`
+                      : "Balance"
+                  }
                 >
-                  {mobileAppMenuOpen ? (
-                    <X className="h-3.5 w-3.5" aria-hidden="true" />
-                  ) : (
-                    <StudioMenuLogoIcon />
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
+                    onClick={() => {
+                      setHistoryOpen(false);
+                      setSettingsOpen(false);
+                      setMobileAppMenuOpen((open) => !open);
+                    }}
+                    aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
+                    title="Menu"
+                    aria-expanded={mobileAppMenuOpen}
+                  >
+                    {mobileAppMenuOpen ? (
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    ) : (
+                      <StudioMenuLogoIcon />
+                    )}
+                  </button>
+                </CreditBalanceRing>
                 <button
                   type="button"
                   className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
@@ -25700,11 +25714,6 @@ export function StudioShell({
           }
           tools={
             <>
-              <CreditPill
-                creditBalance={billingAccount?.creditBalance}
-                creditPriceCents={pricing?.creditPriceCents}
-                onClick={openCreditsPane}
-              />
               <StudioProfileMenu
                 currentUser={currentUser}
                 profile={myPublicProfile}
@@ -25712,24 +25721,34 @@ export function StudioShell({
                 isProfileTabActive={activeTab.startsWith("profile:")}
                 onViewProfile={openOwnProfile}
               />
-              <button
-                type="button"
-                className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
-                onClick={() => {
-                  setHistoryOpen(false);
-                  setSettingsOpen(false);
-                  setMobileAppMenuOpen((open) => !open);
-                }}
-                aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
-                title="Menu"
-                aria-expanded={mobileAppMenuOpen}
+              <CreditBalanceRing
+                creditBalance={billingAccount?.creditBalance}
+                creditBalanceHigh={billingAccount?.creditBalanceHigh}
+                title={
+                  typeof billingAccount?.creditBalance === "number"
+                    ? `Balance ${formatTtdFromCredits(billingAccount.creditBalance, pricing?.creditPriceCents)}`
+                    : "Balance"
+                }
               >
-                {mobileAppMenuOpen ? (
-                  <X className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <StudioMenuLogoIcon />
-                )}
-              </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
+                  onClick={() => {
+                    setHistoryOpen(false);
+                    setSettingsOpen(false);
+                    setMobileAppMenuOpen((open) => !open);
+                  }}
+                  aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
+                  title="Menu"
+                  aria-expanded={mobileAppMenuOpen}
+                >
+                  {mobileAppMenuOpen ? (
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <StudioMenuLogoIcon />
+                  )}
+                </button>
+              </CreditBalanceRing>
             </>
           }
         />
@@ -25741,6 +25760,9 @@ export function StudioShell({
           isAdminUser={isAdminUser}
           showHistory={showHistory}
           browserFullscreen={browserFullscreen}
+          creditBalance={billingAccount?.creditBalance}
+          creditBalanceHigh={billingAccount?.creditBalanceHigh}
+          creditPriceCents={pricing?.creditPriceCents}
           onClose={() => setMobileAppMenuOpen(false)}
           onViewProfile={() => {
             setMobileAppMenuOpen(false);
@@ -28380,6 +28402,9 @@ function StudioMobileAppMenu({
   isAdminUser,
   showHistory = true,
   browserFullscreen = false,
+  creditBalance,
+  creditBalanceHigh,
+  creditPriceCents,
   onClose,
   onViewProfile,
   onEditProfile,
@@ -28729,6 +28754,12 @@ function StudioMobileAppMenu({
         </div>
       )}
       <div className="studio-mobile-app-menu-scroll">
+        <StudioBalanceChip
+          creditBalance={creditBalance}
+          creditBalanceHigh={creditBalanceHigh}
+          creditPriceCents={creditPriceCents}
+          onUpgrade={onOpenCredits}
+        />
         <nav
           className="studio-mobile-app-menu-body is-app-grid"
           aria-label="Studio menu"
@@ -35863,38 +35894,6 @@ function StudioActivityFeed({
     </section>
   );
 }
-
-const CreditPill = memo(function CreditPill({ creditBalance, creditPriceCents, onClick }) {
-  const lastBalanceRef = useRef(creditBalance);
-  if (typeof creditBalance === "number") {
-    lastBalanceRef.current = creditBalance;
-  }
-  const balance = typeof creditBalance === "number" ? creditBalance : lastBalanceRef.current;
-  const label = formatTtdFromCredits(balance, creditPriceCents);
-  const content = <span>{label}</span>;
-  if (!onClick) {
-    return (
-      <span className="studio-credit-pill inline-flex h-6 items-center gap-1.5 rounded-full border border-cursor-border bg-cursor-panel px-2.5 text-[11px] font-semibold leading-none text-cursor-muted tabular-nums">
-        {content}
-      </span>
-    );
-  }
-  return (
-    <button
-      type="button"
-      className="studio-credit-pill inline-flex h-6 items-center gap-1.5 rounded-full border border-cursor-border bg-cursor-panel px-2.5 text-[11px] font-semibold leading-none text-cursor-muted tabular-nums"
-      onClick={onClick}
-      title={typeof balance === "number" ? "View balance and billing" : "Top up"}
-      aria-label={
-        typeof balance === "number"
-          ? `${label} — view balance and billing`
-          : "Top up balance"
-      }
-    >
-      {content}
-    </button>
-  );
-});
 
 function buildFlatEntries({ folder, parent, loading, folders, assets, documents, videoEdits, elements, assetLookupPool }) {
   const lookup = assetLookupPool ?? assets;

@@ -1,0 +1,150 @@
+/* Credit balance progress ring around Menu chrome + menu Balance chip. */
+
+.studio-credit-balance-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 3px;
+  box-sizing: content-box;
+  line-height: 0;
+}
+
+.studio-credit-balance-ring-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+
+.studio-credit-balance-ring-track {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border-soft)) 90%, transparent);
+  stroke-width: 2.25;
+}
+
+.studio-credit-balance-ring-arc {
+  fill: none;
+  stroke: var(--color-cursor-text-bright, var(--mos-text));
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 220ms ease;
+}
+
+[data-appearance="light"] .studio-credit-balance-ring-arc {
+  stroke: #12141a;
+}
+
+[data-appearance="dark"] .studio-credit-balance-ring-arc {
+  stroke: #f2f2f4;
+}
+
+.studio-credit-balance-ring.is-chip {
+  padding: 0;
+  width: 18px;
+  height: 18px;
+}
+
+.studio-credit-balance-ring.is-chip .studio-credit-balance-ring-track,
+.studio-credit-balance-ring.is-chip .studio-credit-balance-ring-arc {
+  stroke-width: 2;
+}
+
+/* ElevenLabs-style Balance card in app menu. */
+.studio-balance-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 10px;
+  padding: 12px 12px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+[data-appearance="dark"] .studio-balance-chip {
+  background: color-mix(in srgb, var(--mos-plate, #1c1c22) 88%, transparent);
+}
+
+.studio-balance-chip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.studio-balance-chip-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-balance-chip-upgrade {
+  flex: 0 0 auto;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-cursor-text-bright, #12141a);
+  color: var(--mos-page, #f5f5f7);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+}
+
+[data-appearance="dark"] .studio-balance-chip-upgrade {
+  background: #f2f2f4;
+  color: #12141a;
+}
+
+.studio-balance-chip-upgrade:hover {
+  opacity: 0.92;
+}
+
+.studio-balance-chip-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.studio-balance-chip-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.studio-balance-chip-row span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-balance-chip-row strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  text-align: right;
+}
+
+.studio-mobile-app-menu-scroll .studio-balance-chip {
+  margin: 4px 10px 6px;
+  width: auto;
+}
+
+.studio-mobile-app-menu-sheet.is-desktop-popover .studio-balance-chip {
+  margin: 8px 10px 4px;
+}
