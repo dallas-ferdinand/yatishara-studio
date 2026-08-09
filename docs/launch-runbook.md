@@ -20,6 +20,7 @@ For broader architecture, local setup, production deployment, and preview hot re
 2. Confirm AI Gateway model IDs on Convex:
    - text: `GATEWAY_TEXT_MODEL_ID` (`google/gemini-3.5-flash`)
    - assistant: `GATEWAY_ASSISTANT_MODEL_ID` (`google/gemini-3.5-flash`)
+   - DM Improve: `GATEWAY_DM_IMPROVE_MODEL_ID` (`google/gemini-2.5-flash-lite`)
    - image: `GATEWAY_IMAGE_MODEL_ID` (`openai/gpt-image-2`)
    - video: `GATEWAY_VIDEO_MODEL_ID` (`bytedance/seedance-2.5`)
 3. Trigger Coolify deploy for app `y2po9nswpdem975f1zo47u19`.

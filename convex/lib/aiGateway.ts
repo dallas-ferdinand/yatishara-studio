@@ -98,6 +98,14 @@ function textModelId(): string {
   return requiredEnv("GATEWAY_TEXT_MODEL_ID");
 }
 
+/** Cheap lite model for DM Improve — defaults to Gemini 2.5 Flash Lite. */
+function dmImproveModelId(): string {
+  return (
+    process.env.GATEWAY_DM_IMPROVE_MODEL_ID?.trim() ||
+    "google/gemini-2.5-flash-lite"
+  );
+}
+
 export async function enhancePrompt(input: EnhancementInput): Promise<string> {
   const model = input.modelId ?? textModelId();
   const referenceInputs = input.referenceInputs ?? [];
@@ -170,7 +178,7 @@ export async function improveMessageDraft(text: string): Promise<string> {
     throw new Error("Type a message first");
   }
   const result = await generateText({
-    model: gateway.languageModel(textModelId()),
+    model: gateway.languageModel(dmImproveModelId()),
     system: [
       "You improve short chat-message drafts for clarity.",
       "If the input includes an instruction (e.g. make this friendlier, shorten this, rewrite as…), apply that instruction to the message and return ONLY the improved message text.",

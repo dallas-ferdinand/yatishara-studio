@@ -57,6 +57,7 @@ Generation:
 - `AI_GATEWAY_API_KEY`
 - `GATEWAY_TEXT_MODEL_ID` — prompt enhancement and scripts (default: `google/gemini-3.5-flash`)
 - `GATEWAY_ASSISTANT_MODEL_ID` — Studio Assistance multimodal co-pilot (default: `google/gemini-3.5-flash`)
+- `GATEWAY_DM_IMPROVE_MODEL_ID` — Messages DM Improve wand (default: `google/gemini-2.5-flash-lite`)
 - `GATEWAY_IMAGE_MODEL_ID` — image generation (default: `openai/gpt-image-2`)
 - `GATEWAY_VIDEO_MODEL_ID` — video generation (default: `bytedance/seedance-2.5`)
 - `ELEVENLABS_API_KEY` — audio generation (voiceover `eleven_v3`, sound effects, music `music_v2`); Convex secrets only
