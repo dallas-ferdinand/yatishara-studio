@@ -554,6 +554,20 @@
   border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 26%, var(--color-cursor-border-soft, var(--mos-border-soft)));
 }
 
+/* Mobile received bubbles — keep left side short so they stay inside the chat. */
+.studio-polish.is-studio-mobile .studio-dm-bubble-row:not(.is-mine) .studio-dm-bubble,
+.studio-polish.is-studio-mobile .studio-dm-bubble-row:not(.is-mine) .studio-dm-bubble.has-reply,
+.studio-polish.is-studio-mobile .studio-dm-bubble-row:not(.is-mine) .studio-dm-bubble.is-voice,
+.studio-polish.is-studio-mobile .studio-dm-bubble-row:not(.is-mine) .studio-dm-bubble.is-voice.has-reply,
+.studio-polish.is-studio-mobile .studio-dm-bubble-row:not(.is-mine) .studio-dm-bubble.is-image,
+.studio-polish.is-studio-mobile .studio-dm-bubble-row:not(.is-mine) .studio-dm-bubble.is-image.has-reply,
+.studio-polish.is-studio-mobile .studio-dm-bubble-row:not(.is-mine) .studio-dm-bubble.is-video,
+.studio-polish.is-studio-mobile .studio-dm-bubble-row:not(.is-mine) .studio-dm-bubble.is-video.has-reply,
+.studio-polish.is-studio-mobile .studio-dm-bubble-row:not(.is-mine) .studio-dm-bubble.is-studio-share,
+.studio-polish.is-studio-mobile .studio-dm-bubble-row:not(.is-mine) .studio-dm-bubble.is-feed-share {
+  max-width: 70%;
+}
+
 .studio-dm-bubble p {
   margin: 0;
   min-width: 0;
