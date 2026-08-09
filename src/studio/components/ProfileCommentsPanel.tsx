@@ -937,7 +937,7 @@ function CommentsBody({
                 value={commentSort}
                 defaultId="newest"
                 options={[...COMMENT_SORT_FILTERS]}
-                onChange={(next) => {
+                onChange={(next: string) => {
                   if (
                     next === "newest" ||
                     next === "oldest" ||

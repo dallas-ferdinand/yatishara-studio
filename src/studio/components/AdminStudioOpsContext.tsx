@@ -209,14 +209,6 @@ export function money(cents: number) {
   return `TT$${(Number(cents || 0) / 100).toFixed(0)}`;
 }
 
-type DetailState = {
-  session: SessionRow | null;
-  statuses: string[];
-  activity: ActivityRow[];
-  payments: PaymentRow[];
-  media: MediaRow[];
-};
-
 type OpsContextValue = {
   active: boolean;
   opsTab: OpsTab;

@@ -378,14 +378,16 @@ export const ensureStudioDefaults = authedMutation({
           break;
         }
       }
+      // Narrow for TS — this branch only runs when existingBilling was found.
+      const billing = existingBilling!;
       const nextHigh = resolveCreditBalanceHigh({
-        creditBalance: existingBilling.creditBalance,
-        creditBalanceHigh: existingBilling.creditBalanceHigh,
+        creditBalance: billing.creditBalance,
+        creditBalanceHigh: billing.creditBalanceHigh,
         lastGrantBalanceAfter,
       });
-      const prevHigh = existingBilling.creditBalanceHigh ?? 0;
+      const prevHigh = billing.creditBalanceHigh ?? 0;
       if (nextHigh > 0 && nextHigh !== prevHigh) {
-        await ctx.db.patch(existingBilling._id, {
+        await ctx.db.patch(billing._id, {
           creditBalanceHigh: nextHigh,
           updatedAt: now,
         });

@@ -216,9 +216,7 @@ function LessonRail({
   const q = academy.lessonSearch.trim().toLowerCase();
   const showIntro =
     !q ||
-    `${detail?.title ?? ""} ${detail?.blurb ?? ""} intro`.toLowerCase().includes(
-      q,
-    );
+    `${detail?.title ?? ""} intro`.toLowerCase().includes(q);
 
   return (
     <div className="studio-cn-sidebar-body">
