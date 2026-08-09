@@ -61,31 +61,31 @@
 
 .studio-credit-balance-ring-track {
   fill: none;
-  stroke: color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border-soft)) 85%, transparent);
+  stroke: color-mix(in srgb, var(--color-cursor-muted, var(--mos-muted)) 42%, transparent);
   stroke-linecap: butt;
 }
 
 .studio-credit-balance-ring-arc {
   fill: none;
-  stroke: var(--color-cursor-text-bright, var(--mos-text));
+  stroke: color-mix(in srgb, var(--color-cursor-text, var(--mos-text)) 72%, transparent);
   stroke-linecap: round;
   transition: stroke-dashoffset 220ms ease;
 }
 
 [data-appearance="light"] .studio-credit-balance-ring-track {
-  stroke: color-mix(in srgb, #12141a 18%, transparent);
+  stroke: color-mix(in srgb, #12141a 12%, transparent);
 }
 
 [data-appearance="light"] .studio-credit-balance-ring-arc {
-  stroke: #12141a;
+  stroke: color-mix(in srgb, #12141a 55%, transparent);
 }
 
 [data-appearance="dark"] .studio-credit-balance-ring-track {
-  stroke: color-mix(in srgb, #f2f2f4 22%, transparent);
+  stroke: color-mix(in srgb, #f2f2f4 16%, transparent);
 }
 
 [data-appearance="dark"] .studio-credit-balance-ring-arc {
-  stroke: #f2f2f4;
+  stroke: color-mix(in srgb, #f2f2f4 58%, transparent);
 }
 
 .studio-credit-balance-ring.is-chip {

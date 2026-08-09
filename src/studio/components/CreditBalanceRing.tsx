@@ -38,7 +38,7 @@ export function CreditBalanceRing({
   const progress = creditBalanceProgress(balance, high);
   // Inset ring: radius clears half the stroke so the arc sits inside the edge.
   const vb = size === "chip" ? 18 : 36;
-  const stroke = size === "chip" ? 2.5 : 3.5;
+  const stroke = size === "chip" ? 1.75 : 2;
   const r = vb / 2 - stroke / 2 - (size === "chip" ? 0.5 : 0.75);
   const c = 2 * Math.PI * r;
   const offset = c * (1 - progress);
