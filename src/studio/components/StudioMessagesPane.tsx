@@ -3885,17 +3885,18 @@ export function StudioMessagesPane({
             <>
               <button
                 type="button"
-                className="studio-composer-circle-btn studio-dm-composer-circle"
+                className="studio-settings-pill studio-dm-extra-pill"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={filesPickBusy}
                 aria-label="Upload photos"
                 title="Upload photos"
               >
                 <Upload aria-hidden="true" />
+                <span className="studio-dm-extra-pill-label">Upload</span>
               </button>
               <button
                 type="button"
-                className="studio-composer-circle-btn studio-dm-composer-circle"
+                className="studio-settings-pill studio-dm-extra-pill"
                 onClick={openChooseStudioFiles}
                 disabled={filesPickBusy}
                 aria-label="Choose from Studio Files"
@@ -3906,17 +3907,19 @@ export function StudioMessagesPane({
                 ) : (
                   <FolderOpen aria-hidden="true" />
                 )}
+                <span className="studio-dm-extra-pill-label">Choose</span>
               </button>
               <button
                 ref={shareExtrasBtnRef}
                 type="button"
-                className="studio-composer-circle-btn studio-dm-composer-circle"
+                className="studio-settings-pill studio-dm-extra-pill"
                 onClick={openShareStudioFiles}
                 disabled={filesPickBusy}
                 aria-label="Share from Studio Files"
                 title="Share from Studio Files"
               >
                 <Share2 aria-hidden="true" />
+                <span className="studio-dm-extra-pill-label">Share</span>
               </button>
               <span className="studio-dm-extras-spacer" aria-hidden="true" />
               <button
