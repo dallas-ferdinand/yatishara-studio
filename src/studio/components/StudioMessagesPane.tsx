@@ -22,6 +22,7 @@ import {
   Copy,
   Music,
   Pause,
+  Paperclip,
   Pencil,
   Play,
   Reply,
@@ -2280,7 +2281,11 @@ export function StudioMessagesPane({
   const [showJumpDown, setShowJumpDown] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const attachBtnRef = useRef<HTMLButtonElement | null>(null);
   const shareExtrasBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [attachMenu, setAttachMenu] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [filesPickerOpen, setFilesPickerOpen] = useState(false);
   const [filesPickMode, setFilesPickMode] = useState<"choose" | "share">("choose");
   const [filesPickBusy, setFilesPickBusy] = useState(false);
@@ -2310,6 +2315,9 @@ export function StudioMessagesPane({
 
   useMobileBackLayer("dm-lightbox", Boolean(lightbox), () => {
     setLightbox(null);
+  });
+  useMobileBackLayer("dm-attach-menu", Boolean(attachMenu), () => {
+    setAttachMenu(null);
   });
   useMobileBackLayer("dm-share-type", shareTypeOpen, () => {
     if (filesPickBusy) return;
@@ -2387,6 +2395,18 @@ export function StudioMessagesPane({
       return prev.filter((_, i) => i !== index);
     });
   }, []);
+
+  function openAttachMenu() {
+    const btn = attachBtnRef.current;
+    if (!btn) {
+      setAttachMenu({ x: 16, y: window.innerHeight - 120 });
+      return;
+    }
+    const rect = btn.getBoundingClientRect();
+    // Anchor at the paperclip top — StudioDmContextMenu placement="above"
+    // measures itself and sits fully above the composer.
+    setAttachMenu({ x: rect.left, y: rect.top });
+  }
 
   function openChooseStudioFiles() {
     if (onRequestPickAsset) {
@@ -3720,7 +3740,7 @@ export function StudioMessagesPane({
         </div>
       ) : null}
 
-      <footer className="studio-dm-composer">
+      <footer className={`studio-dm-composer${isMobile ? " is-classic" : " is-split"}`}>
         <input
           ref={fileInputRef}
           type="file"
@@ -3732,14 +3752,22 @@ export function StudioMessagesPane({
             event.target.value = "";
           }}
         />
-        <div
-          className={`studio-dm-composer-row is-message${recState !== "idle" ? " is-recording" : ""}`}
-          {...(recState !== "idle"
-            ? { role: "status", "aria-label": "Recording voice note" }
-            : {})}
-        >
-          {recState !== "idle" ? (
-            <>
+        {isMobile ? (
+          recState !== "idle" ? (
+            <div
+              className="studio-dm-recording"
+              role="status"
+              aria-label="Recording voice note"
+            >
+              <button
+                type="button"
+                className="studio-dm-rec-cancel"
+                onClick={() => finishRecording("cancel")}
+                disabled={recState === "sending"}
+                aria-label="Discard recording"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </button>
               <span className="studio-dm-rec-meta">
                 <span
                   className={`studio-dm-rec-dot${recState === "recording" ? " is-live" : ""}`}
@@ -3747,212 +3775,398 @@ export function StudioMessagesPane({
                 />
                 <span className="studio-dm-rec-time">
                   {recordingTimeLabel(recSeconds)}
-                  {recState === "paused" ? " · paused" : ""}
                 </span>
               </span>
               <MicrophoneWaveform
                 className="studio-dm-rec-wave"
                 active={recState === "recording"}
                 processing={recState === "sending"}
-                height={28}
+                height={32}
                 barWidth={3}
                 barGap={2}
-                barRadius={1}
+                barRadius={999}
                 barColor="gray"
                 sensitivity={1.6}
                 fadeEdges
                 fadeWidth={20}
               />
-            </>
-          ) : (
-            <textarea
-              ref={(el) => {
-                inputRef.current = el;
-                autosizeComposerInput(el);
-              }}
-              value={draft}
-              rows={1}
-              placeholder={
-                pendingFeedShare
-                  ? "Add a note…"
-                  : pendingImages.length > 0
-                    ? "Add a caption…"
-                    : "Message…"
-              }
-              aria-label={`Message ${peerLabel}`}
-              onChange={(event) => {
-                const next = looksLikeFeedShareJson(event.target.value)
-                  ? ""
-                  : event.target.value;
-                setDraft(next);
-                pingTyping(next.trim().length > 0);
-                autosizeComposerInput(event.currentTarget);
-              }}
-              onBlur={() => pingTyping(false)}
-              onPaste={(event) => {
-                const text = event.clipboardData.getData("text/plain");
-                if (looksLikeFeedShareJson(text)) {
-                  event.preventDefault();
-                  const payload = parseFeedSharePayload(text.trim());
-                  if (payload && conversationId) {
-                    clearPendingImages();
-                    setPendingDmFeedShare({ conversationId, payload });
-                  }
-                  return;
-                }
-                const items = event.clipboardData?.items;
-                if (!items) return;
-                for (const item of items) {
-                  if (item.type.startsWith("image/")) {
-                    const file = item.getAsFile();
-                    if (file) {
-                      event.preventDefault();
-                      pickImageFile(file);
-                      return;
-                    }
-                  }
-                }
-              }}
-              onDrop={(event) => {
-                void onStudioChatDrop(event);
-              }}
-              onDragOver={onStudioChatDragOver}
-              onDragLeave={onStudioChatDragLeave}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void handleSend();
-                }
-              }}
-            />
-          )}
-        </div>
-        <div
-          className="studio-dm-composer-row is-extras"
-          role="toolbar"
-          aria-label={
-            recState !== "idle" ? "Recording controls" : "Message actions"
-          }
-        >
-          {recState !== "idle" ? (
-            <>
               <button
                 type="button"
-                className="studio-composer-circle-btn studio-dm-composer-circle"
-                onClick={() => finishRecording("cancel")}
-                disabled={recState === "sending"}
-                aria-label="Discard recording"
-                title="Delete"
-              >
-                <Trash2 aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="studio-composer-circle-btn studio-dm-composer-circle"
-                onClick={() =>
-                  recState === "paused" ? resumeRecording() : pauseRecording()
-                }
-                disabled={recState === "sending"}
-                aria-label={
-                  recState === "paused" ? "Resume recording" : "Pause recording"
-                }
-                title={recState === "paused" ? "Resume" : "Pause"}
-              >
-                {recState === "paused" ? (
-                  <Play aria-hidden="true" />
-                ) : (
-                  <Pause aria-hidden="true" />
-                )}
-              </button>
-              <span className="studio-dm-extras-spacer" aria-hidden="true" />
-              <button
-                type="button"
-                className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
+                className="studio-dm-send"
                 data-studio-sfx="send"
                 onClick={() => finishRecording("send")}
                 disabled={recState === "sending"}
                 aria-label="Send voice note"
-                title="Send"
               >
                 {recState === "sending" ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 ) : (
-                  <SendHorizontal aria-hidden="true" />
+                  <SendHorizontal className="h-4 w-4" aria-hidden="true" />
                 )}
               </button>
-            </>
+            </div>
           ) : (
             <>
               <button
+                ref={attachBtnRef}
                 type="button"
-                className="studio-settings-pill studio-dm-extra-pill"
-                onClick={() => fileInputRef.current?.click()}
+                className="studio-dm-attach"
+                onClick={openAttachMenu}
                 disabled={filesPickBusy}
-                aria-label="Upload photos"
-                title="Upload photos"
-              >
-                <Upload aria-hidden="true" />
-                <span className="studio-dm-extra-pill-label">Upload</span>
-              </button>
-              <button
-                type="button"
-                className="studio-settings-pill studio-dm-extra-pill"
-                onClick={openChooseStudioFiles}
-                disabled={filesPickBusy}
-                aria-label="Choose from Studio Files"
-                title="Choose from Studio Files"
+                aria-label="Attach a photo"
+                aria-haspopup="menu"
+                aria-expanded={attachMenu != null}
               >
                 {filesPickBusy ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 ) : (
-                  <FolderOpen aria-hidden="true" />
+                  <Paperclip className="h-4 w-4" aria-hidden="true" />
                 )}
-                <span className="studio-dm-extra-pill-label">Choose</span>
               </button>
-              <button
-                ref={shareExtrasBtnRef}
-                type="button"
-                className="studio-settings-pill studio-dm-extra-pill"
-                onClick={openShareStudioFiles}
-                disabled={filesPickBusy}
-                aria-label="Share from Studio Files"
-                title="Share from Studio Files"
-              >
-                <Share2 aria-hidden="true" />
-                <span className="studio-dm-extra-pill-label">Share</span>
-              </button>
-              <span className="studio-dm-extras-spacer" aria-hidden="true" />
-              <button
-                type="button"
-                className="studio-composer-circle-btn studio-dm-composer-circle"
-                onClick={() => void startRecording()}
-                disabled={filesPickBusy}
-                aria-label="Record a voice note"
-                title="Record"
-              >
-                <Mic aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
-                data-studio-sfx="send"
-                onClick={() => void handleSend()}
-                disabled={!canSend}
-                aria-label={
-                  pendingImages.length > 1
-                    ? "Send photos"
-                    : pendingImages.length === 1
-                      ? "Send photo"
-                      : "Send message"
+              <textarea
+                ref={(el) => {
+                  inputRef.current = el;
+                  autosizeComposerInput(el);
+                }}
+                value={draft}
+                rows={1}
+                placeholder={
+                  pendingFeedShare
+                    ? "Add a note…"
+                    : pendingImages.length > 0
+                      ? "Add a caption…"
+                      : "Message…"
                 }
-                title="Send"
-              >
-                <SendHorizontal aria-hidden="true" />
-              </button>
+                aria-label={`Message ${peerLabel}`}
+                onChange={(event) => {
+                  const next = looksLikeFeedShareJson(event.target.value)
+                    ? ""
+                    : event.target.value;
+                  setDraft(next);
+                  pingTyping(next.trim().length > 0);
+                  autosizeComposerInput(event.currentTarget);
+                }}
+                onBlur={() => pingTyping(false)}
+                onPaste={(event) => {
+                  const text = event.clipboardData.getData("text/plain");
+                  if (looksLikeFeedShareJson(text)) {
+                    event.preventDefault();
+                    const payload = parseFeedSharePayload(text.trim());
+                    if (payload && conversationId) {
+                      clearPendingImages();
+                      setPendingDmFeedShare({ conversationId, payload });
+                    }
+                    return;
+                  }
+                  const items = event.clipboardData?.items;
+                  if (!items) return;
+                  for (const item of items) {
+                    if (item.type.startsWith("image/")) {
+                      const file = item.getAsFile();
+                      if (file) {
+                        event.preventDefault();
+                        pickImageFile(file);
+                        return;
+                      }
+                    }
+                  }
+                }}
+                onDrop={(event) => {
+                  void onStudioChatDrop(event);
+                }}
+                onDragOver={onStudioChatDragOver}
+                onDragLeave={onStudioChatDragLeave}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void handleSend();
+                  }
+                }}
+              />
+              {canSend ? (
+                <button
+                  type="button"
+                  className="studio-dm-send"
+                  data-studio-sfx="send"
+                  onClick={() => void handleSend()}
+                  aria-label={
+                    pendingImages.length > 1
+                      ? "Send photos"
+                      : pendingImages.length === 1
+                        ? "Send photo"
+                        : "Send message"
+                  }
+                >
+                  <SendHorizontal className="h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="studio-dm-send is-mic"
+                  onClick={() => void startRecording()}
+                  aria-label="Record a voice note"
+                >
+                  <Mic className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
             </>
-          )}
-        </div>
+          )
+        ) : (
+          <>
+            <div
+              className={`studio-dm-composer-row is-message${recState !== "idle" ? " is-recording" : ""}`}
+              {...(recState !== "idle"
+                ? { role: "status", "aria-label": "Recording voice note" }
+                : {})}
+            >
+              {recState !== "idle" ? (
+                <>
+                  <span className="studio-dm-rec-meta">
+                    <span
+                      className={`studio-dm-rec-dot${recState === "recording" ? " is-live" : ""}`}
+                      aria-hidden="true"
+                    />
+                    <span className="studio-dm-rec-time">
+                      {recordingTimeLabel(recSeconds)}
+                      {recState === "paused" ? " · paused" : ""}
+                    </span>
+                  </span>
+                  <MicrophoneWaveform
+                    className="studio-dm-rec-wave"
+                    active={recState === "recording"}
+                    processing={recState === "sending"}
+                    height={28}
+                    barWidth={3}
+                    barGap={2}
+                    barRadius={1}
+                    barColor="gray"
+                    sensitivity={1.6}
+                    fadeEdges
+                    fadeWidth={20}
+                  />
+                </>
+              ) : (
+                <textarea
+                  ref={(el) => {
+                    inputRef.current = el;
+                    autosizeComposerInput(el);
+                  }}
+                  value={draft}
+                  rows={1}
+                  placeholder={
+                    pendingFeedShare
+                      ? "Add a note…"
+                      : pendingImages.length > 0
+                        ? "Add a caption…"
+                        : "Message…"
+                  }
+                  aria-label={`Message ${peerLabel}`}
+                  onChange={(event) => {
+                    const next = looksLikeFeedShareJson(event.target.value)
+                      ? ""
+                      : event.target.value;
+                    setDraft(next);
+                    pingTyping(next.trim().length > 0);
+                    autosizeComposerInput(event.currentTarget);
+                  }}
+                  onBlur={() => pingTyping(false)}
+                  onPaste={(event) => {
+                    const text = event.clipboardData.getData("text/plain");
+                    if (looksLikeFeedShareJson(text)) {
+                      event.preventDefault();
+                      const payload = parseFeedSharePayload(text.trim());
+                      if (payload && conversationId) {
+                        clearPendingImages();
+                        setPendingDmFeedShare({ conversationId, payload });
+                      }
+                      return;
+                    }
+                    const items = event.clipboardData?.items;
+                    if (!items) return;
+                    for (const item of items) {
+                      if (item.type.startsWith("image/")) {
+                        const file = item.getAsFile();
+                        if (file) {
+                          event.preventDefault();
+                          pickImageFile(file);
+                          return;
+                        }
+                      }
+                    }
+                  }}
+                  onDrop={(event) => {
+                    void onStudioChatDrop(event);
+                  }}
+                  onDragOver={onStudioChatDragOver}
+                  onDragLeave={onStudioChatDragLeave}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                />
+              )}
+            </div>
+            <div
+              className="studio-dm-composer-row is-extras"
+              role="toolbar"
+              aria-label={
+                recState !== "idle" ? "Recording controls" : "Message actions"
+              }
+            >
+              {recState !== "idle" ? (
+                <>
+                  <button
+                    type="button"
+                    className="studio-composer-circle-btn studio-dm-composer-circle"
+                    onClick={() => finishRecording("cancel")}
+                    disabled={recState === "sending"}
+                    aria-label="Discard recording"
+                    title="Delete"
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="studio-composer-circle-btn studio-dm-composer-circle"
+                    onClick={() =>
+                      recState === "paused" ? resumeRecording() : pauseRecording()
+                    }
+                    disabled={recState === "sending"}
+                    aria-label={
+                      recState === "paused"
+                        ? "Resume recording"
+                        : "Pause recording"
+                    }
+                    title={recState === "paused" ? "Resume" : "Pause"}
+                  >
+                    {recState === "paused" ? (
+                      <Play aria-hidden="true" />
+                    ) : (
+                      <Pause aria-hidden="true" />
+                    )}
+                  </button>
+                  <span className="studio-dm-extras-spacer" aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
+                    data-studio-sfx="send"
+                    onClick={() => finishRecording("send")}
+                    disabled={recState === "sending"}
+                    aria-label="Send voice note"
+                    title="Send"
+                  >
+                    {recState === "sending" ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <SendHorizontal aria-hidden="true" />
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="studio-settings-pill studio-dm-extra-pill"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={filesPickBusy}
+                    aria-label="Upload photos"
+                    title="Upload photos"
+                  >
+                    <Upload aria-hidden="true" />
+                    <span className="studio-dm-extra-pill-label">Upload</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="studio-settings-pill studio-dm-extra-pill"
+                    onClick={openChooseStudioFiles}
+                    disabled={filesPickBusy}
+                    aria-label="Choose from Studio Files"
+                    title="Choose from Studio Files"
+                  >
+                    {filesPickBusy ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <FolderOpen aria-hidden="true" />
+                    )}
+                    <span className="studio-dm-extra-pill-label">Choose</span>
+                  </button>
+                  <button
+                    ref={shareExtrasBtnRef}
+                    type="button"
+                    className="studio-settings-pill studio-dm-extra-pill"
+                    onClick={openShareStudioFiles}
+                    disabled={filesPickBusy}
+                    aria-label="Share from Studio Files"
+                    title="Share from Studio Files"
+                  >
+                    <Share2 aria-hidden="true" />
+                    <span className="studio-dm-extra-pill-label">Share</span>
+                  </button>
+                  <span className="studio-dm-extras-spacer" aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="studio-composer-circle-btn studio-dm-composer-circle"
+                    onClick={() => void startRecording()}
+                    disabled={filesPickBusy}
+                    aria-label="Record a voice note"
+                    title="Record"
+                  >
+                    <Mic aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
+                    data-studio-sfx="send"
+                    onClick={() => void handleSend()}
+                    disabled={!canSend}
+                    aria-label={
+                      pendingImages.length > 1
+                        ? "Send photos"
+                        : pendingImages.length === 1
+                          ? "Send photo"
+                          : "Send message"
+                    }
+                    title="Send"
+                  >
+                    <SendHorizontal aria-hidden="true" />
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </footer>
+
+      {attachMenu ? (
+        <StudioDmContextMenu
+          x={attachMenu.x}
+          y={attachMenu.y}
+          placement="above"
+          onClose={() => setAttachMenu(null)}
+          items={[
+            {
+              key: "upload",
+              label: "Upload photos",
+              icon: <Upload className="h-3.5 w-3.5" aria-hidden="true" />,
+              onSelect: () => fileInputRef.current?.click(),
+            },
+            {
+              key: "choose-studio-files",
+              label: "Choose from Studio Files",
+              icon: <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />,
+              onSelect: openChooseStudioFiles,
+            },
+            {
+              key: "share-studio-files",
+              label: "Share from Studio Files",
+              icon: <Share2 className="h-3.5 w-3.5" aria-hidden="true" />,
+              onSelect: openShareStudioFiles,
+            },
+          ]}
+        />
+      ) : null}
 
       {filesPickerOpen ? (
         <StudioAssetPickerSheet

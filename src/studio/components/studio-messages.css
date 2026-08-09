@@ -1162,12 +1162,7 @@
 }
 
 .studio-dm-composer {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
   flex: 0 0 auto;
-  padding: 0;
   border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
   background: var(--mos-bg, var(--color-cursor-bg, #05080f));
 }
@@ -1176,7 +1171,16 @@
   background: var(--mos-panel, #f5f5f7);
 }
 
-.studio-dm-composer-row {
+/* Desktop-only split composer (two flat rows). */
+.studio-dm-composer.is-split {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+}
+
+.studio-dm-composer.is-split .studio-dm-composer-row {
   display: flex;
   align-items: center;
   gap: 0;
@@ -1184,13 +1188,13 @@
   min-width: 0;
 }
 
-.studio-dm-composer-row.is-message {
+.studio-dm-composer.is-split .studio-dm-composer-row.is-message {
   min-height: var(--cursor-head-h, 36px);
   padding: 0;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
 }
 
-.studio-dm-composer-row.is-extras {
+.studio-dm-composer.is-split .studio-dm-composer-row.is-extras {
   min-height: 34px;
   padding: 4px 6px;
   gap: 6px;
@@ -1201,8 +1205,7 @@
   min-width: 8px;
 }
 
-/* Desktop: Upload / Choose / Share = header-style text pills. */
-.studio-dm-composer .studio-settings-pill.studio-dm-extra-pill {
+.studio-dm-composer.is-split .studio-settings-pill.studio-dm-extra-pill {
   flex: 0 0 auto;
   height: 24px;
   min-height: 24px;
@@ -1213,14 +1216,14 @@
   line-height: 1;
 }
 
-.studio-dm-composer .studio-settings-pill.studio-dm-extra-pill svg {
+.studio-dm-composer.is-split .studio-settings-pill.studio-dm-extra-pill svg {
   width: 12px;
   height: 12px;
   flex: 0 0 auto;
   stroke-width: 2.25;
 }
 
-.studio-dm-composer .studio-settings-pill.studio-dm-extra-pill:disabled {
+.studio-dm-composer.is-split .studio-settings-pill.studio-dm-extra-pill:disabled {
   opacity: 0.55;
   cursor: default;
 }
@@ -1229,29 +1232,7 @@
   white-space: nowrap;
 }
 
-/* Mobile: icon-only circles (match other composer circles). */
-.studio-polish.is-studio-mobile .studio-dm-composer .studio-settings-pill.studio-dm-extra-pill {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  min-height: 24px;
-  padding: 0;
-  gap: 0;
-  border-radius: 999px;
-  justify-content: center;
-}
-
-.studio-polish.is-studio-mobile .studio-dm-composer .studio-dm-extra-pill-label {
-  display: none;
-}
-
-.studio-polish.is-studio-mobile .studio-dm-composer .studio-settings-pill.studio-dm-extra-pill svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* Match DM chat-head / header chrome: 24px round glass circles. */
-.studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle {
+.studio-dm-composer.is-split .studio-composer-circle-btn.studio-dm-composer-circle {
   width: 24px;
   min-width: 24px;
   height: 24px;
@@ -1259,14 +1240,13 @@
   flex: 0 0 auto;
 }
 
-.studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle svg {
+.studio-dm-composer.is-split .studio-composer-circle-btn.studio-dm-composer-circle svg {
   width: 13px;
   height: 13px;
   stroke-width: 2.25;
 }
 
-/* Active send = Create composer 3D chrome (studio-composer-send-btn); keep 24px. */
-.studio-dm-composer .studio-composer-circle-btn.studio-composer-send-btn {
+.studio-dm-composer.is-split .studio-composer-circle-btn.studio-composer-send-btn {
   width: 24px;
   min-width: 24px;
   height: 24px;
@@ -1275,18 +1255,18 @@
   gap: 0;
 }
 
-.studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle:disabled:not(.studio-composer-send-btn) {
+.studio-dm-composer.is-split .studio-composer-circle-btn.studio-dm-composer-circle:disabled:not(.studio-composer-send-btn) {
   opacity: 0.55;
   cursor: default;
 }
 
-.studio-dm-composer-row.is-recording {
+.studio-dm-composer.is-split .studio-dm-composer-row.is-recording {
   gap: 8px;
   padding: 0 10px 0 12px;
   min-height: var(--cursor-head-h, 36px);
 }
 
-.studio-dm-composer textarea {
+.studio-dm-composer.is-split textarea {
   flex: 1 1 auto;
   min-width: 0;
   width: 100%;
@@ -1309,28 +1289,136 @@
   appearance: none;
 }
 
-.studio-dm-composer textarea::placeholder {
+.studio-dm-composer.is-split textarea::placeholder {
   color: var(--color-cursor-muted, var(--mos-muted));
   opacity: 1;
 }
 
-.studio-dm-composer textarea::-webkit-scrollbar {
+.studio-dm-composer.is-split textarea::-webkit-scrollbar {
   display: none;
 }
 
-.studio-dm-composer textarea:focus,
-.studio-dm-composer textarea:focus-visible {
+.studio-dm-composer.is-split textarea:focus,
+.studio-dm-composer.is-split textarea:focus-visible {
   outline: none;
   box-shadow: none;
   border: none;
 }
 
-.studio-polish .studio-dm-composer .studio-composer-circle-btn.studio-dm-composer-circle:hover:not(:disabled) :where(svg, .icon-inline) {
+.studio-polish .studio-dm-composer.is-split .studio-composer-circle-btn.studio-dm-composer-circle:hover:not(:disabled) :where(svg, .icon-inline) {
   color: inherit !important;
   filter: none;
 }
 
-/* —— Voice-note recording row (message row while recording) —— */
+/* Mobile classic: paperclip + rounded input + mic/send (pre-desktop redesign). */
+.studio-dm-composer.is-classic {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 12px 10px;
+}
+
+.studio-dm-composer.is-classic textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-height: 120px;
+  resize: none;
+  padding: 7px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  background: var(--cursor-surface-input, var(--mos-surface));
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  font: inherit;
+  font-size: var(--desk-text-ui, 13px);
+  line-height: 1.4;
+  outline: none;
+  scrollbar-width: none;
+}
+
+.studio-dm-composer.is-classic textarea::-webkit-scrollbar {
+  display: none;
+}
+
+.studio-dm-composer.is-classic textarea:focus-visible {
+  border-color: var(--cursor-border-focus, var(--cursor-accent));
+}
+
+.studio-dm-composer.is-classic .studio-dm-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: var(--cursor-accent, var(--mos-accent));
+  color: #10140a;
+  cursor: pointer;
+}
+
+.studio-dm-composer.is-classic .studio-dm-send:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.studio-dm-composer.is-classic .studio-dm-send:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.studio-dm-composer.is-classic .studio-dm-send.is-mic {
+  background: var(--cursor-surface-input, var(--mos-surface));
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.studio-dm-composer.is-classic .studio-dm-send.is-mic:hover:not(:disabled) {
+  filter: none;
+  border-color: var(--cursor-border-focus, var(--cursor-accent));
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-dm-recording {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 4px 0 2px;
+  border-radius: 16px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  background: var(--cursor-surface-input, var(--mos-surface));
+}
+
+.studio-dm-recording .studio-dm-send {
+  width: 26px;
+  height: 26px;
+}
+
+.studio-dm-rec-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  cursor: pointer;
+}
+
+.studio-dm-rec-cancel:hover:not(:disabled) {
+  color: var(--mos-danger, #f87171);
+  background: color-mix(in srgb, var(--mos-danger, #f87171) 12%, transparent);
+}
+
+.studio-dm-rec-cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 
 .studio-dm-rec-meta {
   display: inline-flex;
@@ -1643,7 +1731,27 @@
 
 /* Same footprint as .studio-dm-send, bordered quiet style (like .is-mic). */
 .studio-dm-attach {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  border-radius: 999px;
+  background: var(--cursor-surface-input, var(--mos-surface));
+  color: var(--color-cursor-text, var(--mos-text));
+  cursor: pointer;
+}
+
+.studio-dm-attach:hover:not(:disabled) {
+  border-color: var(--cursor-border-focus, var(--cursor-accent));
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-dm-attach:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .studio-dm-attach-preview {
