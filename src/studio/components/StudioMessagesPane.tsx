@@ -2391,8 +2391,9 @@ export function StudioMessagesPane({
       return;
     }
     const rect = btn.getBoundingClientRect();
-    // Menu opens upward from the paperclip so it clears the composer.
-    setAttachMenu({ x: rect.left, y: Math.max(8, rect.top - 8) });
+    // Anchor at the paperclip top — StudioDmContextMenu placement="above"
+    // measures itself and sits fully above the composer.
+    setAttachMenu({ x: rect.left, y: rect.top });
   }
 
   /** Voice-note recorder (WhatsApp-style: mic replaces send while draft is empty). */
@@ -3806,6 +3807,7 @@ export function StudioMessagesPane({
         <StudioDmContextMenu
           x={attachMenu.x}
           y={attachMenu.y}
+          placement="above"
           onClose={() => setAttachMenu(null)}
           items={[
             {

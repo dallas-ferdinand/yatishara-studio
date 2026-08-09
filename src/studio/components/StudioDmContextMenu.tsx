@@ -28,6 +28,11 @@ type StudioDmContextMenuProps = {
   onClose: () => void;
   /** Accessibility label for the mobile sheet. */
   title?: string;
+  /**
+   * Desktop only. `above` treats `y` as the bottom edge of the menu
+   * (e.g. composer paperclip) so the panel opens upward.
+   */
+  placement?: "above" | "below";
 };
 
 type SheetDragState = {
@@ -162,11 +167,13 @@ export function StudioDmContextMenu({
   items,
   onClose,
   title = "Actions",
+  placement = "below",
 }: StudioDmContextMenuProps) {
   const { isMobile } = useMobileLayout();
   const isSheet = isMobile;
   const ref = useRef<HTMLDivElement | null>(null);
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
+  const gap = 8;
 
   useMobileBackLayer("dm-context-menu", isSheet, onClose);
 
@@ -203,16 +210,19 @@ export function StudioDmContextMenu({
     const rect = el.getBoundingClientRect();
     const pad = 8;
     let left = x;
-    let top = y;
+    // `above`: y is the bottom anchor (button top). `below`: y is menu top.
+    let top = placement === "above" ? y - rect.height - gap : y;
     if (left + rect.width > window.innerWidth - pad) {
       left = Math.max(pad, window.innerWidth - rect.width - pad);
     }
+    if (left < pad) left = pad;
+    if (top < pad) top = pad;
     if (top + rect.height > window.innerHeight - pad) {
       top = Math.max(pad, window.innerHeight - rect.height - pad);
     }
     el.style.left = `${left}px`;
     el.style.top = `${top}px`;
-  }, [isSheet, x, y, items.length, confirmKey]);
+  }, [isSheet, x, y, placement, items.length, confirmKey]);
 
   if (typeof document === "undefined") return null;
 
@@ -264,12 +274,16 @@ export function StudioDmContextMenu({
     );
   }
 
+  // Rough height so "above" doesn't flash over the composer before measure.
+  const estimatedTop =
+    placement === "above" ? Math.max(8, y - items.length * 40 - 24) : y;
+
   return createPortal(
     <div
       ref={ref}
       className="cursor-tab-context-menu studio-dm-context-menu"
       role="menu"
-      style={{ left: x, top: y }}
+      style={{ left: x, top: estimatedTop }}
       onContextMenu={(event) => event.preventDefault()}
     >
       {itemButtons}
