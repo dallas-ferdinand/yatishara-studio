@@ -8666,25 +8666,30 @@ export function StudioShell({
           background: transparent;
           box-sizing: border-box;
         }
+        /* Pill hugs the circles — no inset pad; only the gap between buttons. */
         .studio-mobile-nav-cluster.is-linked {
-          padding: 2px;
+          padding: 0;
           gap: 2px;
+          height: auto;
+          max-height: none;
+          align-self: center;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--studio-mobile-chrome-border));
           border-radius: 999px;
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--studio-mobile-chrome-glass-foot));
         }
         .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-btn.is-cluster-slot {
           flex: 0 0 auto !important;
-          width: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
-          min-width: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
-          max-width: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
-          height: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
-          min-height: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
-          max-height: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          width: var(--studio-mobile-chrome-control, 30px) !important;
+          min-width: var(--studio-mobile-chrome-control, 30px) !important;
+          max-width: var(--studio-mobile-chrome-control, 30px) !important;
+          height: var(--studio-mobile-chrome-control, 30px) !important;
+          min-height: var(--studio-mobile-chrome-control, 30px) !important;
+          max-height: var(--studio-mobile-chrome-control, 30px) !important;
           padding: 0 !important;
           border: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
           border-radius: 999px !important;
           box-shadow: none !important;
+          box-sizing: border-box !important;
         }
         .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-btn.is-cluster-slot.is-active {
           background: color-mix(in srgb, var(--cursor-accent) 22%, var(--studio-mobile-chrome-glass-foot)) !important;
@@ -10206,17 +10211,18 @@ export function StudioShell({
         }
         .studio-header-create-cluster.is-linked {
           gap: 2px;
-          padding: 2px;
+          padding: 0;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
           border-radius: 999px;
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, transparent));
         }
         .studio-header-create-cluster.is-linked .studio-settings-pill {
-          width: calc(var(--studio-chrome-control, 28px) - 2px) !important;
-          min-width: calc(var(--studio-chrome-control, 28px) - 2px) !important;
-          height: calc(var(--studio-chrome-control, 28px) - 2px) !important;
-          min-height: calc(var(--studio-chrome-control, 28px) - 2px) !important;
+          width: var(--studio-chrome-control, 28px) !important;
+          min-width: var(--studio-chrome-control, 28px) !important;
+          height: var(--studio-chrome-control, 28px) !important;
+          min-height: var(--studio-chrome-control, 28px) !important;
           border-radius: 999px !important;
+          box-sizing: border-box !important;
         }
         .studio-header-create-cluster.is-linked .studio-settings-pill.is-active {
           background: color-mix(in srgb, var(--cursor-accent) 22%, var(--mos-panel, transparent)) !important;
