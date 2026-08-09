@@ -870,16 +870,16 @@
     );
 }
 
-/* Large relative watermark — top-right, like Balance / billing hero. */
+/* Large relative watermark — centered, soft. */
 .public-offers-hero-icon {
   position: absolute;
-  top: -18px;
-  right: -22px;
-  width: min(46vw, 200px);
-  height: min(46vw, 200px);
-  transform: rotate(-10deg);
+  top: 50%;
+  left: 50%;
+  width: min(52vw, 220px);
+  height: min(52vw, 220px);
+  transform: translate(-50%, -50%) rotate(-10deg);
   color: var(--cursor-accent);
-  opacity: 0.34;
+  opacity: 0.14;
   pointer-events: none;
   z-index: 2;
 }
@@ -1769,11 +1769,9 @@
   }
 
   .public-offers-hero-icon {
-    top: -12px;
-    right: -16px;
-    width: min(48vw, 148px);
-    height: min(48vw, 148px);
-    opacity: 0.3;
+    width: min(56vw, 168px);
+    height: min(56vw, 168px);
+    opacity: 0.12;
   }
 
   .public-offers-grid {
