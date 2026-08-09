@@ -77,16 +77,16 @@
    Need head + circle-btn specificity so StudioShell .studio-composer-circle-btn
    (30px, later) cannot win — same nesting as .studio-dm-peer-toggle. */
 .studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  min-height: 24px;
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
   flex: 0 0 auto;
 }
 
 .studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back svg {
-  width: 13px;
-  height: 13px;
+  width: 13px !important;
+  height: 13px !important;
 }
 
 .studio-dm-chat-peer {
@@ -148,10 +148,10 @@
 /* Nest 24px hammer / open-full circles in 32px head; accent when Action panel is open. */
 .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle,
 .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-open-full {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  min-height: 24px;
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
 }
 
 .studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle svg,
@@ -187,10 +187,10 @@
   );
 }
 
-/* Match workspace tab thumb (.cursor-unified-tab-preview = 20px), not tool circles. */
+/* Same 24px circle as header back / hammer / settings triggers. */
 .studio-dm-chat-head .studio-profile-avatar {
-  width: 20px !important;
-  height: 20px !important;
+  width: 24px !important;
+  height: 24px !important;
   font-size: 10px !important;
   font-weight: 700 !important;
   letter-spacing: 0.01em !important;
@@ -2483,6 +2483,20 @@
 .studio-dm-row-avatar-wrap {
   position: relative;
   flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+}
+
+/* Conversation list avatars = same 24px chrome circles as chat-head tools. */
+.studio-dm-row-avatar-wrap .studio-profile-avatar {
+  width: 24px !important;
+  height: 24px !important;
+  font-size: 10px !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent) !important;
 }
 
 .studio-dm-online-dot {
