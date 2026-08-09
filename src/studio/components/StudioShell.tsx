@@ -23769,44 +23769,17 @@ export function StudioShell({
           effectiveFilesRail ? " is-files-nav" : ""
         }${sharingToPeople ? " is-share-people" : ""}`}
       >
-        {(() => {
-          // File explorer chrome: no Studio title row — Add + view live in the pathbar.
-          const explorerChrome =
-            !effectiveSocialRail &&
-            !effectiveMessagesRail &&
-            !effectiveNetworkRail &&
-            !effectiveAcademyRail &&
-            !effectiveFilesRail &&
-            !sharingToPeople;
-          if (explorerChrome) {
-            return (
-              <input
-                ref={fileInputRef}
-                className="hidden"
-                type="file"
-                multiple
-                onChange={(event) => {
-                  void uploadFiles(event.currentTarget.files);
-                  event.currentTarget.value = "";
-                }}
-              />
-            );
-          }
-          return (
-            <StudioShellSidebarPanelHead effectiveFilesRail={effectiveFilesRail}>
-              <input
-                ref={fileInputRef}
-                className="hidden"
-                type="file"
-                multiple
-                onChange={(event) => {
-                  void uploadFiles(event.currentTarget.files);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </StudioShellSidebarPanelHead>
-          );
-        })()}
+        {/* No π Studio / Files brand row — rails start at search / filters. */}
+        <input
+          ref={fileInputRef}
+          className="hidden"
+          type="file"
+          multiple
+          onChange={(event) => {
+            void uploadFiles(event.currentTarget.files);
+            event.currentTarget.value = "";
+          }}
+        />
         {effectiveMessagesRail ? (
           <StudioMessagesSidebar
             activeConversationId={activeDmConversationId}
@@ -28028,26 +28001,6 @@ function AdminQuickLinks({ onOpenAdminTab, active = false }) {
     >
       <Gauge className="h-3.5 w-3.5" aria-hidden="true" />
     </button>
-  );
-}
-
-function StudioSidebarBrand() {
-  const sidebarLogo = useMercurySidebarLogo();
-  return (
-    <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-sidebar-brand min-w-0">
-      <span className="cursor-sidebar-brand-logo" aria-hidden="true">
-        <img
-          src={sidebarLogo}
-          alt=""
-          width={16}
-          height={16}
-          decoding="async"
-          loading="eager"
-          className="cursor-sidebar-brand-logo-img"
-        />
-      </span>
-      <span className="studio-sidebar-brand-label truncate">Studio</span>
-    </div>
   );
 }
 
@@ -33470,31 +33423,6 @@ function StudioFilesMobileSheet({
       </div>
     </div>
   );
-}
-
-/** Left-rail title row — hidden for Ops Chats (list chrome starts at search). */
-function StudioShellSidebarPanelHead({ effectiveFilesRail, children }) {
-  const ops = useAdminStudioOpsOptional();
-  if (ops?.active && ops.opsTab === "chats") return null;
-  return (
-    <div className={STYLE.panelHead}>
-      <StudioShellSidebarBrand effectiveFilesRail={effectiveFilesRail} />
-      {children}
-    </div>
-  );
-}
-
-/** Brand in the left rail — Files swaps Studio title; Ops Chats hides the whole head. */
-function StudioShellSidebarBrand({ effectiveFilesRail }) {
-  if (effectiveFilesRail) {
-    return (
-      <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-sidebar-brand min-w-0">
-        <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        <span className="studio-sidebar-brand-label truncate">Files</span>
-      </div>
-    );
-  }
-  return <StudioSidebarBrand />;
 }
 
 /** When Admin → Ops → Chats is open, replace the file explorer with Sophie chat list. */
