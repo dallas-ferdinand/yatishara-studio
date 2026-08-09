@@ -1523,8 +1523,11 @@ button.studio-cn-card-btn.public-offers-card {
   min-height: var(--studio-mobile-nav-height, 38px) !important;
   max-height: var(--studio-mobile-nav-height, 38px) !important;
   padding: 0 10px !important;
-  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border-soft)));
-  background: var(--mos-bg, var(--mos-panel, var(--color-cursor-bg, #f5f5f7)));
+  /* Same hairline + plate as CN head / catalog body — not a heavier mos-bg band. */
+  border: 0 !important;
+  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+  background: var(--mos-page, var(--mos-panel, var(--color-cursor-bg)));
+  box-shadow: none;
   box-sizing: border-box;
 }
 
