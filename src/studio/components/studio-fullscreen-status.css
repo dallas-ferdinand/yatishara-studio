@@ -7,13 +7,13 @@
   right: 0;
   z-index: 80;
   display: none;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   box-sizing: border-box;
   height: var(--studio-fullscreen-status-h, max(32px, calc(env(safe-area-inset-top, 0px) + 4px)));
-  /* +4px bottom pad so time/battery sit a touch higher in the band. */
-  padding: 0 max(14px, env(safe-area-inset-right, 0px)) 14px
+  /* Vertically center time + battery in the notch band. */
+  padding: 4px max(14px, env(safe-area-inset-right, 0px)) 4px
     max(14px, env(safe-area-inset-left, 0px));
   pointer-events: none;
   position: fixed !important;
