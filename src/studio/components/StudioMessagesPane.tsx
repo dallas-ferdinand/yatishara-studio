@@ -733,7 +733,9 @@ function DmReplyQuote({
         {!hasVoice ? (
           <span className="studio-dm-reply-snippet">
             <ReplyKindIcon kind={snippet.kind} />
-            {replySnippetLabel(snippet)}
+            <span className="studio-dm-reply-snippet-text">
+              {replySnippetLabel(snippet)}
+            </span>
           </span>
         ) : null}
       </button>
@@ -3726,7 +3728,9 @@ export function StudioMessagesPane({
             ) : (
               <span className="studio-dm-reply-snippet">
                 <ReplyKindIcon kind={replyTo.kind} />
-                {replySnippetLabel(replyTo)}
+                <span className="studio-dm-reply-snippet-text">
+                  {replySnippetLabel(replyTo)}
+                </span>
               </span>
             )}
           </span>

@@ -271,6 +271,8 @@
 .studio-dm-scroll {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 12px 16px 10px;
@@ -368,7 +370,10 @@
   display: flex;
   justify-content: flex-start;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .studio-dm-swipe-shell.is-mine {
@@ -404,6 +409,8 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
   will-change: transform;
   touch-action: pan-y;
   -webkit-user-select: none;
@@ -437,9 +444,9 @@
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  /* Quote can be wider than body text — keep bubble within pane. */
+  /* Quote min-content can be huge — hard-cap to pane, not content. */
   width: min(100%, 22rem);
-  max-width: min(72%, 42rem);
+  max-width: min(100%, 22rem);
 }
 
 .studio-dm-bubble-body {
@@ -868,7 +875,15 @@
   overflow: hidden;
 }
 
-.studio-dm-reply-snippet > :not(svg) {
+.studio-dm-reply-snippet-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-dm-reply-snippet > :not(svg):not(.studio-dm-reply-snippet-text) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
