@@ -1330,7 +1330,7 @@
   height: 32px;
   min-height: 32px;
   padding: 6px 12px;
-  border-radius: 10px;
+  border-radius: 16px;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
   background: var(--cursor-surface-input, var(--mos-surface));
   color: var(--color-cursor-text-bright, var(--mos-text));
@@ -1407,7 +1407,7 @@
   min-height: 32px;
   height: 32px;
   padding: 0 4px 0 2px;
-  border-radius: 10px;
+  border-radius: 16px;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
   background: var(--cursor-surface-input, var(--mos-surface));
   box-sizing: border-box;
