@@ -3791,32 +3791,6 @@ export function StudioMessagesPane({
                   }
                 }}
               />
-              {canSend ? (
-                <button
-                  type="button"
-                  className="studio-dm-send"
-                  data-studio-sfx="send"
-                  onClick={() => void handleSend()}
-                  aria-label={
-                    pendingImages.length > 1
-                      ? "Send photos"
-                      : pendingImages.length === 1
-                        ? "Send photo"
-                        : "Send message"
-                  }
-                >
-                  <SendHorizontal className="h-4 w-4" aria-hidden="true" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="studio-dm-send is-mic"
-                  onClick={() => void startRecording()}
-                  aria-label="Record a voice note"
-                >
-                  <Mic className="h-4 w-4" aria-hidden="true" />
-                </button>
-              )}
             </div>
             <div className="studio-dm-composer-row is-extras" role="toolbar" aria-label="Message actions">
               <button
@@ -3857,6 +3831,35 @@ export function StudioMessagesPane({
                 <Share2 className="h-4 w-4" aria-hidden="true" />
                 <span>Share</span>
               </button>
+              <span className="studio-dm-extras-spacer" aria-hidden="true" />
+              {canSend ? (
+                <button
+                  type="button"
+                  className="studio-dm-send"
+                  data-studio-sfx="send"
+                  onClick={() => void handleSend()}
+                  aria-label={
+                    pendingImages.length > 1
+                      ? "Send photos"
+                      : pendingImages.length === 1
+                        ? "Send photo"
+                        : "Send message"
+                  }
+                  title="Send"
+                >
+                  <SendHorizontal className="h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="studio-dm-send is-mic"
+                  onClick={() => void startRecording()}
+                  aria-label="Record a voice note"
+                  title="Record"
+                >
+                  <Mic className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
             </div>
           </>
         )}
