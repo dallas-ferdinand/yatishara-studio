@@ -3834,9 +3834,9 @@ export function StudioShell({
     const entries = (displayCurrentEntries.entries ?? []).filter((entry) =>
       matchesExplorerTypeFilter(entry, typeFilter),
     );
+    // Keep parent + folders so type filter still lets you navigate a project.
     return {
       ...displayCurrentEntries,
-      parent: null,
       entries,
     };
   }, [displayCurrentEntries, typeFilter]);

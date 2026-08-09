@@ -123,24 +123,36 @@ export function explorerEntryIcon(entry) {
   return fileIconName(entry?.name ?? entry?.path ?? "");
 }
 
-/** Sidebar type filter: hide folders and keep matching content only. */
+/**
+ * Files type filter (All / Images / Videos / Edits / Scripts / Elements / Audio).
+ * Folders stay visible so you can still open a project while a type is selected.
+ * Edits/elements/scripts match only their studioKind — preview kind on a .studio
+ * edit must not make it look like an image or video asset.
+ */
 export function matchesExplorerTypeFilter(entry, filterId) {
   if (!filterId || filterId === "all") return true;
-  if (!entry || entry.type === "parent" || entry.type === "search-divider" || entry.type === "dir") {
+  if (!entry || entry.type === "parent" || entry.type === "search-divider") {
     return false;
   }
-  const viewerKind = fileViewerKind(entry.ext || entry.name);
+  if (entry.type === "dir" || entry.studioKind === "folder") return true;
+
+  const studioKind = entry.studioKind;
+  if (studioKind === "videoEdit") return filterId === "videoEdit";
+  if (studioKind === "element") return filterId === "element";
+  if (studioKind === "document") return filterId === "document";
+
+  const viewerKind = fileViewerKind(entry.ext || entry.name || entry.path);
   switch (filterId) {
     case "image":
-      return entry.kind === "image" || (entry.studioKind !== "videoEdit" && viewerKind === "image");
+      return entry.kind === "image" || viewerKind === "image";
     case "video":
-      return entry.kind === "video" || (entry.studioKind !== "videoEdit" && viewerKind === "video");
+      return entry.kind === "video" || viewerKind === "video";
     case "videoEdit":
-      return entry.studioKind === "videoEdit" || viewerKind === "videoEdit";
+      return viewerKind === "videoEdit";
     case "document":
-      return entry.studioKind === "document" || viewerKind === "markdown";
+      return viewerKind === "markdown";
     case "element":
-      return entry.studioKind === "element";
+      return false;
     case "audio":
       return entry.kind === "audio" || viewerKind === "audio";
     default:
