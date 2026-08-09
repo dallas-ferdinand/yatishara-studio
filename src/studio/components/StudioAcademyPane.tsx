@@ -1123,7 +1123,7 @@ export function StudioAcademyPane({
         </nav>
         {!owned && checkoutSheetOpen ? (
           <div
-            className="studio-cn-book-sheet"
+            className="studio-cn-book-sheet is-academy-checkout"
             role="dialog"
             aria-modal="true"
             aria-label="Course checkout"

@@ -1657,6 +1657,18 @@ button.studio-cn-card-btn.public-offers-card {
   animation: studio-cn-book-sheet-in 220ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
+/* Academy PayWise checkout is short — don’t open at full book-sheet height. */
+.studio-cn-book-sheet.is-academy-checkout .studio-cn-book-sheet-panel {
+  height: auto;
+  max-height: min(48dvh, 380px);
+}
+
+.studio-cn-book-sheet.is-academy-checkout .studio-cn-book-sheet-body {
+  flex: 0 1 auto;
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+
 @keyframes studio-cn-book-sheet-in {
   from {
     transform: translate3d(0, 16px, 0);
