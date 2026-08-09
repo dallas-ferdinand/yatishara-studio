@@ -2488,8 +2488,8 @@ export function StudioMessagesPane({
 
   function autosizeComposerInput(el: HTMLTextAreaElement | null) {
     if (!el) return;
-    // Mobile row is a touch taller so placeholder/text can optically center.
-    const minPx = isMobile ? 40 : 32;
+    // Slimmer than chat-head; mobile stays a touch taller for tap target.
+    const minPx = isMobile ? 34 : 28;
     el.style.height = "0px";
     const scroll = el.scrollHeight;
     const lineCount = el.value.split("\n").length;

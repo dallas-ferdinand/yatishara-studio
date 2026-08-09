@@ -1278,7 +1278,8 @@
 }
 
 .studio-dm-composer.is-split .studio-dm-composer-row.is-message {
-  min-height: var(--cursor-head-h, 32px);
+  /* Slimmer than chat-head (32px) — text can read larger without a tall band. */
+  min-height: 28px;
   padding: 0;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
 }
@@ -1341,27 +1342,29 @@
 }
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-dm-composer-row.is-message {
-  min-height: 40px;
+  min-height: 34px;
 }
 
 .studio-dm-composer.is-split.is-mobile-icons textarea {
-  height: 40px;
-  min-height: 40px;
+  height: 34px;
+  min-height: 34px;
   padding: 0 12px;
-  line-height: 40px;
-  font-size: 16px; /* avoid iOS focus zoom */
+  line-height: 34px;
+  /* Match bubble text (+nudge); 16px was oversized vs sent messages. */
+  font-size: 14px;
+  font-weight: 550;
 }
 
 .studio-dm-composer.is-split.is-mobile-icons textarea.is-single-line {
-  height: 40px !important;
-  min-height: 40px;
+  height: 34px !important;
+  min-height: 34px;
   padding: 0 12px;
-  line-height: 40px;
+  line-height: 34px;
 }
 
 .studio-dm-composer.is-split.is-mobile-icons textarea:not(.is-single-line) {
-  padding: 8px 12px;
-  line-height: 1.35;
+  padding: 7px 12px;
+  line-height: 1.4;
 }
 
 .studio-dm-composer.is-split .studio-settings-pill.studio-dm-extra-pill svg {
@@ -1411,7 +1414,7 @@
 .studio-dm-composer.is-split .studio-dm-composer-row.is-recording {
   gap: 8px;
   padding: 0 6px 0 12px;
-  min-height: var(--cursor-head-h, 32px);
+  min-height: 28px;
 }
 
 .studio-dm-composer.is-split .studio-dm-composer-row.is-recording .studio-composer-circle-btn {
@@ -1426,20 +1429,21 @@
   flex: 1 1 auto;
   min-width: 0;
   width: 100%;
-  height: var(--cursor-head-h, 32px);
-  min-height: var(--cursor-head-h, 32px);
+  height: 28px;
+  min-height: 28px;
   max-height: 120px;
   resize: none;
   margin: 0;
-  /* Match chat-head band: 6+18+6 = 32 when single-line. */
-  padding: 6px 12px;
+  /* Slim band: 5 + 18 + 5 = 28; type reads like bubbles (+slight nudge). */
+  padding: 5px 12px;
   border: none;
   border-radius: 0;
   background: transparent;
   color: var(--color-cursor-text-bright, var(--mos-text));
   font: inherit;
-  font-size: var(--desk-text-ui, 13px);
-  font-weight: 500;
+  /* Bubbles = 13px / normal; composer = slightly bigger + bolder. */
+  font-size: 13.5px;
+  font-weight: 550;
   line-height: 18px;
   outline: none;
   box-shadow: none;
