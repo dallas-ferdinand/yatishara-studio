@@ -24297,14 +24297,17 @@ export function StudioShell({
                 >
                   <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
+                {isAdminUser ? (
+                  <AdminQuickLinks
+                    onOpenAdminTab={openAdminTab}
+                    active={Boolean(activeAdminTab)}
+                  />
+                ) : null}
                 <CreditPill
                   creditBalance={billingAccount?.creditBalance}
                   creditPriceCents={pricing?.creditPriceCents}
                   onClick={openCreditsPane}
                 />
-                {isAdminUser ? (
-                  <AdminQuickLinks onOpenAdminTab={openAdminTab} />
-                ) : null}
                 <StudioProfileMenu
                   currentUser={currentUser}
                   profile={myPublicProfile}
@@ -24350,7 +24353,10 @@ export function StudioShell({
             ) : (
               <>
                 {isAdminUser ? (
-                  <AdminQuickLinks onOpenAdminTab={openAdminTab} />
+                  <AdminQuickLinks
+                    onOpenAdminTab={openAdminTab}
+                    active={Boolean(activeAdminTab)}
+                  />
                 ) : null}
                 <button
                   type="button"
@@ -27848,13 +27854,14 @@ function StudioInlineSettingPopover({ icon: Icon, label, valueLabel, menuLabel, 
   );
 }
 
-function AdminQuickLinks({ onOpenAdminTab }) {
+function AdminQuickLinks({ onOpenAdminTab, active = false }) {
   return (
     <button
       type="button"
-      className="studio-settings-pill studio-settings-trigger"
+      className={`studio-settings-pill studio-settings-trigger${active ? " is-active" : ""}`}
       aria-label="Admin workspace"
       title="Admin workspace"
+      aria-pressed={active}
       onClick={() => onOpenAdminTab("payments")}
     >
       <Gauge className="h-3.5 w-3.5" aria-hidden="true" />
