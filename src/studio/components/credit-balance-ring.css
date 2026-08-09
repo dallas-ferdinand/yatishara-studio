@@ -205,7 +205,7 @@
 .studio-mobile-app-menu-scroll:has(.studio-balance-chip) {
   --studio-menu-edge: 16px;
   --studio-menu-balance-mask-h: 8px;
-  --studio-menu-balance-gap: 8px;
+  --studio-menu-balance-gap: 14px;
 }
 
 .studio-mobile-app-menu-scroll .studio-balance-chip {
