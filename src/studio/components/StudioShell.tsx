@@ -8459,7 +8459,10 @@ export function StudioShell({
           --studio-motion-spring: cubic-bezier(0.2, 0, 0.2, 1);
           --studio-composer-focus-line-ease: cubic-bezier(0.16, 1, 0.3, 1);
           --studio-hover-scale: 1;
-          --studio-press-scale: 0.985;
+          /* Global button push — shrink on press, spring back on release. */
+          --studio-press-scale: 0.94;
+          --studio-press-duration: 140ms;
+          --studio-press-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
           --studio-composer-glass: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent);
           --studio-composer-glass-strong: color-mix(in srgb, var(--mos-bg, #05080f) 94%, transparent);
@@ -9577,8 +9580,72 @@ export function StudioShell({
           transform: none;
           box-shadow: none;
         }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):active:not(:disabled) {
+        /*
+          Global button push: shrink while held, grow back on release.
+          Buttons only — not workspace tabs / section switches.
+        */
+        .studio-polish :is(
+          button,
+          [role="button"],
+          .studio-settings-pill,
+          .studio-pill-btn,
+          .studio-composer-circle-btn,
+          .cursor-icon-btn,
+          .cursor-toolbar-icon,
+          .studio-balance-chip-topup,
+          .studio-credit-balance-ring > button
+        ):not(:disabled):not([aria-disabled="true"]):not([data-studio-no-press]) {
+          transform-origin: center center;
+          transition:
+            transform var(--studio-press-duration) var(--studio-press-ease),
+            background-color var(--studio-motion-fast) var(--studio-motion-ease),
+            border-color var(--studio-motion-fast) var(--studio-motion-ease),
+            color var(--studio-motion-fast) var(--studio-motion-ease),
+            opacity var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-polish :is(
+          button,
+          [role="button"],
+          .studio-settings-pill,
+          .studio-pill-btn,
+          .studio-composer-circle-btn,
+          .cursor-icon-btn,
+          .cursor-toolbar-icon,
+          .studio-balance-chip-topup,
+          .studio-credit-balance-ring > button
+        ):not(:disabled):not([aria-disabled="true"]):not([data-studio-no-press]):active {
           transform: scale(var(--studio-press-scale));
+        }
+        /* Tab / section switches stay flat — no press squash. */
+        .studio-polish :is(
+          .cursor-unified-tab,
+          .cursor-tab,
+          [role="tab"],
+          .studio-mobile-nav-btn,
+          .studio-admin-head-tab,
+          .studio-settings-horizontal-menu button,
+          .studio-feed-mode-menu button,
+          [data-studio-nav],
+          [data-studio-no-press]
+        ):active,
+        .studio-polish :is(
+          .cursor-unified-tab,
+          .cursor-tab,
+          [role="tab"],
+          .studio-mobile-nav-btn,
+          .studio-admin-head-tab,
+          .studio-settings-horizontal-menu button,
+          .studio-feed-mode-menu button,
+          [data-studio-nav],
+          [data-studio-no-press]
+        ).is-pressed {
+          transform: none !important;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .studio-polish {
+            --studio-press-scale: 1;
+            --studio-press-duration: 0ms;
+          }
         }
         .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item, .desk-file-breadcrumbs-chip):focus-visible {
           outline: 2px solid color-mix(in srgb, var(--cursor-accent) 42%, transparent);
