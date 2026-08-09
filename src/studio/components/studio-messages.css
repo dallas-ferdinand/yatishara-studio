@@ -51,6 +51,8 @@
   height: 100%;
   min-height: 0;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 /* Match other workspace panel heads (--cursor-head-h: 32px). */
@@ -339,19 +341,26 @@
   opacity: 0.92;
 }
 
-/* Full-width message column (WhatsApp main pane). */
+/* Full-width message column (WhatsApp main pane).
+   minmax(0,1fr) so long reply/text min-content cannot widen the track. */
 .studio-dm-messages {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 3px;
   width: 100%;
-  max-width: none;
+  max-width: 100%;
+  min-width: 0;
   margin: 0;
+  overflow-x: clip;
+  box-sizing: border-box;
 }
 
 .studio-dm-day {
   display: flex;
   justify-content: center;
   padding: 10px 0 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .studio-dm-day span {
@@ -429,8 +438,8 @@
   gap: 2px;
   box-sizing: border-box;
   min-width: 0;
-  max-width: min(72%, 42rem);
-  /* Shrink below voice-player min-content so meta stays in-pane. */
+  /* Wider in the pane, but never past the row. */
+  max-width: min(88%, 36rem);
   width: fit-content;
   padding: 7px 10px;
   border-radius: 14px;
@@ -438,15 +447,17 @@
   background: var(--mos-plate, var(--mos-panel));
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .studio-dm-bubble.has-reply {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  /* Quote min-content can be huge — hard-cap to pane, not content. */
-  width: min(100%, 22rem);
-  max-width: min(100%, 22rem);
+  /* Cap to row width so quotes cannot expand the grid track. */
+  width: auto;
+  max-width: min(88%, 32rem);
 }
 
 .studio-dm-bubble-body {
@@ -1539,7 +1550,8 @@
 
 .studio-dm-bubble.is-voice.has-reply {
   align-items: stretch;
-  width: min(88%, 26rem);
+  width: auto;
+  max-width: min(88%, 28rem);
 }
 
 .studio-dm-bubble.is-voice .studio-dm-bubble-body {
@@ -1573,8 +1585,12 @@
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  max-width: min(78%, 20rem);
+  max-width: min(88%, 26rem);
   padding: 4px;
+}
+
+.studio-dm-bubble.is-image.has-reply {
+  max-width: min(88%, 28rem);
 }
 
 .studio-dm-bubble.is-image > p {
@@ -1590,8 +1606,12 @@
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  max-width: min(78%, 20rem);
+  max-width: min(88%, 26rem);
   padding: 4px;
+}
+
+.studio-dm-bubble.is-video.has-reply {
+  max-width: min(88%, 28rem);
 }
 
 .studio-dm-bubble.is-video > p {
