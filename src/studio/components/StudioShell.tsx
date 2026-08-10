@@ -24152,6 +24152,16 @@ export function StudioShell({
                 </button>
                 <button
                   type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isAcademyRail ? " is-active" : ""}`}
+                  onClick={() => openAcademyTab()}
+                  aria-label="Open Academy"
+                  title="Academy"
+                  aria-pressed={isAcademyRail}
+                >
+                  <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
                   className={`studio-settings-pill studio-settings-trigger${isMessagesRail ? " is-active" : ""}`}
                   onClick={openMessages}
                   aria-label="Open messages"
@@ -24925,6 +24935,16 @@ export function StudioShell({
                   aria-pressed={isNetworkRail}
                 >
                   <Store className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isAcademyRail ? " is-active" : ""}`}
+                  onClick={() => openAcademyTab()}
+                  aria-label="Open Academy"
+                  title="Academy"
+                  aria-pressed={isAcademyRail}
+                >
+                  <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
                 <button
                   type="button"
