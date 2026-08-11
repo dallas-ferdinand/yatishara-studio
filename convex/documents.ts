@@ -73,10 +73,18 @@ export const create = authedMutation({
   handler: async (ctx, args) => {
     await requireFolderOwnerOrEditShare(ctx, args.folderId);
     const now = Date.now();
+    const title = args.title.trim();
+    const content = String(args.contentMarkdown ?? "").trim();
+    // Scripts/prompts must not land as empty shells — agent + Files New both use this path.
+    if (!content && /^(prompt|script)\b/i.test(title)) {
+      throw new Error(
+        "Script content is empty. Pass contentMarkdown with the full prompt/script body.",
+      );
+    }
     return await ctx.db.insert("documents", {
       ownerId: ctx.user._id,
       folderId: args.folderId,
-      title: args.title.trim(),
+      title,
       contentMarkdown: args.contentMarkdown ?? "",
       createdAt: now,
       updatedAt: now,

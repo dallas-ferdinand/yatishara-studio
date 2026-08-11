@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   Eye,
+  FileText,
   FolderInput,
   FolderPlus,
   Loader2,
@@ -39,6 +40,9 @@ function StepIcon({
     return <AlertCircle size={13} aria-hidden="true" />;
   }
   const name = String(toolName || "");
+  if (name.includes("document") || name.includes("script")) {
+    return <FileText size={13} aria-hidden="true" />;
+  }
   if (name.includes("search") || name.includes("catalog") || name.includes("describe")) {
     return <Search size={13} aria-hidden="true" />;
   }

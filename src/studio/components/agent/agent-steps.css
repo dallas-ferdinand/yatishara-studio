@@ -94,6 +94,10 @@
   transform-origin: center;
 }
 
+.studio-agent-step.is-thinking .studio-agent-step-icon.is-thinking-mark {
+  opacity: 0.55;
+}
+
 .studio-agent-step.is-error .studio-agent-step-icon {
   opacity: 1;
 }

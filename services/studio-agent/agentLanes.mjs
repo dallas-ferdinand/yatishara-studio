@@ -92,7 +92,7 @@ export function detectActionLane(message, workingSet) {
     || /\b(prompt|script)\b.{0,40}\b(image|product|hero|still|video|ad)\b/.test(text)
     || /\bcreate a script\b/.test(text)
     || /\bshot script\b/.test(text)) {
-    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt/script. ALWAYS studio_create_document {folderId:CWD, title:\"Prompt — …\" or \"Script — …\", contentMarkdown with ```text fence + References: asset lines}. NEVER remember the script body — remember only a short pointer to the file after create. Do not dump the full prompt in chat unless they asked to see/copy it.";
+    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt/script. ALWAYS studio_create_document {folderId:CWD, title:\"Prompt — …\" or \"Script — …\", contentMarkdown NON-EMPTY with ```text fence + References: asset lines}. If file exists empty: studio_update_document. NEVER remember the script body. Do not dump the full prompt in chat unless they asked to see/copy it.";
   }
   if (/\b(generat(e|ing)|creat(e|ing)|make|draw|render)\b.{0,40}\b(image|picture|photo|still|art)\b/.test(text)
     || /\b(image|picture|photo)\b.{0,40}\b(generat|creat|make|draw|render)/.test(text)) {
