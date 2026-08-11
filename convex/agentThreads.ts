@@ -217,41 +217,91 @@ export const threadInsight = authedQuery({
       createdAt: number;
     }> = [];
     const seen = new Set<string>();
+
+    const pushAssetId = async (
+      rawId: unknown,
+      kindHint: string,
+      name?: string,
+      toolName?: string,
+      createdAt?: number,
+    ) => {
+      const id = String(rawId || "").trim();
+      if (!id || seen.has(id)) return;
+      const assetId = ctx.db.normalizeId("assets", id);
+      if (assetId) {
+        seen.add(id);
+        const asset = await ctx.db.get("assets", assetId);
+        if (!asset || asset.ownerId !== ctx.user._id || asset.deletedAt) return;
+        media.push({
+          assetId: String(assetId),
+          kind: String(asset.kind || kindHint || "image"),
+          name: name || asset.name,
+          toolName,
+          createdAt: createdAt ?? asset.createdAt,
+        });
+        return;
+      }
+      const jobId = ctx.db.normalizeId("generationJobs", id);
+      if (!jobId) return;
+      const job = await ctx.db.get("generationJobs", jobId);
+      if (!job || job.ownerId !== ctx.user._id) return;
+      const outputs = await ctx.db
+        .query("generationOutputs")
+        .withIndex("by_job", (q) => q.eq("jobId", jobId))
+        .collect();
+      for (const output of outputs) {
+        await pushAssetId(
+          output.assetId,
+          kindHint,
+          name,
+          toolName,
+          createdAt ?? job.createdAt,
+        );
+      }
+    };
+
     for (const tc of toolCalls) {
       if (!/generate_(image|video|audio)|generate_batch/i.test(tc.toolName)) continue;
       if (!tc.resultJson) continue;
+      const kindHint = /video/i.test(tc.toolName)
+        ? "video"
+        : /audio/i.test(tc.toolName)
+          ? "audio"
+          : "image";
       try {
         const parsed = JSON.parse(tc.resultJson) as Record<string, unknown>;
         const root =
           parsed.data && typeof parsed.data === "object"
             ? (parsed.data as Record<string, unknown>)
             : parsed;
-        const push = (raw: Record<string, unknown>) => {
-          const assetId = String(
-            raw.assetId || raw.id || raw._id || "",
-          ).trim();
-          if (!assetId || seen.has(assetId)) return;
-          seen.add(assetId);
-          media.push({
-            assetId,
-            kind: String(raw.kind || "image"),
-            name: typeof raw.name === "string" ? raw.name : undefined,
-            toolName: tc.toolName,
-            createdAt: tc.startedAt,
-          });
-        };
         if (Array.isArray(root.assets)) {
           for (const a of root.assets) {
-            if (a && typeof a === "object") push(a as Record<string, unknown>);
+            if (!a || typeof a !== "object") continue;
+            const row = a as Record<string, unknown>;
+            await pushAssetId(
+              row.assetId || row.id || row._id,
+              String(row.kind || kindHint),
+              typeof row.name === "string" ? row.name : undefined,
+              tc.toolName,
+              tc.startedAt,
+            );
           }
-        }
-        if (root.assetId || root.id || root._id) {
-          push(root);
         }
         if (Array.isArray(root.assetIds)) {
           for (const id of root.assetIds) {
-            push({ assetId: String(id), kind: "image" });
+            await pushAssetId(id, kindHint, undefined, tc.toolName, tc.startedAt);
           }
+        }
+        if (root.assetId) {
+          await pushAssetId(root.assetId, kindHint, undefined, tc.toolName, tc.startedAt);
+        } else if (root.jobId || root.id || root._id) {
+          await pushAssetId(
+            root.jobId || root.id || root._id,
+            kindHint,
+            undefined,
+            tc.toolName,
+            tc.startedAt,
+          );
         }
       } catch {
         // ignore

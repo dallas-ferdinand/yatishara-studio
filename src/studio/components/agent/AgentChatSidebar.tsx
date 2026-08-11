@@ -39,13 +39,23 @@ export function AgentChatSidebar({
     [insight?.todosJson],
   );
 
-  const mediaIds = useMemo(
-    () => (insight?.media ?? []).map((m) => m.assetId as Id<"assets">).filter(Boolean),
-    [insight?.media],
-  );
+  const mediaIds = useMemo(() => {
+    const ids: Id<"assets">[] = [];
+    const seen = new Set<string>();
+    for (const item of insight?.media ?? []) {
+      const id = String(item.assetId || "").trim();
+      // Server already normalizes to assets; skip empty / dupes.
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id as Id<"assets">);
+    }
+    return ids.slice(0, 40);
+  }, [insight?.media]);
   const mediaAssets = useQuery(
     api.assets.listByIds,
-    open && mediaIds.length ? { assetIds: mediaIds, quality: "thumb" as const } : "skip",
+    open && tab === "media" && mediaIds.length
+      ? { assetIds: mediaIds, quality: "thumb" as const }
+      : "skip",
   );
   const thumbById = useMemo(() => {
     const map = new Map<string, string>();
