@@ -18,6 +18,8 @@ import type * as agentApprovalsNode from "../agentApprovalsNode.js";
 import type * as agentCapabilities from "../agentCapabilities.js";
 import type * as agentMemory from "../agentMemory.js";
 import type * as agentMessages from "../agentMessages.js";
+import type * as agentPreferences from "../agentPreferences.js";
+import type * as agentQuestions from "../agentQuestions.js";
 import type * as agentRuns from "../agentRuns.js";
 import type * as agentThreads from "../agentThreads.js";
 import type * as agentWorkerHttp from "../agentWorkerHttp.js";
@@ -190,6 +192,8 @@ declare const fullApi: ApiFromModules<{
   agentCapabilities: typeof agentCapabilities;
   agentMemory: typeof agentMemory;
   agentMessages: typeof agentMessages;
+  agentPreferences: typeof agentPreferences;
+  agentQuestions: typeof agentQuestions;
   agentRuns: typeof agentRuns;
   agentThreads: typeof agentThreads;
   agentWorkerHttp: typeof agentWorkerHttp;
