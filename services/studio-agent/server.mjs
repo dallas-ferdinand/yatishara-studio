@@ -11,12 +11,10 @@
  *   STUDIO_AGENT_WORKER_TOKEN (required — fail closed)
  */
 import { createServer } from "node:http";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { createPiStudioTools } from "../../packages/studio-tools/src/piAdapter.js";
-import { authorizeTool } from "../../packages/studio-tools/src/policy.js";
-import { invokeStudioTool } from "../../packages/studio-tools/src/http.js";
+import { createStudioPiTools } from "./piTools.mjs";
 
 const PORT = Number(process.env.STUDIO_AGENT_PORT || process.env.PORT || 8796);
 const TOKEN = String(process.env.STUDIO_AGENT_WORKER_TOKEN || "").trim();
@@ -127,7 +125,7 @@ async function runPiTurn(body, abortSignal) {
     const mod = await import("@earendil-works/pi-coding-agent");
     const { createAgentSession, SessionManager } = mod;
 
-    const studioTools = createPiStudioTools({
+    const tools = createStudioPiTools({
       apiBase: studioApiBase,
       role,
       scopes:
@@ -140,14 +138,27 @@ async function runPiTurn(body, abortSignal) {
           "marketplace",
         ],
       getBearerToken: async () => capabilityToken,
-      onApprovalRequired: async ({ toolName, args, tool }) => {
-        const start = await callback(callbackBase, workerCallbackToken, "tool-start", {
+      onBeforeInvoke: async ({ toolName, args }) =>
+        callback(callbackBase, workerCallbackToken, "tool-start", {
           ownerId: userId,
           threadId,
           runId,
           toolName,
           args,
+        }),
+      onAfterInvoke: async ({ toolCallId, toolName, ok, result, error }) => {
+        if (!toolCallId) return;
+        await callback(callbackBase, workerCallbackToken, "tool-result", {
+          toolCallId,
+          ownerId: userId,
+          threadId,
+          toolName,
+          ok,
+          result,
+          error,
         });
+      },
+      onApprovalRequired: async ({ toolName, args, tool }) => {
         const idempotencyKey = createHash("sha256")
           .update(
             `${runId || ""}:${toolName}:${JSON.stringify(args || {})}`,
@@ -171,16 +182,6 @@ async function runPiTurn(body, abortSignal) {
             role,
           },
         );
-        if (start?.toolCallId) {
-          await callback(callbackBase, workerCallbackToken, "tool-result", {
-            toolCallId: start.toolCallId,
-            ownerId: userId,
-            threadId,
-            toolName,
-            ok: true,
-            result: approval,
-          });
-        }
         return {
           ok: true,
           pendingApproval: true,
@@ -211,101 +212,6 @@ async function runPiTurn(body, abortSignal) {
       },
     });
 
-    // Wrap invoke to emit tool events for direct (non-approval) calls
-    const tools = studioTools.map((tool) => {
-      if (tool.name !== "invoke") return tool;
-      return {
-        ...tool,
-        execute: async (input) => {
-          const toolName = String(input?.name || "");
-          const args = input?.args && typeof input.args === "object" ? input.args : {};
-          const auth = authorizeTool(toolName, {
-            surface: "agent",
-            role,
-            scopes:
-              scopes || [
-                "read",
-                "write",
-                "generate",
-                "messages",
-                "social",
-                "marketplace",
-              ],
-          });
-          const start = await callback(
-            callbackBase,
-            workerCallbackToken,
-            "tool-start",
-            {
-              ownerId: userId,
-              threadId,
-              runId,
-              toolName,
-              args,
-            },
-          );
-          try {
-            if (auth.ok && auth.requiresApproval) {
-              return tool.execute(input);
-            }
-            const result = await tool.execute(input);
-            if (start?.toolCallId) {
-              await callback(callbackBase, workerCallbackToken, "tool-result", {
-                toolCallId: start.toolCallId,
-                ownerId: userId,
-                threadId,
-                toolName,
-                ok: Boolean(result?.ok !== false),
-                result,
-                error: result?.error,
-              });
-            }
-            return result;
-          } catch (error) {
-            if (start?.toolCallId) {
-              await callback(callbackBase, workerCallbackToken, "tool-result", {
-                toolCallId: start.toolCallId,
-                ownerId: userId,
-                threadId,
-                toolName,
-                ok: false,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
-            throw error;
-          }
-        },
-      };
-    });
-
-    tools.push({
-      name: "remember",
-      description:
-        "Store an owner-scoped durable memory for future Agent turns (never cross-user).",
-      parameters: {
-        type: "object",
-        properties: {
-          title: { type: "string" },
-          body: { type: "string" },
-          kind: {
-            type: "string",
-            enum: ["note", "preference", "decision", "summary"],
-          },
-          projectFolderId: { type: "string" },
-        },
-        required: ["title", "body"],
-      },
-      execute: async (args) =>
-        callback(callbackBase, workerCallbackToken, "remember", {
-          ownerId: userId,
-          threadId,
-          title: String(args.title || "Memory"),
-          body: String(args.body || ""),
-          kind: args.kind,
-          projectFolderId: args.projectFolderId,
-        }),
-    });
-
     const { session } = await createAgentSession({
       cwd: AGENT_DIR,
       agentDir: AGENT_DIR,
@@ -329,8 +235,10 @@ async function runPiTurn(body, abortSignal) {
         : "";
 
     const system = [
-      "You are Yatishara Studio Agent — full access to current non-retired Studio tools for this signed-in user.",
-      "Discover tools with catalog, inspect with describe, run with invoke.",
+      "You are Yatishara Studio Agent — full access to Studio for this signed-in user.",
+      "Pi tools (only these): catalog, describe, invoke, remember.",
+      "Studio actions go through invoke: { name: \"studio_create_folder\", args: { name: \"...\" } }.",
+      "Never call studio_* as a top-level tool — that yields Unknown tool.",
       "Paid/destructive/outbound/admin tools create approval cards — never claim they already ran.",
       "Admin tools only if this user is admin. Never access other users' data.",
       "Use remember for durable preferences/decisions.",

@@ -52,6 +52,10 @@ export STUDIO_AGENT_WORKER_TOKEN=dev
 npm start
 ```
 
-Tools: dynamic `catalog` / `describe` / `invoke` from `@yatishara/studio-tools`
-→ Studio `/api/v1` with a short-lived per-user `ysa_cap_*` capability.
+Tools: dynamic `catalog` / `describe` / `invoke` / `remember` from
+`services/studio-agent/piTools.mjs` (Pi `defineTool` + TypeBox +
+`AgentToolResult`). Studio HTTP via `@yatishara/studio-tools`.
 MCP is not on the in-app path.
+
+Do **not** register raw JSON-Schema tools with `execute(args)` — Pi expects
+`execute(toolCallId, params, signal, onUpdate, ctx)` and TypeBox schemas.
