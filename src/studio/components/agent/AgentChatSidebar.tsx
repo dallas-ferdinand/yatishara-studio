@@ -17,7 +17,7 @@ type AgentChatSidebarProps = {
   variant?: "docked" | "sheet";
 };
 
-type TabId = "info" | "media" | "search";
+type TabId = "info" | "media";
 
 export function AgentChatSidebar({
   threadId,
@@ -29,9 +29,12 @@ export function AgentChatSidebar({
 }: AgentChatSidebarProps) {
   const [tab, setTab] = useState<TabId>("info");
   const [search, setSearch] = useState("");
+  const searchNeedle = search.trim();
+  const searching = searchNeedle.length > 0;
+
   const insight = useQuery(
     api.agentThreads.threadInsight,
-    open ? { threadId, search: search.trim() || undefined } : "skip",
+    open ? { threadId, search: searching ? searchNeedle : undefined } : "skip",
   );
 
   const board = useMemo(
@@ -44,7 +47,6 @@ export function AgentChatSidebar({
     const seen = new Set<string>();
     for (const item of insight?.media ?? []) {
       const id = String(item.assetId || "").trim();
-      // Server already normalizes to assets; skip empty / dupes.
       if (!id || seen.has(id)) continue;
       seen.add(id);
       ids.push(id as Id<"assets">);
@@ -53,7 +55,7 @@ export function AgentChatSidebar({
   }, [insight?.media]);
   const mediaAssets = useQuery(
     api.assets.listByIds,
-    open && tab === "media" && mediaIds.length
+    open && !searching && tab === "media" && mediaIds.length
       ? { assetIds: mediaIds, quality: "thumb" as const }
       : "skip",
   );
@@ -76,7 +78,6 @@ export function AgentChatSidebar({
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: "info", label: "Info" },
     { id: "media", label: "Media" },
-    { id: "search", label: "Search" },
   ];
 
   return (
@@ -100,21 +101,62 @@ export function AgentChatSidebar({
         </div>
       ) : null}
 
-      <nav className="studio-admin-head-tabs" aria-label="Chat panels">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={`studio-admin-head-tab${tab === t.id ? " is-active" : ""}`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <div className="studio-agent-sidebar-toolbar">
+        <nav className="studio-admin-head-tabs studio-agent-sidebar-tabs" aria-label="Chat panels">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`studio-admin-head-tab${tab === t.id && !searching ? " is-active" : ""}`}
+              onClick={() => {
+                setTab(t.id);
+                if (searching) setSearch("");
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <label className="studio-agent-sidebar-search">
+          <Search size={12} strokeWidth={2.25} aria-hidden="true" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search"
+            aria-label="Search this chat"
+          />
+          {searching ? (
+            <button
+              type="button"
+              className="studio-agent-sidebar-search-clear"
+              aria-label="Clear search"
+              onClick={() => setSearch("")}
+            >
+              <X size={11} strokeWidth={2.5} aria-hidden="true" />
+            </button>
+          ) : null}
+        </label>
+      </div>
 
       <div className="studio-agent-chat-sidebar-body">
-        {tab === "info" ? (
+        {searching ? (
+          <div className="studio-agent-sidebar-section">
+            {!insight?.searchHits?.length ? (
+              <p className="studio-agent-sidebar-empty">No matches.</p>
+            ) : (
+              <ul className="studio-agent-search-hits">
+                {insight.searchHits.map((hit) => (
+                  <li key={String(hit._id)}>
+                    <span className="studio-agent-search-role">{hit.role}</span>
+                    <p>{hit.content}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+
+        {!searching && tab === "info" ? (
           <div className="studio-agent-sidebar-section">
             <div className="studio-agent-cost-grid" role="group" aria-label="Chat summary">
               <div className="studio-agent-cost-stat">
@@ -231,7 +273,7 @@ export function AgentChatSidebar({
           </div>
         ) : null}
 
-        {tab === "media" ? (
+        {!searching && tab === "media" ? (
           <div className="studio-agent-sidebar-section">
             {!insight?.media?.length ? (
               <p className="studio-agent-sidebar-empty">
@@ -261,33 +303,6 @@ export function AgentChatSidebar({
                     </li>
                   );
                 })}
-              </ul>
-            )}
-          </div>
-        ) : null}
-
-        {tab === "search" ? (
-          <div className="studio-agent-sidebar-section">
-            <label className="studio-agent-search-field">
-              <Search size={13} aria-hidden="true" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search this chat"
-              />
-            </label>
-            {!search.trim() ? (
-              <p className="studio-agent-sidebar-empty">Type to search messages.</p>
-            ) : !insight?.searchHits?.length ? (
-              <p className="studio-agent-sidebar-empty">No matches.</p>
-            ) : (
-              <ul className="studio-agent-search-hits">
-                {insight.searchHits.map((hit) => (
-                  <li key={String(hit._id)}>
-                    <span className="studio-agent-search-role">{hit.role}</span>
-                    <p>{hit.content}</p>
-                  </li>
-                ))}
               </ul>
             )}
           </div>

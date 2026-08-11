@@ -848,8 +848,80 @@
 
 .studio-agent-chat-sidebar .studio-admin-head-tabs {
   flex: 0 0 auto;
-  padding: 0 8px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.studio-agent-sidebar-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 0 0 auto;
+  min-height: var(--cursor-head-h, 32px);
+  padding: 0 8px 0 4px;
   border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+.studio-agent-sidebar-tabs {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0 4px 0 4px;
+}
+
+.studio-agent-sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 6px;
+  padding: 0 0 0 8px;
+  border-left: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-agent-sidebar-search > svg {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+
+.studio-agent-sidebar-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-cursor-text, var(--mos-ink));
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 6px 0;
+  outline: none;
+}
+
+.studio-agent-sidebar-search input::placeholder {
+  color: var(--color-cursor-muted, var(--mos-muted));
+  opacity: 0.8;
+}
+
+.studio-agent-sidebar-search-clear {
+  appearance: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mos-ink, #111) 8%, transparent);
+  color: var(--color-cursor-muted, var(--mos-muted));
+  cursor: pointer;
+}
+
+.studio-agent-sidebar-search-clear:hover {
+  color: var(--color-cursor-text, var(--mos-ink));
 }
 
 .studio-agent-chat-sidebar-body {
@@ -1184,22 +1256,5 @@
 }
 
 .studio-agent-search-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-  border-radius: 8px;
-  background: transparent;
-}
-
-.studio-agent-search-field input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 12px;
-  outline: none;
+  display: none;
 }
