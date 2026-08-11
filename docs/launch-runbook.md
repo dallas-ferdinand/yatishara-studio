@@ -18,8 +18,8 @@ For broader architecture, local setup, production deployment, and preview hot re
 
 1. Keep `/opt/yatishara-studio` pushed to the dedicated GitHub repo before deploys.
 2. Confirm BytePlus ModelArk model IDs on Convex:
-   - text: `GATEWAY_TEXT_MODEL_ID` (`seed-2-0-lite-260428`)
-   - assistant: `GATEWAY_ASSISTANT_MODEL_ID` (`seed-2-0-lite-260428`)
+   - text: `GATEWAY_TEXT_MODEL_ID` (`seed-2-0-pro-260328`)
+   - assistant: `GATEWAY_ASSISTANT_MODEL_ID` (`seed-2-0-pro-260328`)
    - DM Improve: `GATEWAY_DM_IMPROVE_MODEL_ID` (`seed-2-0-mini-260428`)
    - image: `GATEWAY_IMAGE_MODEL_ID` (`dola-seedream-5-0-pro-260628`)
    - video: `GATEWAY_VIDEO_MODEL_ID` (`dreamina-seedance-2-5-260628`)

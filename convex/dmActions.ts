@@ -17,7 +17,7 @@ const chargeTextGenerationRef = makeFunctionReference<
     folderId: Id<"folders">;
     inputTokens: number;
     outputTokens: number;
-    textModel?: "lite" | "mini";
+    textModel?: "pro" | "lite" | "mini";
   },
   Id<"creditTransactions">
 >("generation:chargeTextGeneration");

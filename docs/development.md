@@ -56,8 +56,8 @@ Generation:
 
 - `ARK_API_KEY` — BytePlus ModelArk API key (Convex secrets only)
 - `ARK_BASE_URL` — optional; default `https://ark.ap-southeast.bytepluses.com/api/v3`
-- `GATEWAY_TEXT_MODEL_ID` — prompt enhancement and scripts (default: `seed-2-0-lite-260428`)
-- `GATEWAY_ASSISTANT_MODEL_ID` — Studio Assistance multimodal co-pilot (default: `seed-2-0-lite-260428`)
+- `GATEWAY_TEXT_MODEL_ID` — prompt enhancement and scripts (default: `seed-2-0-pro-260328`)
+- `GATEWAY_ASSISTANT_MODEL_ID` — Studio Assistance multimodal co-pilot (default: `seed-2-0-pro-260328`)
 - `GATEWAY_ASSISTANT_FALLBACK_MODEL_ID` — Assistance fallback (default: `seed-2-0-mini-260428`)
 - `GATEWAY_DM_IMPROVE_MODEL_ID` — Messages DM Improve wand (default: `seed-2-0-mini-260428`)
 - `GATEWAY_IMAGE_MODEL_ID` — image generation (default: `dola-seedream-5-0-pro-260628`)

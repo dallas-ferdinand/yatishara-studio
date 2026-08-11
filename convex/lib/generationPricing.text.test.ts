@@ -20,21 +20,21 @@ describe("measured text usage pricing", () => {
     );
   });
 
-  it("applies 2× Seed Lite COGS and rounds up to TT$0.01", () => {
-    // 10k input @ $0.25/M + 2k output @ $2.00/M = $0.0065 USD
-    // ×10 FX ×2 markup = TT$0.13 exactly
+  it("applies 2× Seed Pro COGS and rounds up to TT$0.01", () => {
+    // 10k input @ $0.50/M + 2k output @ $3.00/M = $0.011 USD
+    // ×10 FX ×2 markup = TT$0.22 exactly
     expect(
       textSellPriceFromUsageTtd({
         inputTokens: 10_000,
         outputTokens: 2_000,
       }),
-    ).toBe(0.13);
+    ).toBe(0.22);
     expect(
       textCreditsFromMeasuredUsage({
         inputTokens: 10_000,
         outputTokens: 2_000,
       }),
-    ).toBe(0.26);
+    ).toBe(0.44);
   });
 
   it("bills DM Improve at Seed Mini list rates", () => {
@@ -74,7 +74,7 @@ describe("measured text usage pricing", () => {
         inputTokens: 5_000,
         outputTokens: 500,
       }),
-    ).toBe(0.05);
+    ).toBe(0.08);
   });
 
   it("textCreditCost prefers measured tokens over reference estimates", () => {
@@ -83,7 +83,7 @@ describe("measured text usage pricing", () => {
       inputTokens: 10_000,
       outputTokens: 2_000,
     });
-    expect(measured).toBe(0.26);
+    expect(measured).toBe(0.44);
     expect(
       textCreditCost({
         imageReferenceCount: 99,

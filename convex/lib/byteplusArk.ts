@@ -11,7 +11,9 @@ export const ARK_MODEL_IDS = {
   image: "dola-seedream-5-0-pro-260628",
   video25: "dreamina-seedance-2-5-260628",
   video20: "dreamina-seedance-2-0-260128",
-  text: "seed-2-0-lite-260428",
+  /** Assistance / enhance / scripts — multimodal flagship (Gemini 3.5-class). */
+  text: "seed-2-0-pro-260328",
+  textLite: "seed-2-0-lite-260428",
   textMini: "seed-2-0-mini-260428",
 } as const;
 
@@ -22,6 +24,7 @@ const LEGACY_MODEL_MAP: Record<string, string> = {
   "google/gemini-3.5-flash": ARK_MODEL_IDS.text,
   "google/gemini-2.5-flash-lite": ARK_MODEL_IDS.textMini,
   "google/gemini-2.5-flash": ARK_MODEL_IDS.text,
+  "seed-2-0-lite-260428": ARK_MODEL_IDS.textLite,
 };
 
 let cachedProvider: OpenAIProvider | null = null;

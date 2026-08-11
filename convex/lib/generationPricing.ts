@@ -17,8 +17,8 @@
  * (Studio 2K). Studio 4K clamps to 2K. First reference image free; each
  * additional reference +$0.003 COGS (then ×2 markup).
  *
- * Text — Seed 2.0 Lite (≤128k): $0.25/M in / $2.00/M out.
- * DM Improve — Seed 2.0 Mini (≤128k): $0.10/M in / $0.40/M out.
+ * Text — Seed 2.0 Pro (≤128k, default Assistance/scripts): $0.50/M in / $3.00/M out.
+ * Optional Lite: $0.25/$2. DM Improve — Seed 2.0 Mini: $0.10/$0.40.
  * Measured-token charges use the model that ran. Customer = 2× COGS.
  */
 
@@ -161,22 +161,26 @@ export const PLATFORM_OVERHEAD_CREDITS_MEDIA = 0;
 export const PLATFORM_OVERHEAD_CREDITS_TEXT = 0;
 
 /**
- * Seed 2.0 Lite (≤128k) — Assistance / enhance / scripts.
- * Seed 2.0 Mini (≤128k) — DM Improve.
+ * Seed 2.0 Pro (≤128k) — Assistance / enhance / scripts (default).
+ * Seed 2.0 Lite / Mini — optional cheaper tiers (DM Improve uses mini).
  */
-export type TextPricingModel = "lite" | "mini";
+export type TextPricingModel = "pro" | "lite" | "mini";
 
-export const TEXT_USD_PER_M_INPUT = 0.25;
-export const TEXT_USD_PER_M_OUTPUT = 2.0;
-/** Seed Lite has no separate audio line on ModelArk list — bill audio input at text input rate. */
+/** Seed 2.0 Pro list (≤128k) — default text/assistance COGS. */
+export const TEXT_USD_PER_M_INPUT = 0.5;
+export const TEXT_USD_PER_M_OUTPUT = 3.0;
 export const TEXT_USD_PER_M_AUDIO_INPUT = TEXT_USD_PER_M_INPUT;
+
+export const TEXT_LITE_USD_PER_M_INPUT = 0.25;
+export const TEXT_LITE_USD_PER_M_OUTPUT = 2.0;
+export const TEXT_LITE_USD_PER_M_AUDIO_INPUT = TEXT_LITE_USD_PER_M_INPUT;
 
 export const TEXT_MINI_USD_PER_M_INPUT = 0.1;
 export const TEXT_MINI_USD_PER_M_OUTPUT = 0.4;
 export const TEXT_MINI_USD_PER_M_AUDIO_INPUT = TEXT_MINI_USD_PER_M_INPUT;
 
 /**
- * Typical Assistance / script / element-notes turn on Seed 2.0 Lite
+ * Typical Assistance / script turn on Seed 2.0 Pro
  * (estimate shape for UI quotes; ledger uses measured tokens).
  */
 export const TEXT_BASE_INPUT_TOKENS = 2_000;
@@ -227,7 +231,7 @@ export function roundUpToHalfTtd(ttd: number): number {
   return Math.ceil(ttd / CREDIT_PRICE_TTD) * CREDIT_PRICE_TTD;
 }
 
-function textRates(model: TextPricingModel = "lite"): {
+function textRates(model: TextPricingModel = "pro"): {
   input: number;
   output: number;
   audioInput: number;
@@ -237,6 +241,13 @@ function textRates(model: TextPricingModel = "lite"): {
       input: TEXT_MINI_USD_PER_M_INPUT,
       output: TEXT_MINI_USD_PER_M_OUTPUT,
       audioInput: TEXT_MINI_USD_PER_M_AUDIO_INPUT,
+    };
+  }
+  if (model === "lite") {
+    return {
+      input: TEXT_LITE_USD_PER_M_INPUT,
+      output: TEXT_LITE_USD_PER_M_OUTPUT,
+      audioInput: TEXT_LITE_USD_PER_M_AUDIO_INPUT,
     };
   }
   return {
@@ -465,7 +476,7 @@ export function estimateTextModelUsd(args: {
   audioReferenceCount?: number;
   textModel?: TextPricingModel;
 }): number {
-  const rates = textRates(args.textModel ?? "lite");
+  const rates = textRates(args.textModel ?? "pro");
   const imageRefs = Math.max(0, Math.ceil(args.imageReferenceCount ?? 0));
   const videoRefs = Math.max(0, Math.ceil(args.videoReferenceCount ?? 0));
   const audioRefs = Math.max(0, Math.ceil(args.audioReferenceCount ?? 0));
@@ -492,10 +503,10 @@ export type MeasuredTextUsage = {
   outputTokens?: number;
 };
 
-/** Provider USD for Seed Lite / Mini text tokens. */
+/** Provider USD for Seed Pro / Lite / Mini text tokens. */
 export function textProviderCostUsd(
   usage: MeasuredTextUsage,
-  textModel: TextPricingModel = "lite",
+  textModel: TextPricingModel = "pro",
 ): number {
   const rates = textRates(textModel);
   const inputTokens = Math.max(0, Math.floor(usage.inputTokens ?? 0));
@@ -509,7 +520,7 @@ export function textProviderCostUsd(
 /** Customer TT$ = 2× measured provider USD, rounded up to TT$0.01. */
 export function textSellPriceFromUsageTtd(
   usage: MeasuredTextUsage,
-  textModel: TextPricingModel = "lite",
+  textModel: TextPricingModel = "pro",
 ): number {
   const raw = textProviderCostUsd(usage, textModel) * USD_TO_TTD * 2;
   return Math.max(TEXT_MIN_SELL_TTD, roundUpToCentTtd(raw));
@@ -517,7 +528,7 @@ export function textSellPriceFromUsageTtd(
 
 export function textCreditsFromMeasuredUsage(
   usage: MeasuredTextUsage,
-  textModel: TextPricingModel = "lite",
+  textModel: TextPricingModel = "pro",
 ): number {
   const sellTtd = textSellPriceFromUsageTtd(usage, textModel);
   return Math.round((sellTtd / CREDIT_PRICE_TTD) * 100) / 100;
@@ -568,7 +579,7 @@ export function textCreditCost(args: {
         inputTokens: args.inputTokens,
         outputTokens: args.outputTokens,
       },
-      args.textModel ?? "lite",
+      args.textModel ?? "pro",
     );
   }
   const sellTtd = textSellPriceTtd(args);

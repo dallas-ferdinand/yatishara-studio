@@ -2564,8 +2564,10 @@ export const chargeTextGeneration = authedMutation({
     imageReferenceCount: v.optional(v.number()),
     videoReferenceCount: v.optional(v.number()),
     audioReferenceCount: v.optional(v.number()),
-    /** BytePlus text tier: lite (default) or mini (DM Improve). */
-    textModel: v.optional(v.union(v.literal("lite"), v.literal("mini"))),
+    /** BytePlus text tier: pro (default Assistance), lite, or mini (DM Improve). */
+    textModel: v.optional(
+      v.union(v.literal("pro"), v.literal("lite"), v.literal("mini")),
+    ),
   },
   returns: v.id("creditTransactions"),
   handler: async (ctx, args) => {
@@ -2581,7 +2583,7 @@ export const chargeTextGeneration = authedMutation({
     const cost = textCreditCost({
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
-      textModel: args.textModel ?? "lite",
+      textModel: args.textModel ?? "pro",
     });
     const now = Date.now();
     if (!account || account.creditBalance < cost) {
