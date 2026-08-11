@@ -51,6 +51,22 @@
   color: #fff;
 }
 
+/* Inline attachment chips inside the green user bubble (same chips as composer). */
+.studio-agent-pane .studio-agent-user-bubble {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+}
+
+.studio-agent-pane .studio-agent-user-bubble .studio-inline-tag.is-inline {
+  display: inline-flex;
+  vertical-align: middle;
+  margin: 0 3px;
+  max-width: min(200px, 52vw);
+  cursor: default;
+  color: var(--color-cursor-text-bright, #fff);
+}
+
 .studio-agent-pane .studio-chat-bubble.is-assistant,
 .studio-agent-pane .studio-chat-bubble.is-system {
   margin-right: 0;

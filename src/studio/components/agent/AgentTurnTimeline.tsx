@@ -9,6 +9,7 @@ import { AgentStepRow } from "./AgentStepRow";
 import {
   buildAgentTurns,
   liveProgressLabel,
+  type AgentAttachmentChip,
   type AgentApprovalRow,
   type AgentMessageRow,
   type AgentRunRow,
@@ -25,6 +26,7 @@ type AgentTurnTimelineProps = {
   busy?: boolean;
   activeRunId?: Id<"agentRuns"> | null;
   pendingUserText?: string | null;
+  pendingAttachments?: AgentAttachmentChip[] | null;
   onDecideApproval: (
     approvalId: Id<"agentApprovals">,
     decision: "approve" | "deny",
@@ -47,9 +49,61 @@ function TurnBlock({
   onDecideApproval: AgentTurnTimelineProps["onDecideApproval"];
   onOpenFolder?: (folderId: Id<"folders">) => void;
 }) {
+  const inline = useMemo(
+    () => splitUserTextWithAttachments(turn.userText, turn.attachments ?? []),
+    [turn.userText, turn.attachments],
+  );
+
   return (
     <section className="studio-agent-turn" aria-label="Agent turn">
-      <article className="studio-chat-bubble is-user">{turn.userText}</article>
+      {inline.parts.length || turn.userText ? (
+        <article className="studio-chat-bubble is-user studio-agent-user-bubble">
+          {inline.parts.length
+            ? inline.parts.map((part) =>
+                part.type === "text" ? (
+                  <span key={part.key}>{part.value}</span>
+                ) : (
+                  <span
+                    key={part.key}
+                    className="studio-inline-tag studio-agent-attachment-chip is-static is-inline"
+                    title={
+                      part.attachment.path ||
+                      part.attachment.label ||
+                      part.attachment.studioId ||
+                      "Attachment"
+                    }
+                  >
+                    <span className="studio-inline-tag-kind">
+                      {chipKindLabel(part.attachment)}
+                    </span>
+                    <span className="studio-inline-tag-label">
+                      {part.attachment.label ||
+                        part.attachment.path ||
+                        part.attachment.studioId ||
+                        "Attachment"}
+                    </span>
+                  </span>
+                ),
+              )
+            : turn.userText}
+        </article>
+      ) : null}
+      {inline.leftover.length ? (
+        <div className="studio-agent-turn-attachments" aria-label="Attached items">
+          {inline.leftover.map((attachment, index) => (
+            <span
+              key={`${attachment.studioId ?? attachment.label ?? "attachment"}-${index}`}
+              className="studio-inline-tag studio-agent-attachment-chip is-static"
+              title={attachment.path || attachment.label || attachment.studioId || "Attachment"}
+            >
+              <span className="studio-inline-tag-kind">{chipKindLabel(attachment)}</span>
+              <span className="studio-inline-tag-label">
+                {attachment.label || attachment.path || attachment.studioId || "Attachment"}
+              </span>
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {turn.steps.length > 0 ? (
         <div className="studio-agent-turn-steps" role="list">
@@ -100,6 +154,55 @@ function TurnBlock({
   );
 }
 
+function chipKindLabel(attachment: AgentAttachmentChip) {
+  if (attachment.kind === "image") return "IMG";
+  if (attachment.kind === "video") return "VID";
+  if (attachment.kind === "audio") return "AUD";
+  if (attachment.studioKind === "folder") return "DIR";
+  if (attachment.studioKind === "document") return "DOC";
+  if (attachment.studioKind === "element") return "EL";
+  return "REF";
+}
+
+function splitUserTextWithAttachments(
+  text: string,
+  attachments: AgentAttachmentChip[],
+) {
+  const parts: Array<
+    | { type: "text"; key: string; value: string }
+    | { type: "chip"; key: string; attachment: AgentAttachmentChip }
+  > = [];
+  let buffer = "";
+  let tokenIndex = 0;
+  let partIndex = 0;
+  const used = new Set<number>();
+  const flush = () => {
+    if (!buffer) return;
+    parts.push({ type: "text", key: `t-${partIndex++}`, value: buffer });
+    buffer = "";
+  };
+  for (const ch of String(text ?? "")) {
+    if (ch === "\uFFFC") {
+      flush();
+      const attachment = attachments[tokenIndex];
+      if (attachment) {
+        used.add(tokenIndex);
+        parts.push({
+          type: "chip",
+          key: `c-${partIndex++}-${attachment.studioId ?? tokenIndex}`,
+          attachment,
+        });
+      }
+      tokenIndex += 1;
+      continue;
+    }
+    buffer += ch;
+  }
+  flush();
+  const leftover = attachments.filter((_, index) => !used.has(index));
+  return { parts, leftover };
+}
+
 export function AgentTurnTimeline({
   messages,
   toolCalls,
@@ -108,6 +211,7 @@ export function AgentTurnTimeline({
   busy,
   activeRunId,
   pendingUserText,
+  pendingAttachments,
   onDecideApproval,
   onOpenFolder,
 }: AgentTurnTimelineProps) {
@@ -128,8 +232,9 @@ export function AgentTurnTimeline({
         busy,
         activeRunId,
         pendingUserText,
+        pendingAttachments,
       }),
-    [messages, toolCalls, runs, approvals, busy, activeRunId, pendingUserText],
+    [messages, toolCalls, runs, approvals, busy, activeRunId, pendingUserText, pendingAttachments],
   );
 
   function toggleStep(id: string) {

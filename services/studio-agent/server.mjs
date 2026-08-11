@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { createStudioPiTools } from "./piTools.mjs";
+import { invokeStudioTool } from "../../packages/studio-tools/src/http.js";
 
 const PORT = Number(process.env.STUDIO_AGENT_PORT || process.env.PORT || 8796);
 const TOKEN = String(process.env.STUDIO_AGENT_WORKER_TOKEN || "").trim();
@@ -76,9 +77,71 @@ async function callback(callbackBase, workerCallbackToken, route, body, method =
   }
 }
 
+function objectValue(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function expandAttachmentTokens(message, workingSet) {
+  const items = Array.isArray(workingSet) ? workingSet : [];
+  let index = 0;
+  return String(message || "").replace(/\uFFFC/g, () => {
+    const item = items[index++];
+    if (!item) return "[missing attachment]";
+    const kind = textValue(item.studioKind) || "item";
+    const label = textValue(item.label) || textValue(item.studioId) || "item";
+    const id = textValue(item.studioId) || "?";
+    return `[${kind}:${label} id=${id}]`;
+  });
+}
+
+function textValue(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function pickImageUrl(media) {
+  const root = objectValue(media) ?? {};
+  const data = objectValue(root.data) ?? root;
+  return (
+    textValue(data.thumbnailUrl) ||
+    textValue(data.preferredViewUrl) ||
+    textValue(data.url) ||
+    ""
+  );
+}
+
+function inferMimeType(url = "", fallback = "") {
+  const hinted = textValue(fallback).split(";")[0].trim();
+  if (hinted.startsWith("image/")) return hinted;
+  const clean = String(url).split("?")[0].toLowerCase();
+  if (clean.endsWith(".png")) return "image/png";
+  if (clean.endsWith(".webp")) return "image/webp";
+  if (clean.endsWith(".gif")) return "image/gif";
+  if (clean.endsWith(".jpeg") || clean.endsWith(".jpg")) return "image/jpeg";
+  return hinted || "image/jpeg";
+}
+
+async function fetchImageContent(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Image fetch failed (${res.status})`);
+  const mimeType = inferMimeType(url, res.headers.get("content-type") || "");
+  if (!mimeType.startsWith("image/")) {
+    throw new Error(`Expected image content, got ${mimeType}`);
+  }
+  return {
+    type: "image",
+    source: {
+      type: "base64",
+      mediaType: mimeType,
+      data: Buffer.from(await res.arrayBuffer()).toString("base64"),
+    },
+  };
+}
+
 async function runPiTurn(body, abortSignal) {
   const {
     message,
+    attachments,
+    workingSet,
     history,
     memories,
     userId,
@@ -234,11 +297,52 @@ async function runPiTurn(body, abortSignal) {
             .join("\n")}`
         : "";
 
+    const attachmentBlock = Array.isArray(workingSet) && workingSet.length
+      ? `Attached working set (primary scope for this turn):\n${workingSet
+          .map((item, index) => {
+            const parts = [
+              `${index + 1}. ${textValue(item.label) || textValue(item.studioId)}`,
+              textValue(item.studioKind) ? `kind=${textValue(item.studioKind)}` : "",
+              textValue(item.studioId) ? `id=${textValue(item.studioId)}` : "",
+              textValue(item.elementType) ? `type=${textValue(item.elementType)}` : "",
+              textValue(item.folderPath || item.path) ? `path=${textValue(item.folderPath || item.path)}` : "",
+              textValue(item.mimeType) ? `mime=${textValue(item.mimeType)}` : "",
+            ].filter(Boolean);
+            const lines = [parts.join(" | ")];
+            if (item.preview?.folders?.length) {
+              lines.push(`folders: ${item.preview.folders.join(", ")}`);
+            }
+            if (item.preview?.assets?.length) {
+              lines.push(
+                `assets: ${item.preview.assets
+                  .map((asset) => `${asset.name} (${asset.kind})`)
+                  .join(", ")}`,
+              );
+            }
+            if (item.preview?.documents?.length) {
+              lines.push(`documents: ${item.preview.documents.join(", ")}`);
+            }
+            if (item.preview?.elements?.length) {
+              lines.push(`elements: ${item.preview.elements.join(", ")}`);
+            }
+            if (textValue(item.excerpt)) lines.push(`excerpt: ${textValue(item.excerpt).slice(0, 600)}`);
+            if (textValue(item.description)) lines.push(`notes: ${textValue(item.description).slice(0, 600)}`);
+            return lines.join("\n");
+          })
+          .join("\n\n")}`
+      : "Attached working set: none";
+
     const system = [
       "You are Yatishara Studio Agent — full access to Studio for this signed-in user.",
       "Pi tools (only these): catalog, describe, invoke, inspect, remember.",
       "Studio actions go through invoke: { name: \"studio_create_folder\", args: { name: \"...\" } }.",
       "Never call studio_* as a top-level tool — that yields Unknown tool.",
+      "For workspace orientation, prefer invoke name=studio_workspace_tree args={} or studio_search. Use studio_folder_contents only with a real folderId.",
+      "Never invent root/path aliases like root, studio_list_directory, or path-only filesystem operations. Studio file tools operate on Studio ids.",
+      "Attached items are the primary scope for this turn. Prefer their ids and paths before broad workspace exploration.",
+      "User text may include [asset:Name id=...] / [folder:Name id=...] tokens — those are the attached chips. Use those ids directly.",
+      "For move/place requests: if the working set already has source item(s) and a target folder, immediately invoke studio_bulk_move with args { items: [{ id, kind }], targetFolderId }. kind must be studioKind (asset|document|element|folder). Do not ask the user for ids that are already in the working set.",
+      "If an attached image is already visible in the turn, do not call inspect first unless you need more workspace media beyond the attached set.",
       "For visual tasks, first list/search/filter likely image assets, then call inspect with up to 8 assetIds before claiming what an image shows.",
       "Never claim visual understanding from filenames or URLs alone when inspect is needed.",
       "Prefer inspect with thumbnails first; if more than 8 images need review, inspect them in batches.",
@@ -258,10 +362,13 @@ async function runPiTurn(body, abortSignal) {
           .map((row) => `${row.role}: ${row.content}`)
           .join("\n")
       : "";
+    const userMessage =
+      expandAttachmentTokens(message, workingSet).trim() || "(attachments only)";
     const prompt = [
       system,
       prior ? `Prior turns:\n${prior}` : "",
-      `User:\n${message}`,
+      attachmentBlock,
+      `User:\n${userMessage}`,
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -270,8 +377,32 @@ async function runPiTurn(body, abortSignal) {
       throw new Error("cancelled");
     }
 
+    const images = [];
+    const attachedAssets = Array.isArray(attachments) ? attachments.slice(0, 12) : [];
+    for (const item of attachedAssets) {
+      if (images.length >= 8) break;
+      if (textValue(item?.studioKind) !== "asset") continue;
+      const studioId = textValue(item?.studioId);
+      const kind = textValue(item?.kind);
+      if (!studioId || kind !== "image") continue;
+      try {
+        const media = await invokeStudioTool(
+          studioApiBase,
+          capabilityToken,
+          "studio_view_media",
+          { assetId: studioId },
+        );
+        if (media?.ok === false) continue;
+        const imageUrl = pickImageUrl(media?.data ?? media);
+        if (!imageUrl) continue;
+        images.push(await fetchImageContent(imageUrl));
+      } catch {
+        // best-effort multimodal attach; text working-set remains
+      }
+    }
+
     // prompt() resolves void — text + usage come from session after idle.
-    await session.prompt(prompt);
+    await session.prompt(prompt, images.length ? { images } : undefined);
 
     const lastAssistant = [...(session.messages || [])]
       .reverse()
