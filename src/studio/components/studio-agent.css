@@ -912,7 +912,8 @@
   flex: 0 0 auto;
   width: 1px;
   align-self: stretch;
-  margin: 0;
+  /* Air between tabs and full-height search divider. */
+  margin: 0 0 0 8px;
   background: var(--color-cursor-border-soft, var(--mos-border-soft));
 }
 
