@@ -1,0 +1,5 @@
+node_modules/
+.pi-harness/auth.json
+.pi-harness/models-store.json
+.pi-harness/sessions/
+.pi-harness/bin/
