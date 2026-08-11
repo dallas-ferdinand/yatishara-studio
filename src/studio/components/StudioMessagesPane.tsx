@@ -2488,17 +2488,17 @@ export function StudioMessagesPane({
 
   function autosizeComposerInput(el: HTMLTextAreaElement | null) {
     if (!el) return;
-    // Slimmer than chat-head; mobile stays a touch taller for tap target.
-    const minPx = isMobile ? 34 : 28;
+    // Start at two lines like Create; grow with content up to max.
+    const minPx = isMobile ? 54 : 46;
     el.style.height = "0px";
     const scroll = el.scrollHeight;
     const lineCount = el.value.split("\n").length;
-    const singleLine = lineCount <= 1 && scroll <= minPx + 10;
-    const next = singleLine
+    const twoLineIdle = lineCount <= 1 && scroll <= minPx + 10;
+    const next = twoLineIdle
       ? minPx
       : Math.min(Math.max(scroll, minPx), 120);
     el.style.height = `${next}px`;
-    el.classList.toggle("is-single-line", singleLine);
+    el.classList.toggle("is-single-line", twoLineIdle);
   }
 
   /** Voice-note recorder — pause/resume supported; extras row stays visible. */
@@ -3932,7 +3932,7 @@ export function StudioMessagesPane({
                     autosizeComposerInput(el);
                   }}
                   value={draft}
-                  rows={1}
+                  rows={2}
                   enterKeyHint={isMobile ? "enter" : "send"}
                   placeholder={
                     pendingFeedShare
