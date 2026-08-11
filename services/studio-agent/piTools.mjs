@@ -11,6 +11,11 @@ import {
 } from "../../packages/studio-tools/src/catalog.js";
 import { authorizeTool } from "../../packages/studio-tools/src/policy.js";
 import { invokeStudioTool } from "../../packages/studio-tools/src/http.js";
+import {
+  STARTER_TOOL_NAMES,
+  DESCRIBE_EXAMPLES,
+  agentDescription,
+} from "./agentLanes.mjs";
 
 function textResult(payload) {
   const text =
@@ -109,11 +114,11 @@ export function createStudioPiTools(opts) {
     name: "catalog",
     label: "Catalog",
     description:
-      "List available Studio tools for this user (name, category, risk, requiresApproval). Call this before invoke. Filter with optional category or q. Never invent studio_* tool names as Pi tools — only catalog/describe/invoke/remember exist here.",
+      "List Studio tools (lean). Default = high-use starter set. Pass q or category to search. Then describe/invoke by name. Never invent studio_* as top-level Pi tools.",
     promptSnippet: "List Studio API tools (then invoke by name)",
     promptGuidelines: [
-      "Only Pi tools are catalog, describe, invoke, remember.",
-      "To create a folder: invoke name=studio_create_folder with args { name }.",
+      "Only Pi tools are catalog, describe, invoke, inspect, remember.",
+      "Prefer catalog with q= (e.g. q=post, q=generate, q=move) — avoid dumping everything.",
       "Never call studio_* as a top-level tool name.",
     ],
     parameters: Type.Object({
@@ -124,13 +129,14 @@ export function createStudioPiTools(opts) {
       limit: Type.Optional(Type.Number()),
     }),
     async execute(_toolCallId, params) {
+      const filtered = Boolean(params.category || params.q);
       let tools = listToolsForSurface("agent", { role }).map((t) => ({
         name: t.name,
         category: t.category,
         risk: t.risk,
         scope: t.scope,
         requiresApproval: t.requiresApproval,
-        description: t.description.slice(0, 160),
+        description: agentDescription(t),
       }));
       if (params.category) {
         tools = tools.filter((t) => t.category === params.category);
@@ -142,11 +148,18 @@ export function createStudioPiTools(opts) {
             t.name.includes(needle) ||
             t.description.toLowerCase().includes(needle),
         );
+      } else if (!params.category) {
+        const starter = new Set(STARTER_TOOL_NAMES);
+        tools = tools.filter((t) => starter.has(t.name));
       }
-      const max = Math.min(Math.max(Number(params.limit) || 80, 1), 200);
+      const max = Math.min(Math.max(Number(params.limit) || 24, 1), 60);
       return textResult({
         catalogVersion: catalogVersion(),
         count: tools.length,
+        filtered,
+        hint: filtered
+          ? undefined
+          : "Starter set only. Re-call with q= or category= for more tools.",
         tools: tools.slice(0, max),
       });
     },
@@ -156,7 +169,7 @@ export function createStudioPiTools(opts) {
     name: "describe",
     label: "Describe",
     description:
-      "Describe one Studio tool by name: schema, HTTP mapping, risk, approval rule. Use before invoke when unsure of args.",
+      "Describe one Studio tool: short intent, example args, risk, approval. Use before invoke when unsure of args.",
     promptSnippet: "Inspect one Studio tool schema",
     parameters: Type.Object({
       name: Type.String({ description: "Studio tool name, e.g. studio_create_folder" }),
@@ -164,13 +177,26 @@ export function createStudioPiTools(opts) {
     async execute(_toolCallId, params) {
       const info = describeTool(params.name);
       if (!info) {
-        return textResult({ ok: false, error: `Unknown Studio tool: ${params.name}` });
+        return textResult({
+          ok: false,
+          error: `Unknown Studio tool: ${params.name}. Call catalog with q= to find the right name.`,
+        });
       }
       const auth = authorizeTool(params.name, { surface: "agent", role, scopes });
+      const example = DESCRIBE_EXAMPLES[params.name];
       return textResult({
         ok: auth.ok,
         ...(auth.ok ? {} : { error: auth.error }),
-        tool: info,
+        tool: {
+          name: info.name,
+          description: agentDescription(info),
+          category: info.category,
+          risk: info.risk,
+          scope: info.scope,
+          requiresApproval: info.requiresApproval,
+          inputSchema: info.inputSchema,
+          ...(example ? { exampleArgs: example } : {}),
+        },
       });
     },
   });
@@ -179,11 +205,12 @@ export function createStudioPiTools(opts) {
     name: "invoke",
     label: "Invoke",
     description:
-      "Invoke a Studio tool by name with a JSON args object. Example: { name: \"studio_create_folder\", args: { name: \"My Folder\" } }. Reads/safe writes run immediately. Paid/destructive/outbound/admin tools create an approval card instead of executing.",
+      "Run a Studio tool: { name:\"studio_*\", args:{...} }. Reads/safe writes run now. Paid/destructive/outbound/admin → approval card (YOLO may auto-run).",
     promptSnippet: "Run a Studio tool via name + args",
     promptGuidelines: [
       "Always pass the Studio tool name in invoke.name (e.g. studio_create_folder).",
       "Pass arguments in invoke.args as a JSON object.",
+      "Do the action — don't explain how unless the user asked how.",
     ],
     parameters: Type.Object({
       name: Type.String({
@@ -222,7 +249,16 @@ export function createStudioPiTools(opts) {
       try {
         const auth = authorizeTool(toolName, { surface: "agent", role, scopes });
         if (!auth.ok) {
-          const fail = { ok: false, error: auth.error, code: auth.code, toolName };
+          const fail = {
+            ok: false,
+            error: auth.error,
+            code: auth.code,
+            toolName,
+            hint:
+              auth.code === "unknown_tool" || /unknown/i.test(String(auth.error || ""))
+                ? `Call catalog with q=${toolName.replace(/^studio_/, "").slice(0, 24)} then describe the match before retrying invoke.`
+                : undefined,
+          };
           await opts.onAfterInvoke?.({
             toolCallId: trackId,
             toolName,

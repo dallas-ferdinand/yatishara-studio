@@ -483,7 +483,7 @@
   },
   {
     "name": "studio_bulk_move",
-    "description": "[preferred] Move up to 50 assets/documents/elements/folders into targetFolderId. Requires write scope. Partial success returns moved + errors.",
+    "description": "Move up to 50 assets/documents/elements/folders into targetFolderId. Args: {targetFolderId, items:[{kind,id}]}. Prefer when user says move/put/place.",
     "category": "context",
     "scope": "write",
     "risk": "safe_write",
@@ -1731,7 +1731,7 @@
   },
   {
     "name": "studio_generate_image",
-    "description": "[preferred] Generate an image and save it to a Studio folder. Call studio_estimate_generation first. Uses wait=true (usually completes in seconds). DEFAULT: Direct handoff (verbatim prompt). Pass styleSheetElementId to enable the enhancement sticking layer. ${directHandoffHint}",
+    "description": "[preferred] Create an image from a prompt into a Studio folder (paid). Call studio_estimate_generation first when cost matters. wait=true. DEFAULT: Direct verbatim prompt; pass styleSheetElementId for enhancement sticking.",
     "category": "generations",
     "scope": "generate",
     "risk": "paid",
@@ -3926,7 +3926,7 @@
   },
   {
     "name": "studio_send_media_message",
-    "description": "Send Studio media into a DM like the UI Choose/Share flow. Default delivery=file copies into the peer's Messages folder and posts image/video bubbles (supports video). Pass assetId, assetIds, and/or items[{itemKind,itemId}]. delivery=access grants live Shared-with-me links. Requires messages scope.",
+    "description": "Send Studio media in a DM (Choose/Share). Args: conversationId + assetId|assetIds. delivery=file (default) or access. Outbound — needs approval in Agent.",
     "category": "messages",
     "scope": "messages",
     "risk": "outbound",
@@ -3948,7 +3948,7 @@
   },
   {
     "name": "studio_send_message",
-    "description": "Send a text DM. Optional replyToMessageId for quote-reply. Requires messages scope.",
+    "description": "Send a text DM. Args: {conversationId,body}. Optional replyToMessageId. Outbound — needs approval in Agent.",
     "category": "messages",
     "scope": "messages",
     "risk": "outbound",
@@ -4057,7 +4057,7 @@
   },
   {
     "name": "studio_share_asset_post",
-    "description": "Share an owned image/video asset to the public profile feed.",
+    "description": "Post owned image/video to the public profile feed. Args: assetId, optional caption/hashtags. Use for post/share/publish — not advice.",
     "category": "social",
     "scope": "social",
     "risk": "outbound",
@@ -4233,7 +4233,7 @@
   },
   {
     "name": "studio_trash",
-    "description": "Move a folder, asset, document, or element to trash (soft delete). Requires write scope.",
+    "description": "Soft-delete one folder/asset/document/element. Args: {kind,id}. Destructive — needs approval in Agent.",
     "category": "trash",
     "scope": "write",
     "risk": "destructive",

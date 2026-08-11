@@ -173,7 +173,7 @@ export function registerContextTools(server: McpServer) {
 
   server.tool(
     "studio_bulk_move",
-    "[preferred] Move up to 50 assets/documents/elements/folders into targetFolderId. Requires write scope. Partial success returns moved + errors.",
+    "Move up to 50 assets/documents/elements/folders into targetFolderId. Args: {targetFolderId, items:[{kind,id}]}. Prefer when user says move/put/place.",
     {
       targetFolderId: z.string(),
       items: z.array(

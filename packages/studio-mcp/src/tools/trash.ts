@@ -17,7 +17,7 @@ export function registerTrashTools(server: McpServer) {
 
   server.tool(
     "studio_trash",
-    "Move a folder, asset, document, or element to trash (soft delete). Requires write scope.",
+    "Soft-delete one folder/asset/document/element. Args: {kind,id}. Destructive — needs approval in Agent.",
     {
       kind: trashKind,
       id: z.string(),

@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { createStudioPiTools } from "./piTools.mjs";
+import { detectActionLane } from "./agentLanes.mjs";
 import { invokeStudioTool } from "../../packages/studio-tools/src/http.js";
 
 const PORT = Number(process.env.STUDIO_AGENT_PORT || process.env.PORT || 8796);
@@ -298,13 +299,14 @@ async function runPiTurn(body, abortSignal) {
 
     const memoryBlock =
       Array.isArray(memories) && memories.length
-        ? `Owner memories (do not mix users):\n${memories
-            .map((m) => `- [${m.kind}] ${m.title}: ${String(m.body).slice(0, 240)}`)
+        ? `Memories:\n${memories
+            .slice(0, 8)
+            .map((m) => `- [${m.kind}] ${m.title}: ${String(m.body).slice(0, 120)}`)
             .join("\n")}`
         : "";
 
     const attachmentBlock = Array.isArray(workingSet) && workingSet.length
-      ? `Attached working set (primary scope for this turn):\n${workingSet
+      ? `Attached (use these ids):\n${workingSet
           .map((item, index) => {
             const parts = [
               `${index + 1}. ${textValue(item.label) || textValue(item.studioId)}`,
@@ -312,54 +314,42 @@ async function runPiTurn(body, abortSignal) {
               textValue(item.studioId) ? `id=${textValue(item.studioId)}` : "",
               textValue(item.elementType) ? `type=${textValue(item.elementType)}` : "",
               textValue(item.folderPath || item.path) ? `path=${textValue(item.folderPath || item.path)}` : "",
-              textValue(item.mimeType) ? `mime=${textValue(item.mimeType)}` : "",
             ].filter(Boolean);
             const lines = [parts.join(" | ")];
             if (item.preview?.folders?.length) {
-              lines.push(`folders: ${item.preview.folders.join(", ")}`);
+              lines.push(`folders: ${item.preview.folders.slice(0, 8).join(", ")}`);
             }
             if (item.preview?.assets?.length) {
               lines.push(
                 `assets: ${item.preview.assets
+                  .slice(0, 8)
                   .map((asset) => `${asset.name} (${asset.kind})`)
                   .join(", ")}`,
               );
             }
-            if (item.preview?.documents?.length) {
-              lines.push(`documents: ${item.preview.documents.join(", ")}`);
-            }
-            if (item.preview?.elements?.length) {
-              lines.push(`elements: ${item.preview.elements.join(", ")}`);
-            }
-            if (textValue(item.excerpt)) lines.push(`excerpt: ${textValue(item.excerpt).slice(0, 600)}`);
-            if (textValue(item.description)) lines.push(`notes: ${textValue(item.description).slice(0, 600)}`);
+            if (textValue(item.excerpt)) lines.push(`excerpt: ${textValue(item.excerpt).slice(0, 280)}`);
+            if (textValue(item.description)) lines.push(`notes: ${textValue(item.description).slice(0, 200)}`);
             return lines.join("\n");
           })
           .join("\n\n")}`
-      : "Attached working set: none";
+      : "Attached: none";
+
+    const userMessage =
+      expandAttachmentTokens(message, workingSet).trim() || "(attachments only)";
+    const lane = detectActionLane(userMessage, workingSet);
 
     const system = [
-      "You are Yatishara Studio Agent — full access to Studio for this signed-in user.",
-      "Pi tools (only these): catalog, describe, invoke, inspect, remember.",
-      "Studio actions go through invoke: { name: \"studio_create_folder\", args: { name: \"...\" } }.",
-      "Never call studio_* as a top-level tool — that yields Unknown tool.",
-      "For workspace orientation, prefer invoke name=studio_workspace_tree args={} or studio_search. Use studio_folder_contents only with a real folderId.",
-      "Never invent root/path aliases like root, studio_list_directory, or path-only filesystem operations. Studio file tools operate on Studio ids.",
-      "Attached items are the primary scope for this turn. Prefer their ids and paths before broad workspace exploration.",
-      "User text may include [asset:Name id=...] / [folder:Name id=...] tokens — those are the attached chips. Use those ids directly.",
-      "For move/place requests: if the working set already has source item(s) and a target folder, immediately invoke studio_bulk_move with args { items: [{ id, kind }], targetFolderId }. kind must be studioKind (asset|document|element|folder). Do not ask the user for ids that are already in the working set.",
-      "If the user asks to post/share/publish an attached image or video publicly, use invoke name=studio_share_asset_post with the attached asset id. Do not say posting is unavailable unless invoke/catalog actually proves the tool is unavailable.",
-      "If the user asks to generate or create an image, use invoke name=studio_generate_image. Do not claim image generation is unavailable unless invoke/catalog actually proves the tool is unavailable.",
-      "If an attached image is already visible in the turn, do not call inspect first unless you need more workspace media beyond the attached set.",
-      "For visual tasks, first list/search/filter likely image assets, then call inspect with up to 8 assetIds before claiming what an image shows.",
-      "Never claim visual understanding from filenames or URLs alone when inspect is needed.",
-      "Prefer inspect with thumbnails first; if more than 8 images need review, inspect them in batches.",
-      "Paid/destructive/outbound/admin tools create approval cards — never claim they already ran.",
-      "If a tool creates an approval card, stop there. Do not tell the user to approve elsewhere; the chat UI handles confirmation.",
-      "Admin tools only if this user is admin. Never access other users' data.",
-      "Use remember for durable preferences/decisions.",
-      "Never say Done unless a tool actually succeeded. If a tool fails, report the error.",
-      "Talk like a warm, helpful Studio assistant — friendly and clear for everyday creators, not engineers. Short sentences, natural vibe, light personality. Use a relevant emoji once in a while (not every line). Lead with the answer people care about. For lists, use real markdown bullets (- item). Prefer plain folder/file names — skip backticks, ids, JSON, and debug talk (no \"Results are complete\", \"not truncated\", \"Total nodes\", pathTemplates). Sound human: helpful, upbeat, easy to skim.",
+      "Yatishara Studio Agent. Act with tools — don't advise how unless asked.",
+      "Pi tools only: catalog, describe, invoke, inspect, remember.",
+      "Studio actions: invoke {name:\"studio_*\", args:{...}}. Never call studio_* as a top-level tool.",
+      "catalog: default=starter set; use q= or category= to search. describe before invoke if args unclear.",
+      "Attached chips are primary scope — use their ids. Tokens like [asset:Name id=...] are chips.",
+      "Orient: studio_workspace_tree {} or studio_search. studio_folder_contents needs a real folderId.",
+      "Paid/destructive/outbound/admin → approval card (stop; chat UI handles it). Never claim success without tool ok.",
+      "inspect: only when you need to see image pixels beyond attached vision; max 8 assetIds; videos → pull frames first.",
+      "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets for lists. No ids/JSON/debug talk.",
+      "remember for durable prefs. Admin tools only if admin. Never touch other users' data.",
+      lane,
       byokFallbackNote || "",
       memoryBlock,
     ]
@@ -368,15 +358,13 @@ async function runPiTurn(body, abortSignal) {
 
     const prior = Array.isArray(history)
       ? history
-          .slice(-16)
-          .map((row) => `${row.role}: ${row.content}`)
+          .slice(-8)
+          .map((row) => `${row.role}: ${String(row.content || "").slice(0, 600)}`)
           .join("\n")
       : "";
-    const userMessage =
-      expandAttachmentTokens(message, workingSet).trim() || "(attachments only)";
     const prompt = [
       system,
-      prior ? `Prior turns:\n${prior}` : "",
+      prior ? `Prior:\n${prior}` : "",
       attachmentBlock,
       `User:\n${userMessage}`,
     ]

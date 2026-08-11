@@ -412,9 +412,7 @@ Rules:
 
   server.tool(
     "studio_generate_image",
-    `[preferred] Generate an image and save it to a Studio folder. Call studio_estimate_generation first. Uses wait=true (usually completes in seconds).
-
-DEFAULT: Direct handoff (verbatim prompt). Pass styleSheetElementId to enable the enhancement sticking layer. ${directHandoffHint}`,
+    `[preferred] Create an image from a prompt into a Studio folder (paid). Call studio_estimate_generation first when cost matters. wait=true. DEFAULT: Direct verbatim prompt; pass styleSheetElementId for enhancement sticking. ${directHandoffHint}`,
     {
       prompt: z.string(),
       folderId: z.string().optional(),
