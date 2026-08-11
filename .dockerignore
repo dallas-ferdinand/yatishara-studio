@@ -11,7 +11,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 *.tsbuildinfo
-packages/studio-mcp
+packages/studio-mcp/node_modules
+packages/studio-mcp/dist
+packages/studio-mcp/src
 *.apk
 **/*-debug.apk
 public/blur-test*.html
