@@ -30,6 +30,10 @@
   box-sizing: border-box;
 }
 
+.studio-agent-pane .studio-chat-stream-inner > :first-child {
+  margin-top: 0;
+}
+
 /* Full column width bubbles — not fit-content short chips. */
 .studio-agent-pane .studio-agent-turn > .studio-chat-bubble,
 .studio-agent-pane .studio-chat-bubble {
@@ -182,13 +186,62 @@
   box-sizing: border-box;
 }
 
-/* Same shell width band as Create / DM composers. */
-.studio-agent-composer-dock .studio-dm-composer.is-split {
+/* Same shell width band as Create composer. */
+.studio-agent-composer-dock .studio-composer {
   width: 100%;
   max-width: var(--studio-composer-shell-max, min(600px, 94vw));
   margin-inline: auto;
   padding-inline: 12px;
   box-sizing: border-box;
+}
+
+.studio-agent-pane .studio-composer-inputline {
+  min-height: calc(36px + 6px + 4px);
+  padding: 6px 10px 4px;
+}
+
+.studio-agent-pane .cursor-composer-mention-editor {
+  min-height: 36px;
+}
+
+.studio-agent-attachment-strip,
+.studio-agent-turn-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.studio-agent-attachment-strip {
+  padding: 0 0 8px;
+}
+
+.studio-agent-turn-attachments {
+  margin: 6px 0 2px;
+}
+
+.studio-agent-attachment-chip {
+  max-width: 100%;
+}
+
+.studio-agent-attachment-chip .studio-inline-tag-label {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-agent-attachment-chip.is-static {
+  cursor: default;
+}
+
+.studio-agent-attachment-remove {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 0 0 4px;
+  line-height: 1;
+  font-size: 14px;
 }
 
 .studio-agent-primary-btn,
