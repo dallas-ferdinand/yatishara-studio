@@ -16,6 +16,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { StudioChatMarkdown } from "../StudioChatMarkdown";
 import { LogoLoader } from "../logo-loader";
 import { AgentApprovalStep } from "./AgentApprovalStep";
+import { AgentQuestionStep, type AgentQuestionRow } from "./AgentQuestionStep";
 import { AgentStepRow } from "./AgentStepRow";
 import {
   buildAgentTurns,
@@ -35,6 +36,7 @@ type AgentTurnTimelineProps = {
   toolCalls: AgentToolCallRow[];
   runs: AgentRunRow[];
   approvals: AgentApprovalRow[];
+  questions?: AgentQuestionRow[];
   busy?: boolean;
   activeRunId?: Id<"agentRuns"> | null;
   pendingUserText?: string | null;
@@ -43,6 +45,15 @@ type AgentTurnTimelineProps = {
     approvalId: Id<"agentApprovals">,
     decision: "approve" | "deny",
   ) => void;
+  onAnswerQuestions: (
+    questionId: Id<"agentQuestions">,
+    answers: Array<{
+      questionId: string;
+      optionId?: string;
+      optionLabel?: string;
+      customText?: string;
+    }>,
+  ) => Promise<void> | void;
   onOpenFolder?: (folderId: Id<"folders">) => void;
 };
 
@@ -418,11 +429,13 @@ export function AgentTurnTimeline({
   toolCalls,
   runs,
   approvals,
+  questions = [],
   busy,
   activeRunId,
   pendingUserText,
   pendingAttachments,
   onDecideApproval,
+  onAnswerQuestions,
   onOpenFolder,
 }: AgentTurnTimelineProps) {
   const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
@@ -455,6 +468,23 @@ export function AgentTurnTimeline({
       pendingAttachments,
     ],
   );
+
+  const livePlan = useMemo(() => {
+    const withPlan = [...runs]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .find((r) => r.planJson);
+    if (!withPlan?.planJson) return null;
+    try {
+      const parsed = JSON.parse(withPlan.planJson) as {
+        goal?: string;
+        steps?: Array<{ id: string; text: string; status: string }>;
+      };
+      if (!parsed?.steps?.length) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }, [runs]);
 
   const assetIds = useMemo(
     () => collectAssetIds(turns, pendingAttachments),
@@ -492,6 +522,9 @@ export function AgentTurnTimeline({
     setExpandedStepId((prev) => (prev === id ? null : id));
   }
 
+  const pendingQuestions = questions.filter((q) => q.status === "pending");
+  const recentQuestions = questions.slice(-4);
+
   return (
     <>
       {turns.map((turn) => (
@@ -506,6 +539,43 @@ export function AgentTurnTimeline({
           thumbById={thumbById}
         />
       ))}
+      {livePlan ? (
+        <div className="studio-agent-todo-card" aria-label="Agent todo list">
+          <p className="studio-agent-todo-kicker">To-do</p>
+          {livePlan.goal ? (
+            <p className="studio-agent-todo-goal">{livePlan.goal}</p>
+          ) : null}
+          <ul className="studio-agent-todo-list">
+            {livePlan.steps.map((step) => (
+              <li
+                key={step.id}
+                className={`is-${step.status || "pending"}`}
+                data-status={step.status || "pending"}
+              >
+                <span className="studio-agent-todo-mark" aria-hidden="true">
+                  {step.status === "done"
+                    ? "✓"
+                    : step.status === "doing"
+                      ? "→"
+                      : step.status === "blocked"
+                        ? "!"
+                        : "○"}
+                </span>
+                <span>{step.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {(pendingQuestions.length ? pendingQuestions : recentQuestions.slice(-1)).map(
+        (q) => (
+          <AgentQuestionStep
+            key={String(q._id)}
+            question={q}
+            onAnswer={onAnswerQuestions}
+          />
+        ),
+      )}
     </>
   );
 }

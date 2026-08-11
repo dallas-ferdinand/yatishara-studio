@@ -1845,12 +1845,14 @@ export default defineSchema({
       v.literal("tool"),
       v.literal("system"),
       v.literal("approval"),
+      v.literal("question"),
     ),
     content: v.string(),
     attachmentsJson: v.optional(v.string()),
     toolName: v.optional(v.string()),
     toolCallId: v.optional(v.string()),
     approvalId: v.optional(v.id("agentApprovals")),
+    questionId: v.optional(v.id("agentQuestions")),
     status: v.optional(
       v.union(
         v.literal("streaming"),
@@ -1862,7 +1864,8 @@ export default defineSchema({
   })
     .index("by_thread_and_created", ["threadId", "createdAt"])
     .index("by_owner", ["ownerId"])
-    .index("by_approval", ["approvalId"]),
+    .index("by_approval", ["approvalId"])
+    .index("by_question", ["questionId"]),
 
   agentApprovals: defineTable({
     ownerId: v.id("users"),
@@ -1950,6 +1953,7 @@ export default defineSchema({
       v.literal("queued"),
       v.literal("running"),
       v.literal("awaiting_approval"),
+      v.literal("awaiting_question"),
       v.literal("completed"),
       v.literal("failed"),
       v.literal("cancelled"),
@@ -1961,6 +1965,8 @@ export default defineSchema({
     usedByok: v.optional(v.boolean()),
     creditsSpent: v.optional(v.number()),
     catalogVersion: v.optional(v.string()),
+    /** Latest multi-step TODO JSON for reinjection across ask pauses */
+    planJson: v.optional(v.string()),
     cancelRequestedAt: v.optional(v.number()),
     startedAt: v.optional(v.number()),
     finishedAt: v.optional(v.number()),
@@ -1971,6 +1977,29 @@ export default defineSchema({
     .index("by_owner_and_created", ["ownerId", "createdAt"])
     .index("by_owner_and_status", ["ownerId", "status"]),
 
+  /** Structured Agent Mode clarifying questions (multi-choice + custom). */
+  agentQuestions: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("agentThreads"),
+    runId: v.optional(v.id("agentRuns")),
+    intro: v.optional(v.string()),
+    /** [{ id, prompt, options:[{id,label}], allowCustom? }] */
+    questionsJson: v.string(),
+    /** [{ questionId, optionId?, optionLabel?, customText? }] */
+    answersJson: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("answered"),
+      v.literal("cancelled"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    answeredAt: v.optional(v.number()),
+  })
+    .index("by_thread_and_status", ["threadId", "status"])
+    .index("by_owner", ["ownerId"])
+    .index("by_run", ["runId"]),
+
   agentToolCalls: defineTable({
     ownerId: v.id("users"),
     threadId: v.id("agentThreads"),
@@ -1980,6 +2009,7 @@ export default defineSchema({
     status: v.union(
       v.literal("started"),
       v.literal("pending_approval"),
+      v.literal("pending_question"),
       v.literal("completed"),
       v.literal("failed"),
       v.literal("cancelled"),
@@ -1987,6 +2017,7 @@ export default defineSchema({
     resultJson: v.optional(v.string()),
     error: v.optional(v.string()),
     approvalId: v.optional(v.id("agentApprovals")),
+    questionId: v.optional(v.id("agentQuestions")),
     startedAt: v.number(),
     finishedAt: v.optional(v.number()),
   })

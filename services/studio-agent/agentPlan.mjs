@@ -1,18 +1,53 @@
 /**
  * Lightweight plan/todo for multi-step turns (local to one Pi session).
+ * Latest list is reinjected into tool observations so the model stays on track.
+ */
+
+/**
+ * @typedef {{ id: string, text: string, status: string }} PlanStep
+ * @typedef {{ goal: string, steps: PlanStep[], open: number }} PlanSnapshot
  */
 
 export function createPlanStore() {
-  /** @type {{ goal: string, steps: Array<{ id: string, text: string, status: string }> }} */
+  /** @type {{ goal: string, steps: PlanStep[] }} */
   let plan = { goal: "", steps: [] };
+  /** @type {((snap: PlanSnapshot) => void)|null} */
+  let onChange = null;
 
-  return {
+  const api = {
+    /**
+     * @param {(snap: PlanSnapshot) => void} fn
+     */
+    setOnChange(fn) {
+      onChange = typeof fn === "function" ? fn : null;
+    },
     get() {
       return {
         goal: plan.goal,
         steps: plan.steps.map((s) => ({ ...s })),
         open: plan.steps.filter((s) => s.status !== "done").length,
       };
+    },
+    /** Compact block for prompt / observation reinjection */
+    formatBlock() {
+      const snap = this.get();
+      if (!snap.steps.length) return "";
+      const lines = [
+        "TODO (update as you go — mark doing/done):",
+        snap.goal ? `Goal: ${snap.goal}` : null,
+        ...snap.steps.map((s) => {
+          const mark =
+            s.status === "done"
+              ? "[x]"
+              : s.status === "doing"
+                ? "[~]"
+                : s.status === "blocked"
+                  ? "[!]"
+                  : "[ ]";
+          return `${mark} ${s.id}: ${s.text}`;
+        }),
+      ].filter(Boolean);
+      return lines.join("\n");
     },
     set(goal, steps) {
       const list = Array.isArray(steps) ? steps : [];
@@ -35,7 +70,13 @@ export function createPlanStore() {
           };
         }),
       };
-      return this.get();
+      const snap = this.get();
+      try {
+        onChange?.(snap);
+      } catch {
+        // ignore sync errors
+      }
+      return snap;
     },
     update(id, status) {
       const step = plan.steps.find((s) => s.id === id);
@@ -44,11 +85,24 @@ export function createPlanStore() {
         return { ok: false, error: "status must be pending|doing|done|blocked" };
       }
       step.status = status;
-      return { ok: true, plan: this.get() };
+      const snap = this.get();
+      try {
+        onChange?.(snap);
+      } catch {
+        // ignore
+      }
+      return { ok: true, plan: snap };
     },
     clear() {
       plan = { goal: "", steps: [] };
+      const snap = this.get();
+      try {
+        onChange?.(snap);
+      } catch {
+        // ignore
+      }
       return { ok: true };
     },
   };
+  return api;
 }

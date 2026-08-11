@@ -57,6 +57,7 @@ type SendTurnResult = {
   runId?: string;
   error?: string;
   pendingApproval?: boolean;
+  pendingAsk?: boolean;
 };
 
 type AgentTurnAttachment = {
@@ -89,6 +90,7 @@ export const sendTurn = action({
     threadId: v.id("agentThreads"),
     message: v.string(),
     autoApprove: v.optional(v.boolean()),
+    seedPlanJson: v.optional(v.string()),
     attachments: v.optional(
       v.array(
         v.object({
@@ -109,6 +111,7 @@ export const sendTurn = action({
     runId: v.optional(v.string()),
     error: v.optional(v.string()),
     pendingApproval: v.optional(v.boolean()),
+    pendingAsk: v.optional(v.boolean()),
   }),
   handler: async (ctx, args): Promise<SendTurnResult> => {
     const me = await ctx.runQuery(api.users.current, {});
@@ -416,6 +419,7 @@ export const sendTurn = action({
             process.env.STUDIO_AGENT_FORWARD_BYOK === "1" ? byokPlain : undefined,
           byokFallbackNote,
           catalogVersion: "2026-08-11.1",
+          seedPlanJson: args.seedPlanJson,
         }),
       });
 
@@ -426,6 +430,7 @@ export const sendTurn = action({
         usedByok?: boolean;
         error?: string;
         pendingApproval?: boolean;
+        pendingAsk?: boolean;
         usage?: { inputTokens?: number; outputTokens?: number };
       } = {};
       try {
@@ -458,7 +463,7 @@ export const sendTurn = action({
         };
       }
 
-      if (body.pendingApproval) {
+      if (body.pendingApproval || body.pendingAsk) {
         await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
         return {
           ok: true,
@@ -466,7 +471,8 @@ export const sendTurn = action({
           creditsSpent: 0,
           usedByok,
           runId: String(runId),
-          pendingApproval: true,
+          pendingApproval: Boolean(body.pendingApproval),
+          pendingAsk: Boolean(body.pendingAsk),
         };
       }
 

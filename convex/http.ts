@@ -275,6 +275,8 @@ for (const path of [
   "/api/agent-worker/tool-result",
   "/api/agent-worker/approval",
   "/api/agent-worker/remember",
+  "/api/agent-worker/plan-sync",
+  "/api/agent-worker/ask",
   "/api/agent-worker/run-status",
 ] as const) {
   http.route({ path, method: "POST", handler: agentWorkerCallback });

@@ -112,6 +112,9 @@ async function fetchImageBlock(url, fallbackMimeType = "") {
  *   onBeforeInvoke?: (info: { toolName: string, args: Record<string, unknown> }) => Promise<{ toolCallId?: string }|void>,
  *   onAfterInvoke?: (info: { toolCallId?: string, toolName: string, ok: boolean, result?: any, error?: string }) => Promise<void>,
  *   trajectory?: ReturnType<typeof createTrajectory>,
+ *   seedPlan?: { goal?: string, steps?: unknown[] }|null,
+ *   onPlanChange?: (snap: object) => void,
+ *   onAskRequired?: (info: object) => Promise<any>,
  * }} opts
  */
 export function createStudioPiTools(opts) {
@@ -127,7 +130,26 @@ export function createStudioPiTools(opts) {
     ];
   const localHandlers = opts.localHandlers ?? {};
   const planStore = createPlanStore();
+  if (opts.seedPlan?.steps?.length) {
+    planStore.set(opts.seedPlan.goal || "", opts.seedPlan.steps);
+  }
+  if (typeof opts.onPlanChange === "function") {
+    planStore.setOnChange(opts.onPlanChange);
+  }
   const trajectory = opts.trajectory || createTrajectory();
+
+  function attachTodo(payload) {
+    const todo = planStore.formatBlock();
+    if (!todo) return payload;
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      return { ...payload, todo };
+    }
+    return { result: payload, todo };
+  }
+
+  function textResultWithTodo(payload) {
+    return textResult(attachTodo(payload));
+  }
 
   const catalog = defineTool({
     name: "catalog",
@@ -136,9 +158,10 @@ export function createStudioPiTools(opts) {
       "List Studio tools (lean). Default = high-use starter set. Pass q or category to search. Then describe/invoke by name. Never invent studio_* as top-level Pi tools.",
     promptSnippet: "List Studio API tools (then invoke by name)",
     promptGuidelines: [
-      "Only Pi tools are catalog, describe, invoke, inspect, remember, skills, plan.",
+      "Only Pi tools are catalog, describe, invoke, inspect, remember, skills, plan, ask.",
       "Prefer catalog with q= (e.g. q=post, q=generate, q=move) — avoid dumping everything.",
       "Load a skill pack with skills before multi-step work.",
+      "For 2+ step jobs: plan set first, update statuses as you go (todo reinjects automatically).",
       "Never call studio_* as a top-level tool name.",
     ],
     parameters: Type.Object({
@@ -348,7 +371,7 @@ export function createStudioPiTools(opts) {
                 pendingApproval: Boolean(approval?.pendingApproval),
                 bytes: observationByteBudget(compact),
               });
-              return textResult(compact);
+              return textResultWithTodo(compact);
             }
           } else {
             const fail = {
@@ -364,7 +387,7 @@ export function createStudioPiTools(opts) {
               ok: false,
               error: fail.error,
             });
-            return textResult(fail);
+            return textResultWithTodo(fail);
           }
         }
 
@@ -427,7 +450,7 @@ export function createStudioPiTools(opts) {
           result: compact,
           error: result?.error,
         });
-        return textResult(compact);
+        return textResultWithTodo(compact);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         trajectory.recordTool({ toolName, ok: false, error: message });
@@ -437,7 +460,7 @@ export function createStudioPiTools(opts) {
           ok: false,
           error: message,
         });
-        return textResult({ ok: false, toolName, error: message });
+        return textResultWithTodo({ ok: false, toolName, error: message });
       }
     },
   });
@@ -696,8 +719,8 @@ export function createStudioPiTools(opts) {
     name: "plan",
     label: "Plan",
     description:
-      "Optional multi-step checklist for jobs with 3+ steps. Actions: get | set | update | clear. Skip for one-shot post/move/send.",
-    promptSnippet: "Maintain a short todo plan for this turn",
+      "Required checklist when a job needs 2+ tool steps. Actions: get | set | update | clear. set at start; update to doing/done as you go. Latest TODO reinjects into later tool results.",
+    promptSnippet: "Maintain a short todo plan for multi-step work",
     parameters: Type.Object({
       action: Type.Union([
         Type.Literal("get"),
@@ -724,24 +747,96 @@ export function createStudioPiTools(opts) {
     }),
     async execute(_toolCallId, params) {
       const action = params.action;
-      if (action === "get") return textResult({ ok: true, plan: planStore.get() });
-      if (action === "clear") return textResult(planStore.clear());
+      if (action === "get") {
+        return textResultWithTodo({ ok: true, plan: planStore.get() });
+      }
+      if (action === "clear") {
+        return textResultWithTodo(planStore.clear());
+      }
       if (action === "set") {
-        return textResult({
+        const steps = params.steps || [];
+        if (steps.length < 2) {
+          return textResultWithTodo({
+            ok: false,
+            error: "plan set needs 2+ steps (skip plan for one-shot actions)",
+          });
+        }
+        return textResultWithTodo({
           ok: true,
-          plan: planStore.set(params.goal || "", params.steps || []),
+          plan: planStore.set(params.goal || "", steps),
         });
       }
       if (action === "update") {
-        return textResult(
+        return textResultWithTodo(
           planStore.update(String(params.id || ""), String(params.status || "")),
         );
       }
-      return textResult({ ok: false, error: "unknown plan action" });
+      return textResultWithTodo({ ok: false, error: "unknown plan action" });
     },
   });
 
-  return [catalog, describe, invoke, inspect, remember, skills, plan];
+  const ask = defineTool({
+    name: "ask",
+    label: "Ask",
+    description:
+      "Ask the user 1–4 structured questions (multi-choice + optional custom). Use only for material unknowns (aspect, subject, direction). Ends the turn until they answer in chat. Prefer assuming + estimate for noncritical gaps.",
+    promptSnippet: "Ask clarifying multiple-choice questions",
+    parameters: Type.Object({
+      intro: Type.Optional(
+        Type.String({ description: "One short line above the questions" }),
+      ),
+      questions: Type.Array(
+        Type.Object({
+          id: Type.String(),
+          prompt: Type.String(),
+          options: Type.Array(
+            Type.Union([
+              Type.String(),
+              Type.Object({
+                id: Type.Optional(Type.String()),
+                label: Type.String(),
+              }),
+            ]),
+          ),
+          allowCustom: Type.Optional(Type.Boolean()),
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params) {
+      if (typeof opts.onAskRequired !== "function") {
+        return textResultWithTodo({
+          ok: false,
+          error: "ask UI not configured",
+        });
+      }
+      const questions = Array.isArray(params.questions) ? params.questions : [];
+      if (!questions.length) {
+        return textResultWithTodo({
+          ok: false,
+          error: "ask requires questions[]",
+        });
+      }
+      const result = await opts.onAskRequired({
+        intro: params.intro,
+        questions,
+      });
+      trajectory.recordTool({
+        toolName: "ask",
+        ok: true,
+        pendingApproval: false,
+        bytes: observationByteBudget(result),
+      });
+      return textResultWithTodo({
+        ok: true,
+        pendingAsk: true,
+        questionId: result?.questionId,
+        message: "Waiting for answers in chat — stop this turn.",
+        todo: planStore.formatBlock() || undefined,
+      });
+    },
+  });
+
+  return [catalog, describe, invoke, inspect, remember, skills, plan, ask];
 }
 
 export { createTrajectory };

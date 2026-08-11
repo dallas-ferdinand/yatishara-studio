@@ -157,6 +157,7 @@ async function runPiTurn(body, abortSignal) {
     callbackBase,
     workerCallbackToken,
     byokFallbackNote,
+    seedPlanJson,
   } = body;
 
   if (!capabilityToken) {
@@ -189,6 +190,7 @@ async function runPiTurn(body, abortSignal) {
 
   try {
     let approvalCreated = false;
+    let askCreated = false;
     const mod = await import("@earendil-works/pi-coding-agent");
     const { createAgentSession, SessionManager } = mod;
 
@@ -200,6 +202,15 @@ async function runPiTurn(body, abortSignal) {
       lane: laneEarly,
       message: String(message || ""),
     });
+
+    let seedPlan = null;
+    if (seedPlanJson) {
+      try {
+        seedPlan = typeof seedPlanJson === "string" ? JSON.parse(seedPlanJson) : seedPlanJson;
+      } catch {
+        seedPlan = null;
+      }
+    }
 
     const tools = createStudioPiTools({
       apiBase: studioApiBase,
@@ -214,7 +225,15 @@ async function runPiTurn(body, abortSignal) {
           "marketplace",
         ],
       trajectory,
+      seedPlan,
       getBearerToken: async () => capabilityToken,
+      onPlanChange: (snap) => {
+        if (!runId || !callbackBase) return;
+        void callback(callbackBase, workerCallbackToken, "plan-sync", {
+          runId,
+          planJson: JSON.stringify(snap),
+        });
+      },
       onBeforeInvoke: async ({ toolName, args }) =>
         callback(callbackBase, workerCallbackToken, "tool-start", {
           ownerId: userId,
@@ -234,6 +253,17 @@ async function runPiTurn(body, abortSignal) {
           result,
           error,
         });
+      },
+      onAskRequired: async ({ intro, questions }) => {
+        askCreated = true;
+        const ask = await callback(callbackBase, workerCallbackToken, "ask", {
+          ownerId: userId,
+          threadId,
+          runId,
+          intro,
+          questions,
+        });
+        return ask;
       },
       onApprovalRequired: async ({ toolName, args, tool, toolCallId }) => {
         if (autoApprove) {
@@ -351,7 +381,7 @@ async function runPiTurn(body, abortSignal) {
 
     const system = [
       "Yatishara Studio Agent. Act with tools — don't advise how unless asked.",
-      "Pi tools: catalog, describe, invoke, inspect, remember, skills, plan.",
+      "Pi tools: catalog, describe, invoke, inspect, remember, skills, plan, ask.",
       "Studio actions: invoke {name:\"studio_*\", args:{...}}. Never call studio_* as a top-level tool.",
       "catalog: starter set by default; q= or category= to search. describe if args unclear.",
       skillPromptBlock(),
@@ -359,19 +389,24 @@ async function runPiTurn(body, abortSignal) {
       "Video models: only from studio_list_video_models (or known slugs seedance-2.5 / seedance-2.0). Talk about motion/light/res/length. Never invent caps, features, or legacy/pipeline marketing.",
       "Bias to action: for vague creative asks, assume strong defaults and DO the next useful tool step (usually estimate, then generate → approval). Do not offer a menu of options.",
       "Assumptions: pick model seedance-2.5, duration ~8s (clamp to model max), aspect from attached still or 16:9, cinematic unless they said hypermotion/chaos. Disclose assumptions in one short line after tools run.",
-      "Clarify only for material unknowns that change the outcome (wrong subject, wrong aspect they care about, missing required id). Prefer estimate first, then one short verify if needed — never a laundry list before acting.",
+      "TODO: if the job needs 2+ tool steps, call plan {action:\"set\", goal, steps:[...]} first. Mark steps doing/done with plan update as you go. The latest TODO is reinjected on every tool result — follow it.",
+      "ask: only for material unknowns (aspect/subject/direction that would change the gen). 1–4 multi-choice questions, then stop. Never ask readiness menus.",
+      "Clarify only for material unknowns. Prefer estimate first, then ask if needed — never a laundry list before acting.",
       "Never end with 'Would you like me to A, B, or C?' — pick the best next step and invoke it.",
-      "plan: only for 3+ step jobs (set/update/get). Skip for one-shot post/move/send.",
+      "plan: skip only for true one-shots (post/move/send one item).",
       "Attached chips are primary scope — use their ids. Tokens like [asset:Name id=…] are chips.",
       "Orient: studio_workspace_tree {} or studio_search. folder_contents needs a real folderId.",
       "Ambiguity: if attached ids cover the action, invoke now. Ask only when a required arg is missing.",
       "Cost: for paid generate, estimate first when the user did not clearly confirm spend, then proceed to generate (approval card handles spend).",
       "Paid/destructive/outbound/admin → approval card (stop; chat UI handles it).",
-      "Done criteria: never claim success unless invoke ok (or pendingApproval). Follow verifyHint / verified.",
+      "Done criteria: never claim success unless invoke ok (or pendingApproval / pendingAsk). Follow verifyHint / verified.",
       "Failures: on error → fix args or catalog/describe → retry once → then tell the user the error. Never invent 'tool unavailable'.",
       "inspect: only for pixels beyond attached vision; max 8; videos → pull frames first.",
       "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets. No ids/JSON/debug talk.",
       "remember for durable prefs. Admin only if admin. Never touch other users' data.",
+      seedPlan?.steps?.length
+        ? `Existing TODO to continue:\n${JSON.stringify(seedPlan)}`
+        : "",
       lane,
       byokFallbackNote || "",
       memoryBlock,
@@ -453,7 +488,7 @@ async function runPiTurn(body, abortSignal) {
       (typeof session.getLastAssistantText === "function"
         ? session.getLastAssistantText()
         : null) || "";
-    if (approvalCreated) {
+    if (approvalCreated || askCreated) {
       try {
         session.dispose?.();
       } catch {
@@ -462,7 +497,8 @@ async function runPiTurn(body, abortSignal) {
       const traj = trajectory.snapshot();
       console.log("[studio-agent] trajectory", JSON.stringify(traj));
       return {
-        pendingApproval: true,
+        pendingApproval: approvalCreated || undefined,
+        pendingAsk: askCreated || undefined,
         usage: { inputTokens, outputTokens },
         model: `${session.model?.provider || PLATFORM_PROVIDER}/${session.model?.id || PLATFORM_MODEL}`,
         trajectory: traj,
@@ -511,6 +547,7 @@ const server = createServer(async (req, res) => {
             "remember",
             "skills",
             "plan",
+            "ask",
           ],
         }),
       );

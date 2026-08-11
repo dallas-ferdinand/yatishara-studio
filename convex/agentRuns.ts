@@ -9,6 +9,7 @@ const runStatus = v.union(
   v.literal("queued"),
   v.literal("running"),
   v.literal("awaiting_approval"),
+  v.literal("awaiting_question"),
   v.literal("completed"),
   v.literal("failed"),
   v.literal("cancelled"),
@@ -17,6 +18,7 @@ const runStatus = v.union(
 const toolStatus = v.union(
   v.literal("started"),
   v.literal("pending_approval"),
+  v.literal("pending_question"),
   v.literal("completed"),
   v.literal("failed"),
   v.literal("cancelled"),
@@ -72,6 +74,37 @@ export const markAwaitingApproval = internalMutation({
     if (!row || row.status === "cancelled") return null;
     await ctx.db.patch(row._id, {
       status: "awaiting_approval",
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const markAwaitingQuestion = internalMutation({
+  args: { runId: v.id("agentRuns") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("agentRuns", args.runId);
+    if (!row || row.status === "cancelled") return null;
+    await ctx.db.patch(row._id, {
+      status: "awaiting_question",
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const setPlanJson = internalMutation({
+  args: {
+    runId: v.id("agentRuns"),
+    planJson: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("agentRuns", args.runId);
+    if (!row || row.status === "cancelled") return null;
+    await ctx.db.patch(row._id, {
+      planJson: args.planJson.slice(0, 8000),
       updatedAt: Date.now(),
     });
     return null;
@@ -216,6 +249,7 @@ export const listForThread = authedQuery({
       creditsSpent: v.optional(v.number()),
       usedByok: v.optional(v.boolean()),
       model: v.optional(v.string()),
+      planJson: v.optional(v.string()),
       createdAt: v.number(),
       finishedAt: v.optional(v.number()),
     }),
@@ -238,6 +272,7 @@ export const listForThread = authedQuery({
       creditsSpent: row.creditsSpent,
       usedByok: row.usedByok,
       model: row.model,
+      planJson: row.planJson,
       createdAt: row.createdAt,
       finishedAt: row.finishedAt,
     }));

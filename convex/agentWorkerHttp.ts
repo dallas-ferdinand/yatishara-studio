@@ -156,6 +156,48 @@ export const agentWorkerCallback = httpAction(async (ctx, request) => {
       return jsonResponse({ ok: true, memoryId });
     }
 
+    if (request.method === "POST" && path.endsWith("/agent-worker/plan-sync")) {
+      const body = await readJsonBody<{
+        runId: string;
+        planJson: string;
+      }>(request);
+      if (!body.runId) return errorResponse("runId required", 400);
+      await ctx.runMutation(internal.agentRuns.setPlanJson, {
+        runId: body.runId as Id<"agentRuns">,
+        planJson: String(body.planJson || "{}"),
+      });
+      return jsonResponse({ ok: true });
+    }
+
+    if (request.method === "POST" && path.endsWith("/agent-worker/ask")) {
+      const body = await readJsonBody<{
+        ownerId: string;
+        threadId: string;
+        runId?: string;
+        toolCallId?: string;
+        intro?: string;
+        questions?: unknown;
+      }>(request);
+      const questionId = await ctx.runMutation(
+        internal.agentQuestions.createPendingInternal,
+        {
+          ownerId: body.ownerId as Id<"users">,
+          threadId: body.threadId as Id<"agentThreads">,
+          runId: body.runId
+            ? (body.runId as Id<"agentRuns">)
+            : undefined,
+          intro: body.intro,
+          questionsJson: JSON.stringify(body.questions ?? []),
+        },
+      );
+      return jsonResponse({
+        ok: true,
+        pendingAsk: true,
+        questionId,
+        status: "pending",
+      });
+    }
+
     if (request.method === "GET" && path.endsWith("/agent-worker/run-status")) {
       const runId = url.searchParams.get("runId");
       if (!runId) return errorResponse("runId required", 400);

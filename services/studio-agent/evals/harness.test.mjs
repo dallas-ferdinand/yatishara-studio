@@ -174,14 +174,18 @@ test("skills pack surface", () => {
   assert.ok(matchSkills("hypermotion").some((s) => s.id === "prompt-hypermotion"));
 });
 
-test("plan store", () => {
+test("plan store formats and updates", () => {
   const store = createPlanStore();
   store.set("Ship post", ["share", "verify"]);
   assert.equal(store.get().open, 2);
+  assert.match(store.formatBlock(), /\[ \] s1: share/);
+  store.update("s1", "doing");
+  assert.match(store.formatBlock(), /\[~\] s1: share/);
   store.update("s1", "done");
   assert.equal(store.get().open, 1);
   store.clear();
   assert.equal(store.get().steps.length, 0);
+  assert.equal(store.formatBlock(), "");
 });
 
 test("trajectory + observation mask", () => {

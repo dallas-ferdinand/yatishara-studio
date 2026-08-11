@@ -496,6 +496,7 @@ export function StudioAgentPane({
 }: StudioAgentPaneProps) {
   const createThread = useMutation(api.agentThreads.create);
   const decideApproval = useMutation(api.agentApprovals.decide);
+  const answerQuestions = useMutation(api.agentQuestions.answer);
   const cancelRun = useMutation(api.agentRuns.requestCancel);
   const ensureMessagesFolder = useMutation(api.folders.ensureMessagesFolderForMe);
   const reserveUpload = useMutation(api.assets.reserveUpload);
@@ -534,6 +535,10 @@ export function StudioAgentPane({
     api.agentApprovals.listForThread,
     activeThreadId ? { threadId: activeThreadId } : "skip",
   );
+  const questions = useQuery(
+    api.agentQuestions.listForThread,
+    activeThreadId ? { threadId: activeThreadId } : "skip",
+  );
   const toolCalls = useQuery(
     api.agentRuns.listToolCallsForThread,
     activeThreadId ? { threadId: activeThreadId, limit: 40 } : "skip",
@@ -556,12 +561,15 @@ export function StudioAgentPane({
     () =>
       activeRunId ??
       ((runs ?? []).find((row: { status: string }) =>
-        ["queued", "running", "awaiting_approval"].includes(row.status),
+        ["queued", "running", "awaiting_approval", "awaiting_question"].includes(row.status),
       )?._id ?? null),
     [activeRunId, runs],
   );
   const awaitingApproval = useMemo(
-    () => (runs ?? []).some((row: { status: string }) => row.status === "awaiting_approval"),
+    () =>
+      (runs ?? []).some((row: { status: string }) =>
+        ["awaiting_approval", "awaiting_question"].includes(row.status),
+      ),
     [runs],
   );
   const autoApprove = Boolean(agentPreferences?.autoApprove);
@@ -895,6 +903,36 @@ export function StudioAgentPane({
     }
   }
 
+  async function handleAnswerQuestions(
+    questionId: Id<"agentQuestions">,
+    answers: Array<{
+      questionId: string;
+      optionId?: string;
+      optionLabel?: string;
+      customText?: string;
+    }>,
+  ) {
+    setBusy(true);
+    stickToBottomRef.current = true;
+    try {
+      const result = await answerQuestions({ questionId, answers });
+      if (!result.ok || !result.continueMessage) return;
+      const turn = await (sendTurn as any)({
+        threadId: result.threadId,
+        message: result.continueMessage,
+        autoApprove,
+        seedPlanJson: result.planJson,
+      });
+      if (turn?.runId) setActiveRunId(turn.runId as Id<"agentRuns">);
+      if (!turn?.ok && turn?.error) toast.error(turn.error);
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not continue after answers"));
+    } finally {
+      setBusy(false);
+      setActiveRunId(null);
+    }
+  }
+
   const hasMessages = hasTurns;
   const composerLocked = busy || awaitingApproval;
   const canSend = (Boolean(draft.trim()) || attachments.length > 0) && !composerLocked;
@@ -919,11 +957,13 @@ export function StudioAgentPane({
                 toolCalls={toolCalls ?? []}
                 runs={runs ?? []}
                 approvals={approvals ?? []}
+                questions={(questions ?? []) as any}
                 busy={busy}
                 activeRunId={cancellableRunId}
                 pendingUserText={pendingUserText}
                 pendingAttachments={pendingAttachments}
                 onDecideApproval={handleDecide}
+                onAnswerQuestions={handleAnswerQuestions}
                 onOpenFolder={onOpenFolder}
               />
             )}

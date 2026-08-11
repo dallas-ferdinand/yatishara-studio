@@ -407,6 +407,147 @@
   width: 100%;
 }
 
+.studio-agent-todo-card,
+.studio-agent-ask-card {
+  margin: 8px 0 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 12%, transparent);
+  background: color-mix(in srgb, var(--mos-surface, #fff) 92%, var(--mos-ink, #111));
+  max-width: 420px;
+}
+
+.studio-agent-todo-kicker,
+.studio-agent-ask-kicker {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.studio-agent-todo-goal {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.studio-agent-todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.studio-agent-todo-list li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.studio-agent-todo-list li.is-done {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.studio-agent-todo-list li.is-doing {
+  font-weight: 600;
+}
+
+.studio-agent-todo-mark {
+  width: 1em;
+  flex: none;
+  opacity: 0.7;
+}
+
+.studio-agent-ask-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.studio-agent-ask-progress {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.55;
+}
+
+.studio-agent-ask-intro {
+  margin: 8px 0 0;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.studio-agent-ask-prompt {
+  margin: 10px 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.studio-agent-ask-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.studio-agent-ask-option {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 14%, transparent);
+  background: transparent;
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.studio-agent-ask-option:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mos-ink, #111) 5%, transparent);
+}
+
+.studio-agent-ask-option.is-primary {
+  background: color-mix(in srgb, var(--mos-ink, #111) 88%, transparent);
+  color: var(--mos-surface, #fff);
+  border-color: transparent;
+}
+
+.studio-agent-ask-option.is-muted {
+  opacity: 0.75;
+  border-style: dashed;
+}
+
+.studio-agent-ask-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.studio-agent-ask-custom input {
+  border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 14%, transparent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  background: transparent;
+}
+
+.studio-agent-ask-summary {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.studio-agent-ask-card.is-done {
+  opacity: 0.75;
+}
+
 .studio-agent-media-caption {
   font-size: 11px;
   line-height: 1.3;

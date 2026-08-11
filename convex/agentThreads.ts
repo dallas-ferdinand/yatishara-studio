@@ -41,6 +41,7 @@ export const listMessages = authedQuery({
       attachmentsJson: v.optional(v.string()),
       toolName: v.optional(v.string()),
       approvalId: v.optional(v.id("agentApprovals")),
+      questionId: v.optional(v.id("agentQuestions")),
       status: v.optional(v.string()),
       createdAt: v.number(),
     }),
@@ -59,6 +60,7 @@ export const listMessages = authedQuery({
       attachmentsJson: row.attachmentsJson,
       toolName: row.toolName,
       approvalId: row.approvalId,
+      questionId: row.questionId,
       status: row.status,
       createdAt: row.createdAt,
     }));

@@ -44,6 +44,7 @@ export type AgentRunRow = {
   userMessage: string;
   status: string;
   createdAt: number;
+  planJson?: string;
 };
 
 export type AgentApprovalRow = {
