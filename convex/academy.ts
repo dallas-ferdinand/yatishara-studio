@@ -927,6 +927,37 @@ export const adminGrantCourse = adminMutation({
   },
 });
 
+/** Internal ops: free course grant by user id (no admin session). */
+export const internalGrantCourse = internalMutation({
+  args: {
+    courseId: v.id("academyCourses"),
+    userId: v.id("users"),
+    grantedByAdminId: v.optional(v.id("users")),
+  },
+  returns: v.id("academyPurchases"),
+  handler: async (ctx, args) => {
+    const course = await ctx.db.get("academyCourses", args.courseId);
+    if (!course) throw new Error("Course not found");
+    const user = await ctx.db.get("users", args.userId);
+    if (!user) throw new Error("User not found");
+    const existing = await findPurchase(ctx, args.userId, args.courseId);
+    if (existing) return existing._id;
+    const now = Date.now();
+    const purchaseId = await ctx.db.insert("academyPurchases", {
+      userId: args.userId,
+      courseId: args.courseId,
+      priceCredits: 0,
+      grantedByAdminId: args.grantedByAdminId,
+      purchasedAt: now,
+    });
+    await ctx.db.patch(args.courseId, {
+      purchaseCount: course.purchaseCount + 1,
+      updatedAt: now,
+    });
+    return purchaseId;
+  },
+});
+
 async function revokeCoursePurchaseWithRefund(
   ctx: MutationCtx,
   purchaseId: Id<"academyPurchases">,
