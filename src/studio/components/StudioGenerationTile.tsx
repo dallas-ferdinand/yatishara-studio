@@ -92,8 +92,8 @@ export function StudioGenerationTile({
       : posterUrl;
   const canPlay =
     tile.stage === "done" &&
-    ((tile.kind === "image" && Boolean(imageSrc)) ||
-      (tile.kind === "video" && Boolean(videoSrc || posterUrl)));
+    tile.kind === "video" &&
+    Boolean(videoSrc || posterUrl);
   const canUpscale = tile.kind === "image" && tile.stage === "done" && Boolean(tile.assetId);
   const canVideo = tile.kind === "image" && tile.stage === "done" && Boolean(tile.assetId);
 
