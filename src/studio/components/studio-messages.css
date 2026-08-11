@@ -1351,7 +1351,7 @@
   align-items: stretch;
   gap: 0;
   width: 100%;
-  max-width: calc(var(--studio-chat-column-max, min(92%, 36rem)) + 18px);
+  max-width: var(--studio-composer-shell-max, min(600px, 94vw));
   margin-inline: auto;
   box-sizing: border-box;
   padding: 0 12px max(10px, env(safe-area-inset-bottom, 0px));
@@ -1710,10 +1710,10 @@
   background: transparent;
   color: var(--color-cursor-text-bright, var(--mos-text));
   font: inherit;
-  /* Bubbles = 13px / normal; composer = slightly bigger + bolder. */
-  font-size: 13.5px;
+  /* Match Create composer text rhythm. */
+  font-size: 13px;
   font-weight: 550;
-  line-height: 18px;
+  line-height: 22px;
   outline: none;
   box-shadow: none;
   scrollbar-width: none;
