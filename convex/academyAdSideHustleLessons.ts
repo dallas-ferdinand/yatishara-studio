@@ -1,9 +1,9 @@
 /**
  * Ad Side Hustle lessons — seed via:
- *   npx convex run academy:internalSeedAdSideHustleLessons
+ *   npx convex run academyAdSideHustleLessons:internalSeedAdSideHustleLessons
  *
- * Lessons stay draft until Stream video is attached (publish gate).
- * Lesson 0 (The Ad Flywheel) has no cover — UI falls back to the course banner.
+ * Course overview row in the rail = Intro (course description / intro video).
+ * "The Ad Flywheel" was retired 2026-08-11 — not a separate lesson.
  */
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
@@ -11,24 +11,15 @@ import type { Id } from "./_generated/dataModel";
 
 export const AD_SIDE_HUSTLE_SLUG = "ad-side-hustle";
 
-/** Locked titles 2026-08-11 (Dallas). */
-export const AD_SIDE_HUSTLE_LESSONS = [
-  {
-    slug: "the-ad-flywheel",
-    title: "The Ad Flywheel",
-    sortOrder: 10,
-    descriptionMarkdown: `Map the full side-hustle flywheel once so nothing feels random.
+/** Retired lesson slugs — deleted on seed so they cannot reappear. */
+const RETIRED_LESSON_SLUGS = ["the-ad-flywheel"] as const;
 
-### You leave knowing
-- The end state: ad running → WhatsApp sales
-- How each later lesson fits the flywheel
-- What to build first vs what to sell later
-`,
-  },
+/** Locked titles 2026-08-11 (Dallas). Updated: no Flywheel lesson — Intro covers that. */
+export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "getting-started-with-studio",
     title: "Getting Started with Studio",
-    sortOrder: 20,
+    sortOrder: 10,
     descriptionMarkdown: `Create your Studio account, verify email, and learn where everything lives.
 
 ### You leave knowing
@@ -40,7 +31,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "make-your-first-flyer-in-studio",
     title: "Make Your First Flyer in Studio",
-    sortOrder: 30,
+    sortOrder: 20,
     descriptionMarkdown: `Walk one real flyer end-to-end. Clicks over theory.
 
 ### You leave knowing
@@ -52,7 +43,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "prompt-with-agent",
     title: "Prompt with Agent",
-    sortOrder: 40,
+    sortOrder: 30,
     descriptionMarkdown: `Brief Agent so prompts match the flyer and brand. See good vs weak prompts.
 
 ### You leave knowing
@@ -64,7 +55,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "generate-the-video",
     title: "Generate the Video",
-    sortOrder: 50,
+    sortOrder: 40,
     descriptionMarkdown: `Take those prompts into generation. Pick the cut. Keep it practical.
 
 ### You leave knowing
@@ -76,7 +67,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "create-the-audio-in-studio",
     title: "Create the Audio in Studio",
-    sortOrder: 60,
+    sortOrder: 50,
     descriptionMarkdown: `Music and voiceover inside Studio for this ad.
 
 ### You leave knowing
@@ -88,7 +79,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "edit-watermark-export",
     title: "Edit & Watermark Export",
-    sortOrder: 70,
+    sortOrder: 60,
     descriptionMarkdown: `Assemble video + audio in the Studio editor. Export the watermarked delivery cut.
 
 ### You leave knowing
@@ -100,7 +91,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "post-on-tiktok-winning-format",
     title: "Post on TikTok (The Winning Format)",
-    sortOrder: 80,
+    sortOrder: 70,
     descriptionMarkdown: `Build and post the short format: ~4s hook → 15s ad → ~4s CTA.
 
 ### Format
@@ -117,7 +108,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "boost-for-tiktok-dms",
     title: "Boost for TikTok DMs",
-    sortOrder: 90,
+    sortOrder: 80,
     descriptionMarkdown: `Boost / run paid on that TikTok post. Aim for DMs, not vanity views.
 
 ### You leave knowing
@@ -129,7 +120,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "funnel-tiktok-dms-to-whatsapp",
     title: "Funnel TikTok DMs to WhatsApp",
-    sortOrder: 100,
+    sortOrder: 90,
     descriptionMarkdown: `Cut noise. Ask for WhatsApp. Only move people who will convert.
 
 ### You leave knowing
@@ -141,7 +132,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "close-on-whatsapp-packages",
     title: "Close on WhatsApp (Info, Price, Packages)",
-    sortOrder: 110,
+    sortOrder: 100,
     descriptionMarkdown: `What to ask, how much to charge, packages, soft close, and deposit path.
 
 ### You leave knowing
@@ -153,7 +144,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "tags-followups-retention-sales",
     title: "Tags, Follow-ups, Retention, Quick Sales",
-    sortOrder: 120,
+    sortOrder: 110,
     descriptionMarkdown: `Manage chats with tags. Follow up. Keep clients coming back. Every ~2 weeks, run a quick sale to pull ad spend back.
 
 ### You leave knowing
@@ -165,7 +156,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "the-10-usd-loop",
     title: "The $10 USD Loop",
-    sortOrder: 130,
+    sortOrder: 120,
     descriptionMarkdown: `Reviews + client care. Put the same video back up as an ad at ~$10 USD/day and run the flywheel again.
 
 ### You leave knowing
@@ -177,7 +168,7 @@ export const AD_SIDE_HUSTLE_LESSONS = [
   {
     slug: "bonus-usd-payment-hacks",
     title: "Bonus (USD & Payment Hacks)",
-    sortOrder: 140,
+    sortOrder: 130,
     descriptionMarkdown: `Practical ways to access USD and get payments moving so you can fund ads without getting stuck.
 
 ### Tips covered
@@ -205,7 +196,8 @@ function slugify(input: string): string {
 /**
  * Idempotent by lesson slug under Ad Side Hustle.
  * Creates missing lessons; updates title/description/sort on existing.
- * Does not publish (video still required).
+ * Deletes retired slugs (e.g. the-ad-flywheel).
+ * Does not publish (video still required for admin publish gate).
  */
 export const internalSeedAdSideHustleLessons = internalMutation({
   args: {},
@@ -213,6 +205,7 @@ export const internalSeedAdSideHustleLessons = internalMutation({
     courseId: v.id("academyCourses"),
     created: v.number(),
     updated: v.number(),
+    deleted: v.number(),
     lessons: v.array(
       v.object({
         lessonId: v.id("academyLessons"),
@@ -241,12 +234,28 @@ export const internalSeedAdSideHustleLessons = internalMutation({
     const now = Date.now();
     let created = 0;
     let updated = 0;
+    let deleted = 0;
     const lessons: Array<{
       lessonId: Id<"academyLessons">;
       slug: string;
       title: string;
       created: boolean;
     }> = [];
+
+    for (const retired of RETIRED_LESSON_SLUGS) {
+      const row = bySlug.get(retired);
+      if (!row) continue;
+      const comments = await ctx.db
+        .query("academyComments")
+        .withIndex("by_lesson_and_created", (q) => q.eq("lessonId", row._id))
+        .collect();
+      for (const comment of comments) {
+        await ctx.db.delete(comment._id);
+      }
+      await ctx.db.delete(row._id);
+      bySlug.delete(retired);
+      deleted += 1;
+    }
 
     for (const seed of AD_SIDE_HUSTLE_LESSONS) {
       const slug = slugify(seed.slug);
@@ -287,7 +296,7 @@ export const internalSeedAdSideHustleLessons = internalMutation({
     }
 
     await ctx.db.patch(course._id, { updatedAt: now });
-    return { courseId: course._id, created, updated, lessons };
+    return { courseId: course._id, created, updated, deleted, lessons };
   },
 });
 

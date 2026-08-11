@@ -246,8 +246,8 @@ function LessonRail({
                     0
                   </span>
                   <span className="studio-academy-lesson-meta">
-                    <strong>{detail.title}</strong>
-                    <small>Intro</small>
+                    <strong>Intro</strong>
+                    <small>{detail.title}</small>
                   </span>
                 </button>
               </li>
