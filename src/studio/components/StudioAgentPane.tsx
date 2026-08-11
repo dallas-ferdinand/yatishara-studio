@@ -214,11 +214,15 @@ function readComposerEditorText(editor: HTMLDivElement | null) {
 function pruneDuplicateComposerTokens(editor: HTMLDivElement | null) {
   if (!editor) return;
   const seenTokenIds = new Set<string>();
+  const seenAttachmentIds = new Set<string>();
   for (const node of Array.from(editor.querySelectorAll(".studio-inline-tag"))) {
     const token = node as HTMLElement;
     const tokenId = token.dataset.tokenId;
-    if (!tokenId) continue;
-    if (seenTokenIds.has(tokenId)) {
+    const attachmentId = token.dataset.attachmentId;
+    const isDup =
+      (tokenId && seenTokenIds.has(tokenId)) ||
+      (attachmentId && seenAttachmentIds.has(attachmentId));
+    if (isDup) {
       const after = token.nextSibling;
       token.remove();
       if (after?.nodeType === Node.TEXT_NODE && /^\s*$/.test(after.nodeValue ?? "")) {
@@ -226,67 +230,17 @@ function pruneDuplicateComposerTokens(editor: HTMLDivElement | null) {
       }
       continue;
     }
-    seenTokenIds.add(tokenId);
+    if (tokenId) seenTokenIds.add(tokenId);
+    if (attachmentId) seenAttachmentIds.add(attachmentId);
   }
 }
 
-type ParkedComposerToken = {
-  token: HTMLElement;
-  spacer: ChildNode | null;
-  marker: Comment;
-};
-
-let parkedComposerToken: ParkedComposerToken | null = null;
-
-function parkComposerToken(token: HTMLElement) {
-  const spacer =
-    token.nextSibling?.nodeType === Node.TEXT_NODE &&
-    /^\s*$/.test(token.nextSibling.nodeValue ?? "")
-      ? token.nextSibling
-      : null;
-  const marker = document.createComment("studio-composer-token-park");
-  token.parentNode?.insertBefore(marker, token);
-  token.remove();
-  spacer?.remove();
-  parkedComposerToken = { token, spacer, marker };
-}
-
-function restoreParkedComposerToken() {
-  const parked = parkedComposerToken;
-  if (!parked?.marker.parentNode) {
-    parkedComposerToken = null;
-    return;
-  }
-  parked.marker.parentNode.insertBefore(parked.token, parked.marker);
-  if (parked.spacer) {
-    parked.marker.parentNode.insertBefore(parked.spacer, parked.marker);
-  }
-  parked.marker.remove();
-  parked.token.classList.remove("is-dragging");
-  parkedComposerToken = null;
-}
-
-function placeParkedComposerToken(editor: HTMLDivElement | null, insertRange: Range | null) {
-  const parked = parkedComposerToken;
-  if (!parked || !editor) return false;
-  const range = normalizeComposerInsertRange(
-    editor,
-    insertRange ? insertRange.cloneRange() : ensureSelectionInEditor(editor),
-  );
-  if (!range) return false;
-  parked.marker.remove();
-  const spacer = document.createTextNode(" ");
-  range.insertNode(spacer);
-  range.insertNode(parked.token);
-  parked.token.classList.remove("is-dragging");
-  range.setStart(spacer, spacer.nodeValue?.length ?? 1);
-  range.collapse(true);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-  editor.focus();
-  parkedComposerToken = null;
-  return true;
+function moveComposerDraggedToken(editor: HTMLDivElement | null, tokenId: string) {
+  if (!editor || !tokenId) return;
+  const token = editor.querySelector(`[data-token-id="${CSS.escape(tokenId)}"]`);
+  const next = token?.nextSibling;
+  token?.remove();
+  if (next?.nodeType === Node.TEXT_NODE && /^\s*$/.test(next.nodeValue ?? "")) next.remove();
 }
 
 function createComposerAttachmentToken(attachment: AgentAttachment) {
@@ -303,26 +257,16 @@ function createComposerAttachmentToken(attachment: AgentAttachment) {
   token.dataset.attachment = JSON.stringify(attachment);
   token.addEventListener("dragstart", (event) => {
     token.classList.add("is-dragging");
+    // Match Create: custom MIME only — no text/plain bait for contentEditable.
     event.dataTransfer?.setData(
       "application/x-studio-composer-token",
       JSON.stringify({ ...attachment, tokenId: token.dataset.tokenId }),
     );
-    event.dataTransfer?.setData("text/plain", attachment.label || "attachment");
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = "move";
     }
-    // Park immediately so contentEditable cannot clone the chip on drop.
-    window.requestAnimationFrame(() => {
-      if (token.isConnected) parkComposerToken(token);
-    });
   });
-  token.addEventListener("dragend", () => {
-    if (parkedComposerToken?.token === token) {
-      restoreParkedComposerToken();
-    } else {
-      token.classList.remove("is-dragging");
-    }
-  });
+  token.addEventListener("dragend", () => token.classList.remove("is-dragging"));
 
   const kind = document.createElement("span");
   kind.className = "studio-inline-tag-kind";
@@ -459,44 +403,6 @@ function readComposerTokenDragData(dataTransfer: DataTransfer | null) {
   } catch {
     return null;
   }
-}
-
-function relocateComposerDraggedToken(
-  editor: HTMLDivElement | null,
-  tokenId: string,
-  insertRange: Range | null,
-) {
-  if (!editor || !tokenId) return false;
-  const token = editor.querySelector(`[data-token-id="${CSS.escape(tokenId)}"]`) as HTMLElement | null;
-  if (!token) return false;
-  const trailing =
-    token.nextSibling?.nodeType === Node.TEXT_NODE &&
-    /^\s*$/.test(token.nextSibling.nodeValue ?? "")
-      ? token.nextSibling
-      : null;
-  const range = normalizeComposerInsertRange(
-    editor,
-    insertRange ? insertRange.cloneRange() : ensureSelectionInEditor(editor),
-  );
-  if (!range) return false;
-  if (
-    token === range.startContainer ||
-    token.contains(range.startContainer)
-  ) {
-    return true;
-  }
-  token.remove();
-  trailing?.remove();
-  const spacer = document.createTextNode(" ");
-  range.insertNode(spacer);
-  range.insertNode(token);
-  range.setStart(spacer, spacer.nodeValue?.length ?? 1);
-  range.collapse(true);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-  editor.focus();
-  return true;
 }
 
 function rangeFromPointInEditor(editor: HTMLDivElement | null, clientX: number, clientY: number) {
@@ -964,25 +870,13 @@ export function StudioAgentPane({
               | Record<string, unknown>
               | null;
             if (tokenAttachment) {
-              const range = rangeFromPointInEditor(
+              // Exact Create path: remove original, insert once, then hard-dedupe.
+              moveComposerDraggedToken(editorRef.current, tokenAttachment.tokenId ?? "");
+              insertComposerAttachmentToken(
                 editorRef.current,
-                event.clientX,
-                event.clientY,
+                tokenAttachment,
+                rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
               );
-              if (!placeParkedComposerToken(editorRef.current, range)) {
-                // Park race: place at end rather than inserting a second chip.
-                if (!placeParkedComposerToken(editorRef.current, null)) {
-                  if (
-                    !relocateComposerDraggedToken(
-                      editorRef.current,
-                      tokenAttachment.tokenId ?? "",
-                      range,
-                    )
-                  ) {
-                    insertComposerAttachmentToken(editorRef.current, tokenAttachment, range);
-                  }
-                }
-              }
               pruneDuplicateComposerTokens(editorRef.current);
               setDraft(readComposerEditorText(editorRef.current));
               return;
@@ -992,6 +886,7 @@ export function StudioAgentPane({
                 entry,
                 rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
               );
+              pruneDuplicateComposerTokens(editorRef.current);
               return;
             }
             if (event.dataTransfer?.files?.length) {
@@ -1031,16 +926,47 @@ export function StudioAgentPane({
                 data-placeholder="Ask the agent to set up a project, generate, or work across Studio…"
                 className="cursor-composer-mention-editor"
                 onDragOver={(event) => {
-                  // Block contentEditable's native chip clone before our footer handler runs.
                   event.preventDefault();
+                  event.stopPropagation();
                   if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
                 }}
                 onDrop={(event) => {
-                  // Keep bubbling to the footer handler, but kill the native insert.
+                  // Own the drop here so contentEditable cannot clone, then stop bubble.
                   event.preventDefault();
+                  event.stopPropagation();
+                  setDragOver(false);
+                  const tokenAttachment = readComposerTokenDragData(event.dataTransfer) as
+                    | (AgentAttachment & { tokenId?: string })
+                    | null;
+                  const entry = readExplorerDragData(event.dataTransfer) as
+                    | Record<string, unknown>
+                    | null;
+                  if (tokenAttachment) {
+                    moveComposerDraggedToken(editorRef.current, tokenAttachment.tokenId ?? "");
+                    insertComposerAttachmentToken(
+                      editorRef.current,
+                      tokenAttachment,
+                      rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
+                    );
+                    pruneDuplicateComposerTokens(editorRef.current);
+                    setDraft(readComposerEditorText(editorRef.current));
+                    return;
+                  }
+                  if (entry) {
+                    attachAgentEntry(
+                      entry,
+                      rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
+                    );
+                    pruneDuplicateComposerTokens(editorRef.current);
+                    return;
+                  }
+                  if (event.dataTransfer?.files?.length) {
+                    void uploadAgentFiles(event.dataTransfer.files);
+                  }
                 }}
                 onInput={() => {
                   setDraft(readComposerEditorText(editorRef.current));
+                  pruneDuplicateComposerTokens(editorRef.current);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && !isMobile) {
