@@ -211,6 +211,84 @@ function readComposerEditorText(editor: HTMLDivElement | null) {
   return parts.join("").replace(/[ \t]+\n/g, "\n").replace(/\s{2,}/g, " ");
 }
 
+function pruneDuplicateComposerTokens(editor: HTMLDivElement | null) {
+  if (!editor) return;
+  const seenTokenIds = new Set<string>();
+  for (const node of Array.from(editor.querySelectorAll(".studio-inline-tag"))) {
+    const token = node as HTMLElement;
+    const tokenId = token.dataset.tokenId;
+    if (!tokenId) continue;
+    if (seenTokenIds.has(tokenId)) {
+      const after = token.nextSibling;
+      token.remove();
+      if (after?.nodeType === Node.TEXT_NODE && /^\s*$/.test(after.nodeValue ?? "")) {
+        after.remove();
+      }
+      continue;
+    }
+    seenTokenIds.add(tokenId);
+  }
+}
+
+type ParkedComposerToken = {
+  token: HTMLElement;
+  spacer: ChildNode | null;
+  marker: Comment;
+};
+
+let parkedComposerToken: ParkedComposerToken | null = null;
+
+function parkComposerToken(token: HTMLElement) {
+  const spacer =
+    token.nextSibling?.nodeType === Node.TEXT_NODE &&
+    /^\s*$/.test(token.nextSibling.nodeValue ?? "")
+      ? token.nextSibling
+      : null;
+  const marker = document.createComment("studio-composer-token-park");
+  token.parentNode?.insertBefore(marker, token);
+  token.remove();
+  spacer?.remove();
+  parkedComposerToken = { token, spacer, marker };
+}
+
+function restoreParkedComposerToken() {
+  const parked = parkedComposerToken;
+  if (!parked?.marker.parentNode) {
+    parkedComposerToken = null;
+    return;
+  }
+  parked.marker.parentNode.insertBefore(parked.token, parked.marker);
+  if (parked.spacer) {
+    parked.marker.parentNode.insertBefore(parked.spacer, parked.marker);
+  }
+  parked.marker.remove();
+  parked.token.classList.remove("is-dragging");
+  parkedComposerToken = null;
+}
+
+function placeParkedComposerToken(editor: HTMLDivElement | null, insertRange: Range | null) {
+  const parked = parkedComposerToken;
+  if (!parked || !editor) return false;
+  const range = normalizeComposerInsertRange(
+    editor,
+    insertRange ? insertRange.cloneRange() : ensureSelectionInEditor(editor),
+  );
+  if (!range) return false;
+  parked.marker.remove();
+  const spacer = document.createTextNode(" ");
+  range.insertNode(spacer);
+  range.insertNode(parked.token);
+  parked.token.classList.remove("is-dragging");
+  range.setStart(spacer, spacer.nodeValue?.length ?? 1);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  editor.focus();
+  parkedComposerToken = null;
+  return true;
+}
+
 function createComposerAttachmentToken(attachment: AgentAttachment) {
   const token = document.createElement("span");
   token.className = "studio-inline-tag";
@@ -233,8 +311,18 @@ function createComposerAttachmentToken(attachment: AgentAttachment) {
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = "move";
     }
+    // Park immediately so contentEditable cannot clone the chip on drop.
+    window.requestAnimationFrame(() => {
+      if (token.isConnected) parkComposerToken(token);
+    });
   });
-  token.addEventListener("dragend", () => token.classList.remove("is-dragging"));
+  token.addEventListener("dragend", () => {
+    if (parkedComposerToken?.token === token) {
+      restoreParkedComposerToken();
+    } else {
+      token.classList.remove("is-dragging");
+    }
+  });
 
   const kind = document.createElement("span");
   kind.className = "studio-inline-tag-kind";
@@ -881,15 +969,21 @@ export function StudioAgentPane({
                 event.clientX,
                 event.clientY,
               );
-              if (
-                !relocateComposerDraggedToken(
-                  editorRef.current,
-                  tokenAttachment.tokenId ?? "",
-                  range,
-                )
-              ) {
-                insertComposerAttachmentToken(editorRef.current, tokenAttachment, range);
+              if (!placeParkedComposerToken(editorRef.current, range)) {
+                // Park race: place at end rather than inserting a second chip.
+                if (!placeParkedComposerToken(editorRef.current, null)) {
+                  if (
+                    !relocateComposerDraggedToken(
+                      editorRef.current,
+                      tokenAttachment.tokenId ?? "",
+                      range,
+                    )
+                  ) {
+                    insertComposerAttachmentToken(editorRef.current, tokenAttachment, range);
+                  }
+                }
               }
+              pruneDuplicateComposerTokens(editorRef.current);
               setDraft(readComposerEditorText(editorRef.current));
               return;
             }
@@ -936,6 +1030,15 @@ export function StudioAgentPane({
                 suppressContentEditableWarning
                 data-placeholder="Ask the agent to set up a project, generate, or work across Studio…"
                 className="cursor-composer-mention-editor"
+                onDragOver={(event) => {
+                  // Block contentEditable's native chip clone before our footer handler runs.
+                  event.preventDefault();
+                  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => {
+                  // Keep bubbling to the footer handler, but kill the native insert.
+                  event.preventDefault();
+                }}
                 onInput={() => {
                   setDraft(readComposerEditorText(editorRef.current));
                 }}
