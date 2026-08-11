@@ -47,6 +47,43 @@ function workerUrl(): string {
   return (process.env.STUDIO_AGENT_URL ?? "").trim().replace(/\/$/, "");
 }
 
+/** Transient Docker/host blips (agent restart) → undici "fetch failed". */
+function isTransientFetchError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "AbortError") return false;
+  const msg = error.message.toLowerCase();
+  if (msg.includes("fetch failed")) return true;
+  if (msg.includes("econnrefused") || msg.includes("econnreset")) return true;
+  if (msg.includes("socket hang up") || msg.includes("network")) return true;
+  const cause = (error as Error & { cause?: { code?: string; message?: string } })
+    .cause;
+  const code = String(cause?.code ?? "").toUpperCase();
+  return (
+    code === "ECONNREFUSED" ||
+    code === "ECONNRESET" ||
+    code === "EPIPE" ||
+    code === "UND_ERR_CONNECT_TIMEOUT"
+  );
+}
+
+async function fetchPiTurn(
+  url: string,
+  init: RequestInit,
+  attempts = 3,
+): Promise<Response> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      last = error;
+      if (!isTransientFetchError(error) || i === attempts - 1) throw error;
+      await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    }
+  }
+  throw last instanceof Error ? last : new Error(String(last));
+}
+
 function workerToken(): string {
   return (process.env.STUDIO_AGENT_WORKER_TOKEN ?? "").trim();
 }
@@ -400,7 +437,7 @@ export const sendTurn = action({
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const res = await fetch(`${piBase}/v1/turn`, {
+      const res = await fetchPiTurn(`${piBase}/v1/turn`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
