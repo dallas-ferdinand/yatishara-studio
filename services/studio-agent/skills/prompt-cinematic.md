@@ -57,6 +57,17 @@ Enough concrete nouns and verbs that a stranger could block the shot. Prefer one
 ## Save prompt as a script (when they asked for a prompt)
 
 1. Write the full sealed prompt above — never a short vibe line.
-2. `studio_create_document` into **CWD** with title `Prompt — <short>` and the prompt inside a ```text fence.
+2. `studio_create_document` into **CWD** with title `Prompt — <short>` and this shape:
+
+~~~
+```text
+<sealed prompt>
+```
+
+References:
+- @Label | kind: image | path: /Studio/assets/{assetId} | studio: {assetId}
+~~~
+
+Asset ids only (attached/generated). No elements. Paste/Run in Studio hydrates chips from `References:`.
 3. Paste in chat only if they asked to see/copy it; otherwise tell them the file is in Files.
-4. If they also want a generate: estimate → storyboard still (people) → `studio_generate_video` with `folderId` = CWD. Quote cost as $ / TTD only.
+4. If they also want a generate: `studio_get_document` if needed → parse refs → estimate → storyboard still (people) → `studio_generate_video` with `folderId` = CWD and `referenceAssetIds` / `startFrameAssetId`. Quote cost as $ / TTD only.

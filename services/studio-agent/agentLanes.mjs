@@ -12,7 +12,7 @@ export const INTENT_BLURBS = {
   studio_generate_video:
     "Create video (paid+approval). Default folderId=CWD. People scenes: storyboard still via studio_generate_image first, then video. Quote cost as $ / TTD only.",
   studio_create_document:
-    "Create a markdown doc in a folder. Args:{folderId,title,contentMarkdown}. Use for prompt scripts — default folderId=CWD.",
+    "Create a markdown doc in a folder. Args:{folderId,title,contentMarkdown}. Prompt scripts: include References: asset lines so paste/Run hydrates chips. Default folderId=CWD. Never elements.",
   studio_bulk_move:
     "Move items into a folder. Args:{targetFolderId,items:[{kind,id}]}. kind=asset|document|element|folder.",
   studio_trash:
@@ -86,7 +86,7 @@ export function detectActionLane(message, workingSet) {
     || /\bprompt\b.{0,40}\b(for|for\s+me|please)\b/.test(text)
     || /\b(image|product|hero|still|video)\b.{0,40}\bprompt\b/.test(text)
     || /\bprompt\b.{0,40}\b(image|product|hero|still|video)\b/.test(text)) {
-    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt (not a short vibe line). studio_create_document {folderId:CWD, title:\"Prompt — …\", contentMarkdown with ```text fence}. Do not dump the full prompt in chat unless they asked to see/copy it; point them to the file.";
+    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt (not a short vibe line). studio_create_document {folderId:CWD, title:\"Prompt — …\", contentMarkdown with ```text fence + References: asset lines (/Studio/assets/{id} only)}. Do not dump the full prompt in chat unless they asked to see/copy it; point them to the file. Generate from that doc uses referenceAssetIds from References.";
   }
   if (/\b(generat(e|ing)|creat(e|ing)|make|draw|render)\b.{0,40}\b(image|picture|photo|still|art)\b/.test(text)
     || /\b(image|picture|photo)\b.{0,40}\b(generat|creat|make|draw|render)/.test(text)) {

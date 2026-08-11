@@ -215,6 +215,11 @@ import {
   insertPlainTextAtSelection,
   plainTextFromClipboard,
 } from "@/studio/lib/composerPasteIntelligence";
+import {
+  hydrateComposerFromText,
+  looksLikePromptScript,
+  parsePromptDocument,
+} from "@/studio/lib/promptReferences";
 import { threadTitleFromPrompt, collectStudioAssetIdsFromPrompt } from "@/studio/lib/studio-prompt-display.js";
 import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
@@ -569,8 +574,6 @@ const CREATE_MENU_ITEMS_BASE = [
   { action: "new-folder", label: "Folder", icon: Plus },
   { action: "new-file", label: "Ad copy", icon: FileText },
   { action: "new-video-edit", label: "Video edit", icon: Clapperboard, previewOnly: true },
-  { sep: true },
-  { action: "new-element", label: "Add element", icon: Sparkles },
 ];
 
 function getCreateMenuItems() {
@@ -4788,10 +4791,6 @@ export function StudioShell({
       void createInlineStudioItem("videoEdit");
       return;
     }
-    if (action === "new-element") {
-      void createInlineStudioItem("element");
-      return;
-    }
   }
 
   function openElementCreateInComposer() {
@@ -7810,6 +7809,111 @@ export function StudioShell({
       el.focus();
     });
     if (isMobile) setMobileSection("composer");
+  }
+
+  async function resolvePromptScriptHydration(markdown) {
+    const text = String(markdown ?? "");
+    const preliminary = hydrateComposerFromText(text, []);
+    let assets = assetLookupPool.length
+      ? assetLookupPool
+      : (assetsWithPreviewUrls ?? []);
+    if (preliminary.assetIds.length) {
+      try {
+        const fetched = await convex.query(api.assets.listByIds, {
+          assetIds: preliminary.assetIds.filter((id) =>
+            /^[a-z0-9]+$/i.test(String(id)),
+          ),
+          expiresUnix: assetUrlExpiresUnix,
+          quality: "thumb",
+        });
+        if (Array.isArray(fetched) && fetched.length) {
+          const byId = new Map(
+            [...assets, ...fetched].map((row) => [String(row._id ?? row.studioId), row]),
+          );
+          assets = [...byId.values()];
+        }
+      } catch (error) {
+        console.warn("Prompt script asset hydrate failed", error);
+      }
+    }
+    return hydrateComposerFromText(text, assets);
+  }
+
+  function mergeComposerAttachments(existing, incoming) {
+    const out = Array.isArray(existing) ? [...existing] : [];
+    const seen = new Set(out.map((item) => item.id).filter(Boolean));
+    for (const item of incoming ?? []) {
+      if (!item?.id || seen.has(item.id)) continue;
+      seen.add(item.id);
+      out.push(item);
+    }
+    return out;
+  }
+
+  async function applyHydratedPromptToCreate(markdown, { replace = true } = {}) {
+    const hydrated = await resolvePromptScriptHydration(markdown);
+    if (!hydrated.body && !hydrated.attachments.length) {
+      toast.message("No prompt or references found in that document.");
+      return false;
+    }
+    const nextAttachments = replace
+      ? hydrated.attachments
+      : mergeComposerAttachments(attachments, hydrated.attachments);
+    const nextDraft = replace
+      ? hydrated.draftWithMarkers
+      : (() => {
+          const current = String(draft ?? "")
+            .replace(/\uFFFC/g, "")
+            .trim();
+          return current
+            ? `${current}\n\n${hydrated.draftWithMarkers}`
+            : hydrated.draftWithMarkers;
+        })();
+    setEditingPromptEventId(null);
+    setDraft(nextDraft);
+    setAttachments(nextAttachments);
+    openTab(COMPOSER_TAB);
+    if (isMobile) setMobileSection("composer");
+    requestAnimationFrame(() => {
+      const el = editorRef.current;
+      if (!el) return;
+      applyComposerContextToEditor(el, {
+        draft: nextDraft,
+        attachments: nextAttachments,
+      });
+      el.focus();
+    });
+    return true;
+  }
+
+  async function applyHydratedPromptToAgent(markdown) {
+    const hydrated = await resolvePromptScriptHydration(markdown);
+    if (!hydrated.body && !hydrated.attachments.length) {
+      toast.message("No prompt or references found in that document.");
+      return false;
+    }
+    openAgent();
+    window.dispatchEvent(
+      new CustomEvent("studio-agent-seed-prompt", {
+        detail: {
+          draft: hydrated.draftWithMarkers,
+          attachments: hydrated.attachments,
+        },
+      }),
+    );
+    return true;
+  }
+
+  async function handleRunDocumentInCreate(entry) {
+    const markdown = String(entry?.description ?? "");
+    const ok = await applyHydratedPromptToCreate(markdown, { replace: true });
+    if (ok) toast.message("Prompt loaded in Create — chips hydrated.");
+  }
+
+  async function handleUseDocumentInAgent(entry) {
+    const markdown = String(entry?.description ?? "");
+    const ok = await applyHydratedPromptToAgent(markdown);
+    if (ok) toast.message("Prompt loaded in Agent — chips hydrated.");
   }
 
   async function handleSubmit() {
@@ -25193,6 +25297,12 @@ export function StudioShell({
                 );
               }
             }}
+            onRunDocumentInCreate={(entry) => {
+              void handleRunDocumentInCreate(entry);
+            }}
+            onUseDocumentInAgent={(entry) => {
+              void handleUseDocumentInAgent(entry);
+            }}
             onSwitchThreadFolder={(threadId) => {
               // Explicit only — never auto-bind chat save folder to explorer browse.
               if (!activeFolder) return;
@@ -25395,6 +25505,8 @@ export function StudioShell({
             assistBusy={false}
             canCancelAssist={false}
             onCancelAssist={undefined}
+            expiresUnix={assetUrlExpiresUnix}
+            onHydratePromptPaste={resolvePromptScriptHydration}
           />
         ) : null}
       </main>
@@ -26409,6 +26521,8 @@ function StudioComposer({
   assistBusy = false,
   canCancelAssist = false,
   onCancelAssist,
+  expiresUnix,
+  onHydratePromptPaste,
 }) {
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const enhanceComposerDraft = useAction(api.composerEnhanceActions.enhanceComposerDraft);
@@ -27395,6 +27509,52 @@ function StudioComposer({
               removeComposerTokensInSelection(editor, setAttachments)
             ) {
               // Selection may have included chips; clear remaining range via insert.
+            }
+            if (looksLikePromptScript(text) && onHydratePromptPaste) {
+              void (async () => {
+                try {
+                  const hydrated = await onHydratePromptPaste(text);
+                  if (!hydrated?.attachments?.length && !hydrated?.body) {
+                    insertPlainTextAtSelection(text);
+                    pushDraftToParent(readComposerEditorText(editor), {
+                      immediate: true,
+                    });
+                    pruneComposerAttachmentsFromDom(editor, setAttachments);
+                    return;
+                  }
+                  setAttachments((prev) => {
+                    const merged = [...prev];
+                    const seen = new Set(merged.map((item) => item.id));
+                    for (const item of hydrated.attachments) {
+                      if (!item?.id || seen.has(item.id)) continue;
+                      seen.add(item.id);
+                      merged.push(item);
+                    }
+                    const current = readComposerEditorText(editor)
+                      .replace(/\uFFFC/g, "")
+                      .trim();
+                    const nextDraft = current
+                      ? `${current}\n\n${hydrated.draftWithMarkers}`
+                      : hydrated.draftWithMarkers;
+                    applyComposerContextToEditor(editor, {
+                      draft: nextDraft,
+                      attachments: merged,
+                    });
+                    pushDraftToParent(readComposerEditorText(editor), {
+                      immediate: true,
+                    });
+                    return merged;
+                  });
+                } catch (error) {
+                  console.warn("Prompt paste hydrate failed", error);
+                  insertPlainTextAtSelection(text);
+                  pushDraftToParent(readComposerEditorText(editor), {
+                    immediate: true,
+                  });
+                  pruneComposerAttachmentsFromDom(editor, setAttachments);
+                }
+              })();
+              return;
             }
             insertPlainTextAtSelection(text);
             pushDraftToParent(readComposerEditorText(editor), { immediate: true });
@@ -31355,6 +31515,8 @@ function ActivePane({
   onBuildElementSheet,
   stylePresets,
   onDocumentChange,
+  onRunDocumentInCreate,
+  onUseDocumentInAgent,
   onSwitchThreadFolder,
   adminTab,
   billingTab,
@@ -31790,8 +31952,31 @@ function ActivePane({
     return wrapPane(null);
   }
   if (activeEntry?.studioKind === "document") {
+    const markdown = String(activeEntry.description ?? "");
+    const canRunPrompt =
+      looksLikePromptScript(markdown) ||
+      /^Prompt\s*[—–-]/i.test(String(activeEntry.name ?? "")) ||
+      parsePromptDocument(markdown).references.length > 0;
     return wrapPane(
       <div className="studio-asset-preview studio-document-preview">
+        {canRunPrompt ? (
+          <div className="studio-document-prompt-actions" role="toolbar" aria-label="Prompt actions">
+            <button
+              type="button"
+              className="studio-agent-primary-btn"
+              onClick={() => onRunDocumentInCreate?.(activeEntry)}
+            >
+              Run in Create
+            </button>
+            <button
+              type="button"
+              className="studio-agent-secondary-btn"
+              onClick={() => onUseDocumentInAgent?.(activeEntry)}
+            >
+              Use in Agent
+            </button>
+          </div>
+        ) : null}
         <MarkdownDocEditor
           name={activeEntry.name}
           value={activeEntry.description ?? ""}
@@ -37023,6 +37208,10 @@ function stripPromptReferencesSection(prompt) {
 
 /** Best-effort restore composer chips from the prompt's References section. */
 function attachmentsFromPromptReferences(prompt, assets = [], elements = []) {
+  // Prefer shared asset-only hydrate; fall back to legacy element resolve for old prompts.
+  const hydrated = hydrateComposerFromText(prompt, assets);
+  if (hydrated.attachments.length) return hydrated.attachments;
+
   const text = String(prompt ?? "");
   const marker = "\n\nReferences:\n";
   const idx = text.lastIndexOf(marker);

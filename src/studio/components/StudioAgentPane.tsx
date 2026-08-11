@@ -6,7 +6,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { ArrowUp, Loader2, Mic, Paperclip, RotateCcw, Settings, Square, X } from "lucide-react";
@@ -22,6 +22,10 @@ import {
   insertPlainTextAtSelection,
   plainTextFromClipboard,
 } from "@/studio/lib/composerPasteIntelligence";
+import {
+  hydrateComposerFromText,
+  looksLikePromptScript,
+} from "@/studio/lib/promptReferences";
 import { StudioEmptyLogoButton } from "./StudioEmptyLogoButton";
 import { AgentTurnTimeline } from "./agent/AgentTurnTimeline";
 import { AgentChatHeader } from "./agent/AgentChatHeader";
@@ -32,6 +36,7 @@ import "./studio-messages.css";
 import "./studio-agent.css";
 
 const AGENT_ATTACH_EVENT = "studio-agent-attach";
+const AGENT_SEED_PROMPT_EVENT = "studio-agent-seed-prompt";
 const AGENT_INFO_OPEN_KEY = "studio-agent-info-sidebar-open";
 
 type AgentAttachment = {
@@ -357,6 +362,47 @@ function clearComposerEditor(editor: HTMLDivElement | null) {
   editor.innerHTML = "";
 }
 
+function applyAgentComposerState(
+  editor: HTMLDivElement | null,
+  draft: string,
+  attachments: AgentAttachment[],
+) {
+  if (!editor) return;
+  const shell = document.createElement("div");
+  const text = String(draft ?? "");
+  const tokens = Array.isArray(attachments) ? attachments : [];
+  let tokenIndex = 0;
+  let buffer = "";
+  const flush = () => {
+    if (!buffer) return;
+    shell.appendChild(document.createTextNode(buffer));
+    buffer = "";
+  };
+  for (const ch of text) {
+    if (ch === "\uFFFC") {
+      flush();
+      const attachment = tokens[tokenIndex];
+      tokenIndex += 1;
+      if (attachment) {
+        shell.appendChild(createComposerAttachmentToken(attachment));
+        shell.appendChild(document.createTextNode(" "));
+      }
+      continue;
+    }
+    buffer += ch;
+  }
+  flush();
+  while (tokenIndex < tokens.length) {
+    const attachment = tokens[tokenIndex];
+    tokenIndex += 1;
+    if (!attachment) continue;
+    shell.appendChild(createComposerAttachmentToken(attachment));
+    shell.appendChild(document.createTextNode(" "));
+  }
+  editor.innerHTML = shell.innerHTML;
+  focusComposerEditorEnd(editor);
+}
+
 function appendPlainTextToComposer(editor: HTMLDivElement | null, text: string) {
   if (!editor || !text) return;
   focusComposerEditorEnd(editor);
@@ -523,6 +569,7 @@ export function StudioAgentPane({
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const pricing = useQuery(api.billing.getPricing, {});
   const agentPreferences = useQuery(api.agentPreferences.getMine, {});
+  const convex = useConvex();
 
   const [draft, setDraft] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -670,9 +717,50 @@ export function StudioAgentPane({
       });
       window.requestAnimationFrame(() => pruneDuplicateComposerTokens(editorRef.current));
     }
+    function onSeedPrompt(event: Event) {
+      const detail = (
+        event as CustomEvent<{
+          draft?: string;
+          attachments?: AgentAttachment[];
+        }>
+      ).detail;
+      const nextAttachments = Array.isArray(detail?.attachments)
+        ? detail.attachments
+        : [];
+      const nextDraft = String(detail?.draft ?? "");
+      setAttachments(nextAttachments);
+      setDraft(nextDraft);
+      requestAnimationFrame(() => {
+        applyAgentComposerState(editorRef.current, nextDraft, nextAttachments);
+      });
+    }
     window.addEventListener(AGENT_ATTACH_EVENT, onAttach as EventListener);
-    return () => window.removeEventListener(AGENT_ATTACH_EVENT, onAttach as EventListener);
+    window.addEventListener(AGENT_SEED_PROMPT_EVENT, onSeedPrompt as EventListener);
+    return () => {
+      window.removeEventListener(AGENT_ATTACH_EVENT, onAttach as EventListener);
+      window.removeEventListener(AGENT_SEED_PROMPT_EVENT, onSeedPrompt as EventListener);
+    };
   }, []);
+
+  async function hydrateAgentPromptPaste(text: string) {
+    const preliminary = hydrateComposerFromText(text, []);
+    let assets: Array<Record<string, unknown>> = [];
+    if (preliminary.assetIds.length) {
+      try {
+        const fetched = await convex.query(api.assets.listByIds, {
+          assetIds: preliminary.assetIds.filter((id) =>
+            /^[a-z0-9]+$/i.test(String(id)),
+          ) as Id<"assets">[],
+          expiresUnix,
+          quality: "thumb",
+        });
+        assets = Array.isArray(fetched) ? fetched : [];
+      } catch (error) {
+        console.warn("Agent prompt paste hydrate failed", error);
+      }
+    }
+    return hydrateComposerFromText(text, assets);
+  }
 
   useEffect(() => {
     return () => {
@@ -1108,6 +1196,43 @@ export function StudioAgentPane({
                   }
                   event.preventDefault();
                   ensureSelectionInEditor(editor);
+                  if (looksLikePromptScript(text)) {
+                    void (async () => {
+                      try {
+                        const hydrated = await hydrateAgentPromptPaste(text);
+                        if (!hydrated.attachments.length && !hydrated.body) {
+                          insertPlainTextAtSelection(text);
+                          setDraft(readComposerEditorText(editor));
+                          pruneDuplicateComposerTokens(editor);
+                          return;
+                        }
+                        setAttachments((prev) => {
+                          const merged = [...prev];
+                          const seen = new Set(merged.map((item) => item.id));
+                          for (const item of hydrated.attachments) {
+                            if (!item?.id || seen.has(item.id)) continue;
+                            seen.add(item.id);
+                            merged.push(item as AgentAttachment);
+                          }
+                          const current = readComposerEditorText(editor)
+                            .replace(/\uFFFC/g, "")
+                            .trim();
+                          const nextDraft = current
+                            ? `${current}\n\n${hydrated.draftWithMarkers}`
+                            : hydrated.draftWithMarkers;
+                          applyAgentComposerState(editor, nextDraft, merged);
+                          setDraft(readComposerEditorText(editor));
+                          return merged;
+                        });
+                      } catch (error) {
+                        console.warn("Agent prompt paste hydrate failed", error);
+                        insertPlainTextAtSelection(text);
+                        setDraft(readComposerEditorText(editor));
+                        pruneDuplicateComposerTokens(editor);
+                      }
+                    })();
+                    return;
+                  }
                   insertPlainTextAtSelection(text);
                   setDraft(readComposerEditorText(editor));
                   pruneDuplicateComposerTokens(editor);

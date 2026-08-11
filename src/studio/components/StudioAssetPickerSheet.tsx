@@ -523,7 +523,7 @@ export function StudioAssetPickerSheet({
               })}
             </div>
           ) : null}
-          {pickAnyStudio && (elements?.length ?? 0) > 0 ? (
+          {false && pickAnyStudio && (elements?.length ?? 0) > 0 ? (
             <div
               className="studio-asset-picker-list"
               role="group"

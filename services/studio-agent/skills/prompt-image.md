@@ -42,8 +42,23 @@ A [who/what] [doing what] in [place]. [Time of day / light]. Shot as [medium / c
 1. Load this skill, write a **full** sealed prompt (subject + action + setting + light + lens + materials + keep-outs) — never a one-line vibe dump.
 2. `studio_create_document` into **CWD** (`folderId` from Current folder):
    - `title`: `Prompt — <short subject>`
-   - `contentMarkdown`: short note + a ```text fence with the full prompt
-3. Chat: point them at the file. Paste the fence in chat **only** if they asked to see / copy it in chat.
-4. Generate only if they also asked to generate.
+   - `contentMarkdown`: sealed prompt (optionally in a text fence) **plus** a trailing References block so Create/Agent can hydrate chips on paste/Run:
+
+Example `contentMarkdown`:
+
+~~~
+# Prompt — <short>
+
+```text
+<full sealed prompt; may mention @Label visually>
+```
+
+References:
+- @Label | kind: image | path: /Studio/assets/{assetId} | file: name.png | studio: {assetId}
+~~~
+
+3. Only **asset** ids from attached chips / generated stills. Never invent element ids. Never use `/Studio/elements/…`.
+4. Chat: point them at the file. Paste the fence in chat **only** if they asked to see / copy it in chat.
+5. Generate only if they also asked to generate — then pass `referenceAssetIds` from the References lines (and `folderId` = CWD).
 
 Estimate first if spend is unclear. After ok, optionally `studio_view_media`.
