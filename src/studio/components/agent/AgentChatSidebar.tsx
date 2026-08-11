@@ -1,8 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "convex/react";
-import { Check, CircleHelp, Loader2, Search, X } from "lucide-react";
+import {
+  Check,
+  CircleHelp,
+  Images,
+  ListTodo,
+  Loader2,
+  MessageSquare,
+  Search,
+  Wallet,
+  X,
+} from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { formatTtdFromCredits } from "@/studio/lib/money";
@@ -18,6 +28,37 @@ type AgentChatSidebarProps = {
 };
 
 type TabId = "info" | "media";
+
+function Section({
+  title,
+  icon,
+  extras,
+  children,
+}: {
+  title: string;
+  icon?: ReactNode;
+  extras?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="studio-admin-section">
+      <div className="studio-admin-section-head">
+        <span className="studio-admin-section-title">
+          {icon ? (
+            <span className="studio-dm-peer-section-icon" aria-hidden="true">
+              {icon}
+            </span>
+          ) : null}
+          {title}
+        </span>
+        {extras ? (
+          <div className="studio-admin-section-extras">{extras}</div>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export function AgentChatSidebar({
   threadId,
@@ -102,7 +143,10 @@ export function AgentChatSidebar({
       ) : null}
 
       <div className="studio-agent-sidebar-toolbar">
-        <nav className="studio-admin-head-tabs studio-agent-sidebar-tabs" aria-label="Chat panels">
+        <nav
+          className="studio-admin-head-tabs studio-agent-sidebar-tabs"
+          aria-label="Chat panels"
+        >
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -117,6 +161,7 @@ export function AgentChatSidebar({
             </button>
           ))}
         </nav>
+        <div className="studio-agent-sidebar-toolbar-divider" aria-hidden="true" />
         <label className="studio-agent-sidebar-search">
           <Search size={12} strokeWidth={2.25} aria-hidden="true" />
           <input
@@ -140,45 +185,51 @@ export function AgentChatSidebar({
 
       <div className="studio-agent-chat-sidebar-body">
         {searching ? (
-          <div className="studio-agent-sidebar-section">
+          <Section title="Search" icon={<Search className="h-3 w-3" />}>
             {!insight?.searchHits?.length ? (
-              <p className="studio-agent-sidebar-empty">No matches.</p>
+              <p className="studio-settings-empty">No matches.</p>
             ) : (
               <ul className="studio-agent-search-hits">
                 {insight.searchHits.map((hit) => (
-                  <li key={String(hit._id)}>
+                  <li key={String(hit._id)} className="studio-dm-peer-plate">
                     <span className="studio-agent-search-role">{hit.role}</span>
                     <p>{hit.content}</p>
                   </li>
                 ))}
               </ul>
             )}
-          </div>
+          </Section>
         ) : null}
 
         {!searching && tab === "info" ? (
-          <div className="studio-agent-sidebar-section">
-            <div className="studio-agent-cost-grid" role="group" aria-label="Chat summary">
-              <div className="studio-agent-cost-stat">
+          <div className="studio-agent-sidebar-stack">
+            <div
+              className="studio-dm-peer-stat-grid"
+              role="group"
+              aria-label="Chat summary"
+            >
+              <div className="studio-dm-peer-plate studio-dm-peer-stat">
+                <Wallet aria-hidden="true" />
                 <strong>
                   {formatTtdFromCredits(insight?.creditsSpent ?? 0, price)}
                 </strong>
                 <span>Spent</span>
               </div>
-              <div className="studio-agent-cost-stat">
+              <div className="studio-dm-peer-plate studio-dm-peer-stat">
+                <MessageSquare aria-hidden="true" />
                 <strong>{insight?.turnCount ?? 0}</strong>
                 <span>Turns</span>
               </div>
-              <div className="studio-agent-cost-stat">
+              <div className="studio-dm-peer-plate studio-dm-peer-stat">
+                <Images aria-hidden="true" />
                 <strong>{insight?.media?.length ?? 0}</strong>
                 <span>Media</span>
               </div>
             </div>
 
-            <div className="studio-agent-sidebar-block">
-              <p className="studio-agent-sidebar-kicker">To-do</p>
+            <Section title="To-do" icon={<ListTodo className="h-3 w-3" />}>
               {!board.lists.length ? (
-                <p className="studio-agent-sidebar-empty">
+                <p className="studio-settings-empty">
                   No to-do lists yet. Multi-step work shows up here.
                 </p>
               ) : (
@@ -196,7 +247,7 @@ export function AgentChatSidebar({
                     return (
                       <details
                         key={`${list.id}:${isCurrent ? "open" : "closed"}:${list.status}`}
-                        className={`studio-agent-todo-acc is-${list.status}`}
+                        className={`studio-agent-todo-acc studio-dm-peer-plate is-${list.status}`}
                         open={isCurrent}
                       >
                         <summary>
@@ -208,7 +259,10 @@ export function AgentChatSidebar({
                               <CircleHelp size={10} aria-hidden="true" />
                               {total}
                             </span>
-                            <span className="studio-agent-todo-badge is-done" title="Completed">
+                            <span
+                              className="studio-agent-todo-badge is-done"
+                              title="Completed"
+                            >
                               <Check size={10} aria-hidden="true" />
                               {done}
                             </span>
@@ -229,7 +283,13 @@ export function AgentChatSidebar({
                               data-status={step.status}
                             >
                               <span
-                                className={`studio-agent-todo-check is-${step.status === "done" ? "done" : step.status === "doing" && working ? "doing" : "pending"}`}
+                                className={`studio-agent-todo-check is-${
+                                  step.status === "done"
+                                    ? "done"
+                                    : step.status === "doing" && working
+                                      ? "doing"
+                                      : "pending"
+                                }`}
                                 aria-hidden="true"
                               >
                                 {step.status === "done" ? (
@@ -238,7 +298,9 @@ export function AgentChatSidebar({
                                   <Loader2 size={10} className="animate-spin" />
                                 ) : null}
                               </span>
-                              <span className="studio-agent-todo-step-text">{step.text}</span>
+                              <span className="studio-agent-todo-step-text">
+                                {step.text}
+                              </span>
                             </li>
                           ))}
                         </ul>
@@ -247,16 +309,15 @@ export function AgentChatSidebar({
                   })}
                 </div>
               )}
-            </div>
+            </Section>
 
-            <div className="studio-agent-sidebar-block">
-              <p className="studio-agent-sidebar-kicker">Recent turns</p>
+            <Section title="Recent turns" icon={<MessageSquare className="h-3 w-3" />}>
               {!insight?.runs?.length ? (
-                <p className="studio-agent-sidebar-empty">No turns yet.</p>
+                <p className="studio-settings-empty">No turns yet.</p>
               ) : (
                 <ul className="studio-agent-turn-cost-list">
                   {(insight?.runs ?? []).slice(0, 12).map((run) => (
-                    <li key={String(run._id)}>
+                    <li key={String(run._id)} className="studio-dm-peer-plate">
                       <span className="studio-agent-turn-cost-msg">
                         {run.userMessage || "(attachments)"}
                       </span>
@@ -269,43 +330,41 @@ export function AgentChatSidebar({
                   ))}
                 </ul>
               )}
-            </div>
+            </Section>
           </div>
         ) : null}
 
         {!searching && tab === "media" ? (
-          <div className="studio-agent-sidebar-section">
+          <Section title="Media" icon={<Images className="h-3 w-3" />}>
             {!insight?.media?.length ? (
-              <p className="studio-agent-sidebar-empty">
+              <p className="studio-settings-empty">
                 No generated media in this chat yet.
               </p>
             ) : (
-              <ul className="studio-agent-media-list">
+              <ul className="studio-agent-media-grid">
                 {insight.media.map((item) => {
                   const thumb = thumbById.get(item.assetId);
+                  const sourceLabel = /attach|upload/i.test(item.toolName || "")
+                    ? "Attachment"
+                    : "Generation";
                   return (
-                    <li key={item.assetId}>
+                    <li key={item.assetId} className="studio-agent-media-tile">
                       {thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={thumb} alt="" className="studio-agent-media-thumb" />
+                        <img src={thumb} alt="" className="studio-agent-media-tile-img" />
                       ) : (
-                        <span className="studio-agent-media-thumb is-empty" />
+                        <span className="studio-agent-media-tile-img is-empty" />
                       )}
-                      <div>
+                      <div className="studio-agent-media-tile-overlay">
                         <strong>{item.name || item.kind}</strong>
-                        <span>
-                          {item.kind}
-                          {item.toolName
-                            ? ` · ${item.toolName.replace(/^studio_/, "")}`
-                            : ""}
-                        </span>
+                        <span>{sourceLabel}</span>
                       </div>
                     </li>
                   );
                 })}
               </ul>
             )}
-          </div>
+          </Section>
         ) : null}
       </div>
     </aside>

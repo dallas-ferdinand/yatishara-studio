@@ -1237,7 +1237,7 @@ export function StudioAgentPane({
           </nav>
         )}
         <div className="studio-agent-chat-sidebar-body">
-          <p className="studio-agent-sidebar-empty">
+          <p className="studio-settings-empty">
             Send a message to start this chat — cost, media, and to-dos will show here.
           </p>
         </div>
