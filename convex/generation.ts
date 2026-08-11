@@ -2388,16 +2388,11 @@ function resolveVideoPricingModel(args: {
   tier: "image" | "pro_video" | "audio" | "low" | "medium" | "high";
   videoModel?: string;
   resolvedModel?: string;
-}): "seedance-2.5" | "seedance-2.0" | "google-omni-flash" | "kling-3.0-i2v" | undefined {
+}): "seedance-2.5" | "seedance-2.0" | undefined {
   if (args.tier !== "pro_video") {
     return undefined;
   }
-  if (
-    args.videoModel === "seedance-2.5" ||
-    args.videoModel === "seedance-2.0" ||
-    args.videoModel === "google-omni-flash" ||
-    args.videoModel === "kling-3.0-i2v"
-  ) {
+  if (args.videoModel === "seedance-2.5" || args.videoModel === "seedance-2.0") {
     return args.videoModel;
   }
   if (args.resolvedModel) {

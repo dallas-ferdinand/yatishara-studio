@@ -190,13 +190,13 @@ export const getPricing = authedQuery({
       klingVideoCredits720p: videoCreditCost({
         resolution: "1280x720",
         durationSeconds: 5,
-        videoModel: "kling-3.0-i2v",
+        videoModel: "seedance-2.0",
         audioEnabled: false,
       }),
       klingVideoCredits1080p: videoCreditCost({
         resolution: "1920x1080",
         durationSeconds: 5,
-        videoModel: "kling-3.0-i2v",
+        videoModel: "seedance-2.0",
         audioEnabled: false,
       }),
       platformOverheadCreditsMedia: PLATFORM_OVERHEAD_CREDITS_MEDIA,
@@ -450,13 +450,13 @@ export const getPricingForApi = internalQuery({
       klingVideoCredits720p: videoCreditCost({
         resolution: "1280x720",
         durationSeconds: 5,
-        videoModel: "kling-3.0-i2v",
+        videoModel: "seedance-2.0",
         audioEnabled: false,
       }),
       klingVideoCredits1080p: videoCreditCost({
         resolution: "1920x1080",
         durationSeconds: 5,
-        videoModel: "kling-3.0-i2v",
+        videoModel: "seedance-2.0",
         audioEnabled: false,
       }),
       platformOverheadCreditsMedia: PLATFORM_OVERHEAD_CREDITS_MEDIA,

@@ -1,59 +1,65 @@
 /**
  * Generation pricing.
  *
- * Image + video + text (script / element notes): 2× Vercel AI Gateway model COGS,
- * rounded up to the next TT$0.50. FX: US$1 = TT$10. Ledger: TT$0.50 per credit.
+ * Image + video + text: 2× BytePlus ModelArk COGS, rounded up to the next
+ * TT$0.50 (text rounds to TT$0.01). FX: US$1 = TT$10. Ledger: TT$0.50 per credit.
  * No platform fee on top of the 2× markup.
  *
- * Seedance 2.5 (`bytedance/seedance-2.5`): $10.70/M tokens (no video input) /
- * $6.40/M (with video input). Customer quotes use the no-video rate.
+ * Seedance 2.5: $10.70/M tokens (no video input) / $6.40/M (with video input).
+ * Customer quotes use the no-video rate.
  * tokens ≈ (height × width × 24fps × seconds) / 1024. Audio included.
  * Resolutions 480p/720p; max 30s.
  *
- * Seedance 2.0 (`bytedance/seedance-2.0`): no-video rates by tier —
+ * Seedance 2.0: no-video rates by tier —
  * 480p/720p $7/M, 1080p $7.7/M, 4k $4/M; with-video $4.30/M (not used for quotes).
  * Resolutions 480p/720p/1080p/4k; max 15s.
  *
- * Omni Flash (`google/gemini-omni-flash-preview`): $0.10/s output (Veo Fast-aligned). Max 10s.
+ * Seedream 5.0 Pro: $0.045/image ≤2.36MP (Studio 1K); $0.09 >2.36MP (Studio 2K).
+ * Studio 4K clamps to 2K. First reference image free; each extra ref +$0.003 COGS
+ * (customer surcharge via IMAGE_REFERENCE_SURCHARGE on 2K).
  *
- * Kling 3.0 I2V (MCP, `mode: "pro"`): $0.224/s silent · $0.336/s with audio.
- *
- * Text / Assistance (`google/gemini-3.5-flash`): $1.50/M input (text/image/video),
- * $3/M audio input (2× text), $9/M output — customer price is 2× measured provider
- * COGS, rounded up to TT$0.01. Dedicated text turns (Assistance, scripts, element
- * notes, DM Improve) charge after the model from measured tokens. Estimates from
- * ref counts are for UI/API quotes only.
+ * Text / Assistance (Seed 2.0 Lite): $0.25/M input / $2.00/M output.
+ * DM Improve (Seed 2.0 Mini): same formula; cheaper model billed from measured tokens.
+ * Customer price is 2× measured provider COGS, rounded up to TT$0.01.
  */
 
 export const CREDIT_PRICE_TTD = 0.5;
 export const USD_TO_TTD = 10;
 export const MIN_GROSS_MARGIN = 0.35;
 
-/** Image quality passed to GPT Image 2. */
+/** Legacy GPT Image quality — ignored for Seedream billing (compat for callers). */
 export type ImageQuality = "low" | "medium" | "high";
 
 /**
- * GPT Image 2 model USD (output) at our size tiers.
- * Wide ≈ 16:9 / 9:16; square = 1:1. Official 1K + published 2K/4K anchors.
+ * Seedream 5.0 Pro USD per output image by Studio resolution tier.
+ * 1K = ≤2.36MP ($0.045); 2K/4K = >2.36MP ($0.09). 4K is clamped to 2K at gen time.
+ * Quality keys kept for API compat — all map to the same Seedream rate.
  */
+const SEEDREAM_USD_BY_TIER: Record<"1K" | "2K" | "4K", number> = {
+  "1K": 0.045,
+  "2K": 0.09,
+  "4K": 0.09,
+};
+
+/** @deprecated Prefer SEEDREAM_USD_BY_TIER — kept for any direct IMAGE_MODEL_USD reads. */
 const IMAGE_MODEL_USD: Record<
   "1K" | "2K" | "4K",
   Record<ImageQuality, { square: number; wide: number }>
 > = {
   "1K": {
-    low: { square: 0.006, wide: 0.005 },
-    medium: { square: 0.053, wide: 0.041 },
-    high: { square: 0.211, wide: 0.165 },
+    low: { square: 0.045, wide: 0.045 },
+    medium: { square: 0.045, wide: 0.045 },
+    high: { square: 0.045, wide: 0.045 },
   },
   "2K": {
-    low: { square: 0.008, wide: 0.006 },
-    medium: { square: 0.064, wide: 0.048 },
-    high: { square: 0.256, wide: 0.192 },
+    low: { square: 0.09, wide: 0.09 },
+    medium: { square: 0.09, wide: 0.09 },
+    high: { square: 0.09, wide: 0.09 },
   },
   "4K": {
-    low: { square: 0.012, wide: 0.012 },
-    medium: { square: 0.101, wide: 0.101 },
-    high: { square: 0.401, wide: 0.401 },
+    low: { square: 0.09, wide: 0.09 },
+    medium: { square: 0.09, wide: 0.09 },
+    high: { square: 0.09, wide: 0.09 },
   },
 };
 
@@ -61,17 +67,17 @@ const IMAGE_MODEL_USD: Record<
 export const IMAGE_CREDITS_BY_RESOLUTION: Record<string, number> = {
   "1K": 2,
   "2K": 2,
-  "4K": 5,
+  "4K": 2,
 };
 
-/** +TT$1 (2 credits) when reference images are used on 2K/4K. */
+/** +TT$1 (2 credits) when reference images are used on 2K/4K (extra Seedream refs). */
 export const IMAGE_REFERENCE_SURCHARGE = 2;
 
-/** Vercel Seedance 2.5 — USD per million video tokens (customer quotes use no-video rate). */
+/** Seedance 2.5 — USD per million video tokens (customer quotes use no-video rate). */
 export const SEEDANCE_USD_PER_M_TOKENS_NO_VIDEO = 10.7;
-/** Gateway pass-through when video is in the input — not used for customer quotes. */
+/** Pass-through when video is in the input — not used for customer quotes. */
 export const SEEDANCE_USD_PER_M_TOKENS_WITH_VIDEO = 6.4;
-/** Seedance 2.0 no-video rates by resolution tier (Vercel AI Gateway catalog). */
+/** Seedance 2.0 no-video rates by resolution tier. */
 export const SEEDANCE_20_USD_PER_M_TOKENS_NO_VIDEO = 7;
 export const SEEDANCE_20_USD_PER_M_TOKENS_1080P = 7.7;
 export const SEEDANCE_20_USD_PER_M_TOKENS_4K = 4;
@@ -80,25 +86,15 @@ export const SEEDANCE_FPS = 24;
 export const SEEDANCE_25_MAX_DURATION_SECONDS = 30;
 export const SEEDANCE_20_MAX_DURATION_SECONDS = 15;
 
-/**
- * Google Gemini Omni Flash Preview — published video output rate (aligned with Veo 3.1 Fast).
- * Max clip length is 10s.
- */
+/** @deprecated Omni Flash removed from Studio. */
 export const OMNI_FLASH_USD_PER_SECOND = 0.1;
 export const OMNI_FLASH_MAX_DURATION_SECONDS = 10;
 
-/**
- * Kling 3.0 I2V on Vercel (studio calls `mode: "pro"`).
- * Resolution does not change the gateway listed rate.
- */
+/** @deprecated Kling removed from Studio. */
 export const KLING_PRO_USD_PER_SECOND_SILENT = 0.224;
 export const KLING_PRO_USD_PER_SECOND_AUDIO = 0.336;
 
-export type VideoPricingModel =
-  | "seedance-2.5"
-  | "seedance-2.0"
-  | "google-omni-flash"
-  | "kling-3.0-i2v";
+export type VideoPricingModel = "seedance-2.5" | "seedance-2.0";
 
 const VIDEO_RESOLUTION_WH: Record<string, { width: number; height: number }> = {
   "854x480": { width: 854, height: 480 },
@@ -151,20 +147,20 @@ export const VIDEO_VIDEO_REFERENCE_SURCHARGE_PER_BLOCK = 0;
  * Kept for billing UI field compatibility.
  */
 export const PLATFORM_OVERHEAD_CREDITS_MEDIA = 0;
-/** @deprecated Text uses 2× Gemini 3.5 Flash COGS — see textCreditCost. */
+/** @deprecated Text uses 2× Seed Lite COGS — see textCreditCost. */
 export const PLATFORM_OVERHEAD_CREDITS_TEXT = 0;
 
 /**
- * Gemini 3.5 Flash (GATEWAY_TEXT_MODEL_ID + GATEWAY_ASSISTANT_MODEL_ID) —
- * USD per million tokens. Text / image / video input share $1.50; audio $3.00; output $9.00.
+ * Seed 2.0 Lite (GATEWAY_TEXT_MODEL_ID + GATEWAY_ASSISTANT_MODEL_ID) —
+ * USD per million tokens. Audio input billed at 2× text input when measured separately.
  */
-export const TEXT_USD_PER_M_INPUT = 1.5;
-export const TEXT_USD_PER_M_OUTPUT = 9.0;
-export const TEXT_USD_PER_M_AUDIO_INPUT = 3.0;
+export const TEXT_USD_PER_M_INPUT = 0.25;
+export const TEXT_USD_PER_M_OUTPUT = 2.0;
+export const TEXT_USD_PER_M_AUDIO_INPUT = 0.5;
 
 /**
- * Typical Assistance / script / element-notes turn on Gemini 3.5 Flash
- * (calibrated from prior usage shape; re-measure after cutover).
+ * Typical Assistance / script / element-notes turn on Seed 2.0 Lite
+ * (calibrated shape; re-measure after cutover).
  */
 export const TEXT_BASE_INPUT_TOKENS = 2_000;
 export const TEXT_BASE_OUTPUT_TOKENS = 600;
@@ -176,7 +172,7 @@ export const TEXT_AUDIO_REF_INPUT_TOKENS = 5_000;
 
 /**
  * Text / Assistance floor + step: TT$0.01 (0.02 credits at TT$0.50 each).
- * Customer charge = 2× Gemini 3.5 Flash provider COGS, rounded up to this cent.
+ * Customer charge = 2× Seed Lite provider COGS, rounded up to this cent.
  */
 export const TEXT_MIN_SELL_TTD = 0.01;
 
@@ -209,11 +205,9 @@ export function normalizeImageQuality(
   return "medium";
 }
 
-function isSquareAspectRatio(aspectRatio: string | undefined): boolean {
-  if (!aspectRatio) return false;
-  const match = aspectRatio.match(/^(\d+)\s*:\s*(\d+)$/);
-  if (!match) return false;
-  return match[1] === match[2];
+function isSquareAspectRatio(_aspectRatio: string | undefined): boolean {
+  void _aspectRatio;
+  return false;
 }
 
 /** Round up to the next TT$0.50 (1.20→1.50, 1.80→2.00). */
@@ -227,9 +221,9 @@ export function estimateImageModelUsd(args: {
   aspectRatio?: string;
 }): number {
   const tier = normalizeImageResolutionLabel(args.resolution);
-  const quality = normalizeImageQuality(args.quality);
-  const shape = isSquareAspectRatio(args.aspectRatio) ? "square" : "wide";
-  return IMAGE_MODEL_USD[tier][quality][shape];
+  void args.quality;
+  void args.aspectRatio;
+  return SEEDREAM_USD_BY_TIER[tier];
 }
 
 /** Customer TT$ for an image = 2× model COGS, rounded up to TT$0.50. */
@@ -261,11 +255,9 @@ export function videoDurationSeconds(
   videoModel?: VideoPricingModel,
 ): number {
   const max =
-    videoModel === "google-omni-flash"
-      ? OMNI_FLASH_MAX_DURATION_SECONDS
-      : videoModel === "seedance-2.0" || videoModel === "kling-3.0-i2v"
-        ? SEEDANCE_20_MAX_DURATION_SECONDS
-        : SEEDANCE_25_MAX_DURATION_SECONDS;
+    videoModel === "seedance-2.0"
+      ? SEEDANCE_20_MAX_DURATION_SECONDS
+      : SEEDANCE_25_MAX_DURATION_SECONDS;
   return Math.max(4, Math.min(max, Math.ceil(Number(durationSeconds) || 4)));
 }
 
@@ -337,24 +329,9 @@ export function estimateVideoModelUsd(args: {
   videoModel?: VideoPricingModel;
 }): number {
   const videoModel = args.videoModel ?? "seedance-2.5";
-  const seconds = videoDurationSeconds(args.durationSeconds, videoModel);
-
-  if (videoModel === "kling-3.0-i2v") {
-    const rate = args.audioEnabled
-      ? KLING_PRO_USD_PER_SECOND_AUDIO
-      : KLING_PRO_USD_PER_SECOND_SILENT;
-    return rate * seconds;
-  }
-
-  if (videoModel === "google-omni-flash") {
-    // Same customer quote with or without refs; input tokens are small vs output.
-    void args.hasVideoReferenceInput;
-    void args.audioEnabled;
-    return OMNI_FLASH_USD_PER_SECOND * seconds;
-  }
-
   // Seedance — same customer price with or without video refs (no-video rate).
   void args.hasVideoReferenceInput;
+  void args.audioEnabled;
   const tokens = seedanceOutputTokens({
     resolution: args.resolution,
     durationSeconds: args.durationSeconds,

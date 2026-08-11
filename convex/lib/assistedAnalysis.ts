@@ -1,9 +1,9 @@
 /**
- * Multimodal Assistance agent via Gemini 3.5 Flash (GATEWAY_ASSISTANT_MODEL_ID).
+ * Multimodal Assistance agent via Seed 2.0 Lite (GATEWAY_ASSISTANT_MODEL_ID).
  * Multi-turn plan → one chat reply. Never starts generation.
  */
 import { generateObject, jsonSchema } from "ai";
-import { gateway } from "@ai-sdk/gateway";
+import { ARK_MODEL_IDS, arkLanguageModel, resolveArkModelId } from "./byteplusArk";
 import type { ReferenceInput } from "./referenceInput";
 import { normalizeAudioMimeType } from "./referenceInput";
 import type {
@@ -192,8 +192,8 @@ const assistantResponseSchema = jsonSchema<AssistantAnalysis>({
 function assistantModelId(): string {
   // Assistance is multimodal (vision over product/refs). Never fall back to a
   // text-only lite model — that silently breaks image understanding.
-  return (
-    process.env.GATEWAY_ASSISTANT_MODEL_ID?.trim() || "google/gemini-3.5-flash"
+  return resolveArkModelId(
+    process.env.GATEWAY_ASSISTANT_MODEL_ID?.trim() || ARK_MODEL_IDS.text,
   );
 }
 
@@ -676,7 +676,7 @@ export async function analyzeAssistedTurn(input: {
   let repaired = false;
   try {
     const result = await generateObject({
-      model: gateway.languageModel(modelId),
+      model: arkLanguageModel(modelId),
       schema: assistantResponseSchema,
       system,
       messages,
@@ -694,7 +694,7 @@ export async function analyzeAssistedTurn(input: {
     repaired = true;
     try {
       const repair = await generateObject({
-        model: gateway.languageModel(modelId),
+        model: arkLanguageModel(modelId),
         schema: assistantResponseSchema,
         system: `${system}\nPrevious response failed schema validation. Repair and return valid JSON only.`,
         messages: [

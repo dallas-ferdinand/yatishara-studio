@@ -22,8 +22,6 @@ export const list = authedQuery({
       slug: v.union(
         v.literal("seedance-2.5"),
         v.literal("seedance-2.0"),
-        v.literal("google-omni-flash"),
-        v.literal("kling-3.0-i2v"),
       ),
       label: v.string(),
       description: v.string(),

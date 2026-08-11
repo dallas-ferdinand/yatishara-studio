@@ -1553,8 +1553,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         }
       }
 
-      const klingVideo =
-        mode === "video" && resolvedVideoModel?.slug === "kling-3.0-i2v";
+      const klingVideo = false;
 
       if (body.referenceElementIds?.length) {
         try {
@@ -1756,7 +1755,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         resolvedModel:
           mode === "video"
             ? resolvedVideoModel!.gatewayModelId
-            : (process.env.GATEWAY_IMAGE_MODEL_ID ?? "openai/gpt-image-2"),
+            : (process.env.GATEWAY_IMAGE_MODEL_ID ??
+              "dola-seedream-5-0-pro-260628"),
         stylePresetId: preset.id,
         styleSheetElementId,
         userPrompt,

@@ -4,7 +4,6 @@
  * Tools are the only way to mutate brief/settings; prose is not authoritative.
  */
 import { generateObject, generateText, jsonSchema, stepCountIs } from "ai";
-import { gateway } from "@ai-sdk/gateway";
 import type { Id } from "../_generated/dataModel";
 import type { ReferenceInput } from "./referenceInput";
 import { normalizeAudioMimeType } from "./referenceInput";
@@ -39,19 +38,20 @@ import {
   measuredTextUsageFromGateway,
   type MeasuredTextUsage,
 } from "./generationPricing";
+import { ARK_MODEL_IDS, arkLanguageModel, resolveArkModelId } from "./byteplusArk";
 
 const MAX_AGENT_STEPS = 8;
 const RECOVERY_AGENT_STEPS = 2;
 
 function assistantModelId(): string {
-  return (
-    process.env.GATEWAY_ASSISTANT_MODEL_ID?.trim() ||
-    "google/gemini-3.5-flash"
+  return resolveArkModelId(
+    process.env.GATEWAY_ASSISTANT_MODEL_ID?.trim() || ARK_MODEL_IDS.text,
   );
 }
 
 function assistantFallbackModelId(): string | undefined {
-  return process.env.GATEWAY_ASSISTANT_FALLBACK_MODEL_ID?.trim() || undefined;
+  const raw = process.env.GATEWAY_ASSISTANT_FALLBACK_MODEL_ID?.trim();
+  return raw ? resolveArkModelId(raw) : ARK_MODEL_IDS.textMini;
 }
 
 function assistanceErrorDetails(error: unknown): {
@@ -121,7 +121,7 @@ async function inspectReferenceMedia(
   reference: ReferenceInput,
 ): Promise<{ description: string; usage: MeasuredTextUsage }> {
   const result = await generateText({
-    model: gateway.languageModel(modelId),
+    model: arkLanguageModel(modelId),
     system:
       "Inspect the supplied Studio media for a creative production agent. Describe only observable content, composition, text, branding, visual style, motion, pacing, and audio that would affect how it should be used as a generation reference. Be concise and do not infer private identity.",
     messages: [
@@ -270,7 +270,7 @@ async function runCreativeReadinessCritic(input: {
     .slice(0, 3)
     .flatMap((reference) => contentPartForReference(reference));
   const result = await generateObject({
-    model: gateway.languageModel(input.modelId),
+    model: arkLanguageModel(input.modelId),
     schema: readinessCritiqueSchema,
     system: READINESS_CRITIC_SYSTEM,
     messages: [
@@ -1012,7 +1012,7 @@ export async function runAssistanceAgentLoop(input: {
     const modelIds = [modelId, assistantFallbackModelId() ?? modelId];
     const generateWithActiveModel = () =>
       generateText({
-        model: gateway.languageModel(modelId),
+        model: arkLanguageModel(modelId),
         tools,
         stopWhen: [
           () => Boolean(session.terminal),

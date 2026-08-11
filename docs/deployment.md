@@ -66,7 +66,7 @@ Set these on Coolify for the Next app:
 - server URLs: `CONVEX_SELF_HOSTED_URL`, `CONVEX_SITE_URL`, `SITE_URL`
 - auth/email/WhatsApp: `AUTH_SECRET`, `AUTH_RESEND_KEY`, `AUTH_RESEND_FROM`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`
 - admin bootstrap: `STUDIO_SUPER_ADMIN_EMAIL`, `STUDIO_SUPER_ADMIN_PHONE`, `STUDIO_WHATSAPP_NUMBER`
-- generation: `AI_GATEWAY_API_KEY`, `GATEWAY_TEXT_MODEL_ID`, `GATEWAY_ASSISTANT_MODEL_ID`, `GATEWAY_DM_IMPROVE_MODEL_ID`, `GATEWAY_IMAGE_MODEL_ID`, `GATEWAY_VIDEO_MODEL_ID`, optional `GUIDED_VIDEO_ASSISTANCE_ENABLED`
+- generation: `ARK_API_KEY`, `GATEWAY_TEXT_MODEL_ID`, `GATEWAY_ASSISTANT_MODEL_ID`, `GATEWAY_DM_IMPROVE_MODEL_ID`, `GATEWAY_IMAGE_MODEL_ID`, `GATEWAY_VIDEO_MODEL_ID`, optional `GUIDED_VIDEO_ASSISTANCE_ENABLED`
 - Bunny: storage, CDN signing, stream library, stream access key vars
 - public wallpapers: `NEXT_PUBLIC_STUDIO_BG_CDN=https://yatishara-studio-assets.b-cdn.net/studio/wallpapers/v1` (unsigned; upload via `node scripts/upload-studio-wallpapers.mjs`)
 - web push: VAPID public/private vars and `WEB_PUSH_SUBJECT`
@@ -82,7 +82,7 @@ Set Convex-side env where Convex functions need it:
 - `EVOLUTION_API_KEY`
 - `EVOLUTION_INSTANCE`
 - `STUDIO_SUPER_ADMIN_EMAIL`
-- `AI_GATEWAY_API_KEY`
+- `ARK_API_KEY`
 - Gateway model ID vars (`GATEWAY_*`)
 - Bunny vars
 - web push vars
@@ -148,7 +148,7 @@ Live smoke after deploy:
 - Upload a small asset and preview signed media.
 - Create/edit a document.
 - Complete a PayWise top-up and confirm credits grant after status verification.
-- Run image/video generation only after AI Gateway model IDs are configured.
+- Run image/video generation only after BytePlus ModelArk model IDs are configured.
 - Confirm notifications and generated assets are saved.
 
 Preview smoke:
@@ -165,4 +165,4 @@ Preview smoke:
 - Convex generated API mismatch: run `npx convex dev` against the intended deployment and restart the Next process.
 - OTP email missing: verify `AUTH_RESEND_KEY`, `AUTH_RESEND_FROM`, Resend domain status, and Convex env.
 - WhatsApp OTP missing: verify `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`, and sender number env.
-- AI Gateway auth or model errors: verify `AI_GATEWAY_API_KEY` and `GATEWAY_*_MODEL_ID` values in Convex env.
+- BytePlus ModelArk auth or model errors: verify `ARK_API_KEY` and `GATEWAY_*_MODEL_ID` values in Convex env.

@@ -17,12 +17,13 @@ For broader architecture, local setup, production deployment, and preview hot re
 ## Required Human Gates
 
 1. Keep `/opt/yatishara-studio` pushed to the dedicated GitHub repo before deploys.
-2. Confirm AI Gateway model IDs on Convex:
-   - text: `GATEWAY_TEXT_MODEL_ID` (`google/gemini-3.5-flash`)
-   - assistant: `GATEWAY_ASSISTANT_MODEL_ID` (`google/gemini-3.5-flash`)
-   - DM Improve: `GATEWAY_DM_IMPROVE_MODEL_ID` (`google/gemini-2.5-flash-lite`)
-   - image: `GATEWAY_IMAGE_MODEL_ID` (`openai/gpt-image-2`)
-   - video: `GATEWAY_VIDEO_MODEL_ID` (`bytedance/seedance-2.5`)
+2. Confirm BytePlus ModelArk model IDs on Convex:
+   - text: `GATEWAY_TEXT_MODEL_ID` (`seed-2-0-lite-260428`)
+   - assistant: `GATEWAY_ASSISTANT_MODEL_ID` (`seed-2-0-lite-260428`)
+   - DM Improve: `GATEWAY_DM_IMPROVE_MODEL_ID` (`seed-2-0-mini-260428`)
+   - image: `GATEWAY_IMAGE_MODEL_ID` (`dola-seedream-5-0-pro-260628`)
+   - video: `GATEWAY_VIDEO_MODEL_ID` (`dreamina-seedance-2-5-260628`)
+   - auth: `ARK_API_KEY` (never commit)
 3. Trigger Coolify deploy for app `y2po9nswpdem975f1zo47u19`.
 4. Complete first OTP login with `STUDIO_SUPER_ADMIN_EMAIL`, then use Settings to:
    - seed style presets,
@@ -75,7 +76,7 @@ Set these on the dedicated Studio Convex deployment (`https://convex-studio-api.
 
 - Bunny Storage: live tiny upload returned `201`.
 - Bunny signed CDN read: live signed GET returned `200`.
-- Vercel AI Gateway: `AI_GATEWAY_API_KEY` and `GATEWAY_*` model IDs configured on Convex; text smoke returns successfully.
+- BytePlus ModelArk: `ARK_API_KEY` and `GATEWAY_*` model IDs configured on Convex; text smoke returns successfully.
 - Web push: VAPID keys are generated and configured; browser permission/subscription must be tested on the live HTTPS domain.
 - Resend: API key/env are configured; DNS verification may still depend on provider propagation.
 

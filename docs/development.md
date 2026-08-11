@@ -54,12 +54,14 @@ Auth and messaging:
 
 Generation:
 
-- `AI_GATEWAY_API_KEY`
-- `GATEWAY_TEXT_MODEL_ID` — prompt enhancement and scripts (default: `google/gemini-3.5-flash`)
-- `GATEWAY_ASSISTANT_MODEL_ID` — Studio Assistance multimodal co-pilot (default: `google/gemini-3.5-flash`)
-- `GATEWAY_DM_IMPROVE_MODEL_ID` — Messages DM Improve wand (default: `google/gemini-2.5-flash-lite`)
-- `GATEWAY_IMAGE_MODEL_ID` — image generation (default: `openai/gpt-image-2`)
-- `GATEWAY_VIDEO_MODEL_ID` — video generation (default: `bytedance/seedance-2.5`)
+- `ARK_API_KEY` — BytePlus ModelArk API key (Convex secrets only)
+- `ARK_BASE_URL` — optional; default `https://ark.ap-southeast.bytepluses.com/api/v3`
+- `GATEWAY_TEXT_MODEL_ID` — prompt enhancement and scripts (default: `seed-2-0-lite-260428`)
+- `GATEWAY_ASSISTANT_MODEL_ID` — Studio Assistance multimodal co-pilot (default: `seed-2-0-lite-260428`)
+- `GATEWAY_ASSISTANT_FALLBACK_MODEL_ID` — Assistance fallback (default: `seed-2-0-mini-260428`)
+- `GATEWAY_DM_IMPROVE_MODEL_ID` — Messages DM Improve wand (default: `seed-2-0-mini-260428`)
+- `GATEWAY_IMAGE_MODEL_ID` — image generation (default: `dola-seedream-5-0-pro-260628`)
+- `GATEWAY_VIDEO_MODEL_ID` — video generation (default: `dreamina-seedance-2-5-260628`)
 - `ELEVENLABS_API_KEY` — audio generation (voiceover `eleven_v3`, sound effects, music `music_v2`); Convex secrets only
 - `GUIDED_VIDEO_ASSISTANCE_ENABLED` — set `0`/`false` to hide Assistance UI (default on)
 
@@ -95,7 +97,7 @@ Run `npm run check:launch-env:convex` before release to verify these names exist
 
 ## Convex Notes
 
-- Generation runs in Convex actions. Set `AI_GATEWAY_API_KEY` and all `GATEWAY_*` model IDs on the Convex deployment with `npx convex env set`, not only in `.env.local`.
+- Generation runs in Convex actions. Set `ARK_API_KEY` and all `GATEWAY_*` model IDs on the Convex deployment with `npx convex env set`, not only in `.env.local`.
 - For the self-hosted Convex instance (`CONVEX_SELF_HOSTED_URL`), `npx convex dev` and `npx convex env` target that deployment when `.env.local` points at it.
 - Public Convex functions should define `args` and `returns` validators.
 - User data should go through `authedQuery`/`authedMutation`; admin-only flows should use `adminQuery`/`adminMutation`.

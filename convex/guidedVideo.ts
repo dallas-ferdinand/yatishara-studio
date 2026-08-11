@@ -384,7 +384,7 @@ async function buildPlanForBrief(
     resolvedModel:
       videoModel?.gatewayModelId ??
       process.env.GATEWAY_IMAGE_MODEL_ID?.trim() ??
-      "openai/gpt-image-2",
+      "dola-seedream-5-0-pro-260628",
     videoModel: videoModel?.slug,
     videoCapabilities: videoModel,
     stylePresetId: brief.stylePresetId ? String(brief.stylePresetId) : undefined,

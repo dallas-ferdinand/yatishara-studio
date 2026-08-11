@@ -54,6 +54,7 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_authEmail from "../lib/authEmail.js";
 import type * as lib_bunny from "../lib/bunny.js";
 import type * as lib_bunnyStream from "../lib/bunnyStream.js";
+import type * as lib_byteplusArk from "../lib/byteplusArk.js";
 import type * as lib_commentSort from "../lib/commentSort.js";
 import type * as lib_composerScriptTypes from "../lib/composerScriptTypes.js";
 import type * as lib_creativeDirection from "../lib/creativeDirection.js";
@@ -202,6 +203,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authEmail": typeof lib_authEmail;
   "lib/bunny": typeof lib_bunny;
   "lib/bunnyStream": typeof lib_bunnyStream;
+  "lib/byteplusArk": typeof lib_byteplusArk;
   "lib/commentSort": typeof lib_commentSort;
   "lib/composerScriptTypes": typeof lib_composerScriptTypes;
   "lib/creativeDirection": typeof lib_creativeDirection;

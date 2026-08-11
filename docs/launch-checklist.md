@@ -3,7 +3,7 @@
 ## Human Inputs Needed
 
 - Keep dedicated GitHub repo `dallas-ferdinand/yatishara-studio` pushed before Coolify deploys.
-- Confirm `AI_GATEWAY_API_KEY` and `GATEWAY_*` model IDs are set on the Convex deployment.
+- Confirm `ARK_API_KEY` and `GATEWAY_*` model IDs are set on the Convex deployment.
 - Resend DNS verification complete for `yatishara.com`.
 - Configure PayWise sandbox/production keys on the Convex deployment (`PAYWISE_*`).
 - Record the exact successful sandbox payment status in `PAYWISE_PAID_STATUSES`; do not infer it.
@@ -31,7 +31,7 @@
 - Preview opens without a password gate and HMR works on `preview.studio.yatishara.com`.
 - OTP sign-in works on `studio.yatishara.com`.
 - Bunny upload and signed read work. Completed locally against live Bunny API.
-- AI Gateway image generation works with `GATEWAY_IMAGE_MODEL_ID` (`openai/gpt-image-2`).
+- BytePlus ModelArk image generation works with `GATEWAY_IMAGE_MODEL_ID` (`dola-seedream-5-0-pro-260628`).
 - Seedance 2.0 video generation works with `GATEWAY_VIDEO_MODEL_ID`.
 - PayWise top-up checkout grants credits after provider status verification and sends notifications.
 - Callback replay, return-sync replay, amount/currency/ID mismatch, and delayed settlement tests pass without duplicate credits.

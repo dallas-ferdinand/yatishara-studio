@@ -31,7 +31,7 @@ const estimateSchema = {
     .string()
     .optional()
     .describe(
-      'Video model: seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s). MCP-only: kling-3.0-i2v, google-omni-flash. Call studio_list_video_models for caps.',
+      'Video model: seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s). Call studio_list_video_models for caps.',
     ),
 };
 
@@ -164,7 +164,7 @@ export function registerGenerationTools(server: McpServer) {
 
   server.tool(
     "studio_list_video_models",
-    "List video models for MCP selection. Includes kling-3.0-i2v (MCP-only, not in Studio UI).",
+    "List video models for MCP selection (Seedance 2.5 / 2.0 via BytePlus Ark).",
     {},
     async () => jsonResult(await studioFetch("/video-models?scope=mcp")),
   );
@@ -501,7 +501,7 @@ Wait ≥65s between video calls (1 req/min gateway quota). For packs use studio_
         .string()
         .optional()
         .describe(
-          'seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s). MCP-only: kling-3.0-i2v, google-omni-flash.',
+          'seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s).',
         ),
       compact: z.boolean().optional(),
     },

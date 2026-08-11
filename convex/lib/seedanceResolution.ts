@@ -1,13 +1,12 @@
 /**
- * Seedance gateway parameter alignment.
+ * Seedance BytePlus Ark parameter alignment.
  *
- * Vercel AI Gateway:
- * - `bytedance/seedance-2.5`: Resolutions `480p` / `720p`; duration 4–30s.
- * - `bytedance/seedance-2.0`: Resolutions `480p` / `720p` / `1080p` / `4k`; duration 4–15s.
+ * - Seedance 2.5 (`dreamina-seedance-2-5-*`): Resolutions `480p` / `720p`; duration 4–30s.
+ * - Seedance 2.0 (`dreamina-seedance-2-0-*`): Resolutions `480p` / `720p` / `1080p` / `4k`; duration 4–15s.
  *
- * Studio may store WxH for pricing/UI; convert at the gateway boundary.
+ * Studio may store WxH for pricing/UI; convert at the Ark boundary.
  * For 2.5, unsupported tiers (1080p / 4K) clamp to 720p.
- * For 2.0, all four gateway labels are passed through.
+ * For 2.0, all four labels are passed through.
  */
 export type SeedanceResolutionLabel = "480p" | "720p" | "1080p" | "4k";
 
@@ -23,7 +22,14 @@ const SEEDANCE_ASPECT_RATIOS = new Set([
 function isSeedance20Model(videoModel?: string | null): boolean {
   if (!videoModel?.trim()) return false;
   const key = videoModel.trim().toLowerCase();
-  return key === "seedance-2.0" || key.includes("seedance-2.0");
+  if (key.includes("seedance-2.5") || key.includes("seedance-2-5")) {
+    return false;
+  }
+  return (
+    key === "seedance-2.0" ||
+    key.includes("seedance-2.0") ||
+    key.includes("seedance-2-0")
+  );
 }
 
 export function normalizeSeedanceResolution(
