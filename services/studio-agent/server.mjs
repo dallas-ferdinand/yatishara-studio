@@ -432,8 +432,10 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "127.0.0.1", () => {
+const HOST = String(process.env.STUDIO_AGENT_HOST || "0.0.0.0").trim() || "0.0.0.0";
+
+server.listen(PORT, HOST, () => {
   console.log(
-    `[studio-agent] Pi worker on http://127.0.0.1:${PORT} (auth ${TOKEN ? "required" : "MISSING"})`,
+    `[studio-agent] Pi worker on http://${HOST}:${PORT} (auth ${TOKEN ? "required" : "MISSING"})`,
   );
 });
