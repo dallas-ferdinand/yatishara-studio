@@ -1351,7 +1351,7 @@
   align-items: stretch;
   gap: 0;
   width: 100%;
-  max-width: var(--studio-composer-shell-max, min(600px, 94vw));
+  max-width: calc(var(--studio-chat-column-max, min(92%, 36rem)) + 6px);
   margin-inline: auto;
   box-sizing: border-box;
   padding: 2px 12px max(10px, env(safe-area-inset-bottom, 0px));
