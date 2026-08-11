@@ -25305,9 +25305,6 @@ export function StudioShell({
             expiresUnix={assetUrlExpiresUnix}
             generationDetailJobId={generationDetail?.jobId ?? null}
             isMobileLayout={isMobile}
-            createLibraryKind={
-              mode === "video" || mode === "audio" ? mode : "image"
-            }
             onSelectGenerationTile={(tile) => {
               setSettingsOpen(false);
               setHistoryOpen(false);
@@ -27890,7 +27887,7 @@ function StudioModeSwitcher({ mode, setMode }) {
           <button
             key={item.value}
             type="button"
-            className={`studio-mode-row studio-composer-circle-btn${active ? " is-active" : ""}`}
+            className={`studio-mode-row${active ? " is-active" : ""}`}
             role="tab"
             aria-selected={active}
             aria-label={item.label}
@@ -31511,7 +31508,6 @@ function ActivePane({
   onLibraryUpscale,
   onLibraryGenerateVideo,
   isMobileLayout = false,
-  createLibraryKind = "image",
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
   const feedPostId = activeTab.startsWith("feed:")
@@ -31862,7 +31858,6 @@ function ActivePane({
     return wrapPane(
       <StudioCreateLibrary
         expiresUnix={expiresUnix}
-        kind={createLibraryKind}
         isMobile={isMobileLayout}
         selectedJobId={generationDetailJobId}
         onSelectTile={onSelectGenerationTile}

@@ -121,9 +121,10 @@
 }
 
 .studio-gen-tile-media.is-square,
-.studio-gen-tile-media.is-audio:not(.is-audio-player),
+.studio-gen-tile-media.is-audio,
 .studio-gen-tile.is-busy .studio-gen-tile-media,
-.studio-gen-tile.is-failed .studio-gen-tile-media {
+.studio-gen-tile.is-failed .studio-gen-tile-media,
+.studio-gen-tile.is-audio-ready .studio-gen-tile-media {
   aspect-ratio: 1;
   display: flex;
   align-items: center;
@@ -131,20 +132,95 @@
 }
 
 .studio-gen-tile-media.is-audio-player {
-  aspect-ratio: auto;
+  aspect-ratio: 1;
   min-height: 0;
-  display: block;
-  padding: 8px;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 10px;
   background: var(--studio-grid-tile-bg, color-mix(in srgb, var(--color-cursor-fg, #fff) 4%, transparent));
 }
 
 .studio-gen-tile-audio {
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: stretch;
 }
 
-.studio-gen-tile-audio .studio-chat-audio-player {
+.studio-gen-tile-audio.is-loading {
+  align-items: center;
+  justify-content: center;
+}
+
+.studio-gen-tile-audio .studio-chat-audio-player,
+.studio-gen-tile-audio .studio-chat-audio-pane {
   width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.studio-gen-tile-audio .studio-chat-audio-pane {
+  padding: 0;
+  background: transparent;
+  display: flex;
+  align-items: stretch;
+}
+
+.studio-gen-tile-audio .studio-chat-audio-player.is-pane {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 8px 12px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-gen-tile-audio .studio-chat-audio-player.is-pane.is-compact {
+  padding: 8px 6px 10px;
+  gap: 6px;
+}
+
+.studio-gen-tile-audio .studio-chat-audio-orb-hero {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  min-height: 0;
+}
+
+.studio-gen-tile-audio .studio-chat-audio-row {
+  flex: 0 0 auto;
+  width: 100%;
+  gap: 6px;
+}
+
+.studio-gen-tile-audio .studio-chat-audio-wave {
+  min-width: 0;
+  height: 36px;
+}
+
+.studio-gen-tile-audio .studio-chat-audio-time {
+  font-size: 10px;
+}
+
+/* ElevenLabs orb — big centered play in the 1:1 tile */
+.studio-gen-tile-audio .studio-orb-play.is-md,
+.studio-gen-tile-audio .studio-orb-play.is-lg {
+  width: min(48%, 92px);
+  height: min(48%, 92px);
+  min-width: 68px;
+  min-height: 68px;
 }
 
 .studio-gen-tile-spinner {

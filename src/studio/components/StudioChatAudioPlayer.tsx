@@ -219,8 +219,9 @@ function AudioPlayerBody({
 }) {
   const player = useAudioPlayer();
   const failed = Boolean(player.error);
-  const waveBars = isPane ? 120 : compact ? 72 : 96;
-  const waveHeight = isPane ? 80 : compact ? 28 : 48;
+  // Pane + compact = masonry / card tile (big orb, shorter wave under).
+  const waveBars = isPane ? (compact ? 72 : 120) : compact ? 72 : 96;
+  const waveHeight = isPane ? (compact ? 36 : 80) : compact ? 28 : 48;
   const waveform = useMemo(
     () => seedWaveform(src, waveBars),
     [src, waveBars],
@@ -308,7 +309,7 @@ export function StudioChatAudioPlayer({
         src={src}
         title={title}
         isPane={isPane}
-        compact={compact && !isPane}
+        compact={compact}
         durationHint={durationHint}
         showTitle={showTitle}
         headerEnd={headerEnd}

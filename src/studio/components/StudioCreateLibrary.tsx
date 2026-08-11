@@ -14,8 +14,6 @@ import "./studio-create-library.css";
 
 const PAGE_SIZE = 24;
 
-type KindFilter = "image" | "video" | "audio";
-
 type LightboxState = {
   url: string;
   kind: "image" | "video" | "audio";
@@ -24,8 +22,6 @@ type LightboxState = {
 
 type StudioCreateLibraryProps = {
   expiresUnix: number;
-  /** Follows composer mode (image / video / audio). */
-  kind?: KindFilter;
   isMobile?: boolean;
   selectedJobId?: string | null;
   onSelectTile: (tile: GenerationLibraryTile) => void;
@@ -34,14 +30,8 @@ type StudioCreateLibraryProps = {
   onGenerateVideo?: (tile: GenerationLibraryTile) => void;
 };
 
-function normalizeKind(kind?: string): KindFilter {
-  if (kind === "video" || kind === "audio") return kind;
-  return "image";
-}
-
 export function StudioCreateLibrary({
   expiresUnix,
-  kind: kindProp = "image",
   isMobile,
   selectedJobId,
   onSelectTile,
@@ -50,28 +40,21 @@ export function StudioCreateLibrary({
   onGenerateVideo,
 }: StudioCreateLibraryProps) {
   const convex = useConvex();
-  const kind = normalizeKind(kindProp);
   const [moreTiles, setMoreTiles] = useState<GenerationLibraryTile[]>([]);
   const [nextCursor, setNextCursor] = useState<number | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
+  // One masonry of all kinds — no type filter yet.
   const firstPage = useQuery(api.generationLibrary.listMyGenerations, {
-    kind,
+    kind: "all",
     limit: PAGE_SIZE,
     expiresUnix,
   });
 
   useEffect(() => {
-    setMoreTiles([]);
-    setNextCursor(undefined);
-    setHasMore(false);
-  }, [kind]);
-
-  useEffect(() => {
     if (!firstPage) return;
-    // Only sync cursor/hasMore from the first page when we haven't loaded extras yet.
     if (moreTiles.length === 0) {
       setNextCursor(firstPage.nextCursor);
       setHasMore(firstPage.hasMore);
@@ -94,7 +77,7 @@ export function StudioCreateLibrary({
     setLoadingMore(true);
     try {
       const page = await convex.query(api.generationLibrary.listMyGenerations, {
-        kind,
+        kind: "all",
         cursor: nextCursor,
         limit: PAGE_SIZE,
         expiresUnix,
@@ -105,7 +88,7 @@ export function StudioCreateLibrary({
     } finally {
       setLoadingMore(false);
     }
-  }, [convex, expiresUnix, kind, loadingMore, nextCursor]);
+  }, [convex, expiresUnix, loadingMore, nextCursor]);
 
   const openLightbox = useCallback((tile: GenerationLibraryTile) => {
     const url = tile.playableUrl ?? tile.thumbnailUrl;
@@ -123,8 +106,6 @@ export function StudioCreateLibrary({
   }, [lightbox]);
 
   const loading = firstPage === undefined;
-  const emptyLabel =
-    kind === "video" ? "Generate a video" : kind === "audio" ? "Generate audio" : "Generate an image";
 
   return (
     <div className="studio-create-library">
@@ -136,8 +117,8 @@ export function StudioCreateLibrary({
         ) : tiles.length === 0 ? (
           <div className="studio-create-library-empty">
             <Sparkles className="h-6 w-6 opacity-60" aria-hidden="true" />
-            <h3>{emptyLabel}</h3>
-            <p>Use the composer below — results for this mode show up here.</p>
+            <h3>Generate something</h3>
+            <p>Use the composer below — new results show up here.</p>
           </div>
         ) : (
           <>

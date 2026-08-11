@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { isVideoFileUrl } from "@/studio/lib/mediaPlayback";
 import {
   StudioChatAudioPlayer,
   StudioChatAudioPlayerLoading,
@@ -76,13 +77,22 @@ export function StudioGenerationTile({
   const busy = isBusy(tile.stage);
   const failed = tile.stage === "failed";
   const cancelled = failed && wasCancelled(tile.error);
-  const squareFrame = busy || failed;
   const doneAudio = tile.kind === "audio" && tile.stage === "done" && Boolean(tile.playableUrl);
+  const squareFrame = busy || failed || tile.kind === "audio";
+  const posterUrl =
+    tile.thumbnailUrl && !isVideoFileUrl(tile.thumbnailUrl) ? tile.thumbnailUrl : undefined;
+  const videoSrc =
+    tile.kind === "video"
+      ? tile.playableUrl || (isVideoFileUrl(tile.thumbnailUrl) ? tile.thumbnailUrl : undefined)
+      : undefined;
+  const imageSrc =
+    tile.kind === "image"
+      ? posterUrl || tile.playableUrl || tile.thumbnailUrl
+      : posterUrl;
   const canPlay =
-    Boolean(tile.playableUrl || tile.thumbnailUrl) &&
     tile.stage === "done" &&
-    tile.kind !== "audio" &&
-    (tile.kind === "video" || tile.kind === "image");
+    ((tile.kind === "image" && Boolean(imageSrc)) ||
+      (tile.kind === "video" && Boolean(videoSrc || posterUrl)));
   const canUpscale = tile.kind === "image" && tile.stage === "done" && Boolean(tile.assetId);
   const canVideo = tile.kind === "image" && tile.stage === "done" && Boolean(tile.assetId);
 
@@ -140,6 +150,52 @@ export function StudioGenerationTile({
     .filter(Boolean)
     .join(" ");
 
+  let mediaBody: ReactNode = null;
+  if (doneAudio) {
+    mediaBody = (
+      <div
+        className="studio-gen-tile-audio"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <StudioChatAudioPlayer
+          src={tile.playableUrl!}
+          title={tile.name}
+          variant="pane"
+          compact
+          durationHint={tile.durationSeconds}
+        />
+      </div>
+    );
+  } else if (tile.kind === "audio" && busy) {
+    mediaBody = (
+      <div className="studio-gen-tile-audio is-loading">
+        <StudioChatAudioPlayerLoading
+          label={tile.stage}
+          ariaLabel={`generating audio (${tile.stage})`}
+        />
+      </div>
+    );
+  } else if (tile.kind === "video" && !failed && (videoSrc || posterUrl)) {
+    mediaBody = videoSrc && !posterUrl ? (
+      <video src={videoSrc} muted playsInline preload="metadata" />
+    ) : posterUrl ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={posterUrl} alt="" draggable={false} />
+    ) : (
+      <video src={videoSrc} muted playsInline preload="metadata" />
+    );
+  } else if (tile.kind === "image" && !failed && imageSrc) {
+    mediaBody = (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={imageSrc} alt="" draggable={false} />
+    );
+  } else if (busy) {
+    mediaBody = (
+      <Loader2 className="studio-gen-tile-spinner h-6 w-6 animate-spin" aria-hidden="true" />
+    );
+  }
+
   return (
     <div
       ref={rootRef}
@@ -160,34 +216,8 @@ export function StudioGenerationTile({
       aria-label={tile.name}
     >
       <div className={mediaClass}>
-        {doneAudio ? (
-          <div
-            className="studio-gen-tile-audio"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            <StudioChatAudioPlayer
-              src={tile.playableUrl!}
-              title={tile.name}
-              compact
-              durationHint={tile.durationSeconds}
-            />
-          </div>
-        ) : tile.kind === "audio" && busy ? (
-          <StudioChatAudioPlayerLoading
-            label={tile.stage}
-            ariaLabel={`Generating audio (${tile.stage})`}
-          />
-        ) : tile.kind === "video" && tile.playableUrl && !tile.thumbnailUrl && !failed ? (
-          <video src={tile.playableUrl} muted playsInline preload="metadata" />
-        ) : tile.thumbnailUrl && !failed ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={tile.thumbnailUrl} alt="" draggable={false} />
-        ) : busy ? (
-          <Loader2 className="studio-gen-tile-spinner h-6 w-6 animate-spin" aria-hidden="true" />
-        ) : null}
+        {mediaBody}
 
-        {/* Kind badge stays normal even when failed */}
         <span className="studio-gen-tile-badge">{tile.kind}</span>
 
         {busy ? (

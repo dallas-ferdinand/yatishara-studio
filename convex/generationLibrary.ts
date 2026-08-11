@@ -94,7 +94,6 @@ async function primaryOutputAsset(
     .query("generationOutputs")
     .withIndex("by_job", (q) => q.eq("jobId", jobId))
     .collect();
-  if (!outputs.length) return null;
   outputs.sort((a, b) => a.sortOrder - b.sortOrder);
   for (const output of outputs) {
     const asset = await ctx.db.get("assets", output.assetId);
@@ -102,36 +101,38 @@ async function primaryOutputAsset(
       return asset;
     }
   }
+  // Some older jobs only stamped sourceGenerationJobId on the asset row.
+  const bySource = await ctx.db
+    .query("assets")
+    .withIndex("by_generation_job", (q) => q.eq("sourceGenerationJobId", jobId))
+    .order("desc")
+    .take(4);
+  for (const asset of bySource) {
+    if (!asset.deletedAt && !asset.purgedAt) return asset;
+  }
   return null;
 }
 
 async function signTileMedia(
   asset: Doc<"assets"> | null,
   expiresUnix: number | undefined,
-  includePlayable: boolean,
 ): Promise<{ thumbnailUrl?: string; playableUrl?: string }> {
   if (!asset || expiresUnix === undefined) return {};
   const thumbPath = assetThumbnailPath(asset);
-  let thumbnailUrl = thumbPath
+  // Real image poster only — never treat a video file URL as an <img> thumb.
+  const thumbnailUrl = thumbPath
     ? await signBunnyCdnUrl(thumbPath, expiresUnix, THUMB_TRANSFORM)
     : undefined;
-  if (!thumbnailUrl && asset.kind === "video" && asset.bunnyPath) {
-    thumbnailUrl = await signBunnyCdnUrl(asset.bunnyPath, expiresUnix);
-  }
   let playableUrl: string | undefined;
-  if (includePlayable && asset.bunnyPath) {
-    if (asset.kind === "video" || asset.kind === "audio") {
-      playableUrl = await signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind);
-    } else if (asset.kind === "image") {
-      playableUrl = await signBunnyFullUrl(asset.bunnyPath, expiresUnix, "image");
-    }
+  if (asset.bunnyPath) {
+    playableUrl = await signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind);
   }
-  // Grid <video> poster fallback when no dedicated thumb.
-  if (!thumbnailUrl && playableUrl && (asset.kind === "video" || asset.kind === "audio")) {
-    thumbnailUrl = playableUrl;
-  }
+  // Images: if Optimizer thumb fails to resolve, fall back to full signed image.
+  const displayThumb =
+    thumbnailUrl ||
+    (asset.kind === "image" && playableUrl ? playableUrl : undefined);
   return {
-    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    ...(displayThumb ? { thumbnailUrl: displayThumb } : {}),
     ...(playableUrl ? { playableUrl } : {}),
   };
 }
@@ -143,9 +144,7 @@ async function tileFromJob(
   signMedia: boolean,
 ) {
   const asset = await primaryOutputAsset(ctx, job._id);
-  const media = signMedia
-    ? await signTileMedia(asset, expiresUnix, asset?.kind === "video" || asset?.kind === "audio")
-    : {};
+  const media = signMedia ? await signTileMedia(asset, expiresUnix) : {};
   const name =
     asset?.name?.trim() ||
     promptSnippet(job.userPrompt, 48) ||
@@ -306,7 +305,7 @@ export const getGenerationDetail = authedQuery({
       asset = await primaryOutputAsset(ctx, job._id);
     }
 
-    const media = await signTileMedia(asset, args.expiresUnix, true);
+    const media = await signTileMedia(asset, args.expiresUnix);
     const creditsSpent = await creditsForJob(ctx, job);
 
     const inputs = await ctx.db
