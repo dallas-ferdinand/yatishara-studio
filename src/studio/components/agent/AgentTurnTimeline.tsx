@@ -149,6 +149,13 @@ function TurnBlock({
     return undefined;
   };
 
+  const hasActiveStep = turn.steps.some(
+    (step) =>
+      step.status === "started" ||
+      step.status === "queued" ||
+      step.status === "pending_approval",
+  );
+
   return (
     <section className="studio-agent-turn" aria-label="Agent turn">
       {inline.parts.length || turn.userText ? (
@@ -220,9 +227,11 @@ function TurnBlock({
         </div>
       ) : null}
 
-      {turn.isLive && !turn.assistantText ? (
+      {turn.isLive && !turn.assistantText && !hasActiveStep ? (
         <div className="studio-agent-live-progress" role="status">
-          <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+          <span className="studio-agent-step-icon" aria-hidden="true">
+            <Loader2 size={13} className="animate-spin" />
+          </span>
           <span className="studio-agent-meta">{liveProgressLabel(turn.steps)}</span>
         </div>
       ) : null}

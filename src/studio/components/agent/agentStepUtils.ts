@@ -390,7 +390,15 @@ export function buildAgentTurns(args: {
 
     if (liveTurn) {
       liveTurn.isLive = true;
-      if (liveSteps.length) liveTurn.steps = liveSteps;
+      if (liveSteps.length) {
+        liveTurn.steps = liveSteps.map((step) => ({
+          ...step,
+          isLive:
+            step.status === "started" ||
+            step.status === "queued" ||
+            step.status === "pending_approval",
+        }));
+      }
       if (liveRunId) liveTurn.runId = liveRunId;
       if (pendingAttachments?.length) liveTurn.attachments = pendingAttachments;
       liveTurn.assistantText = undefined;
@@ -399,7 +407,13 @@ export function buildAgentTurns(args: {
         id: "pending-user",
         userText: pendingText ?? "",
         attachments: pendingAttachments ?? [],
-        steps: liveSteps,
+        steps: liveSteps.map((step) => ({
+          ...step,
+          isLive:
+            step.status === "started" ||
+            step.status === "queued" ||
+            step.status === "pending_approval",
+        })),
         isLive: true,
         runId: liveRunId,
       });

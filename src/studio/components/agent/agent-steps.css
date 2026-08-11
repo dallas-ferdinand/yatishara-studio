@@ -86,6 +86,11 @@
   display: block;
   width: 13px;
   height: 13px;
+  flex: 0 0 auto;
+}
+
+.studio-agent-step-icon .animate-spin {
+  transform-origin: center;
 }
 
 .studio-agent-step.is-error .studio-agent-step-icon {
@@ -135,24 +140,32 @@
 .studio-agent-live-progress {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0;
-  margin: 0;
+  gap: 5px;
+  padding: 0 0 0 4px;
+  margin: 2px 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   font-size: 12px;
+  line-height: 1;
   color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 68%, transparent);
   align-self: flex-start;
   max-width: 100%;
+  box-sizing: border-box;
+}
+
+.studio-agent-live-progress .studio-agent-step-icon {
+  opacity: 0.9;
 }
 
 .studio-agent-live-progress .studio-agent-meta {
   margin: 0;
   min-width: 0;
+  height: 14px;
+  line-height: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 0.85;
+  opacity: 0.9;
   font-size: 12px;
 }
