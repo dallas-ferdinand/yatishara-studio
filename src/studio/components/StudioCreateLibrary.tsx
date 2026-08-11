@@ -14,7 +14,7 @@ import "./studio-create-library.css";
 
 const PAGE_SIZE = 24;
 
-type KindFilter = "all" | "image" | "video" | "audio";
+type KindFilter = "image" | "video" | "audio";
 
 type LightboxState = {
   url: string;
@@ -24,6 +24,8 @@ type LightboxState = {
 
 type StudioCreateLibraryProps = {
   expiresUnix: number;
+  /** Follows composer mode (image / video / audio). */
+  kind?: KindFilter;
   isMobile?: boolean;
   selectedJobId?: string | null;
   onSelectTile: (tile: GenerationLibraryTile) => void;
@@ -32,15 +34,14 @@ type StudioCreateLibraryProps = {
   onGenerateVideo?: (tile: GenerationLibraryTile) => void;
 };
 
-const FILTERS: Array<{ id: KindFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "image", label: "Images" },
-  { id: "video", label: "Videos" },
-  { id: "audio", label: "Audio" },
-];
+function normalizeKind(kind?: string): KindFilter {
+  if (kind === "video" || kind === "audio") return kind;
+  return "image";
+}
 
 export function StudioCreateLibrary({
   expiresUnix,
+  kind: kindProp = "image",
   isMobile,
   selectedJobId,
   onSelectTile,
@@ -49,7 +50,7 @@ export function StudioCreateLibrary({
   onGenerateVideo,
 }: StudioCreateLibraryProps) {
   const convex = useConvex();
-  const [kind, setKind] = useState<KindFilter>("all");
+  const kind = normalizeKind(kindProp);
   const [moreTiles, setMoreTiles] = useState<GenerationLibraryTile[]>([]);
   const [nextCursor, setNextCursor] = useState<number | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
@@ -122,24 +123,11 @@ export function StudioCreateLibrary({
   }, [lightbox]);
 
   const loading = firstPage === undefined;
+  const emptyLabel =
+    kind === "video" ? "Generate a video" : kind === "audio" ? "Generate audio" : "Generate an image";
 
   return (
     <div className="studio-create-library">
-      <div className="studio-create-library-toolbar" role="tablist" aria-label="Generation type">
-        {FILTERS.map((filter) => (
-          <button
-            key={filter.id}
-            type="button"
-            role="tab"
-            aria-selected={kind === filter.id}
-            className={`studio-create-library-filter${kind === filter.id ? " is-active" : ""}`}
-            onClick={() => setKind(filter.id)}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
-
       <div className="studio-create-library-scroll">
         {loading ? (
           <div className="studio-create-library-empty">
@@ -148,8 +136,8 @@ export function StudioCreateLibrary({
         ) : tiles.length === 0 ? (
           <div className="studio-create-library-empty">
             <Sparkles className="h-6 w-6 opacity-60" aria-hidden="true" />
-            <h3>Generate something</h3>
-            <p>Use the composer below — new results show up here.</p>
+            <h3>{emptyLabel}</h3>
+            <p>Use the composer below — results for this mode show up here.</p>
           </div>
         ) : (
           <>
@@ -218,7 +206,6 @@ export function StudioCreateLibrary({
   );
 }
 
-export type { KindFilter };
 export type LibraryOpenTarget = {
   jobId: Id<"generationJobs">;
   assetId?: Id<"assets">;
