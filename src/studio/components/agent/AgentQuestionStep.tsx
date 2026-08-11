@@ -281,66 +281,68 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
         })}
       </div>
 
-      <p className="studio-agent-ask-prompt">{current.prompt}</p>
+      <div className="studio-agent-ask-body">
+        <p className="studio-agent-ask-prompt">{current.prompt}</p>
 
-      <div className="studio-agent-ask-options">
-        {current.options.map((opt, optIndex) => {
-          const selected =
-            currentDraft?.optionId === opt.id && !currentDraft?.customText;
-          const letter = optionLetter(optIndex);
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              className={`studio-agent-ask-option${selected ? " is-selected" : ""}`}
-              disabled={busy}
-              onClick={() => void chooseOption(opt)}
-            >
-              <span className="studio-agent-ask-option-letter" aria-hidden="true">
-                {letter}
-              </span>
-              <span className="studio-agent-ask-option-label">{opt.label}</span>
-            </button>
-          );
-        })}
-        {current.allowCustom !== false ? (
-          customMode ? (
-            <div className="studio-agent-ask-custom is-open">
-              <span className="studio-agent-ask-option-letter" aria-hidden="true">
-                {optionLetter(current.options.length)}
-              </span>
-              <input
-                ref={customRef}
-                value={customText}
-                onChange={(e) => setCustomText(e.target.value)}
-                placeholder="Type your answer…"
+        <div className="studio-agent-ask-options">
+          {current.options.map((opt, optIndex) => {
+            const selected =
+              currentDraft?.optionId === opt.id && !currentDraft?.customText;
+            const letter = optionLetter(optIndex);
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                className={`studio-agent-ask-option${selected ? " is-selected" : ""}`}
                 disabled={busy}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && customText.trim()) {
-                    e.preventDefault();
-                    void commitCustom(customText);
-                  }
-                }}
-              />
-            </div>
-          ) : (
-            <button
-              type="button"
-              className={`studio-agent-ask-option is-muted${currentDraft?.customText ? " is-selected" : ""}`}
-              disabled={busy}
-              onClick={openCustom}
-            >
-              <span className="studio-agent-ask-option-letter" aria-hidden="true">
-                {optionLetter(current.options.length)}
-              </span>
-              <span className="studio-agent-ask-option-label">
-                {currentDraft?.customText
-                  ? currentDraft.customText
-                  : "Something else…"}
-              </span>
-            </button>
-          )
-        ) : null}
+                onClick={() => void chooseOption(opt)}
+              >
+                <span className="studio-agent-ask-option-letter" aria-hidden="true">
+                  {letter}
+                </span>
+                <span className="studio-agent-ask-option-label">{opt.label}</span>
+              </button>
+            );
+          })}
+          {current.allowCustom !== false ? (
+            customMode ? (
+              <div className="studio-agent-ask-custom is-open">
+                <span className="studio-agent-ask-option-letter" aria-hidden="true">
+                  {optionLetter(current.options.length)}
+                </span>
+                <input
+                  ref={customRef}
+                  value={customText}
+                  onChange={(e) => setCustomText(e.target.value)}
+                  placeholder="Type your answer…"
+                  disabled={busy}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customText.trim()) {
+                      e.preventDefault();
+                      void commitCustom(customText);
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={`studio-agent-ask-option is-muted${currentDraft?.customText ? " is-selected" : ""}`}
+                disabled={busy}
+                onClick={openCustom}
+              >
+                <span className="studio-agent-ask-option-letter" aria-hidden="true">
+                  {optionLetter(current.options.length)}
+                </span>
+                <span className="studio-agent-ask-option-label">
+                  {currentDraft?.customText
+                    ? currentDraft.customText
+                    : "Something else…"}
+                </span>
+              </button>
+            )
+          ) : null}
+        </div>
       </div>
 
       <div className="studio-agent-ask-nav">

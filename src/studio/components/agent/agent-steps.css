@@ -468,12 +468,13 @@
   width: 100%;
   max-width: 100%;
   margin: 6px 0 4px;
-  padding: 10px 10px 8px;
+  padding: 0;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 14%, transparent);
   background: var(--mos-plate, var(--mos-panel, #fff));
   box-shadow: none;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 [data-appearance="dark"] .studio-agent-ask-card {
@@ -490,12 +491,23 @@
 .studio-agent-ask-tabs {
   display: flex;
   flex-wrap: nowrap;
+  align-items: center;
   gap: 4px;
-  margin: 0 0 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--mos-ink, #111) 10%, transparent);
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  margin: 0;
+  padding: 0 10px;
+  border-top: 1px solid color-mix(in srgb, var(--mos-ink, #111) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--mos-ink, #111) 12%, transparent);
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.studio-agent-ask-tabs:first-child {
+  border-top: 0;
 }
 
 .studio-agent-ask-tabs::-webkit-scrollbar {
@@ -553,10 +565,15 @@
 }
 
 .studio-agent-ask-intro {
-  margin: 0 0 8px;
+  margin: 0;
+  padding: 10px 10px 8px;
   font-size: 12px;
   line-height: 1.35;
   opacity: 0.72;
+}
+
+.studio-agent-ask-body {
+  padding: 10px 10px 0;
 }
 
 .studio-agent-ask-prompt {
@@ -661,9 +678,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--mos-ink, #111) 10%, transparent);
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  margin: 8px 0 0;
+  padding: 0 10px;
+  border-top: 1px solid color-mix(in srgb, var(--mos-ink, #111) 12%, transparent);
 }
 
 .studio-agent-ask-nav-btn {
@@ -691,8 +713,8 @@
 }
 
 .studio-agent-ask-summary {
-  margin: 8px 0 0;
-  padding-left: 18px;
+  margin: 0;
+  padding: 0 10px 10px 28px;
   font-size: 13px;
 }
 
@@ -700,6 +722,15 @@
   opacity: 0.75;
   width: 100%;
   max-width: 100%;
+  padding: 10px;
+}
+
+.studio-agent-ask-card.is-done .studio-agent-ask-kicker {
+  margin: 0 0 6px;
+}
+
+.studio-agent-ask-card.is-done .studio-agent-ask-summary {
+  padding: 0 0 0 18px;
 }
 
 .studio-agent-media-caption {
