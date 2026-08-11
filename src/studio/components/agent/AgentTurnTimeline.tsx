@@ -155,6 +155,16 @@ function TurnBlock({
       step.status === "queued" ||
       step.status === "pending_approval",
   );
+  const primaryPreview = (turn.attachments ?? [])
+    .map((attachment) => {
+      const preview = previewFor(attachment);
+      if (!preview?.url) return null;
+      return {
+        url: preview.url,
+        kind: preview.kind || attachment.kind,
+      };
+    })
+    .find(Boolean) as { url: string; kind?: string } | undefined;
 
   return (
     <section className="studio-agent-turn" aria-label="Agent turn">
@@ -211,6 +221,8 @@ function TurnBlock({
                   onToggle={() => onToggleStep(step.id)}
                   onDecide={onDecideApproval}
                   onOpenFolder={onOpenFolder}
+                  previewUrl={primaryPreview?.url}
+                  previewKind={primaryPreview?.kind}
                 />
               );
             }

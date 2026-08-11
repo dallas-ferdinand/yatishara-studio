@@ -14,12 +14,16 @@ type AgentApprovalStepProps = {
   onToggle: () => void;
   onDecide: (approvalId: Id<"agentApprovals">, decision: "approve" | "deny") => void;
   onOpenFolder?: (folderId: Id<"folders">) => void;
+  previewUrl?: string;
+  previewKind?: string;
 };
 
 export function AgentApprovalStep({
   step,
   approval,
   onDecide,
+  previewUrl,
+  previewKind,
 }: AgentApprovalStepProps) {
   const isPending = approval.status === "pending";
   const approvalTitle = approval.toolName
@@ -62,6 +66,37 @@ export function AgentApprovalStep({
         <p className="studio-agent-approval-card-summary">
           {approvalSummary(approval)}
         </p>
+        {approval.toolName === "studio_share_asset_post" &&
+        previewUrl &&
+        (previewKind === "image" || previewKind === "video") ? (
+          <div className="studio-agent-approval-post-preview">
+            <div className="studio-agent-approval-post-preview-head">
+              <span className="studio-agent-approval-post-avatar" aria-hidden="true" />
+              <div>
+                <p className="studio-agent-approval-post-name">Your profile post</p>
+                <p className="studio-agent-approval-post-meta">Preview before publishing</p>
+              </div>
+            </div>
+            <div className="studio-agent-approval-post-media-wrap">
+              {previewKind === "video" ? (
+                <video
+                  className="studio-agent-approval-post-media"
+                  src={previewUrl}
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className="studio-agent-approval-post-media"
+                  src={previewUrl}
+                  alt=""
+                />
+              )}
+            </div>
+          </div>
+        ) : null}
         {approval.estimatedCredits != null ? (
           <p className="studio-agent-approval-card-cost">
             Cost: {formatTtdFromCredits(approval.estimatedCredits)}

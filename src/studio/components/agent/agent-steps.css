@@ -147,9 +147,9 @@
 
 .studio-agent-approval-card {
   width: 100%;
-  max-width: min(100%, 34rem);
-  margin-left: 19px;
-  padding: 12px 13px;
+  max-width: min(100%, 31rem);
+  margin-left: 10px;
+  padding: 10px 11px;
   border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 11%, transparent);
   border-radius: 16px;
   background:
@@ -261,7 +261,62 @@
 }
 
 .studio-agent-approval-card .studio-agent-step-approval-actions {
-  margin-top: 10px;
+  margin-top: 8px;
+}
+
+.studio-agent-approval-post-preview {
+  margin-top: 9px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--mos-ink, #111) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 8%, transparent);
+}
+
+.studio-agent-approval-post-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px 8px;
+}
+
+.studio-agent-approval-post-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background:
+    radial-gradient(circle at 30% 30%, color-mix(in srgb, #fff 45%, transparent), transparent 52%),
+    linear-gradient(135deg, color-mix(in srgb, var(--cursor-accent, #7cff6b) 42%, transparent), color-mix(in srgb, var(--mos-ink, #111) 16%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 25%, transparent);
+}
+
+.studio-agent-approval-post-name,
+.studio-agent-approval-post-meta {
+  margin: 0;
+}
+
+.studio-agent-approval-post-name {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--mos-ink, var(--color-cursor-text));
+}
+
+.studio-agent-approval-post-meta {
+  margin-top: 1px;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 58%, transparent);
+}
+
+.studio-agent-approval-post-media-wrap {
+  border-top: 1px solid color-mix(in srgb, var(--mos-ink, #111) 7%, transparent);
+  background: #000;
+}
+
+.studio-agent-approval-post-media {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
 }
 
 .studio-agent-live-progress {
