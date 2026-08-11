@@ -182,12 +182,12 @@ export function StudioGenerationDetailSidebar({
         </h2>
         <button
           type="button"
-          className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close"
+          className="studio-settings-pill studio-settings-trigger studio-gen-detail-close"
           aria-label="Close preview"
           title="Close"
           onClick={onClose}
         >
-          <X aria-hidden="true" />
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </div>
 
