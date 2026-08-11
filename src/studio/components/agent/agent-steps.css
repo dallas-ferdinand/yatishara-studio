@@ -519,6 +519,21 @@
   color: var(--color-cursor-muted, var(--mos-muted));
   background: transparent;
   cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.studio-agent-ask-tab:hover:not(:disabled):not(.is-active) {
+  color: var(--color-cursor-text, var(--mos-ink));
+  background: color-mix(in srgb, var(--mos-ink, #111) 6%, transparent);
+}
+
+.studio-agent-ask-tab:hover:not(:disabled).is-active {
+  background: color-mix(in srgb, var(--mos-ink, #111) 12%, transparent);
+}
+
+.studio-agent-ask-tab:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .studio-agent-ask-tab.is-answered {
