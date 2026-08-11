@@ -13,7 +13,6 @@ import { ArrowUp, Loader2, Mic, Paperclip, Plus, RotateCcw, Settings, Square } f
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import {
-  EXPLORER_DND_TYPE,
   readExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
@@ -220,7 +219,9 @@ function createComposerAttachmentToken(attachment: AgentAttachment) {
   token.dataset.attachmentId = attachment.id;
   token.dataset.label = attachment.label;
   token.dataset.kind = attachment.kind ?? "file";
-  token.dataset.tokenId = `tag-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  token.dataset.tokenId =
+    (attachment as AgentAttachment & { tokenId?: string }).tokenId ??
+    `tag-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   token.dataset.attachment = JSON.stringify(attachment);
   token.addEventListener("dragstart", (event) => {
     token.classList.add("is-dragging");
@@ -228,6 +229,7 @@ function createComposerAttachmentToken(attachment: AgentAttachment) {
       "application/x-studio-composer-token",
       JSON.stringify({ ...attachment, tokenId: token.dataset.tokenId }),
     );
+    event.dataTransfer?.setData("text/plain", attachment.label || "attachment");
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = "move";
     }
@@ -371,12 +373,42 @@ function readComposerTokenDragData(dataTransfer: DataTransfer | null) {
   }
 }
 
-function moveComposerDraggedToken(editor: HTMLDivElement | null, tokenId: string) {
-  if (!editor || !tokenId) return;
-  const token = editor.querySelector(`[data-token-id="${CSS.escape(tokenId)}"]`);
-  const next = token?.nextSibling;
-  token?.remove();
-  if (next?.nodeType === Node.TEXT_NODE && /^\s*$/.test(next.nodeValue ?? "")) next.remove();
+function relocateComposerDraggedToken(
+  editor: HTMLDivElement | null,
+  tokenId: string,
+  insertRange: Range | null,
+) {
+  if (!editor || !tokenId) return false;
+  const token = editor.querySelector(`[data-token-id="${CSS.escape(tokenId)}"]`) as HTMLElement | null;
+  if (!token) return false;
+  const trailing =
+    token.nextSibling?.nodeType === Node.TEXT_NODE &&
+    /^\s*$/.test(token.nextSibling.nodeValue ?? "")
+      ? token.nextSibling
+      : null;
+  const range = normalizeComposerInsertRange(
+    editor,
+    insertRange ? insertRange.cloneRange() : ensureSelectionInEditor(editor),
+  );
+  if (!range) return false;
+  if (
+    token === range.startContainer ||
+    token.contains(range.startContainer)
+  ) {
+    return true;
+  }
+  token.remove();
+  trailing?.remove();
+  const spacer = document.createTextNode(" ");
+  range.insertNode(spacer);
+  range.insertNode(token);
+  range.setStart(spacer, spacer.nodeValue?.length ?? 1);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  editor.focus();
+  return true;
 }
 
 function rangeFromPointInEditor(editor: HTMLDivElement | null, clientX: number, clientY: number) {
@@ -819,14 +851,13 @@ export function StudioAgentPane({
         <footer
           className={`studio-dm-composer is-split${isMobile ? " is-mobile-icons" : ""}${dragOver ? " is-drop-target is-touch-drop-hover" : ""}`}
           data-drop-target="composer"
-          onDragEnter={() => setDragOver(true)}
-          onDragOver={(event) => {
-            const types = Array.from(event.dataTransfer?.types ?? []);
-            if (
-              !types.includes(EXPLORER_DND_TYPE) &&
-              !types.includes("application/x-studio-composer-token")
-            ) return;
+          onDragEnter={(event) => {
             event.preventDefault();
+            setDragOver(true);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
             setDragOver(true);
           }}
           onDragLeave={(event) => {
@@ -835,6 +866,8 @@ export function StudioAgentPane({
             }
           }}
           onDrop={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
             setDragOver(false);
             const tokenAttachment = readComposerTokenDragData(event.dataTransfer) as
               | (AgentAttachment & { tokenId?: string })
@@ -842,14 +875,21 @@ export function StudioAgentPane({
             const entry = readExplorerDragData(event.dataTransfer) as
               | Record<string, unknown>
               | null;
-            event.preventDefault();
             if (tokenAttachment) {
-              moveComposerDraggedToken(editorRef.current, tokenAttachment.tokenId ?? "");
-              insertComposerAttachmentToken(
+              const range = rangeFromPointInEditor(
                 editorRef.current,
-                tokenAttachment,
-                rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
+                event.clientX,
+                event.clientY,
               );
+              if (
+                !relocateComposerDraggedToken(
+                  editorRef.current,
+                  tokenAttachment.tokenId ?? "",
+                  range,
+                )
+              ) {
+                insertComposerAttachmentToken(editorRef.current, tokenAttachment, range);
+              }
               setDraft(readComposerEditorText(editorRef.current));
               return;
             }
