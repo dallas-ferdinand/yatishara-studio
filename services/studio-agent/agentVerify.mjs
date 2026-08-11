@@ -40,6 +40,12 @@ export const VERIFY_MAP = {
   studio_trash: {
     hint: () => "VERIFY: item should be gone from folder; list_trash if user asks.",
   },
+  studio_get_document: {
+    hint: (_args, result) =>
+      result?.ok === false && /not found/i.test(String(result?.error ?? ""))
+        ? "VERIFY: id is stale. studio_folder_contents on CWD (or studio_search) to get the real documentId, then update/patch it. Do NOT create a duplicate Script."
+        : null,
+  },
   studio_create_document: {
     hint: (_args, result) => {
       const id =

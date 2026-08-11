@@ -233,6 +233,7 @@ async function runPiTurn(body, abortSignal) {
         ],
       trajectory,
       seedBoard,
+      cwdFolderId: currentFolderId || cwdFolderId || null,
       getBearerToken: async () => capabilityToken,
       onPlanChange: (snap) => {
         if (!callbackBase) return;
@@ -403,6 +404,7 @@ async function runPiTurn(body, abortSignal) {
       "Before writing image/video prompts or choosing hypermotion vs cinematic, skills {id} for the matching prompt-* pack. Do not invent third-party brand names in prompts.",
       "Prompt craft: never ship lame short vibe lines. Load prompt-cinematic / prompt-hypermotion / prompt-image and write sealed, production-grade prompts (subject, action, camera start→end, light, materials, audio, keep-outs).",
       "Prompt save: when they ask for a prompt or script (write/craft/improve/create a script) — skills first, then ALWAYS studio_create_document into CWD with NON-EMPTY contentMarkdown (title + sealed prompt body + References). Never create an empty Script — empty contentMarkdown is rejected. If a Script already exists empty/wrong, studio_update_document with the full markdown; for small inline fixes use studio_patch_document (oldString/newString) instead of rewriting the whole file. After create, keep the returned documentId for get/patch — never invent ids. Never stash the prompt/script body in remember/memory. Title like \"Prompt — <short>\" or \"Script — <short>\". Chat: only paste the prompt if they asked to see/copy it; otherwise point at the file.",
+      "Find before create: when they point at an existing file (\"it's empty\", \"fix that script\", \"edit it\") — studio_folder_contents on CWD (or studio_search by title) to get the real documentId, then studio_update_document / studio_patch_document. Never answer a \"Document not found\" by creating a second Script with the same title. If a tool result carries a recovery block with candidate documents, reuse one of those ids.",
       "Prompt run: if they ask to generate from a saved prompt doc — studio_get_document, read References, pass referenceAssetIds / startFrameAssetId on generate. Default folderId=CWD.",
       "Elements are retired — use assets as references. Do not create or attach elements.",
       "Video models: only from studio_list_video_models (or known slugs seedance-2.5 / seedance-2.0). Talk about motion/light/res/length. Never invent caps, features, or legacy/pipeline marketing.",

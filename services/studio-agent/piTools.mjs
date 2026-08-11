@@ -116,8 +116,16 @@ async function fetchImageBlock(url, fallbackMimeType = "") {
  *   seedBoard?: object|string|null,
  *   onPlanChange?: (snap: object) => void,
  *   onAskRequired?: (info: object) => Promise<any>,
+ *   cwdFolderId?: string|null,
  * }} opts
  */
+/** Document tools whose "not found" should list real candidates instead of a blind re-create. */
+const DOC_TOOLS = new Set([
+  "studio_get_document",
+  "studio_update_document",
+  "studio_patch_document",
+]);
+
 export function createStudioPiTools(opts) {
   const role = opts.role ?? "user";
   const scopes =
@@ -404,6 +412,46 @@ export function createStudioPiTools(opts) {
         }
         result = salvageGenerationResult(toolName, result);
 
+        // Stale/invented document id → list the folder so the agent edits the
+        // existing Script instead of silently creating another empty one.
+        let recovery;
+        if (
+          result?.ok === false &&
+          DOC_TOOLS.has(toolName) &&
+          /not found/i.test(String(result?.error ?? ""))
+        ) {
+          const folderId = textValue(validated.args?.folderId || opts.cwdFolderId);
+          if (folderId) {
+            try {
+              const token = await opts.getBearerToken();
+              const listed = await invokeStudioTool(
+                opts.apiBase,
+                token,
+                "studio_folder_contents",
+                { folderId },
+              );
+              const docs = Array.isArray(listed?.data?.documents)
+                ? listed.data.documents
+                    .slice(0, 10)
+                    .map((doc) => ({
+                      documentId: doc?._id ?? doc?.id,
+                      title: doc?.title ?? doc?.name,
+                    }))
+                    .filter((doc) => doc.documentId)
+                : [];
+              if (docs.length) {
+                recovery = {
+                  folderId,
+                  documents: docs,
+                  hint: "That documentId does not exist. Reuse one of these ids with studio_update_document / studio_patch_document — do NOT create a new Script.",
+                };
+              }
+            } catch {
+              /* recovery is best-effort */
+            }
+          }
+        }
+
         const ok = Boolean(result?.ok !== false);
         let verified;
         const autoName = ok ? autoVerifyTool(toolName) : null;
@@ -433,6 +481,7 @@ export function createStudioPiTools(opts) {
           verbose,
           verifyHint: verifyHintFor(toolName, validated.args, result) || undefined,
           ...(verified ? { verified } : {}),
+          ...(recovery ? { recovery } : {}),
         });
 
         trajectory.recordTool({

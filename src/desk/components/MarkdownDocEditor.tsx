@@ -25,6 +25,8 @@ export function MarkdownDocEditor({ value, onChange, onSave, name }) {
   const editorRef = useRef(null);
   const lastMarkdownRef = useRef(value ?? "");
   const dirtyRef = useRef(false);
+  // HTML→markdown is lossy (fences, spacing). Only write back after a real edit.
+  const userEditedRef = useRef(false);
 
   const syncFromMarkdown = useCallback((md) => {
     const el = editorRef.current;
@@ -32,6 +34,7 @@ export function MarkdownDocEditor({ value, onChange, onSave, name }) {
     lastMarkdownRef.current = md ?? "";
     el.innerHTML = markdownToDocHtml(md);
     dirtyRef.current = false;
+    userEditedRef.current = false;
   }, []);
 
   useEffect(() => {
@@ -51,7 +54,9 @@ export function MarkdownDocEditor({ value, onChange, onSave, name }) {
   const emitChange = useCallback(() => {
     const el = editorRef.current;
     if (!el) return;
+    if (!userEditedRef.current) return;
     const md = docHtmlToMarkdown(el);
+    if (md === lastMarkdownRef.current) return;
     lastMarkdownRef.current = md;
     dirtyRef.current = true;
     onChange?.(md);
@@ -60,10 +65,12 @@ export function MarkdownDocEditor({ value, onChange, onSave, name }) {
   const runCmd = (cmd, val = null) => {
     editorRef.current?.focus();
     document.execCommand(cmd, false, val);
+    userEditedRef.current = true;
     emitChange();
   };
 
   const onInput = () => {
+    userEditedRef.current = true;
     emitChange();
   };
 

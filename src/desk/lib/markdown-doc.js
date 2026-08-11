@@ -52,7 +52,10 @@ function blockElementToMarkdown(el) {
   if (tag === "pre") {
     const code = el.querySelector("code");
     const text = (code?.textContent ?? el.textContent ?? "").replace(/\n$/, "");
-    return `\`\`\`\n${text}\n\`\`\`\n\n`;
+    // Keep the fence language (```text) — dropping it reflows prompts as prose.
+    const lang =
+      String(code?.className ?? "").match(/language-([\w+-]+)/)?.[1] ?? "";
+    return `\`\`\`${lang}\n${text}\n\`\`\`\n\n`;
   }
   if (tag === "ul") {
     const lines = Array.from(el.children)
