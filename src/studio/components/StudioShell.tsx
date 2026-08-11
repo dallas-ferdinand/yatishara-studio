@@ -25230,6 +25230,15 @@ export function StudioShell({
             onActiveAgentThreadChange={setActiveAgentThreadId}
             onBindAgentThreadTab={bindAgentThreadTab}
             onOpenNewAgentTab={openNewAgentTab}
+            onOpenFolder={(folderId) => {
+              if (!folderId) return;
+              openFiles();
+              setActiveFolderId(folderId);
+              if (isMobile) {
+                setMobileSection("files");
+                setFilesDockExpanded(true);
+              }
+            }}
             expiresUnix={assetUrlExpiresUnix}
             generationDetailJobId={generationDetail?.jobId ?? null}
             isMobileLayout={isMobile}
@@ -31346,6 +31355,7 @@ function ActivePane({
   onActiveAgentThreadChange,
   onBindAgentThreadTab,
   onOpenNewAgentTab,
+  onOpenFolder,
   expiresUnix,
   generationDetailJobId = null,
   onSelectGenerationTile,
@@ -31539,10 +31549,7 @@ function ActivePane({
         onOpenAgentSettings={onOpenAgentSettings}
         onBindThreadTab={onBindAgentThreadTab}
         onOpenNewAgentTab={onOpenNewAgentTab}
-        onOpenFolder={(folderId) => {
-          setActiveFolderId(folderId);
-          openFiles();
-        }}
+        onOpenFolder={onOpenFolder}
         isMobile={isMobileLayout}
       />
     </div>
