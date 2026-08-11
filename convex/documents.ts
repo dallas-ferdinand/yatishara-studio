@@ -76,7 +76,7 @@ export const create = authedMutation({
     const title = args.title.trim();
     const content = String(args.contentMarkdown ?? "").trim();
     // Scripts/prompts must not land as empty shells — agent + Files New both use this path.
-    if (!content && /prompt|script/i.test(title)) {
+    if ((!content || content.length < 20) && /prompt|script/i.test(title)) {
       throw new Error(
         "Script content is empty. Pass contentMarkdown with the full prompt/script body.",
       );
@@ -110,6 +110,16 @@ export const update = authedMutation({
         throw new Error("Only the owner can move this document");
       }
       await requireFolderOwner(ctx, args.folderId);
+    }
+    if (args.contentMarkdown !== undefined) {
+      const next = String(args.contentMarkdown).trim();
+      const title = String(args.title ?? doc.title).trim();
+      const prev = String(doc.contentMarkdown ?? "").trim();
+      if (prev.length >= 20 && next.length < 20 && /prompt|script/i.test(title)) {
+        throw new Error(
+          "Refusing to clear Script/Prompt body to empty. Pass the full contentMarkdown.",
+        );
+      }
     }
     await ctx.db.patch(doc._id, {
       ...(args.title !== undefined ? { title: args.title.trim() } : {}),

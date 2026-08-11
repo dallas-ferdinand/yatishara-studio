@@ -194,6 +194,28 @@ test("compactObservation keeps assetId from nested asset payload", () => {
   assert.equal(compact.data.folderId, "fold_1");
 });
 
+test("hot schemas reject empty create_document body", () => {
+  assert.equal(
+    validateHotToolArgs("studio_create_document", {
+      title: "Prompt — x",
+      contentMarkdown: "",
+    }).ok,
+    false,
+  );
+  assert.equal(
+    validateHotToolArgs("studio_create_document", {
+      title: "Prompt — x",
+      content: "short",
+    }).ok,
+    false,
+  );
+  const ok = validateHotToolArgs("studio_create_document", {
+    title: "Prompt — Degreaser",
+    contentMarkdown: "```text\nA sealed kitchen degreaser ad prompt body here.\n```",
+  });
+  assert.equal(ok.ok, true);
+});
+
 test("verify hints + auto-verify wiring", () => {
   const hint = verifyHintFor("studio_share_asset_post", { assetId: "a1" }, { ok: true });
   assert.match(String(hint), /studio_is_asset_shared/);

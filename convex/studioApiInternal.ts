@@ -1126,7 +1126,7 @@ export const createDocumentForApi = internalMutation({
     const title = args.title.trim();
     const content = String(args.contentMarkdown ?? "").trim();
     // Same gate as documents.create — agent HTTP must not land empty Scripts/Prompts.
-    if (!content && /prompt|script/i.test(title)) {
+    if ((!content || content.length < 20) && /prompt|script/i.test(title)) {
       throw new Error(
         "Script content is empty. Pass contentMarkdown with the full prompt/script body.",
       );
@@ -1162,6 +1162,16 @@ export const updateDocumentForApi = internalMutation({
     }
     if (args.folderId !== undefined) {
       await requireFolderForUser(ctx, args.userId, args.folderId, args.sandboxFolderId);
+    }
+    if (args.contentMarkdown !== undefined) {
+      const next = String(args.contentMarkdown).trim();
+      const title = String(args.title ?? doc.title).trim();
+      const prev = String(doc.contentMarkdown ?? "").trim();
+      if (prev.length >= 20 && next.length < 20 && /prompt|script/i.test(title)) {
+        throw new Error(
+          "Refusing to clear Script/Prompt body to empty. Pass the full contentMarkdown.",
+        );
+      }
     }
     await ctx.db.patch(doc._id, {
       ...(args.title !== undefined ? { title: args.title.trim() } : {}),

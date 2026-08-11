@@ -663,13 +663,17 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         folderId?: Id<"folders">;
         title?: string;
         contentMarkdown?: string;
+        content?: string;
+        markdown?: string;
       }>(request);
       if (!body.title?.trim()) {
         return finish(errorResponse("title is required"));
       }
       const title = body.title.trim();
-      const content = String(body.contentMarkdown ?? "").trim();
-      if (!content && /prompt|script/i.test(title)) {
+      const rawContent =
+        body.contentMarkdown ?? body.content ?? body.markdown ?? "";
+      const content = String(rawContent).trim();
+      if ((!content || content.length < 20) && /prompt|script/i.test(title)) {
         return finish(
           errorResponse(
             "Script content is empty. Pass contentMarkdown with the full prompt/script body.",
@@ -683,7 +687,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           sandboxFolderId: auth.sandboxFolderId,
           folderId,
           title: body.title,
-          contentMarkdown: body.contentMarkdown,
+          contentMarkdown: String(rawContent),
         });
         const document = await ctx.runQuery(internal.studioApiInternal.getDocument, {
           userId: auth.userId,

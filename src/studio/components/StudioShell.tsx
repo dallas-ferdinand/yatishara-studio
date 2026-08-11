@@ -21662,7 +21662,7 @@ export function StudioShell({
           position: relative;
           width: 100%;
           max-width: 100%;
-          aspect-ratio: 16 / 10;
+          aspect-ratio: 16 / 9;
           height: auto;
           max-height: none;
           border-radius: var(--cursor-radius-lg, 12px);
@@ -21680,6 +21680,7 @@ export function StudioShell({
           width: 100%;
           height: 100%;
           object-fit: cover;
+          object-position: center center;
           display: block;
         }
         .studio-academy-player iframe,
@@ -36588,7 +36589,18 @@ function assetToEntry(asset) {
 async function downloadStudioEntry(entry, convex, expiresUnix) {
   if (!entry) return;
   if (entry.studioKind === "document") {
-    const text = entry.description ?? "";
+    let text = entry.description ?? "";
+    // listByFolder blanks bodies — always re-fetch before saving .md
+    if (entry.studioId && convex) {
+      try {
+        const doc = await convex.query(api.documents.get, {
+          documentId: entry.studioId,
+        });
+        if (doc?.contentMarkdown != null) text = doc.contentMarkdown;
+      } catch {
+        /* keep entry.description */
+      }
+    }
     const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
     const objectUrl = URL.createObjectURL(blob);
     await downloadMediaUrl(objectUrl, entry.name ?? "note.md");

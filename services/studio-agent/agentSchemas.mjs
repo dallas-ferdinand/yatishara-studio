@@ -20,6 +20,7 @@ export const HOT_SCHEMAS = {
     oneOfGroups: [["assetId"], ["assetIds"], ["items"]],
   },
   studio_create_folder: { required: ["name"] },
+  studio_create_document: { required: ["title", "contentMarkdown"] },
   studio_folder_contents: { required: ["folderId"] },
   studio_view_media: { required: ["assetId"] },
   studio_get_asset: { required: ["assetId"] },
@@ -106,6 +107,43 @@ export function validateHotToolArgs(toolName, args) {
     }
   }
 
+  if (toolName === "studio_create_document") {
+    // Alias common mis-keys before empty check
+    if (
+      (input.contentMarkdown == null || input.contentMarkdown === "") &&
+      typeof input.content === "string"
+    ) {
+      input.contentMarkdown = input.content;
+      delete input.content;
+    }
+    if (
+      (input.contentMarkdown == null || input.contentMarkdown === "") &&
+      typeof input.markdown === "string"
+    ) {
+      input.contentMarkdown = input.markdown;
+      delete input.markdown;
+    }
+    const body = String(input.contentMarkdown ?? "").trim();
+    const title = String(input.title ?? "").trim();
+    if (!title) {
+      return {
+        ok: false,
+        error: "studio_create_document requires args.title",
+        example: exampleFor(toolName),
+      };
+    }
+    if (!body || body.length < 20) {
+      return {
+        ok: false,
+        error:
+          "studio_create_document requires non-empty contentMarkdown (full prompt/script body, not a stub)",
+        example: exampleFor(toolName),
+      };
+    }
+    input.title = title;
+    input.contentMarkdown = String(input.contentMarkdown ?? "");
+  }
+
   return { ok: true, args: input };
 }
 
@@ -114,6 +152,11 @@ function exampleFor(toolName) {
     studio_share_asset_post: { assetId: "<assetId>", caption: "optional" },
     studio_generate_image: { prompt: "…", folderId: "<optional>" },
     studio_generate_video: { prompt: "…", folderId: "<optional>" },
+    studio_create_document: {
+      folderId: "<CWD>",
+      title: "Prompt — short name",
+      contentMarkdown: "```text\n…sealed prompt…\n```\n\nReferences:\n- asset:…",
+    },
     studio_bulk_move: {
       targetFolderId: "<folderId>",
       items: [{ kind: "asset", id: "<id>" }],

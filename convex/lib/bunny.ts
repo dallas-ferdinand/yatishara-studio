@@ -255,6 +255,20 @@ export const PREVIEW_TRANSFORM: BunnyImageTransform = {
   format: "webp",
 };
 
+/** Style-sheet / large preview cards — sharp enough for look selection. */
+export const PREVIEW_TRANSFORM: BunnyImageTransform = {
+  width: 1280,
+  quality: 88,
+  format: "webp",
+};
+
+/** Academy lesson / course hero covers in the player — sharp, near-full HD. */
+export const ACADEMY_COVER_TRANSFORM: BunnyImageTransform = {
+  width: 1920,
+  quality: 92,
+  format: "webp",
+};
+
 /**
  * Full image views — high width ceiling so Bunny Optimizer Autopilot
  * does not downscale to ~1600px. Bunny will not upscale past the origin.
