@@ -279,37 +279,6 @@ function createComposerAttachmentToken(attachment: AgentAttachment) {
   return token;
 }
 
-function buildComposerEditorHtmlFromState(draft: string, attachments: AgentAttachment[] = []) {
-  const shell = document.createElement("div");
-  let tokenIndex = 0;
-  let buffer = "";
-  const flush = () => {
-    if (!buffer) return;
-    shell.appendChild(document.createTextNode(buffer));
-    buffer = "";
-  };
-  for (const ch of String(draft ?? "")) {
-    if (ch === "\uFFFC") {
-      flush();
-      const attachment = attachments[tokenIndex++];
-      if (attachment) {
-        shell.appendChild(createComposerAttachmentToken(attachment));
-        shell.appendChild(document.createTextNode(" "));
-      }
-      continue;
-    }
-    buffer += ch;
-  }
-  flush();
-  while (tokenIndex < attachments.length) {
-    const attachment = attachments[tokenIndex++];
-    if (!attachment) continue;
-    shell.appendChild(createComposerAttachmentToken(attachment));
-    shell.appendChild(document.createTextNode(" "));
-  }
-  return shell.innerHTML;
-}
-
 function ensureSelectionInEditor(editor: HTMLDivElement) {
   const selection = window.getSelection();
   if (selection?.rangeCount && editor.contains(selection.anchorNode)) {
@@ -330,6 +299,29 @@ function focusComposerEditorEnd(editor: HTMLDivElement | null) {
   range.collapse(false);
   const selection = window.getSelection();
   editor.focus();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function clearComposerEditor(editor: HTMLDivElement | null) {
+  if (!editor) return;
+  editor.innerHTML = "";
+}
+
+function appendPlainTextToComposer(editor: HTMLDivElement | null, text: string) {
+  if (!editor || !text) return;
+  focusComposerEditorEnd(editor);
+  const selection = window.getSelection();
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+  if (!range || !editor.contains(range.startContainer)) {
+    editor.appendChild(document.createTextNode(text));
+    focusComposerEditorEnd(editor);
+    return;
+  }
+  const node = document.createTextNode(text);
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
   selection?.removeAllRanges();
   selection?.addRange(range);
 }
@@ -545,13 +537,6 @@ export function StudioAgentPane({
   }, [messages?.length, toolCalls?.length, busy]);
 
   useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    const html = buildComposerEditorHtmlFromState(draft, attachments);
-    if (editor.innerHTML !== html) editor.innerHTML = html;
-  }, [draft, attachments]);
-
-  useEffect(() => {
     function onAttach(event: Event) {
       const detail = (event as CustomEvent<{ attachment?: AgentAttachment }>).detail;
       const attachment = detail?.attachment;
@@ -673,7 +658,9 @@ export function StudioAgentPane({
         if (!text) {
           throw new Error("No speech detected. Speak a bit longer, then tap the mic to stop.");
         }
-        setDraft((prev) => `${prev}${prev ? " " : ""}${text}`);
+        const existing = readComposerEditorText(editorRef.current).replace(/\uFFFC/g, "").trim();
+        appendPlainTextToComposer(editorRef.current, `${existing ? " " : ""}${text}`);
+        setDraft(readComposerEditorText(editorRef.current));
         return;
       }
 
@@ -694,13 +681,17 @@ export function StudioAgentPane({
   async function handleNewChat() {
     if (onOpenNewAgentTab) {
       onOpenNewAgentTab();
+      clearComposerEditor(editorRef.current);
       setDraft("");
+      setAttachments([]);
       return;
     }
     const id = await createThread({});
     onActiveThreadChange(id);
     onBindThreadTab?.(id);
+    clearComposerEditor(editorRef.current);
     setDraft("");
+    setAttachments([]);
   }
 
   async function handleSend() {
@@ -712,6 +703,7 @@ export function StudioAgentPane({
       const threadId = await ensureThread();
       setPendingUserText(text);
       setPendingAttachments(attachments);
+      clearComposerEditor(editorRef.current);
       setDraft("");
       setAttachments([]);
       const result = await (sendTurn as any)({
