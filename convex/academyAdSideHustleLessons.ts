@@ -291,6 +291,55 @@ export const internalSeedAdSideHustleLessons = internalMutation({
   },
 });
 
+/**
+ * Ops: publish every draft lesson on Ad Side Hustle so learners see the rail.
+ * Videos can attach later — UI shows cover + play; playback stays locked until Stream id exists.
+ */
+export const internalPublishAllLessons = internalMutation({
+  args: {
+    allowWithoutVideo: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    courseId: v.id("academyCourses"),
+    published: v.number(),
+    skipped: v.number(),
+    lessonIds: v.array(v.id("academyLessons")),
+  }),
+  handler: async (ctx, args) => {
+    const allowWithoutVideo = args.allowWithoutVideo !== false;
+    const course = await ctx.db
+      .query("academyCourses")
+      .withIndex("by_slug", (q) => q.eq("slug", AD_SIDE_HUSTLE_SLUG))
+      .unique();
+    if (!course) {
+      throw new Error(`Course slug ${AD_SIDE_HUSTLE_SLUG} not found`);
+    }
+    const rows = await ctx.db
+      .query("academyLessons")
+      .withIndex("by_course_and_sort", (q) => q.eq("courseId", course._id))
+      .collect();
+    const now = Date.now();
+    let published = 0;
+    let skipped = 0;
+    const lessonIds: Array<Id<"academyLessons">> = [];
+    for (const row of rows) {
+      if (row.status === "published") {
+        skipped += 1;
+        continue;
+      }
+      if (!row.bunnyStreamVideoId && !allowWithoutVideo) {
+        skipped += 1;
+        continue;
+      }
+      await ctx.db.patch(row._id, { status: "published", updatedAt: now });
+      published += 1;
+      lessonIds.push(row._id);
+    }
+    await ctx.db.patch(course._id, { updatedAt: now });
+    return { courseId: course._id, published, skipped, lessonIds };
+  },
+});
+
 /** Deploy-key / ops path to attach a Bunny cover after upload. */
 export const internalSetLessonCover = internalMutation({
   args: {
