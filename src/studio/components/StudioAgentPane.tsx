@@ -18,6 +18,10 @@ import {
   readExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
+import {
+  insertPlainTextAtSelection,
+  plainTextFromClipboard,
+} from "@/studio/lib/composerPasteIntelligence";
 import { StudioEmptyLogoButton } from "./StudioEmptyLogoButton";
 import { AgentTurnTimeline } from "./agent/AgentTurnTimeline";
 import { AgentChatHeader } from "./agent/AgentChatHeader";
@@ -1077,6 +1081,26 @@ export function StudioAgentPane({
                 onInput={() => {
                   setDraft(readComposerEditorText(editorRef.current));
                   pruneDuplicateComposerTokens(editorRef.current);
+                }}
+                onPaste={(event) => {
+                  const editor = editorRef.current;
+                  if (!editor || composerLocked) return;
+                  const text = plainTextFromClipboard(event.clipboardData);
+                  if (!text) {
+                    const items = event.clipboardData?.items;
+                    if (items) {
+                      for (const item of items) {
+                        if (item.kind === "file") return;
+                      }
+                    }
+                    event.preventDefault();
+                    return;
+                  }
+                  event.preventDefault();
+                  ensureSelectionInEditor(editor);
+                  insertPlainTextAtSelection(text);
+                  setDraft(readComposerEditorText(editor));
+                  pruneDuplicateComposerTokens(editor);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && !isMobile) {
