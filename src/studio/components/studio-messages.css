@@ -378,7 +378,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   /* Horizontal inset lives on the Create-width column children. */
-  padding: 12px 0 0;
+  padding: 12px 0 6px;
   scrollbar-width: none;
 }
 
