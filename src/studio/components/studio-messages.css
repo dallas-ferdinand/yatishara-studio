@@ -1354,7 +1354,7 @@
   max-width: calc(var(--studio-chat-column-max, min(92%, 36rem)) + 18px);
   margin-inline: auto;
   box-sizing: border-box;
-  padding: 2px 12px max(10px, env(safe-area-inset-bottom, 0px));
+  padding: 0 12px max(10px, env(safe-area-inset-bottom, 0px));
 }
 
 @media (min-width: 900px) {
