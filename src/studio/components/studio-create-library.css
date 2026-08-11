@@ -125,29 +125,42 @@
 .studio-gen-tile.is-busy .studio-gen-tile-media,
 .studio-gen-tile.is-failed .studio-gen-tile-media,
 .studio-gen-tile.is-audio-ready .studio-gen-tile-media {
-  aspect-ratio: 1;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  height: auto;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .studio-gen-tile-media.is-audio-player {
-  aspect-ratio: 1;
+  /* Absolute child so orb+wave cannot stretch the tile past 1:1 */
+  position: relative;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  height: auto;
   min-height: 0;
-  display: flex;
-  align-items: stretch;
-  justify-content: stretch;
-  padding: 10px;
-  background: var(--studio-grid-tile-bg, color-mix(in srgb, var(--color-cursor-fg, #fff) 4%, transparent));
+  overflow: hidden;
+  display: block;
+  padding: 0;
+  background: transparent;
+}
+
+[data-appearance="light"] .studio-gen-tile-media.is-audio-player {
+  background: transparent;
 }
 
 .studio-gen-tile-audio {
-  width: 100%;
+  position: absolute;
+  inset: 0;
+  width: auto;
   min-width: 0;
   min-height: 0;
-  flex: 1 1 auto;
   display: flex;
   align-items: stretch;
+  padding: 14px 12px 12px;
+  box-sizing: border-box;
 }
 
 .studio-gen-tile-audio.is-loading {
@@ -155,47 +168,47 @@
   justify-content: center;
 }
 
+/* Flatten pane/player wrappers — kill border, panel bg, radius, min-width card */
 .studio-gen-tile-audio .studio-chat-audio-player,
-.studio-gen-tile-audio .studio-chat-audio-pane {
+.studio-gen-tile-audio .studio-chat-audio-player.is-pane,
+.studio-gen-tile-audio .studio-chat-audio-player.is-pane.is-compact,
+.studio-gen-tile-audio .studio-chat-audio-pane,
+[data-appearance="light"] .studio-gen-tile-audio .studio-chat-audio-player,
+[data-appearance="light"] .studio-gen-tile-audio .studio-chat-audio-player.is-pane,
+[data-appearance="light"] .studio-gen-tile-audio .studio-chat-audio-pane {
   width: 100%;
-  min-width: 0;
+  min-width: 0 !important;
   max-width: none;
   height: 100%;
   min-height: 0;
+  margin: 0;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
   box-sizing: border-box;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-pane {
-  padding: 0;
-  background: transparent;
   display: flex;
   align-items: stretch;
+  place-items: stretch;
 }
 
-.studio-gen-tile-audio .studio-chat-audio-player.is-pane {
-  width: 100%;
-  height: 100%;
-  max-width: none;
+.studio-gen-tile-audio .studio-chat-audio-player.is-pane,
+.studio-gen-tile-audio .studio-chat-audio-player.is-pane.is-compact {
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 8px;
-  padding: 10px 8px 12px;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-}
-
-.studio-gen-tile-audio .studio-chat-audio-player.is-pane.is-compact {
-  padding: 8px 6px 10px;
-  gap: 6px;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-orb-hero {
   flex: 1 1 auto;
   display: grid;
   place-items: center;
-  margin: 0;
+  margin: 0 !important;
   min-height: 0;
 }
 
@@ -207,20 +220,43 @@
 
 .studio-gen-tile-audio .studio-chat-audio-wave {
   min-width: 0;
-  height: 36px;
+  height: 28px;
+}
+
+.studio-gen-tile-audio .studio-chat-audio-player.is-pane .studio-chat-audio-wave {
+  height: 28px;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-time {
   font-size: 10px;
 }
 
-/* ElevenLabs orb — big centered play in the 1:1 tile */
+/*
+ * Fixed px orb — % width/height use different bases and squash into ovals.
+ */
+.studio-gen-tile-audio .studio-orb-play,
 .studio-gen-tile-audio .studio-orb-play.is-md,
 .studio-gen-tile-audio .studio-orb-play.is-lg {
-  width: min(48%, 92px);
-  height: min(48%, 92px);
-  min-width: 68px;
-  min-height: 68px;
+  width: 72px !important;
+  height: 72px !important;
+  min-width: 72px !important;
+  min-height: 72px !important;
+  max-width: 72px !important;
+  max-height: 72px !important;
+  flex: 0 0 72px;
+  aspect-ratio: 1 / 1;
+  border-radius: 999px;
+  overflow: hidden;
+  align-self: center;
+  justify-self: center;
+}
+
+.studio-gen-tile-audio .studio-orb-frame,
+.studio-gen-tile-audio .studio-orb-well,
+.studio-gen-tile-audio .studio-orb-canvas,
+.studio-gen-tile-audio .studio-orb-fallback {
+  border-radius: 999px !important;
+  overflow: hidden;
 }
 
 .studio-gen-tile-spinner {
