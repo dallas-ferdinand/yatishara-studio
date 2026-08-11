@@ -251,10 +251,7 @@ export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
       next.toolName === step.toolName &&
       next.title === step.title &&
       (step.kind === "read" || step.kind === "meta") &&
-      step.status === "completed" &&
-      (next.status === "started" ||
-        next.status === "pending_approval" ||
-        next.status === "completed");
+      (next.kind === "read" || next.kind === "meta");
     if (duplicateQuietPair) {
       i += 1;
       continue;
