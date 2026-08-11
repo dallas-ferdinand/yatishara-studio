@@ -36518,12 +36518,24 @@ function tabDescriptor({
   composerAttachments,
 }) {
   if (key.startsWith("composer:")) {
-    return { key, kind: "chat", title: key === COMPOSER_TAB ? "Generate" : "New request", status: "ready" };
+    return {
+      key,
+      kind: "chat",
+      title: "Create",
+      status: "ready",
+      studioKind: "create",
+    };
   }
   if (key.startsWith("agent:")) {
     const agentId = key.slice("agent:".length);
     if (!agentId || agentId === "main" || agentId.startsWith("new:")) {
-      return { key, kind: "chat", title: "Agent", status: "ready" };
+      return {
+        key,
+        kind: "chat",
+        title: "Agent",
+        status: "ready",
+        studioKind: "agent",
+      };
     }
     const thread = (agentThreads ?? []).find((row) => row._id === agentId);
     const title =
@@ -36531,7 +36543,7 @@ function tabDescriptor({
       String(thread?.title ?? "").trim() !== "New agent chat"
         ? String(thread.title).trim().slice(0, 48)
         : "Agent chat";
-    return { key, kind: "chat", title, status: "ready" };
+    return { key, kind: "chat", title, status: "ready", studioKind: "agent" };
   }
   if (key.startsWith("post:compose:")) {
     const assetId = key.slice("post:compose:".length).trim();

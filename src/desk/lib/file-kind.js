@@ -166,8 +166,10 @@ export function matchesExplorerTypeFilter(entry, filterId) {
 /** Icon for unified workspace file tab. */
 export function workspaceTabIcon(tab) {
   if (!tab) return "file";
-  // AI chat tabs (Generate / threads) use the sparkle; the message bubble
-  // now belongs to person-to-person Messages.
+  const key = String(tab.key ?? "");
+  // Agent Mode tabs — same robot glyph as the header Agent control (Lucide Bot).
+  if (tab.studioKind === "agent" || key.startsWith("agent:")) return "bot";
+  // Create / generation threads use sparkles (header Create control).
   if (tab.kind === "chat") return "sparkles";
   if (tab.kind === "pulse") return "infinity";
   if (tab.kind === "buckets") return "bucket";

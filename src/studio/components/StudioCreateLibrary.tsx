@@ -22,25 +22,28 @@ const ImageZoomViewer = dynamic(
 
 const PAGE_SIZE = 24;
 
-/** Desktop Create library uses 3 columns; narrow = 2. */
-function columnCountForWidth(width: number): number {
-  if (width >= 720) return 3;
-  return 2;
+/** Desktop Create library is always 3 columns; mobile stays 2 (or 1 when very narrow). */
+function columnCountForWidth(width: number, isMobile?: boolean): number {
+  if (isMobile) {
+    if (width >= 420) return 2;
+    return 1;
+  }
+  return 3;
 }
 
-function useMasonryColumnCount() {
+function useMasonryColumnCount(isMobile?: boolean) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const [cols, setCols] = useState(2);
+  const [cols, setCols] = useState(isMobile ? 2 : 3);
 
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const apply = () => setCols(columnCountForWidth(el.clientWidth));
+    const apply = () => setCols(columnCountForWidth(el.clientWidth, isMobile));
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [isMobile]);
 
   return { ref, cols };
 }
@@ -219,7 +222,7 @@ export function StudioCreateLibrary({
   }, [lightbox]);
 
   const loading = firstPage === undefined;
-  const { ref: masonryRef, cols } = useMasonryColumnCount();
+  const { ref: masonryRef, cols } = useMasonryColumnCount(isMobile);
 
   // Round-robin into columns so newest runs left→right across the top
   // (CSS columns fill top→bottom in col 1 first — wrong reading order).
