@@ -32,6 +32,8 @@ type Props = {
   footer?: ReactNode;
   /** Denser chrome for store listing cards (smaller pad / wave / orb). */
   compact?: boolean;
+  /** Stable Orb palette seed (Create tiles pass jobId hash). */
+  orbSeed?: number;
 };
 
 function formatAudioClock(seconds: number): string {
@@ -103,7 +105,7 @@ function WaveformScrubber({
   durationHint,
 }: {
   data: number[];
-  height: number;
+  height: number | string;
   durationHint?: number;
 }) {
   const player = useAudioPlayer();
@@ -207,6 +209,7 @@ function AudioPlayerBody({
   showTitle,
   headerEnd,
   footer,
+  orbSeed = 2100,
 }: {
   src: string;
   title?: string;
@@ -216,17 +219,32 @@ function AudioPlayerBody({
   showTitle?: boolean;
   headerEnd?: ReactNode;
   footer?: ReactNode;
+  orbSeed?: number;
 }) {
   const player = useAudioPlayer();
   const failed = Boolean(player.error);
-  // Pane + compact = masonry / card tile (big orb, shorter wave under).
-  const waveBars = isPane ? (compact ? 72 : 120) : compact ? 72 : 96;
-  const waveHeight = isPane ? (compact ? 36 : 80) : compact ? 28 : 48;
+  // Pane + compact = masonry / card tile (big orb, wave fills leftover).
+  const waveBars = isPane ? (compact ? 96 : 120) : compact ? 72 : 96;
+  const waveHeight: number | string = isPane
+    ? compact
+      ? "100%"
+      : 80
+    : compact
+      ? 28
+      : 48;
   const waveform = useMemo(
     () => seedWaveform(src, waveBars),
     [src, waveBars],
   );
   const hasHead = Boolean(showTitle && title) || headerEnd != null;
+
+  const timeBlock = (
+    <span className="studio-chat-audio-time">
+      <AudioPlayerTime className="text-inherit" />
+      <span className="studio-chat-audio-time-sep">/</span>
+      <DurationLabel durationHint={durationHint} />
+    </span>
+  );
 
   return (
     <div
@@ -256,11 +274,12 @@ function AudioPlayerBody({
         <div className="studio-chat-audio-orb-hero">
           <StudioOrbPlayButton
             size="lg"
+            live
             playing={player.isPlaying}
             loading={player.isBuffering && player.isPlaying}
             showGlyph
             disabled={failed || !player.activeItem}
-            seed={2100}
+            seed={orbSeed}
             onClick={() => {
               if (player.isPlaying) player.pause();
               else void player.play();
@@ -269,22 +288,30 @@ function AudioPlayerBody({
         </div>
       ) : null}
 
-      <div className="studio-chat-audio-row">
-        {!isPane ? (
+      {isPane ? (
+        <>
+          <div className="studio-chat-audio-meta">{timeBlock}</div>
+          <div className="studio-chat-audio-row is-wave-fill">
+            <WaveformScrubber
+              key={src}
+              data={waveform}
+              height={waveHeight}
+              durationHint={durationHint}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="studio-chat-audio-row">
           <PlayControl disabled={failed} size={compact ? "sm" : "md"} />
-        ) : null}
-        <WaveformScrubber
-          key={src}
-          data={waveform}
-          height={waveHeight}
-          durationHint={durationHint}
-        />
-        <span className="studio-chat-audio-time">
-          <AudioPlayerTime className="text-inherit" />
-          <span className="studio-chat-audio-time-sep">/</span>
-          <DurationLabel durationHint={durationHint} />
-        </span>
-      </div>
+          <WaveformScrubber
+            key={src}
+            data={waveform}
+            height={waveHeight}
+            durationHint={durationHint}
+          />
+          {timeBlock}
+        </div>
+      )}
 
       {footer ? <div className="studio-chat-audio-foot">{footer}</div> : null}
     </div>
@@ -300,6 +327,7 @@ export function StudioChatAudioPlayer({
   headerEnd,
   footer,
   compact = false,
+  orbSeed,
 }: Props) {
   const isPane = variant === "pane";
   const player = (
@@ -314,6 +342,7 @@ export function StudioChatAudioPlayer({
         showTitle={showTitle}
         headerEnd={headerEnd}
         footer={footer}
+        orbSeed={orbSeed}
       />
     </AudioPlayerProvider>
   );

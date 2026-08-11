@@ -59,8 +59,8 @@ const ORB_PALETTES: [string, string][] = [
   ["#F0E0F3", "#C09FC9"],
 ];
 
-/** Browsers typically allow ~8–16 WebGL contexts; stay conservative. */
-const MAX_LIVE_ORBS = 8;
+/** Browsers typically allow ~8–16 WebGL contexts; keep headroom for Create masonry. */
+const MAX_LIVE_ORBS = 16;
 const liveOrbHolders = new Set<string>();
 const liveOrbWaiters = new Set<() => void>();
 
@@ -191,11 +191,13 @@ function OrbShell({
   agentState?: AgentState;
   forceLive?: boolean;
 }) {
-  const { setNode, visible } = useVisibleInViewport(!forceLive);
+  // Always viewport-gate so masonry / long lists don't burn WebGL on
+  // off-screen tiles. `forceLive` only raises claim priority when visible.
+  const { setNode, visible } = useVisibleInViewport(true);
   const live = useLiveOrbSlot({
-    force: forceLive || playing,
+    force: playing,
     visible,
-    priority: playing,
+    priority: playing || Boolean(forceLive),
   });
   const colors = colorsFromSeed(seed);
   const state: AgentState =

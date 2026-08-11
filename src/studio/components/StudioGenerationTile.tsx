@@ -19,6 +19,7 @@ import {
   StudioChatAudioPlayer,
   StudioChatAudioPlayerLoading,
 } from "./StudioChatAudioPlayer";
+import { orbSeedForVoice } from "./StudioOrbPlayButton";
 
 export type GenerationLibraryTile = {
   jobId: string;
@@ -164,6 +165,7 @@ export function StudioGenerationTile({
           variant="pane"
           compact
           durationHint={tile.durationSeconds}
+          orbSeed={orbSeedForVoice(tile.jobId, tile.name)}
         />
       </div>
     );

@@ -74,12 +74,25 @@
   margin-bottom: 14px;
 }
 
+.studio-chat-audio-meta {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  min-width: 0;
+}
+
 .studio-chat-audio-row {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
   min-width: 0;
+}
+
+.studio-chat-audio-row.is-wave-fill {
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .studio-chat-audio-head {
