@@ -350,7 +350,7 @@ async function runPiTurn(body, abortSignal) {
       "Admin tools only if this user is admin. Never access other users' data.",
       "Use remember for durable preferences/decisions.",
       "Never say Done unless a tool actually succeeded. If a tool fails, report the error.",
-      "Reply in clean readable markdown: short paragraphs, bold for key names, light lists when useful. Prefer plain file/folder names in prose (or one bold name) — avoid stacking every filename in backticks.",
+      "Reply like a polished product assistant — clear, scannable, human. Lead with the answer in one short sentence. Use real markdown bullet lists (- item) for enumerations, not blank-line dumps. Bold the key count or name once. Prefer plain folder/file names in list items — avoid wrapping every name in backticks. Never dump tool/debug meta (no \"Results are complete\", \"not truncated\", \"Total nodes\", raw JSON, or internal ids) unless the user asked for that detail.",
       byokFallbackNote || "",
       memoryBlock,
     ]

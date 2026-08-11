@@ -8,6 +8,7 @@ export type AgentStepKind =
   | "error"
   | "meta";
 
+/** Imperative / infinitive stem — used for errors ("Couldn't browse workspace"). */
 const TITLE_MAP: Record<string, string> = {
   catalog: "Look up tools",
   describe: "Inspect tool",
@@ -36,6 +37,35 @@ const TITLE_MAP: Record<string, string> = {
   studio_restore: "Restore item",
 };
 
+/** Live / in-progress — progressive -ing. */
+const LIVE_TITLE_MAP: Record<string, string> = {
+  "Look up tools": "Looking up tools",
+  "Inspect tool": "Inspecting tool",
+  "Run action": "Running action",
+  "Inspect media": "Inspecting media",
+  "Save memory": "Saving memory",
+  "Load workspace": "Loading workspace",
+  Search: "Searching",
+  "Browse workspace": "Browsing workspace",
+  "List folders": "Listing folders",
+  "Open folder": "Opening folder",
+  "Create folder": "Creating folder",
+  "Create folder path": "Creating folder path",
+  "Update folder": "Updating folder",
+  "Move files": "Moving files",
+  "Resolve path": "Resolving path",
+  "Load project": "Loading project",
+  "View media": "Viewing media",
+  "Generate image": "Generating image",
+  "Generate video": "Generating video",
+  "Generate audio": "Generating audio",
+  "Generate batch": "Generating batch",
+  "Send message": "Sending message",
+  "Move to trash": "Moving to trash",
+  "Restore item": "Restoring item",
+};
+
+/** Completed — past -ed / irregular. */
 const PAST_TITLE_MAP: Record<string, string> = {
   "Look up tools": "Looked up tools",
   "Inspect tool": "Inspected tool",
@@ -94,6 +124,21 @@ const READ_PREFIXES = [
   "studio_view_",
 ];
 
+function toProgressiveGuess(base: string): string {
+  const t = base.trim();
+  if (!t) return "Working";
+  if (/\bing\b/i.test(t)) return t;
+  // "Search" → "Searching"; "Move files" → "Moving files"
+  const parts = t.split(" ");
+  const verb = parts[0] || t;
+  const rest = parts.slice(1).join(" ");
+  let ing = verb;
+  if (/e$/i.test(verb) && !/ee$/i.test(verb)) ing = `${verb.slice(0, -1)}ing`;
+  else if (/[^aeiou][aeiou][^aeiou]$/i.test(verb)) ing = `${verb}${verb.slice(-1)}ing`;
+  else ing = `${verb}ing`;
+  return rest ? `${ing} ${rest}` : ing;
+}
+
 export function humanToolTitle(toolName: string): string {
   const key = String(toolName || "").trim();
   if (!key) return "Working";
@@ -105,11 +150,11 @@ export function humanToolTitle(toolName: string): string {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-/** Present for live/queued; past for completed. Never "Done". */
+/** Present progressive while live; past when completed. Never "Done". */
 export function displayToolTitle(toolName: string, status: string): string {
   const base = humanToolTitle(toolName);
   if (status === "started" || status === "queued" || status === "pending_approval") {
-    return base;
+    return LIVE_TITLE_MAP[base] || toProgressiveGuess(base);
   }
   if (status === "failed") return base;
   return PAST_TITLE_MAP[base] || base;
