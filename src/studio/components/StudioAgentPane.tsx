@@ -498,7 +498,6 @@ export function StudioAgentPane({
   const decideApproval = useMutation(api.agentApprovals.decide);
   const cancelRun = useMutation(api.agentRuns.requestCancel);
   const ensureMessagesFolder = useMutation(api.folders.ensureMessagesFolderForMe);
-  const setAgentPreferences = useMutation((api as any).agentPreferences.setMine);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const sendTurn = useAction(api.agentActions.sendTurn);
@@ -516,7 +515,6 @@ export function StudioAgentPane({
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [autoApproveBusy, setAutoApproveBusy] = useState(false);
   const [activeRunId, setActiveRunId] = useState<Id<"agentRuns"> | null>(null);
   const streamRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -897,19 +895,6 @@ export function StudioAgentPane({
     }
   }
 
-  async function handleToggleAutoApprove() {
-    if (autoApproveBusy || busy) return;
-    setAutoApproveBusy(true);
-    try {
-      await setAgentPreferences({ autoApprove: !autoApprove });
-      toast.success(!autoApprove ? "Auto mode on" : "Auto mode off");
-    } catch (error) {
-      toast.error(friendlyConvexError(error, "Could not update Auto mode"));
-    } finally {
-      setAutoApproveBusy(false);
-    }
-  }
-
   const hasMessages = hasTurns;
   const composerLocked = busy || awaitingApproval;
   const canSend = (Boolean(draft.trim()) || attachments.length > 0) && !composerLocked;
@@ -1063,19 +1048,6 @@ export function StudioAgentPane({
                 ) : (
                   <Mic size={14} strokeWidth={2.25} aria-hidden="true" />
                 )}
-              </button>
-              <button
-                type="button"
-                className={`studio-agent-auto-toggle${autoApprove ? " is-on" : ""}`}
-                aria-pressed={autoApprove}
-                title={autoApprove ? "YOLO mode on" : "YOLO mode off"}
-                onClick={() => void handleToggleAutoApprove()}
-                disabled={autoApproveBusy || busy}
-              >
-                <span className="studio-agent-auto-toggle-label">YOLO</span>
-                <span className="studio-agent-auto-toggle-switch" aria-hidden="true">
-                  <span className="studio-agent-auto-toggle-thumb" />
-                </span>
               </button>
               <button
                 type="button"
