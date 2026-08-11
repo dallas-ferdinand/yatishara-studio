@@ -41,21 +41,21 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="studio-admin-section">
-      <div className="studio-admin-section-head">
-        <span className="studio-admin-section-title">
+    <section className="cursor-settings-section studio-agent-sidebar-card">
+      <header className="studio-agent-sidebar-card-head">
+        <div className="studio-settings-card-title">
           {icon ? (
             <span className="studio-dm-peer-section-icon" aria-hidden="true">
               {icon}
             </span>
           ) : null}
           {title}
-        </span>
+        </div>
         {extras ? (
-          <div className="studio-admin-section-extras">{extras}</div>
+          <div className="studio-agent-sidebar-card-extras">{extras}</div>
         ) : null}
-      </div>
-      {children}
+      </header>
+      <div className="studio-agent-sidebar-card-body">{children}</div>
     </section>
   );
 }
@@ -191,7 +191,7 @@ export function AgentChatSidebar({
             ) : (
               <ul className="studio-agent-search-hits">
                 {insight.searchHits.map((hit) => (
-                  <li key={String(hit._id)} className="studio-dm-peer-plate">
+                  <li key={String(hit._id)}>
                     <span className="studio-agent-search-role">{hit.role}</span>
                     <p>{hit.content}</p>
                   </li>
@@ -203,29 +203,30 @@ export function AgentChatSidebar({
 
         {!searching && tab === "info" ? (
           <div className="studio-agent-sidebar-stack">
-            <div
-              className="studio-dm-peer-stat-grid"
-              role="group"
+            <section
+              className="cursor-settings-section studio-agent-sidebar-card"
               aria-label="Chat summary"
             >
-              <div className="studio-dm-peer-plate studio-dm-peer-stat">
-                <Wallet aria-hidden="true" />
-                <strong>
-                  {formatTtdFromCredits(insight?.creditsSpent ?? 0, price)}
-                </strong>
-                <span>Spent</span>
+              <div className="studio-agent-sidebar-stat-grid">
+                <div className="studio-agent-sidebar-stat">
+                  <Wallet aria-hidden="true" />
+                  <strong>
+                    {formatTtdFromCredits(insight?.creditsSpent ?? 0, price)}
+                  </strong>
+                  <span>Spent</span>
+                </div>
+                <div className="studio-agent-sidebar-stat">
+                  <MessageSquare aria-hidden="true" />
+                  <strong>{insight?.turnCount ?? 0}</strong>
+                  <span>Turns</span>
+                </div>
+                <div className="studio-agent-sidebar-stat">
+                  <Images aria-hidden="true" />
+                  <strong>{insight?.media?.length ?? 0}</strong>
+                  <span>Media</span>
+                </div>
               </div>
-              <div className="studio-dm-peer-plate studio-dm-peer-stat">
-                <MessageSquare aria-hidden="true" />
-                <strong>{insight?.turnCount ?? 0}</strong>
-                <span>Turns</span>
-              </div>
-              <div className="studio-dm-peer-plate studio-dm-peer-stat">
-                <Images aria-hidden="true" />
-                <strong>{insight?.media?.length ?? 0}</strong>
-                <span>Media</span>
-              </div>
-            </div>
+            </section>
 
             <Section title="To-do" icon={<ListTodo className="h-3 w-3" />}>
               {!board.lists.length ? (
@@ -247,7 +248,7 @@ export function AgentChatSidebar({
                     return (
                       <details
                         key={`${list.id}:${isCurrent ? "open" : "closed"}:${list.status}`}
-                        className={`studio-agent-todo-acc studio-dm-peer-plate is-${list.status}`}
+                        className={`studio-agent-todo-acc is-${list.status}`}
                         open={isCurrent}
                       >
                         <summary>
@@ -317,7 +318,7 @@ export function AgentChatSidebar({
               ) : (
                 <ul className="studio-agent-turn-cost-list">
                   {(insight?.runs ?? []).slice(0, 12).map((run) => (
-                    <li key={String(run._id)} className="studio-dm-peer-plate">
+                    <li key={String(run._id)}>
                       <span className="studio-agent-turn-cost-msg">
                         {run.userMessage || "(attachments)"}
                       </span>
