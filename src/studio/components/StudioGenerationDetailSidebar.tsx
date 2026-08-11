@@ -4,7 +4,15 @@ import { useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Copy, Loader2, X } from "lucide-react";
+import {
+  Copy,
+  Expand,
+  Film,
+  FolderOpen,
+  Loader2,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { GenerationLibraryTile } from "./StudioGenerationTile";
 
@@ -16,9 +24,8 @@ type StudioGenerationDetailSidebarProps = {
   onClose: () => void;
   onUpscale?: (tile: GenerationLibraryTile) => void;
   onGenerateVideo?: (tile: GenerationLibraryTile) => void;
-  onOpenInFiles?: (assetId: Id<"assets">, folderId: Id<"folders">) => void;
+  onOpenInFiles?: (assetId: Id<"assets">, folderId?: Id<"folders">) => void;
   onTrash?: (assetId: Id<"assets">) => void;
-  onPlay?: (url: string, kind: "image" | "video" | "audio", name: string) => void;
 };
 
 function formatWhen(ms: number) {
@@ -34,6 +41,34 @@ function formatWhen(ms: number) {
   }
 }
 
+function toTile(detail: {
+  jobId: string;
+  assetId?: string;
+  kind: "image" | "video" | "audio";
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  stage: GenerationLibraryTile["stage"];
+  mode: "image" | "video" | "audio";
+  folderId?: string;
+  thumbnailUrl?: string;
+  playableUrl?: string;
+}): GenerationLibraryTile {
+  return {
+    jobId: detail.jobId,
+    assetId: detail.assetId,
+    kind: detail.kind,
+    name: detail.name,
+    createdAt: detail.createdAt,
+    updatedAt: detail.updatedAt,
+    stage: detail.stage,
+    mode: detail.mode,
+    folderId: detail.folderId,
+    thumbnailUrl: detail.thumbnailUrl,
+    playableUrl: detail.playableUrl,
+  };
+}
+
 export function StudioGenerationDetailSidebar({
   jobId,
   assetId,
@@ -44,7 +79,6 @@ export function StudioGenerationDetailSidebar({
   onGenerateVideo,
   onOpenInFiles,
   onTrash,
-  onPlay,
 }: StudioGenerationDetailSidebarProps) {
   const detail = useQuery(
     api.generationLibrary.getGenerationDetail,
@@ -85,11 +119,17 @@ export function StudioGenerationDetailSidebar({
       aria-label="Generation details"
     >
       <div className="studio-gen-detail-head">
-        <h2>{detail?.name ?? (loading ? "Loading…" : "Generation")}</h2>
+        <div className="studio-gen-detail-head-text">
+          <p className="studio-gen-detail-kicker">Details</p>
+          <h2 title={detail?.name}>
+            {detail?.name ?? (loading ? "Loading…" : "Generation")}
+          </h2>
+        </div>
         <button
           type="button"
           className="studio-gen-detail-close"
-          aria-label="Close details"
+          aria-label="Close preview"
+          title="Close"
           onClick={onClose}
         >
           <X className="h-4 w-4" aria-hidden="true" />
@@ -107,94 +147,75 @@ export function StudioGenerationDetailSidebar({
           </div>
         ) : (
           <>
-            <div className="studio-gen-detail-preview">
-              {detail.kind === "video" && detail.playableUrl ? (
-                <video
-                  src={detail.playableUrl}
-                  poster={detail.thumbnailUrl}
-                  controls
-                  playsInline
-                />
-              ) : detail.kind === "audio" && detail.playableUrl ? (
-                <audio src={detail.playableUrl} controls />
-              ) : detail.playableUrl || detail.thumbnailUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={detail.playableUrl ?? detail.thumbnailUrl}
-                  alt=""
-                  onClick={() => {
-                    const url = detail.playableUrl ?? detail.thumbnailUrl;
-                    if (url) onPlay?.(url, detail.kind, detail.name);
-                  }}
-                />
-              ) : (
-                <div className="studio-create-library-empty" style={{ minHeight: 120 }}>
-                  <p>{detail.stage === "failed" ? "Generation failed" : "Still generating…"}</p>
-                </div>
-              )}
+            <div className="studio-gen-detail-status-row">
+              <span className={`studio-gen-detail-chip is-${detail.stage}`}>
+                {detail.stage}
+              </span>
+              <span className="studio-gen-detail-chip is-mode">{detail.mode}</span>
+              {detail.aspectRatio ? (
+                <span className="studio-gen-detail-chip">{detail.aspectRatio}</span>
+              ) : null}
             </div>
 
             <section className="studio-gen-detail-section">
               <div className="studio-gen-detail-label">
                 <span>Prompt</span>
-                <button type="button" className="studio-gen-detail-copy" onClick={copyPrompt}>
-                  <span className="inline-flex items-center gap-1">
+                {detail.prompt?.trim() ? (
+                  <button
+                    type="button"
+                    className="studio-gen-detail-copy"
+                    onClick={() => void copyPrompt()}
+                  >
                     <Copy className="h-3 w-3" aria-hidden="true" />
                     Copy
-                  </span>
-                </button>
+                  </button>
+                ) : null}
               </div>
-              <p className="studio-gen-detail-prompt">{detail.prompt || "—"}</p>
+              <p className="studio-gen-detail-prompt">{detail.prompt?.trim() || "—"}</p>
             </section>
 
             <section className="studio-gen-detail-section">
               <div className="studio-gen-detail-label">
-                <span>Details</span>
+                <span>Info</span>
               </div>
               <dl className="studio-gen-detail-meta">
-                <dt>Model</dt>
-                <dd>{detail.modelLabel ?? detail.resolvedModel ?? "—"}</dd>
-                <dt>Mode</dt>
-                <dd>{detail.mode}</dd>
+                <div className="studio-gen-detail-meta-row">
+                  <dt>Model</dt>
+                  <dd>{detail.modelLabel ?? detail.resolvedModel ?? "—"}</dd>
+                </div>
                 {detail.resolution ? (
-                  <>
+                  <div className="studio-gen-detail-meta-row">
                     <dt>Resolution</dt>
                     <dd>{detail.resolution}</dd>
-                  </>
-                ) : null}
-                {detail.aspectRatio ? (
-                  <>
-                    <dt>Aspect</dt>
-                    <dd>{detail.aspectRatio}</dd>
-                  </>
+                  </div>
                 ) : null}
                 {detail.quality ? (
-                  <>
+                  <div className="studio-gen-detail-meta-row">
                     <dt>Quality</dt>
                     <dd>{detail.quality}</dd>
-                  </>
+                  </div>
                 ) : null}
                 {detail.durationSeconds != null ? (
-                  <>
+                  <div className="studio-gen-detail-meta-row">
                     <dt>Duration</dt>
                     <dd>{detail.durationSeconds}s</dd>
-                  </>
+                  </div>
                 ) : null}
                 {detail.creditsSpent != null ? (
-                  <>
+                  <div className="studio-gen-detail-meta-row">
                     <dt>Credits</dt>
                     <dd>{detail.creditsSpent}</dd>
-                  </>
+                  </div>
                 ) : null}
-                <dt>Status</dt>
-                <dd>{detail.stage}</dd>
-                <dt>Created</dt>
-                <dd>{formatWhen(detail.createdAt)}</dd>
+                <div className="studio-gen-detail-meta-row">
+                  <dt>Created</dt>
+                  <dd>{formatWhen(detail.createdAt)}</dd>
+                </div>
                 {detail.error ? (
-                  <>
+                  <div className="studio-gen-detail-meta-row is-error">
                     <dt>Error</dt>
                     <dd>{detail.error}</dd>
-                  </>
+                  </div>
                 ) : null}
               </dl>
             </section>
@@ -203,52 +224,30 @@ export function StudioGenerationDetailSidebar({
               {detail.kind === "image" && detail.assetId && onUpscale ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    onUpscale({
-                      jobId: detail.jobId,
-                      assetId: detail.assetId,
-                      kind: detail.kind,
-                      name: detail.name,
-                      createdAt: detail.createdAt,
-                      updatedAt: detail.updatedAt,
-                      stage: detail.stage,
-                      mode: detail.mode,
-                      folderId: detail.folderId,
-                      thumbnailUrl: detail.thumbnailUrl,
-                      playableUrl: detail.playableUrl,
-                    })
-                  }
+                  className="is-primary"
+                  onClick={() => onUpscale(toTile(detail))}
                 >
+                  <Expand className="h-3.5 w-3.5" aria-hidden="true" />
                   Upscale
                 </button>
               ) : null}
               {detail.kind === "image" && detail.assetId && onGenerateVideo ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onGenerateVideo({
-                      jobId: detail.jobId,
-                      assetId: detail.assetId,
-                      kind: detail.kind,
-                      name: detail.name,
-                      createdAt: detail.createdAt,
-                      updatedAt: detail.updatedAt,
-                      stage: detail.stage,
-                      mode: detail.mode,
-                      folderId: detail.folderId,
-                      thumbnailUrl: detail.thumbnailUrl,
-                      playableUrl: detail.playableUrl,
-                    })
-                  }
-                >
+                <button type="button" onClick={() => onGenerateVideo(toTile(detail))}>
+                  <Film className="h-3.5 w-3.5" aria-hidden="true" />
                   Generate video
                 </button>
               ) : null}
               {detail.assetId && onOpenInFiles ? (
                 <button
                   type="button"
-                  onClick={() => onOpenInFiles(detail.assetId!, detail.folderId)}
+                  onClick={() =>
+                    onOpenInFiles(
+                      detail.assetId as Id<"assets">,
+                      detail.folderId as Id<"folders"> | undefined,
+                    )
+                  }
                 >
+                  <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
                   Open in Files
                 </button>
               ) : null}
@@ -258,18 +257,8 @@ export function StudioGenerationDetailSidebar({
                   className="is-danger"
                   onClick={() => onTrash(detail.assetId!)}
                 >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                   Trash
-                </button>
-              ) : null}
-              {(detail.playableUrl || detail.thumbnailUrl) && onPlay ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const url = detail.playableUrl ?? detail.thumbnailUrl;
-                    if (url) onPlay(url, detail.kind, detail.name);
-                  }}
-                >
-                  Open media
                 </button>
               ) : null}
             </section>

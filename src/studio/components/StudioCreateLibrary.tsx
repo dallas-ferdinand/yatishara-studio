@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConvex, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Loader2, Sparkles, X } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import {
   StudioGenerationTile,
   type GenerationLibraryTile,
@@ -14,10 +14,8 @@ import "./studio-create-library.css";
 
 const PAGE_SIZE = 24;
 
-/** Match studio-create-library.css breakpoints for LTR column count. */
+/** Desktop Create library uses 3 columns; narrow = 2. */
 function columnCountForWidth(width: number): number {
-  if (width >= 1500) return 5;
-  if (width >= 1100) return 4;
   if (width >= 720) return 3;
   return 2;
 }
@@ -58,9 +56,7 @@ type StudioCreateLibraryProps = {
 };
 
 function previewUrl(tile: GenerationLibraryTile): string | undefined {
-  if (tile.kind === "video") {
-    return tile.playableUrl || tile.thumbnailUrl;
-  }
+  // Prefer full playable URL so lightbox isn't stuck on a tiny thumb.
   if (tile.kind === "audio") return tile.playableUrl;
   return tile.playableUrl || tile.thumbnailUrl;
 }
@@ -88,6 +84,17 @@ export function StudioCreateLibrary({
     limit: PAGE_SIZE,
     expiresUnix,
   });
+
+  // Detail media URL — upgrades lightbox when list only had a thumb.
+  const lightboxDetail = useQuery(
+    api.generationLibrary.getGenerationDetail,
+    lightbox?.jobId
+      ? {
+          jobId: lightbox.jobId as Id<"generationJobs">,
+          expiresUnix,
+        }
+      : "skip",
+  );
 
   useEffect(() => {
     if (!firstPage) return;
@@ -155,6 +162,29 @@ export function StudioCreateLibrary({
   useEffect(() => {
     if (!selectedJobId) setLightbox(null);
   }, [selectedJobId]);
+
+  // When a better playable URL arrives for the open tile, upgrade the lightbox.
+  useEffect(() => {
+    if (!lightbox) return;
+    const fromDetail =
+      lightboxDetail && lightboxDetail.jobId === lightbox.jobId
+        ? lightboxDetail.playableUrl || lightboxDetail.thumbnailUrl
+        : undefined;
+    const tile = tiles.find((t) => t.jobId === lightbox.jobId);
+    const fromTile = tile && tile.stage === "done" ? previewUrl(tile) : undefined;
+    const url = fromDetail || fromTile;
+    if (!url || url === lightbox.url) return;
+    setLightbox((prev) =>
+      prev
+        ? {
+            ...prev,
+            url,
+            kind: (lightboxDetail?.kind as LightboxState["kind"]) || tile?.kind || prev.kind,
+            name: lightboxDetail?.name || tile?.name || prev.name,
+          }
+        : prev,
+    );
+  }, [tiles, lightbox, lightboxDetail]);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -230,20 +260,8 @@ export function StudioCreateLibrary({
           role="dialog"
           aria-modal="true"
           aria-label={lightbox.name}
-          onClick={closePreview}
         >
-          <div
-            className="studio-gen-lightbox-inner"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="studio-gen-lightbox-close"
-              aria-label="Close preview"
-              onClick={closePreview}
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
+          <div className="studio-gen-lightbox-stage">
             {lightbox.kind === "video" ? (
               <video src={lightbox.url} controls autoPlay playsInline />
             ) : lightbox.kind === "audio" ? (

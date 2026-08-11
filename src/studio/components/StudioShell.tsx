@@ -25249,7 +25249,8 @@ export function StudioShell({
           />
         </section>
         {typeof activeTab === "string" &&
-        (activeTab.startsWith("composer:") || activeTab.startsWith("thread:")) ? (
+        (activeTab.startsWith("composer:") || activeTab.startsWith("thread:")) &&
+        !generationDetailOpen ? (
           <StudioComposer
             draft={draft}
             setDraft={setDraft}
