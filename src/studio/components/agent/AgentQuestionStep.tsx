@@ -101,8 +101,8 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
   );
   const [index, setIndex] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, AnswerDraft>>({});
-  const [customMode, setCustomMode] = useState(false);
   const [customText, setCustomText] = useState("");
+  const [customFocused, setCustomFocused] = useState(false);
   const [busy, setBusy] = useState(false);
   const customRef = useRef<HTMLInputElement | null>(null);
 
@@ -111,24 +111,23 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
   const currentDraft = current ? drafts[current.id] : undefined;
   const allAnswered =
     items.length > 0 && items.every((item) => draftFilled(drafts[item.id]));
+  const customActive =
+    customFocused ||
+    Boolean(customText.trim()) ||
+    Boolean(currentDraft?.customText && !currentDraft?.optionId);
 
   useEffect(() => {
     if (!current) return;
     const draft = drafts[current.id];
     if (draft?.customText && !draft.optionId) {
-      setCustomMode(true);
       setCustomText(draft.customText);
       return;
     }
-    setCustomMode(false);
     setCustomText("");
+    setCustomFocused(false);
     // Only re-sync when changing question — not while typing a new custom answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, current?.id]);
-
-  useEffect(() => {
-    if (customMode) customRef.current?.focus();
-  }, [customMode, index]);
 
   if (!items.length) return null;
 
@@ -172,8 +171,9 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
   }
 
   async function chooseOption(option: AgentQuestionOption) {
-    setCustomMode(false);
     setCustomText("");
+    setCustomFocused(false);
+    customRef.current?.blur();
     await applyAnswer({
       questionId: current!.id,
       optionId: option.id,
@@ -181,26 +181,44 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
     });
   }
 
-  function openCustom() {
-    if (!current || busy) return;
-    setCustomMode(true);
-    setCustomText(currentDraft?.customText || "");
-  }
-
-  async function commitCustom(text: string) {
+  async function commitCustom(text: string, opts?: { autoAdvance?: boolean }) {
     const trimmed = text.trim();
     if (!trimmed || !current) return;
-    await applyAnswer({
-      questionId: current.id,
-      customText: trimmed,
-      optionLabel: trimmed,
+    await applyAnswer(
+      {
+        questionId: current.id,
+        customText: trimmed,
+        optionLabel: trimmed,
+      },
+      opts,
+    );
+  }
+
+  function onCustomChange(value: string) {
+    setCustomText(value);
+    if (!current) return;
+    const trimmed = value.trim();
+    if (!trimmed) {
+      if (currentDraft?.customText && !currentDraft?.optionId) {
+        const next = { ...drafts };
+        delete next[current.id];
+        setDrafts(next);
+      }
+      return;
+    }
+    setDrafts({
+      ...drafts,
+      [current.id]: {
+        questionId: current.id,
+        customText: trimmed,
+        optionLabel: trimmed,
+      },
     });
   }
 
   async function handleNext() {
     if (!current || busy) return;
-    if (customMode && customText.trim()) {
-      const wasAnswered = draftFilled(drafts[current.id]);
+    if (customText.trim()) {
       const merged = {
         ...drafts,
         [current.id]: {
@@ -211,7 +229,6 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
       };
       setDrafts(merged);
       if (index < items.length - 1) {
-        // Explicit Next: always move forward once answered
         setIndex(index + 1);
         return;
       }
@@ -249,9 +266,7 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
     );
   }
 
-  const canNext =
-    draftFilled(currentDraft) ||
-    (customMode && Boolean(customText.trim()));
+  const canNext = draftFilled(currentDraft) || Boolean(customText.trim());
   const nextLabel =
     index >= items.length - 1 ? (allAnswered || canNext ? "Done" : "Done") : "Next";
 
@@ -305,42 +320,31 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
             );
           })}
           {current.allowCustom !== false ? (
-            customMode ? (
-              <div className="studio-agent-ask-custom is-open">
-                <span className="studio-agent-ask-option-letter" aria-hidden="true">
-                  {optionLetter(current.options.length)}
-                </span>
-                <input
-                  ref={customRef}
-                  value={customText}
-                  onChange={(e) => setCustomText(e.target.value)}
-                  placeholder="Type your answer…"
-                  disabled={busy}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && customText.trim()) {
-                      e.preventDefault();
-                      void commitCustom(customText);
-                    }
-                  }}
-                />
-              </div>
-            ) : (
-              <button
-                type="button"
-                className={`studio-agent-ask-option is-muted${currentDraft?.customText ? " is-selected" : ""}`}
+            <label
+              className={`studio-agent-ask-option studio-agent-ask-custom is-muted${
+                customActive ? " is-selected" : ""
+              }`}
+            >
+              <span className="studio-agent-ask-option-letter" aria-hidden="true">
+                {optionLetter(current.options.length)}
+              </span>
+              <input
+                ref={customRef}
+                value={customText}
+                onChange={(e) => onCustomChange(e.target.value)}
+                onFocus={() => setCustomFocused(true)}
+                onBlur={() => setCustomFocused(false)}
+                placeholder="Something else…"
                 disabled={busy}
-                onClick={openCustom}
-              >
-                <span className="studio-agent-ask-option-letter" aria-hidden="true">
-                  {optionLetter(current.options.length)}
-                </span>
-                <span className="studio-agent-ask-option-label">
-                  {currentDraft?.customText
-                    ? currentDraft.customText
-                    : "Something else…"}
-                </span>
-              </button>
-            )
+                aria-label="Something else"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customText.trim()) {
+                    e.preventDefault();
+                    void commitCustom(customText);
+                  }
+                }}
+              />
+            </label>
           ) : null}
         </div>
       </div>
