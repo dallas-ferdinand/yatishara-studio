@@ -829,6 +829,8 @@ export default defineSchema({
     paymentId: v.optional(v.id("payments")),
     reversesTransactionId: v.optional(v.id("creditTransactions")),
     reason: v.optional(v.string()),
+    /** Measured token breakdown for text charges (audit / exact COGS). */
+    usageJson: v.optional(v.string()),
     adminId: v.optional(v.id("users")),
     createdAt: v.number(),
   })
@@ -1967,6 +1969,8 @@ export default defineSchema({
     usedByok: v.optional(v.boolean()),
     creditsSpent: v.optional(v.number()),
     catalogVersion: v.optional(v.string()),
+    /** Measured LLM usage JSON for this run (exact billing audit). */
+    usageJson: v.optional(v.string()),
     /** Latest multi-step TODO JSON for reinjection across ask pauses */
     planJson: v.optional(v.string()),
     cancelRequestedAt: v.optional(v.number()),

@@ -24,6 +24,7 @@ import {
   audioCreditCost,
   creditCostForGeneration,
   CREDIT_PRICE_TTD,
+  formatTextUsageReason,
   textCreditCost,
 } from "./lib/generationPricing";
 import { compactElementPromptLine } from "./lib/klingGatewayPrompt";
@@ -1704,7 +1705,20 @@ export const chargeTextGenerationForApi = internalMutation({
       kind: "spent",
       amount: -cost,
       balanceAfter,
-      reason: "Text generation (API)",
+      reason: formatTextUsageReason({
+        inputTokens: args.inputTokens,
+        outputTokens: args.outputTokens,
+        cacheReadTokens: args.cacheReadTokens,
+        cacheWriteTokens: args.cacheWriteTokens,
+      }),
+      usageJson: JSON.stringify({
+        inputTokens: args.inputTokens,
+        outputTokens: args.outputTokens,
+        cacheReadTokens: args.cacheReadTokens ?? 0,
+        cacheWriteTokens: args.cacheWriteTokens ?? 0,
+        textModel: "pro",
+        credits: cost,
+      }),
       createdAt: now,
     });
     return { transactionId, cost };

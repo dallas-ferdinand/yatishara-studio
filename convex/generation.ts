@@ -9,6 +9,7 @@ import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import {
   CREDIT_PRICE_TTD,
   creditCostForGeneration,
+  formatTextUsageReason,
   imageCreditCost,
   TEXT_MIN_SELL_TTD,
   textCreditCost,
@@ -2635,13 +2636,30 @@ export const chargeTextGeneration = authedMutation({
       creditBalance: balanceAfter,
       updatedAt: now,
     });
+    const textModel = args.textModel ?? "pro";
     return await ctx.db.insert("creditTransactions", {
       userId: ctx.user._id,
       billingAccountId: account._id,
       kind: "spent",
       amount: -cost,
       balanceAfter,
-      reason: "Text generation",
+      reason: formatTextUsageReason(
+        {
+          inputTokens: args.inputTokens,
+          outputTokens: args.outputTokens,
+          cacheReadTokens: args.cacheReadTokens,
+          cacheWriteTokens: args.cacheWriteTokens,
+        },
+        textModel,
+      ),
+      usageJson: JSON.stringify({
+        inputTokens: args.inputTokens,
+        outputTokens: args.outputTokens,
+        cacheReadTokens: args.cacheReadTokens ?? 0,
+        cacheWriteTokens: args.cacheWriteTokens ?? 0,
+        textModel,
+        credits: cost,
+      }),
       createdAt: now,
     });
   },

@@ -2,7 +2,7 @@
  * Generation pricing.
  *
  * Image + video + text: **exact BytePlus ModelArk list COGS × 2**, then round
- * (media → next TT$0.50; text → next TT$0.01). FX: US$1 = TT$10.
+ * **up** to the next TT$0.50 (clean whole credits). FX: US$1 = TT$10.
  * Ledger: TT$0.50 per credit. No platform fee on top of the 2× markup.
  *
  * Seedance 2.5 list: $10.70/M (no video input) / $6.40/M (with video input).
@@ -169,8 +169,15 @@ export type TextPricingModel = "pro" | "lite" | "mini";
 /** Seed 2.0 Pro list (≤128k) — default text/assistance COGS. */
 export const TEXT_USD_PER_M_INPUT = 0.5;
 export const TEXT_USD_PER_M_OUTPUT = 3.0;
-/** BytePlus ModelArk context-cache hit input (Seed 2.0 Pro ≤128k). */
+/** BytePlus ModelArk cache-hit input (Seed 2.0 Pro ≤128k). */
 export const TEXT_USD_PER_M_CACHE_READ = 0.1;
+/**
+ * BytePlus ModelArk cache storage (USD / M tokens / hour).
+ * When providers report cache_write_tokens without hours, bill 1h (min Context TTL).
+ */
+export const TEXT_USD_PER_M_CACHE_STORAGE = 0.008333;
+/** Assumed storage hours when only write-token count is known (Context API min TTL). */
+export const TEXT_CACHE_STORAGE_ASSUMED_HOURS = 1;
 export const TEXT_USD_PER_M_AUDIO_INPUT = TEXT_USD_PER_M_INPUT;
 
 export const TEXT_LITE_USD_PER_M_INPUT = 0.25;
@@ -196,10 +203,10 @@ export const TEXT_VIDEO_REF_INPUT_TOKENS = 10_000;
 export const TEXT_AUDIO_REF_INPUT_TOKENS = 5_000;
 
 /**
- * Text / Assistance floor + step: TT$0.01 (0.02 credits at TT$0.50 each).
- * Customer charge = 2× BytePlus text provider COGS, rounded up to this cent.
+ * Text / Assistance floor: TT$0.50 (1 credit) — same clean step as image/video.
+ * Measured charge = BytePlus COGS ×2, then round **up** to next TT$0.50.
  */
-export const TEXT_MIN_SELL_TTD = 0.01;
+export const TEXT_MIN_SELL_TTD = CREDIT_PRICE_TTD;
 
 /** @deprecated Prefer textCreditCost() — legacy flat base for display fallbacks. */
 export const TEXT_GENERATION_BASE_CREDITS = TEXT_MIN_SELL_TTD / CREDIT_PRICE_TTD;
@@ -239,6 +246,7 @@ function textRates(model: TextPricingModel = "pro"): {
   input: number;
   output: number;
   cacheRead: number;
+  cacheStorage: number;
   audioInput: number;
 } {
   if (model === "mini") {
@@ -246,6 +254,7 @@ function textRates(model: TextPricingModel = "pro"): {
       input: TEXT_MINI_USD_PER_M_INPUT,
       output: TEXT_MINI_USD_PER_M_OUTPUT,
       cacheRead: TEXT_MINI_USD_PER_M_CACHE_READ,
+      cacheStorage: TEXT_USD_PER_M_CACHE_STORAGE,
       audioInput: TEXT_MINI_USD_PER_M_AUDIO_INPUT,
     };
   }
@@ -254,6 +263,7 @@ function textRates(model: TextPricingModel = "pro"): {
       input: TEXT_LITE_USD_PER_M_INPUT,
       output: TEXT_LITE_USD_PER_M_OUTPUT,
       cacheRead: TEXT_LITE_USD_PER_M_CACHE_READ,
+      cacheStorage: TEXT_USD_PER_M_CACHE_STORAGE,
       audioInput: TEXT_LITE_USD_PER_M_AUDIO_INPUT,
     };
   }
@@ -261,6 +271,7 @@ function textRates(model: TextPricingModel = "pro"): {
     input: TEXT_USD_PER_M_INPUT,
     output: TEXT_USD_PER_M_OUTPUT,
     cacheRead: TEXT_USD_PER_M_CACHE_READ,
+    cacheStorage: TEXT_USD_PER_M_CACHE_STORAGE,
     audioInput: TEXT_USD_PER_M_AUDIO_INPUT,
   };
 }
@@ -502,45 +513,83 @@ export function estimateTextModelUsd(args: {
   );
 }
 
-function roundUpToCentTtd(ttd: number): number {
-  return Math.ceil(ttd * 100) / 100;
-}
-
 export type MeasuredTextUsage = {
-  /** Non-cached prompt tokens. */
+  /** Non-cached prompt tokens (never include cache hits). */
   inputTokens?: number;
   outputTokens?: number;
-  /** BytePlus / provider cache-hit input tokens (cheaper). */
+  /** BytePlus cache-hit input tokens. */
   cacheReadTokens?: number;
-  /** Tokens written into a new cache (billed at input rate). */
+  /**
+   * Tokens written into a new cache. BytePlus bills storage (USD/M/hour), not
+   * Anthropic-style write×input. When hours unknown, bill 1h min TTL.
+   */
   cacheWriteTokens?: number;
+  /** Optional storage duration override (hours). Default TEXT_CACHE_STORAGE_ASSUMED_HOURS. */
+  cacheStorageHours?: number;
+  /**
+   * Optional total prompt_tokens from the provider. When set, non-cached input is
+   * derived as prompt − cacheRead − cacheWrite (prevents double-billing).
+   */
+  promptTokens?: number;
 };
 
-/** Provider USD for Seed Pro / Lite / Mini text tokens (incl. cache hits). */
+/** Normalize measured usage so input never double-counts cache buckets. */
+export function normalizeMeasuredTextUsage(
+  usage: MeasuredTextUsage,
+): MeasuredTextUsage {
+  const cacheReadTokens = Math.max(0, Math.floor(usage.cacheReadTokens ?? 0));
+  const cacheWriteTokens = Math.max(0, Math.floor(usage.cacheWriteTokens ?? 0));
+  const outputTokens = Math.max(0, Math.floor(usage.outputTokens ?? 0));
+  const promptTokens = Math.max(0, Math.floor(usage.promptTokens ?? 0));
+  let inputTokens = Math.max(0, Math.floor(usage.inputTokens ?? 0));
+  if (promptTokens > 0) {
+    inputTokens = Math.max(0, promptTokens - cacheReadTokens - cacheWriteTokens);
+  }
+  const cacheStorageHours =
+    usage.cacheStorageHours != null && Number.isFinite(usage.cacheStorageHours)
+      ? Math.max(0, Number(usage.cacheStorageHours))
+      : TEXT_CACHE_STORAGE_ASSUMED_HOURS;
+  return {
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    cacheStorageHours,
+    ...(promptTokens > 0 ? { promptTokens } : {}),
+  };
+}
+
+/** Provider USD for Seed Pro / Lite / Mini text tokens (exact BytePlus list items). */
 export function textProviderCostUsd(
   usage: MeasuredTextUsage,
   textModel: TextPricingModel = "pro",
 ): number {
   const rates = textRates(textModel);
-  const inputTokens = Math.max(0, Math.floor(usage.inputTokens ?? 0));
-  const outputTokens = Math.max(0, Math.floor(usage.outputTokens ?? 0));
-  const cacheReadTokens = Math.max(0, Math.floor(usage.cacheReadTokens ?? 0));
-  const cacheWriteTokens = Math.max(0, Math.floor(usage.cacheWriteTokens ?? 0));
-  return (
-    (inputTokens * rates.input) / 1_000_000 +
-    (cacheReadTokens * rates.cacheRead) / 1_000_000 +
-    (cacheWriteTokens * rates.input) / 1_000_000 +
-    (outputTokens * rates.output) / 1_000_000
-  );
+  const n = normalizeMeasuredTextUsage(usage);
+  const inputTokens = n.inputTokens ?? 0;
+  const outputTokens = n.outputTokens ?? 0;
+  const cacheReadTokens = n.cacheReadTokens ?? 0;
+  const cacheWriteTokens = n.cacheWriteTokens ?? 0;
+  const cacheStorageHours = n.cacheStorageHours ?? TEXT_CACHE_STORAGE_ASSUMED_HOURS;
+  const microUsd =
+    inputTokens * rates.input +
+    cacheReadTokens * rates.cacheRead +
+    cacheWriteTokens * rates.cacheStorage * cacheStorageHours +
+    outputTokens * rates.output;
+  return microUsd / 1_000_000;
 }
 
-/** Customer TT$ = 2× measured provider USD, rounded up to TT$0.01. */
+/**
+ * Customer TT$ = BytePlus COGS ×2, then round **up** to next TT$0.50
+ * (same clean step as image/video). Floor TT$0.50.
+ */
 export function textSellPriceFromUsageTtd(
   usage: MeasuredTextUsage,
   textModel: TextPricingModel = "pro",
 ): number {
   const raw = textProviderCostUsd(usage, textModel) * USD_TO_TTD * 2;
-  return Math.max(TEXT_MIN_SELL_TTD, roundUpToCentTtd(raw));
+  if (raw <= 0) return TEXT_MIN_SELL_TTD;
+  return Math.max(TEXT_MIN_SELL_TTD, roundUpToHalfTtd(raw));
 }
 
 export function textCreditsFromMeasuredUsage(
@@ -548,7 +597,21 @@ export function textCreditsFromMeasuredUsage(
   textModel: TextPricingModel = "pro",
 ): number {
   const sellTtd = textSellPriceFromUsageTtd(usage, textModel);
-  return Math.round((sellTtd / CREDIT_PRICE_TTD) * 100) / 100;
+  // Half-TTD steps → whole credits (TT$0.50 = 1 credit).
+  return Math.round(sellTtd / CREDIT_PRICE_TTD);
+}
+
+export function formatTextUsageReason(
+  usage: MeasuredTextUsage,
+  textModel: TextPricingModel = "pro",
+): string {
+  const n = normalizeMeasuredTextUsage(usage);
+  const tier =
+    textModel === "mini" ? "Seed Mini" : textModel === "lite" ? "Seed Lite" : "Seed Pro";
+  return (
+    `Text (${tier}) in=${n.inputTokens ?? 0} cacheHit=${n.cacheReadTokens ?? 0}` +
+    ` cacheStore1h=${n.cacheWriteTokens ?? 0} out=${n.outputTokens ?? 0}`
+  );
 }
 
 export function addMeasuredTextUsage(
@@ -568,16 +631,18 @@ export function measuredTextUsageFromGateway(usage: {
   outputTokens?: number | undefined;
   cacheReadTokens?: number | undefined;
   cacheWriteTokens?: number | undefined;
+  promptTokens?: number | undefined;
 }): MeasuredTextUsage {
-  return {
+  return normalizeMeasuredTextUsage({
     inputTokens: usage.inputTokens ?? 0,
     outputTokens: usage.outputTokens ?? 0,
     cacheReadTokens: usage.cacheReadTokens ?? 0,
     cacheWriteTokens: usage.cacheWriteTokens ?? 0,
-  };
+    promptTokens: usage.promptTokens,
+  });
 }
 
-/** Customer TT$ for script / Assistance / element text = 2× Seed text COGS, min / step TT$0.01. */
+/** Customer TT$ for script / Assistance estimates = COGS ×2, round up to TT$0.50. */
 export function textSellPriceTtd(args: {
   imageReferenceCount?: number;
   videoReferenceCount?: number;
@@ -585,7 +650,7 @@ export function textSellPriceTtd(args: {
   textModel?: TextPricingModel;
 }): number {
   const raw = estimateTextModelUsd(args) * USD_TO_TTD * 2;
-  return Math.max(TEXT_MIN_SELL_TTD, roundUpToCentTtd(raw));
+  return Math.max(TEXT_MIN_SELL_TTD, roundUpToHalfTtd(raw));
 }
 
 export function textCreditCost(args: {
@@ -615,9 +680,7 @@ export function textCreditCost(args: {
     );
   }
   const sellTtd = textSellPriceTtd(args);
-  // Fractional credits so TT$0.01 → 0.02 credits (ledger is TT$0.50 / credit).
-  const credits = Math.round((sellTtd / CREDIT_PRICE_TTD) * 100) / 100;
-  return Math.max(TEXT_MIN_SELL_TTD / CREDIT_PRICE_TTD, credits);
+  return Math.max(1, Math.round(sellTtd / CREDIT_PRICE_TTD));
 }
 
 export type GenerationCreditTier =

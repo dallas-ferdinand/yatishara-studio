@@ -17,6 +17,7 @@ import path from "node:path";
 import { createStudioPiTools, createTrajectory } from "./piTools.mjs";
 import { detectActionLane } from "./agentLanes.mjs";
 import { skillPromptBlock } from "./agentSkills.mjs";
+import { normalizeAgentUsage } from "./usageBilling.mjs";
 import { invokeStudioTool } from "../../packages/studio-tools/src/http.js";
 
 const PORT = Number(process.env.STUDIO_AGENT_PORT || process.env.PORT || 8796);
@@ -496,17 +497,15 @@ async function runPiTurn(body, abortSignal) {
         ? session.getSessionStats()
         : null;
     const tokens = stats?.tokens || {};
-    // Keep cache hits separate — Seed Pro cache-read COGS is ~⅕ of input.
-    const inputTokens = Math.max(0, Math.floor(Number(tokens.input || 0)));
-    const cacheReadTokens = Math.max(0, Math.floor(Number(tokens.cacheRead || 0)));
-    const cacheWriteTokens = Math.max(0, Math.floor(Number(tokens.cacheWrite || 0)));
-    const outputTokens = Math.max(0, Math.floor(Number(tokens.output || 0)));
-    const usage = {
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-    };
+    // Pi splits prompt into input (non-cached) + cacheRead + cacheWrite.
+    // Never fold cache into input — BytePlus bills hits cheaper, storage hourly.
+    const usage = normalizeAgentUsage({
+      inputTokens: tokens.input,
+      outputTokens: tokens.output,
+      cacheReadTokens: tokens.cacheRead,
+      cacheWriteTokens: tokens.cacheWrite,
+    });
+    console.log("[studio-agent] usage", JSON.stringify(usage));
     const assistantText =
       (typeof session.getLastAssistantText === "function"
         ? session.getLastAssistantText()

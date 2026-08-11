@@ -71,12 +71,13 @@ MCP is not on the in-app path.
 Do **not** register raw JSON-Schema tools with `execute(args)` — Pi expects
 `execute(toolCallId, params, signal, onUpdate, ctx)` and TypeBox schemas.
 
-## Script edits + cache billing
+## Script edits + billing
 
-- Prefer **`studio_patch_document`** (exact oldString→newString) over full
-  `studio_update_document` rewrites — keeps model output tokens down.
-- Worker reports `cacheReadTokens` / `cacheWriteTokens` separately from
-  `inputTokens`. Ledger bills Seed Pro cache-hit input at ~⅕ list
-  (`TEXT_USD_PER_M_CACHE_READ`) ×2 sell — do **not** fold cache into input.
-- Ark openai-completions may already return cache-hit usage on repeated
-  prefixes; explicit ModelArk Context/Responses API wiring is a later step.
+- Prefer **`studio_patch_document`** for small Script edits.
+- Ledger = **BytePlus list COGS ×2**, then **round up to next TT$0.50**
+  (same clean step as image/video — whole credits).
+  - input @ $0.50/M (Seed Pro ≤128k)
+  - cache hit @ $0.10/M
+  - cache write → storage $0.008333/M/hour × 1h (never full input rate)
+  - output @ $3.00/M
+- Floor TT$0.50 (1 credit). `usageJson` on the charge stores the token breakdown.

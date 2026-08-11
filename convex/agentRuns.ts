@@ -117,15 +117,18 @@ export const setRunCredits = internalMutation({
     creditsSpent: v.number(),
     usedByok: v.optional(v.boolean()),
     model: v.optional(v.string()),
+    usageJson: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("agentRuns", args.runId);
     if (!row || row.status === "cancelled") return null;
     await ctx.db.patch(row._id, {
-      creditsSpent: Math.max(0, Math.floor(args.creditsSpent)),
+      // Whole credits preferred; keep 2-decimal precision if a path still sends fractions.
+      creditsSpent: Math.max(0, Math.round(args.creditsSpent * 100) / 100),
       usedByok: args.usedByok ?? row.usedByok,
       model: args.model ?? row.model,
+      ...(args.usageJson !== undefined ? { usageJson: args.usageJson } : {}),
       updatedAt: Date.now(),
     });
     return null;
@@ -139,6 +142,7 @@ export const completeRun = internalMutation({
     creditsSpent: v.optional(v.number()),
     usedByok: v.optional(v.boolean()),
     model: v.optional(v.string()),
+    usageJson: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -149,9 +153,13 @@ export const completeRun = internalMutation({
     await ctx.db.patch(row._id, {
       status: "completed",
       assistantText: args.assistantText,
-      creditsSpent: args.creditsSpent,
+      creditsSpent:
+        args.creditsSpent != null
+          ? Math.max(0, Math.round(args.creditsSpent * 100) / 100)
+          : row.creditsSpent,
       usedByok: args.usedByok ?? row.usedByok,
       model: args.model ?? row.model,
+      ...(args.usageJson !== undefined ? { usageJson: args.usageJson } : {}),
       finishedAt: now,
       updatedAt: now,
     });

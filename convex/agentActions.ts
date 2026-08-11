@@ -10,7 +10,7 @@ import { action } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { decryptAgentApiKey, requireAgentKeySecret } from "./lib/agentCrypto";
-import { textCreditCost } from "./lib/generationPricing";
+import { measuredTextUsageFromGateway, textCreditCost } from "./lib/generationPricing";
 import { hashApiKey } from "./lib/studioApi/crypto";
 import { makeFunctionReference } from "convex/server";
 
@@ -454,6 +454,7 @@ export const sendTurn = action({
           outputTokens?: number;
           cacheReadTokens?: number;
           cacheWriteTokens?: number;
+          promptTokens?: number;
         };
       } = {};
       try {
@@ -489,40 +490,24 @@ export const sendTurn = action({
       if (body.pendingApproval || body.pendingAsk) {
         // LLM already ran to reach this pause — always bill measured usage.
         let creditsSpent = 0;
+        let usageJson: string | undefined;
         if (!usedByok) {
-          const inputTokens = Math.max(
-            0,
-            Math.floor(Number(body.usage?.inputTokens ?? 0)),
-          );
-          const outputTokens = Math.max(
-            0,
-            Math.floor(Number(body.usage?.outputTokens ?? 0)),
-          );
-          const cacheReadTokens = Math.max(
-            0,
-            Math.floor(Number(body.usage?.cacheReadTokens ?? 0)),
-          );
-          const cacheWriteTokens = Math.max(
-            0,
-            Math.floor(Number(body.usage?.cacheWriteTokens ?? 0)),
-          );
+          const usage = measuredTextUsageFromGateway(body.usage ?? {});
           creditsSpent = textCreditCost({
-            inputTokens,
-            outputTokens,
-            cacheReadTokens,
-            cacheWriteTokens,
+            ...usage,
             textModel: "pro",
           });
+          usageJson = JSON.stringify({ ...usage, textModel: "pro", credits: creditsSpent });
           const folderId = await ctx.runMutation(
             api.folders.ensureMessagesFolderForMe,
             {},
           );
           await ctx.runMutation(chargeTextGenerationRef, {
             folderId,
-            inputTokens,
-            outputTokens,
-            cacheReadTokens,
-            cacheWriteTokens,
+            inputTokens: usage.inputTokens ?? 0,
+            outputTokens: usage.outputTokens ?? 0,
+            cacheReadTokens: usage.cacheReadTokens,
+            cacheWriteTokens: usage.cacheWriteTokens,
             textModel: "pro",
           });
         }
@@ -531,6 +516,7 @@ export const sendTurn = action({
           creditsSpent,
           usedByok,
           model: body.model,
+          usageJson,
         });
         if (body.pendingAsk) {
           await ctx.runMutation(internal.agentRuns.markAwaitingQuestion, {
@@ -565,43 +551,27 @@ export const sendTurn = action({
         content: assistantText,
       });
 
-      // Always bill platform LLM usage (measured tokens; TT$0.01 floor).
+      // Always bill platform LLM usage (measured tokens; exact BytePlus COGS ×2).
       // BYOK: no LLM ledger charge. Paid tools still charge via Studio API.
       let creditsSpent = 0;
+      let usageJson: string | undefined;
       if (!usedByok) {
-        const inputTokens = Math.max(
-          0,
-          Math.floor(Number(body.usage?.inputTokens ?? 0)),
-        );
-        const outputTokens = Math.max(
-          0,
-          Math.floor(Number(body.usage?.outputTokens ?? 0)),
-        );
-        const cacheReadTokens = Math.max(
-          0,
-          Math.floor(Number(body.usage?.cacheReadTokens ?? 0)),
-        );
-        const cacheWriteTokens = Math.max(
-          0,
-          Math.floor(Number(body.usage?.cacheWriteTokens ?? 0)),
-        );
+        const usage = measuredTextUsageFromGateway(body.usage ?? {});
         creditsSpent = textCreditCost({
-          inputTokens,
-          outputTokens,
-          cacheReadTokens,
-          cacheWriteTokens,
+          ...usage,
           textModel: "pro",
         });
+        usageJson = JSON.stringify({ ...usage, textModel: "pro", credits: creditsSpent });
         const folderId = await ctx.runMutation(
           api.folders.ensureMessagesFolderForMe,
           {},
         );
         await ctx.runMutation(chargeTextGenerationRef, {
           folderId,
-          inputTokens,
-          outputTokens,
-          cacheReadTokens,
-          cacheWriteTokens,
+          inputTokens: usage.inputTokens ?? 0,
+          outputTokens: usage.outputTokens ?? 0,
+          cacheReadTokens: usage.cacheReadTokens,
+          cacheWriteTokens: usage.cacheWriteTokens,
           textModel: "pro",
         });
       }
@@ -611,6 +581,7 @@ export const sendTurn = action({
         assistantText,
         creditsSpent,
         usedByok: Boolean(body.usedByok) || usedByok,
+        usageJson,
       });
       await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
 
