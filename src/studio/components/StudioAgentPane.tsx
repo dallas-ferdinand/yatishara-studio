@@ -708,7 +708,7 @@ export function StudioAgentPane({
 
       <div className="studio-agent-composer-dock">
         <footer
-          className={`cursor-composer-shell studio-composer${dragOver ? " is-drop-target is-touch-drop-hover" : ""}`}
+          className={`studio-dm-composer is-split${isMobile ? " is-mobile-icons" : ""}${dragOver ? " is-drop-target is-touch-drop-hover" : ""}`}
           data-drop-target="composer"
           onDragEnter={() => setDragOver(true)}
           onDragOver={(event) => {
@@ -756,71 +756,73 @@ export function StudioAgentPane({
             }
           }}
         >
-          <div className="cursor-composer">
-            <div className="studio-composer-row">
-              <div className={`cursor-composer-box${recording ? " is-recording" : ""}${transcribing ? " is-transcribing" : ""}${dragOver ? " is-drop-target is-touch-drop-hover" : ""}`} data-drop-target="composer">
-            <input
-              ref={uploadInputRef}
-              className="sr-only"
-              type="file"
-              multiple
-              accept="image/*,video/*,audio/*"
-              onChange={(event) => {
-                void uploadAgentFiles(event.currentTarget.files);
-                event.currentTarget.value = "";
-              }}
-            />
+          <input
+            ref={uploadInputRef}
+            className="sr-only"
+            type="file"
+            multiple
+            accept="image/*,video/*,audio/*"
+            onChange={(event) => {
+              void uploadAgentFiles(event.currentTarget.files);
+              event.currentTarget.value = "";
+            }}
+          />
+          <div
+            className={`studio-dm-composer-box${recording ? " is-recording" : ""}${transcribing ? " is-transcribing" : ""}${dragOver ? " is-drop-target is-touch-drop-hover" : ""}`}
+            data-drop-target="composer"
+          >
             <div
-              className="studio-composer-inputline"
+              className="studio-dm-composer-row is-message"
               onMouseDown={(event) => {
                 if (event.target !== event.currentTarget) return;
                 event.preventDefault();
                 focusComposerEditorEnd(editorRef.current);
               }}
             >
-                <div
-                  ref={editorRef}
-                  role="textbox"
-                  aria-multiline="true"
-                  contentEditable={!busy}
-                  suppressContentEditableWarning
-                  data-placeholder="Ask the agent to set up a project, generate, or work across Studio…"
-                  className="cursor-composer-mention-editor"
-                  onInput={() => {
-                    setDraft(readComposerEditorText(editorRef.current));
-                  }}
-                  onFocus={() => focusComposerEditorEnd(editorRef.current)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey && !isMobile) {
+              <div
+                ref={editorRef}
+                role="textbox"
+                aria-multiline="true"
+                contentEditable={!busy}
+                suppressContentEditableWarning
+                data-placeholder="Ask the agent to set up a project, generate, or work across Studio…"
+                className="cursor-composer-mention-editor"
+                onInput={() => {
+                  setDraft(readComposerEditorText(editorRef.current));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && !isMobile) {
+                    event.preventDefault();
+                    void handleSend();
+                    return;
+                  }
+                  if (event.key === "Backspace") {
+                    if (removeComposerTokenBeforeCaret(editorRef.current, setAttachments)) {
                       event.preventDefault();
-                      void handleSend();
-                      return;
+                      setDraft(readComposerEditorText(editorRef.current));
                     }
-                    if (event.key === "Backspace") {
-                      if (removeComposerTokenBeforeCaret(editorRef.current, setAttachments)) {
-                        event.preventDefault();
-                        setDraft(readComposerEditorText(editorRef.current));
-                      }
-                      return;
-                    }
-                    if (
-                      (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
-                      moveCaretAcrossComposerToken(
-                        editorRef.current,
-                        event.key === "ArrowLeft" ? "left" : "right",
-                      )
-                    ) {
-                      event.preventDefault();
-                    }
-                  }}
-                />
+                    return;
+                  }
+                  if (
+                    (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+                    moveCaretAcrossComposerToken(
+                      editorRef.current,
+                      event.key === "ArrowLeft" ? "left" : "right",
+                    )
+                  ) {
+                    event.preventDefault();
+                  }
+                }}
+              />
             </div>
-            <div className="studio-composer-toolbar" role="toolbar" aria-label="Agent actions">
-              <div className="studio-composer-toolbar-scroll">
-                <div className="studio-composer-toolbar-left">
+            <div
+              className="studio-dm-composer-row is-extras"
+              role="toolbar"
+              aria-label="Agent actions"
+            >
               <button
                 type="button"
-                className="studio-composer-circle-btn studio-upload-trigger"
+                className="studio-composer-circle-btn studio-dm-composer-circle"
                 title={uploading ? "Uploading..." : "Upload media"}
                 aria-label={uploading ? "Uploading media" : "Upload media"}
                 disabled={busy || recording || transcribing}
@@ -834,7 +836,7 @@ export function StudioAgentPane({
               </button>
               <button
                 type="button"
-                className={`studio-composer-circle-btn cursor-composer-mic${recording ? " is-recording" : ""}${transcribing ? " is-transcribing" : ""}`}
+                className={`studio-composer-circle-btn studio-dm-composer-circle cursor-composer-mic${recording ? " is-recording" : ""}${transcribing ? " is-transcribing" : ""}`}
                 title={transcribing ? "Turning voice into text..." : recording ? "Stop recording" : "Use your voice"}
                 aria-label={transcribing ? "Turning voice into text" : recording ? "Stop recording" : "Use your voice"}
                 onClick={() => void toggleVoice()}
@@ -850,7 +852,7 @@ export function StudioAgentPane({
               </button>
               <button
                 type="button"
-                className="studio-settings-pill"
+                className="studio-settings-pill studio-dm-extra-pill"
                 title="New agent chat"
                 aria-label="New agent chat"
                 onClick={() => void handleNewChat()}
@@ -860,7 +862,7 @@ export function StudioAgentPane({
               </button>
               <button
                 type="button"
-                className="studio-settings-pill"
+                className="studio-settings-pill studio-dm-extra-pill"
                 title="Agent settings"
                 aria-label="Agent settings"
                 onClick={() => onOpenAgentSettings?.()}
@@ -871,7 +873,7 @@ export function StudioAgentPane({
               {!busy && latestFailedRun ? (
                 <button
                   type="button"
-                  className="studio-settings-pill"
+                  className="studio-settings-pill studio-dm-extra-pill"
                   title="Retry last failed run"
                   aria-label="Retry last failed run"
                   onClick={() => void handleRetry()}
@@ -880,11 +882,10 @@ export function StudioAgentPane({
                   <span className="studio-dm-extra-pill-label">Retry</span>
                 </button>
               ) : null}
-                </div>
-                <div className="studio-composer-actions">
+              <span className="studio-dm-extras-spacer" aria-hidden="true" />
               <button
                 type="button"
-                className="studio-composer-circle-btn studio-composer-send-btn"
+                className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
                 disabled={!busy && !canSend}
                 aria-label={busy ? "Stop" : "Send"}
                 title={busy ? "Stop" : "Send"}
@@ -894,10 +895,6 @@ export function StudioAgentPane({
                   <ArrowUp aria-hidden="true" />
                 )}
               </button>
-                </div>
-              </div>
-            </div>
-          </div>
             </div>
           </div>
         </footer>

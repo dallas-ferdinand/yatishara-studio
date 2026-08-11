@@ -186,8 +186,8 @@
   box-sizing: border-box;
 }
 
-/* Same shell width band as Create composer. */
-.studio-agent-composer-dock .studio-composer {
+/* Same shell width band as Create / DM composers. */
+.studio-agent-composer-dock .studio-dm-composer.is-split {
   width: 100%;
   max-width: var(--studio-composer-shell-max, min(600px, 94vw));
   margin-inline: auto;
@@ -195,13 +195,46 @@
   box-sizing: border-box;
 }
 
-.studio-agent-pane .studio-composer-inputline {
+.studio-agent-pane .studio-dm-composer.is-split .studio-dm-composer-row.is-message {
   min-height: calc(36px + 6px + 4px);
   padding: 6px 10px 4px;
+  align-items: stretch;
 }
 
-.studio-agent-pane .cursor-composer-mention-editor {
+.studio-agent-pane .studio-dm-composer.is-split .cursor-composer-mention-editor {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
   min-height: 36px;
+  max-height: 120px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 22px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.studio-agent-pane .studio-dm-composer.is-split .cursor-composer-mention-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-cursor-muted, var(--mos-muted));
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.studio-agent-pane .studio-dm-composer.is-split .studio-dm-composer-row.is-extras {
+  padding: 4px 8px 6px;
+  align-items: flex-end;
 }
 
 .studio-agent-attachment-strip,
