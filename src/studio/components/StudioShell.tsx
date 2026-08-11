@@ -827,7 +827,8 @@ function isVideoEditTabKey(tab) {
   );
 }
 
-function sanitizePersistedOpenTabs(tabs) {
+function sanitizePersistedOpenTabs(tabs, opts = {}) {
+  const allowEmpty = Boolean(opts?.allowEmpty);
   const list = Array.isArray(tabs) ? tabs : [];
   const cleaned = [];
   let feedSlot = -1;
@@ -852,6 +853,8 @@ function sanitizePersistedOpenTabs(tabs) {
     cleaned.splice(at, 0, lastFeed);
   }
   if (cleaned.length) return cleaned;
+  // Empty workspace is intentional (last tab closed) — do not remint on reload.
+  if (allowEmpty && Array.isArray(tabs)) return [];
   const preferred =
     typeof window !== "undefined"
       ? studioTabKeyForDefault(readStoredStudioDefaultTab())
@@ -877,7 +880,6 @@ function slimTabEntrySnapshots(snapshots) {
 
 let cachedInitialTabSession = null;
 function readPersistedTabSession() {
-  if (cachedInitialTabSession) return cachedInitialTabSession;
   const preferredDefault =
     typeof window !== "undefined"
       ? studioTabKeyForDefault(readStoredStudioDefaultTab())
@@ -889,10 +891,12 @@ function readPersistedTabSession() {
     navTrail: [],
     snapshots: {},
   };
+  // Never cache SSR/fallback — client must read localStorage or a remount
+  // will hydrate stale defaults and the persist effect will wipe open tabs.
   if (typeof window === "undefined") {
-    cachedInitialTabSession = fallback;
     return fallback;
   }
+  if (cachedInitialTabSession) return cachedInitialTabSession;
   try {
     const raw = window.localStorage.getItem(STUDIO_OPEN_TABS_KEY);
     if (!raw) {
@@ -900,7 +904,9 @@ function readPersistedTabSession() {
       return fallback;
     }
     const parsed = JSON.parse(raw);
-    const openTabs = sanitizePersistedOpenTabs(parsed?.openTabs);
+    const openTabs = sanitizePersistedOpenTabs(parsed?.openTabs, {
+      allowEmpty: true,
+    });
     const rawActive =
       typeof parsed?.activeTab === "string" ? parsed.activeTab : "";
     const normalizedActive = rawActive.startsWith("feed:")
@@ -908,11 +914,14 @@ function readPersistedTabSession() {
       : rawActive.startsWith("offers:")
         ? NETWORK_TAB
         : rawActive;
-    let activeTab = openTabs.includes(normalizedActive)
-      ? normalizedActive
-      : openTabs[openTabs.length - 1] || COMPOSER_TAB;
-    if (!isVideoEditorPreviewEnabled() && isVideoEditTabKey(activeTab)) {
-      activeTab = COMPOSER_TAB;
+    let activeTab =
+      openTabs.length === 0
+        ? ""
+        : openTabs.includes(normalizedActive)
+          ? normalizedActive
+          : openTabs[openTabs.length - 1] || "";
+    if (activeTab && !isVideoEditorPreviewEnabled() && isVideoEditTabKey(activeTab)) {
+      activeTab = openTabs.find((tab) => !isVideoEditTabKey(tab)) || "";
     }
     const navTrail = Array.isArray(parsed?.navTrail)
       ? parsed.navTrail
@@ -938,26 +947,29 @@ function readPersistedTabSession() {
 function writePersistedTabSession(session) {
   if (typeof window === "undefined") return;
   try {
-    const openTabs = sanitizePersistedOpenTabs(session?.openTabs);
+    const openTabs = sanitizePersistedOpenTabs(session?.openTabs, {
+      allowEmpty: true,
+    });
     const activeTab =
-      typeof session?.activeTab === "string" && openTabs.includes(session.activeTab)
-        ? session.activeTab
-        : openTabs[openTabs.length - 1] || "";
-    window.localStorage.setItem(
-      STUDIO_OPEN_TABS_KEY,
-      JSON.stringify({
-        openTabs,
-        activeTab,
-        activeFolderId:
-          typeof session?.activeFolderId === "string" ? session.activeFolderId : null,
-        navTrail: Array.isArray(session?.navTrail)
-          ? session.navTrail
-              .filter((item) => item && typeof item.id === "string" && typeof item.name === "string")
-              .map((item) => ({ id: item.id, name: item.name }))
-          : [],
-        snapshots: slimTabEntrySnapshots(session?.snapshots),
-      }),
-    );
+      openTabs.length === 0
+        ? ""
+        : typeof session?.activeTab === "string" && openTabs.includes(session.activeTab)
+          ? session.activeTab
+          : openTabs[openTabs.length - 1] || "";
+    const next = {
+      openTabs,
+      activeTab,
+      activeFolderId:
+        typeof session?.activeFolderId === "string" ? session.activeFolderId : null,
+      navTrail: Array.isArray(session?.navTrail)
+        ? session.navTrail
+            .filter((item) => item && typeof item.id === "string" && typeof item.name === "string")
+            .map((item) => ({ id: item.id, name: item.name }))
+        : [],
+      snapshots: slimTabEntrySnapshots(session?.snapshots),
+    };
+    window.localStorage.setItem(STUDIO_OPEN_TABS_KEY, JSON.stringify(next));
+    cachedInitialTabSession = next;
   } catch {
     /* ignore */
   }
@@ -1269,6 +1281,23 @@ export function StudioShell({
     }
   }, [mode]);
 
+  const tabSessionReadyRef = useRef(false);
+  const skipNextTabPersistRef = useRef(false);
+
+  // Restore open tabs from localStorage before paint. SSR / HMR used to seed a
+  // default tab list, then the persist effect wrote that over the real session.
+  useLayoutEffect(() => {
+    cachedInitialTabSession = null;
+    const session = readPersistedTabSession();
+    skipNextTabPersistRef.current = true;
+    setOpenTabs(session.openTabs);
+    setActiveTab(session.activeTab);
+    setActiveFolderId(session.activeFolderId);
+    setNavTrail(session.navTrail);
+    setTabEntrySnapshots(session.snapshots || {});
+    tabSessionReadyRef.current = true;
+  }, []);
+
   useEffect(() => {
     if (isVideoEditorPreviewEnabled()) return;
     setOpenTabs((tabs) => {
@@ -1290,6 +1319,11 @@ export function StudioShell({
   }, []);
 
   useEffect(() => {
+    if (!tabSessionReadyRef.current) return;
+    if (skipNextTabPersistRef.current) {
+      skipNextTabPersistRef.current = false;
+      return;
+    }
     writePersistedTabSession({
       openTabs,
       activeTab,
