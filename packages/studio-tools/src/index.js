@@ -14,7 +14,13 @@ export {
   canExecuteDirect,
   scopesForRole,
 } from './policy.js';
-export { buildStudioRequest, invokeStudioTool } from './http.js';
+export {
+  buildStudioRequest,
+  invokeStudioTool,
+  normalizeStudioToolArgs,
+  resolveStudioToolAlias,
+  STUDIO_TOOL_ALIASES,
+} from './http.js';
 export { createPiStudioTools } from './piAdapter.js';
 export {
   mcpToolNames,

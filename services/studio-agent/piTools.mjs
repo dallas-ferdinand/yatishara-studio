@@ -10,7 +10,10 @@ import {
   listToolsForSurface,
 } from "../../packages/studio-tools/src/catalog.js";
 import { authorizeTool } from "../../packages/studio-tools/src/policy.js";
-import { invokeStudioTool } from "../../packages/studio-tools/src/http.js";
+import {
+  invokeStudioTool,
+  resolveStudioToolAlias,
+} from "../../packages/studio-tools/src/http.js";
 import {
   STARTER_TOOL_NAMES,
   DESCRIBE_EXAMPLES,
@@ -408,11 +411,14 @@ export function createStudioPiTools(opts) {
       ),
     }),
     async execute(toolCallId, params, _signal, onUpdate) {
-      const toolName = String(params.name || "").trim();
-      const toolArgs =
+      const rawName = String(params.name || "").trim();
+      const rawArgs =
         params.args && typeof params.args === "object" && !Array.isArray(params.args)
           ? params.args
           : {};
+      const aliased = resolveStudioToolAlias(rawName, rawArgs);
+      const toolName = aliased.toolName;
+      const toolArgs = aliased.args;
       const verbose = Boolean(params.verbose);
       if (!toolName) {
         return textResult({

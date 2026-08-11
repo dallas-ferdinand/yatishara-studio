@@ -74,4 +74,18 @@ test("http mapping for generation + trash", async () => {
     id: "a1",
   });
   assert.equal(trash.local, false);
+  assert.equal(trash.method, "DELETE");
+  assert.equal(trash.path, "/assets/a1");
+
+  const trashByKind = buildStudioRequest("studio_trash", {
+    kind: "document",
+    id: "d1",
+  });
+  assert.equal(trashByKind.path, "/documents/d1");
+
+  const deleteAlias = buildStudioRequest("studio_delete_document", {
+    id: "d2",
+  });
+  assert.equal(deleteAlias.toolName, "studio_trash");
+  assert.equal(deleteAlias.path, "/documents/d2");
 });
