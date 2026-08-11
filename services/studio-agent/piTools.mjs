@@ -117,6 +117,10 @@ async function fetchImageBlock(url, fallbackMimeType = "") {
  *   onPlanChange?: (snap: object) => void,
  *   onAskRequired?: (info: object) => Promise<any>,
  *   cwdFolderId?: string|null,
+ *   cwdIndex?: {
+ *     documents?: Array<{ documentId: string, title?: string, updatedAt?: number }>,
+ *     assets?: Array<{ assetId: string, name?: string, updatedAt?: number }>,
+ *   }|null,
  * }} opts
  */
 /** Document tools whose "not found" should list real candidates instead of a blind re-create. */
@@ -125,6 +129,124 @@ const DOC_TOOLS = new Set([
   "studio_update_document",
   "studio_patch_document",
 ]);
+
+const ASSET_TOOLS = new Set([
+  "studio_get_asset",
+  "studio_view_media",
+  "studio_update_asset",
+]);
+
+/**
+ * Pick a real CWD document id when the model invented/staled one.
+ * @param {Array<{ documentId: string, title?: string, updatedAt?: number }>} docs
+ * @param {Record<string, unknown>} args
+ */
+export function pickRecoveredDocumentId(docs, args) {
+  if (!Array.isArray(docs) || !docs.length) return null;
+  const failedId = String(args?.documentId || args?.id || "").trim();
+  const pool = docs.filter((doc) => doc.documentId && doc.documentId !== failedId);
+  if (!pool.length) return null;
+
+  const titleHint = String(args?.title || args?.name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\.md$/i, "");
+  if (titleHint) {
+    const hit = pool.find((doc) => {
+      const title = String(doc.title || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\.md$/i, "");
+      return (
+        title === titleHint ||
+        title.includes(titleHint) ||
+        titleHint.includes(title)
+      );
+    });
+    if (hit) return hit.documentId;
+  }
+
+  const prompts = pool.filter((doc) => /prompt|script/i.test(String(doc.title || "")));
+  const ranked = (prompts.length ? prompts : pool).slice().sort((a, b) => {
+    return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+  });
+  if (ranked.length === 1) return ranked[0].documentId;
+  // Multiple scripts: still prefer latest Prompt/Script over inventing a new one.
+  if (prompts.length >= 1) return ranked[0].documentId;
+  if (pool.length === 1) return pool[0].documentId;
+  return null;
+}
+
+/**
+ * @param {Array<{ assetId: string, name?: string, updatedAt?: number }>} assets
+ * @param {Record<string, unknown>} args
+ */
+export function pickRecoveredAssetId(assets, args) {
+  if (!Array.isArray(assets) || !assets.length) return null;
+  const failedId = String(args?.assetId || args?.id || "").trim();
+  const pool = assets.filter((row) => row.assetId && row.assetId !== failedId);
+  if (!pool.length) return null;
+  const nameHint = String(args?.name || "")
+    .trim()
+    .toLowerCase();
+  if (nameHint) {
+    const hit = pool.find((row) =>
+      String(row.name || "")
+        .toLowerCase()
+        .includes(nameHint),
+    );
+    if (hit) return hit.assetId;
+  }
+  if (pool.length === 1) return pool[0].assetId;
+  return pool
+    .slice()
+    .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0]
+    ?.assetId;
+}
+
+/**
+ * Rewrite invented/stale ids using a prefetched CWD index so the first HTTP
+ * call never returns not-found (and the chat never shows that failure chip).
+ * @param {string} toolName
+ * @param {Record<string, unknown>} args
+ * @param {{ documents?: Array<{ documentId: string, title?: string, updatedAt?: number }>, assets?: Array<{ assetId: string, name?: string, updatedAt?: number }> }|null|undefined} cwdIndex
+ */
+export function rewriteStaleIdsWithCwdIndex(toolName, args, cwdIndex) {
+  if (!args || !cwdIndex) return { args, rewritten: false };
+  const next = { ...args };
+
+  if (DOC_TOOLS.has(toolName) && Array.isArray(cwdIndex.documents) && cwdIndex.documents.length) {
+    const id = textValue(next.documentId || next.id);
+    const known = new Set(
+      cwdIndex.documents.map((doc) => textValue(doc.documentId)).filter(Boolean),
+    );
+    if (id && !known.has(id)) {
+      const recovered = pickRecoveredDocumentId(cwdIndex.documents, next);
+      if (recovered) {
+        next.documentId = recovered;
+        next.id = recovered;
+        return { args: next, rewritten: true, recoveredId: recovered };
+      }
+    }
+  }
+
+  if (ASSET_TOOLS.has(toolName) && Array.isArray(cwdIndex.assets) && cwdIndex.assets.length) {
+    const id = textValue(next.assetId || next.id);
+    const known = new Set(
+      cwdIndex.assets.map((row) => textValue(row.assetId)).filter(Boolean),
+    );
+    if (id && !known.has(id)) {
+      const recovered = pickRecoveredAssetId(cwdIndex.assets, next);
+      if (recovered) {
+        next.assetId = recovered;
+        next.id = recovered;
+        return { args: next, rewritten: true, recoveredId: recovered };
+      }
+    }
+  }
+
+  return { args: next, rewritten: false };
+}
 
 export function createStudioPiTools(opts) {
   const role = opts.role ?? "user";
@@ -316,13 +438,28 @@ export function createStudioPiTools(opts) {
         });
       }
 
+      // Prefetched CWD index: fix invented/stale ids before tool-start hits the UI.
+      let invokeArgs = validated.args;
+      let preRewroteId = null;
+      if (DOC_TOOLS.has(toolName) || ASSET_TOOLS.has(toolName)) {
+        const fixed = rewriteStaleIdsWithCwdIndex(
+          toolName,
+          validated.args,
+          opts.cwdIndex,
+        );
+        if (fixed.rewritten) {
+          invokeArgs = fixed.args;
+          preRewroteId = fixed.recoveredId || null;
+        }
+      }
+
       onUpdate?.({
         content: [{ type: "text", text: `Calling ${toolName}…` }],
         details: { toolName, phase: "start" },
       });
 
       const started = opts.onBeforeInvoke
-        ? await opts.onBeforeInvoke({ toolName, args: validated.args })
+        ? await opts.onBeforeInvoke({ toolName, args: invokeArgs })
         : null;
       const trackId = started?.toolCallId;
 
@@ -353,7 +490,7 @@ export function createStudioPiTools(opts) {
           if (typeof opts.onApprovalRequired === "function") {
             const approval = await opts.onApprovalRequired({
               toolName,
-              args: validated.args,
+              args: invokeArgs,
               tool: auth.tool,
               toolCallId: trackId,
             });
@@ -369,7 +506,7 @@ export function createStudioPiTools(opts) {
               const compact = compactObservation(toolName, approval, {
                 verifyHint: approval?.pendingApproval
                   ? "Approval pending in chat — stop and wait."
-                  : verifyHintFor(toolName, validated.args, approval) || undefined,
+                  : verifyHintFor(toolName, invokeArgs, approval) || undefined,
               });
               trajectory.recordTool({
                 toolName,
@@ -399,7 +536,7 @@ export function createStudioPiTools(opts) {
 
         let result;
         if (localHandlers[toolName]) {
-          const data = await localHandlers[toolName](validated.args);
+          const data = await localHandlers[toolName](invokeArgs);
           result = { ok: true, toolName, data };
         } else {
           const token = await opts.getBearerToken();
@@ -407,20 +544,30 @@ export function createStudioPiTools(opts) {
             opts.apiBase,
             token,
             toolName,
-            validated.args,
+            invokeArgs,
           );
         }
         result = salvageGenerationResult(toolName, result);
 
-        // Stale/invented document id → list the folder so the agent edits the
-        // existing Script instead of silently creating another empty one.
+        // Stale/invented id → list CWD and auto-retry with a real id before the
+        // failed step hits the chat UI ("Couldn't open script — not found").
         let recovery;
+        let recoveredId = preRewroteId;
+        if (preRewroteId) {
+          recovery = {
+            folderId: textValue(invokeArgs?.folderId || opts.cwdFolderId) || undefined,
+            ...(DOC_TOOLS.has(toolName)
+              ? { recoveredDocumentId: preRewroteId }
+              : { recoveredAssetId: preRewroteId }),
+            hint: `Auto-resolved stale id → ${preRewroteId} (CWD index). Keep using this id.`,
+          };
+        }
         if (
           result?.ok === false &&
-          DOC_TOOLS.has(toolName) &&
+          (DOC_TOOLS.has(toolName) || ASSET_TOOLS.has(toolName)) &&
           /not found/i.test(String(result?.error ?? ""))
         ) {
-          const folderId = textValue(validated.args?.folderId || opts.cwdFolderId);
+          const folderId = textValue(invokeArgs?.folderId || opts.cwdFolderId);
           if (folderId) {
             try {
               const token = await opts.getBearerToken();
@@ -430,21 +577,88 @@ export function createStudioPiTools(opts) {
                 "studio_folder_contents",
                 { folderId },
               );
-              const docs = Array.isArray(listed?.data?.documents)
-                ? listed.data.documents
-                    .slice(0, 10)
-                    .map((doc) => ({
-                      documentId: doc?._id ?? doc?.id,
-                      title: doc?.title ?? doc?.name,
-                    }))
-                    .filter((doc) => doc.documentId)
-                : [];
-              if (docs.length) {
-                recovery = {
-                  folderId,
-                  documents: docs,
-                  hint: "That documentId does not exist. Reuse one of these ids with studio_update_document / studio_patch_document — do NOT create a new Script.",
-                };
+              const raw = listed?.data && typeof listed.data === "object" ? listed.data : {};
+
+              if (DOC_TOOLS.has(toolName)) {
+                const docs = Array.isArray(raw.documents)
+                  ? raw.documents
+                      .map((doc) => ({
+                        documentId: doc?.id ?? doc?._id,
+                        title: doc?.title ?? doc?.name,
+                        updatedAt: doc?.updatedAt,
+                      }))
+                      .filter((doc) => doc.documentId)
+                  : [];
+                recoveredId = pickRecoveredDocumentId(docs, invokeArgs);
+                if (recoveredId) {
+                  const retryArgs = {
+                    ...invokeArgs,
+                    documentId: recoveredId,
+                    id: recoveredId,
+                  };
+                  result = await invokeStudioTool(
+                    opts.apiBase,
+                    token,
+                    toolName,
+                    retryArgs,
+                  );
+                  result = salvageGenerationResult(toolName, result);
+                  if (result?.ok !== false) {
+                    recovery = {
+                      folderId,
+                      recoveredDocumentId: recoveredId,
+                      hint: `Auto-resolved stale documentId → ${recoveredId}. Keep using this id.`,
+                    };
+                    invokeArgs = retryArgs;
+                  } else {
+                    recovery = {
+                      folderId,
+                      documents: docs.slice(0, 10),
+                      hint: "That documentId does not exist. Reuse one of these ids — do NOT create a new Script.",
+                    };
+                  }
+                } else if (docs.length) {
+                  recovery = {
+                    folderId,
+                    documents: docs.slice(0, 10),
+                    hint: "That documentId does not exist. Reuse one of these ids with studio_update_document / studio_patch_document — do NOT create a new Script.",
+                  };
+                }
+              }
+
+              if (ASSET_TOOLS.has(toolName) && result?.ok === false) {
+                const assets = Array.isArray(raw.assets)
+                  ? raw.assets
+                      .map((asset) => ({
+                        assetId: asset?.id ?? asset?._id ?? asset?.assetId,
+                        name: asset?.name,
+                        updatedAt: asset?.updatedAt,
+                      }))
+                      .filter((asset) => asset.assetId)
+                  : [];
+                recoveredId = pickRecoveredAssetId(assets, invokeArgs);
+                if (recoveredId) {
+                  const retryArgs = {
+                    ...invokeArgs,
+                    assetId: recoveredId,
+                    id: recoveredId,
+                  };
+                  result = await invokeStudioTool(
+                    opts.apiBase,
+                    token,
+                    toolName,
+                    retryArgs,
+                  );
+                  result = salvageGenerationResult(toolName, result);
+                  if (result?.ok !== false) {
+                    recovery = {
+                      folderId,
+                      recoveredAssetId: recoveredId,
+                      hint: `Auto-resolved stale assetId → ${recoveredId}. Keep using this id.`,
+                    };
+                    invokeArgs = retryArgs;
+                  }
+                }
               }
             } catch {
               /* recovery is best-effort */
@@ -456,7 +670,7 @@ export function createStudioPiTools(opts) {
         let verified;
         const autoName = ok ? autoVerifyTool(toolName) : null;
         if (autoName && !result?.pendingApproval) {
-          const vArgs = autoVerifyArgs(autoName, validated.args, result);
+          const vArgs = autoVerifyArgs(autoName, invokeArgs, result);
           if (vArgs) {
             try {
               const token = await opts.getBearerToken();
@@ -479,7 +693,7 @@ export function createStudioPiTools(opts) {
 
         const compact = compactObservation(toolName, result, {
           verbose,
-          verifyHint: verifyHintFor(toolName, validated.args, result) || undefined,
+          verifyHint: verifyHintFor(toolName, invokeArgs, result) || undefined,
           ...(verified ? { verified } : {}),
           ...(recovery ? { recovery } : {}),
         });
