@@ -9,7 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { ArrowUp, Loader2, Mic, Paperclip, Plus, RotateCcw, Settings, Square } from "lucide-react";
+import { ArrowUp, Loader2, Mic, Paperclip, RotateCcw, Settings, Square } from "lucide-react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import {
@@ -490,7 +490,6 @@ export function StudioAgentPane({
   onActiveThreadChange,
   onOpenAgentSettings,
   onBindThreadTab,
-  onOpenNewAgentTab,
   onOpenFolder,
   isMobile = false,
 }: StudioAgentPaneProps) {
@@ -806,22 +805,6 @@ export function StudioAgentPane({
     }
   }
 
-  async function handleNewChat() {
-    if (onOpenNewAgentTab) {
-      onOpenNewAgentTab();
-      clearComposerEditor(editorRef.current);
-      setDraft("");
-      setAttachments([]);
-      return;
-    }
-    const id = await createThread({});
-    onActiveThreadChange(id);
-    onBindThreadTab?.(id);
-    clearComposerEditor(editorRef.current);
-    setDraft("");
-    setAttachments([]);
-  }
-
   async function handleSend() {
     const text = draft.trim();
     if ((!text && attachments.length === 0) || busy) return;
@@ -1056,17 +1039,7 @@ export function StudioAgentPane({
               </button>
               <button
                 type="button"
-                className="studio-settings-pill studio-dm-extra-pill"
-                title="New agent chat"
-                aria-label="New agent chat"
-                onClick={() => void handleNewChat()}
-              >
-                <Plus aria-hidden="true" />
-                <span className="studio-dm-extra-pill-label">New</span>
-              </button>
-              <button
-                type="button"
-                className="studio-settings-pill studio-dm-extra-pill"
+                className="studio-pill-btn studio-agent-composer-pill"
                 title="Agent settings"
                 aria-label="Agent settings"
                 onClick={() => onOpenAgentSettings?.()}
@@ -1077,7 +1050,7 @@ export function StudioAgentPane({
               {!busy && latestFailedRun ? (
                 <button
                   type="button"
-                  className="studio-settings-pill studio-dm-extra-pill"
+                  className="studio-pill-btn studio-agent-composer-pill"
                   title="Retry last failed run"
                   aria-label="Retry last failed run"
                   onClick={() => void handleRetry()}
