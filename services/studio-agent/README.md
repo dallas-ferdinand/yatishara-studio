@@ -74,10 +74,9 @@ Do **not** register raw JSON-Schema tools with `execute(args)` — Pi expects
 ## Script edits + billing
 
 - Prefer **`studio_patch_document`** for small Script edits.
-- Ledger = **BytePlus list COGS ×2**, then **round up to next TT$0.50**
-  (same clean step as image/video — whole credits).
-  - input @ $0.50/M (Seed Pro ≤128k)
-  - cache hit @ $0.10/M
-  - cache write → storage $0.008333/M/hour × 1h (never full input rate)
-  - output @ $3.00/M
-- Floor TT$0.50 (1 credit). `usageJson` on the charge stores the token breakdown.
+- Ledger = **BytePlus list COGS ×2**, then text sell rounding:
+  - sub-cent → **TT$0.01**
+  - else round **up** to next **TT$0.05** (0.04→0.05, 0.08→0.10)
+  - image/video still round up to TT$0.50
+- Credit unit stays TT$0.50 (fractional credits for nickels). UI speaks $.
+- Rates: input $0.50/M, cache hit $0.10/M, storage $0.008333/M/h×1h, out $3.00/M.

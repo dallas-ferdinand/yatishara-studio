@@ -1,9 +1,11 @@
 /**
  * Generation pricing.
  *
- * Image + video + text: **exact BytePlus ModelArk list COGS × 2**, then round
- * **up** to the next TT$0.50 (clean whole credits). FX: US$1 = TT$10.
- * Ledger: TT$0.50 per credit. No platform fee on top of the 2× markup.
+ * Image + video: BytePlus COGS ×2, round **up** to next TT$0.50.
+ * Text: BytePlus COGS ×2, then clean sell rounding — sub-cent → TT$0.01,
+ * otherwise round **up** to next TT$0.05 (0.04→0.05, 0.08→0.10).
+ * FX: US$1 = TT$10. Ledger: TT$0.50 per credit (fractional credits OK for nickels).
+ * No platform fee on top of the 2× markup.
  *
  * Seedance 2.5 list: $10.70/M (no video input) / $6.40/M (with video input).
  * tokens ≈ (height × width × 24fps × seconds) / 1024. Audio included in rate.
@@ -203,10 +205,11 @@ export const TEXT_VIDEO_REF_INPUT_TOKENS = 10_000;
 export const TEXT_AUDIO_REF_INPUT_TOKENS = 5_000;
 
 /**
- * Text / Assistance floor: TT$0.50 (1 credit) — same clean step as image/video.
- * Measured charge = BytePlus COGS ×2, then round **up** to next TT$0.50.
+ * Text floor: TT$0.01. Sub-cent COGS×2 bumps here; larger amounts round up to nickels.
  */
-export const TEXT_MIN_SELL_TTD = CREDIT_PRICE_TTD;
+export const TEXT_MIN_SELL_TTD = 0.01;
+/** Text sell step after the 1¢ floor — round up to next TT$0.05. */
+export const TEXT_SELL_STEP_TTD = 0.05;
 
 /** @deprecated Prefer textCreditCost() — legacy flat base for display fallbacks. */
 export const TEXT_GENERATION_BASE_CREDITS = TEXT_MIN_SELL_TTD / CREDIT_PRICE_TTD;
@@ -240,6 +243,20 @@ export function normalizeImageQuality(
 /** Round up to the next TT$0.50 (1.20→1.50, 1.80→2.00). */
 export function roundUpToHalfTtd(ttd: number): number {
   return Math.ceil(ttd / CREDIT_PRICE_TTD) * CREDIT_PRICE_TTD;
+}
+
+/**
+ * Text retail rounding (after COGS ×2):
+ * - ≤0 or empty → TT$0.01 floor
+ * - (0, 0.01) → TT$0.01 (sub-cent never under-bills below a cent)
+ * - else round **up** to next TT$0.05 (integer cents — no float drift)
+ */
+export function roundTextSellTtd(ttd: number): number {
+  if (!(ttd > 0)) return TEXT_MIN_SELL_TTD;
+  if (ttd < TEXT_MIN_SELL_TTD) return TEXT_MIN_SELL_TTD;
+  const cents = Math.max(1, Math.ceil(ttd * 100 - 1e-9));
+  const nickels = Math.ceil(cents / 5) * 5;
+  return nickels / 100;
 }
 
 function textRates(model: TextPricingModel = "pro"): {
@@ -580,16 +597,15 @@ export function textProviderCostUsd(
 }
 
 /**
- * Customer TT$ = BytePlus COGS ×2, then round **up** to next TT$0.50
- * (same clean step as image/video). Floor TT$0.50.
+ * Customer TT$ = BytePlus COGS ×2, then text sell rounding
+ * (1¢ floor for sub-cent; else round up to next TT$0.05).
  */
 export function textSellPriceFromUsageTtd(
   usage: MeasuredTextUsage,
   textModel: TextPricingModel = "pro",
 ): number {
   const raw = textProviderCostUsd(usage, textModel) * USD_TO_TTD * 2;
-  if (raw <= 0) return TEXT_MIN_SELL_TTD;
-  return Math.max(TEXT_MIN_SELL_TTD, roundUpToHalfTtd(raw));
+  return roundTextSellTtd(raw);
 }
 
 export function textCreditsFromMeasuredUsage(
@@ -597,8 +613,8 @@ export function textCreditsFromMeasuredUsage(
   textModel: TextPricingModel = "pro",
 ): number {
   const sellTtd = textSellPriceFromUsageTtd(usage, textModel);
-  // Half-TTD steps → whole credits (TT$0.50 = 1 credit).
-  return Math.round(sellTtd / CREDIT_PRICE_TTD);
+  // Fractional credits OK (TT$0.05 = 0.1 credit at TT$0.50/credit).
+  return Math.round((sellTtd / CREDIT_PRICE_TTD) * 100) / 100;
 }
 
 export function formatTextUsageReason(
@@ -642,7 +658,7 @@ export function measuredTextUsageFromGateway(usage: {
   });
 }
 
-/** Customer TT$ for script / Assistance estimates = COGS ×2, round up to TT$0.50. */
+/** Customer TT$ for script / Assistance estimates = COGS ×2, text sell rounding. */
 export function textSellPriceTtd(args: {
   imageReferenceCount?: number;
   videoReferenceCount?: number;
@@ -650,7 +666,7 @@ export function textSellPriceTtd(args: {
   textModel?: TextPricingModel;
 }): number {
   const raw = estimateTextModelUsd(args) * USD_TO_TTD * 2;
-  return Math.max(TEXT_MIN_SELL_TTD, roundUpToHalfTtd(raw));
+  return roundTextSellTtd(raw);
 }
 
 export function textCreditCost(args: {
@@ -680,7 +696,10 @@ export function textCreditCost(args: {
     );
   }
   const sellTtd = textSellPriceTtd(args);
-  return Math.max(1, Math.round(sellTtd / CREDIT_PRICE_TTD));
+  return Math.max(
+    TEXT_MIN_SELL_TTD / CREDIT_PRICE_TTD,
+    Math.round((sellTtd / CREDIT_PRICE_TTD) * 100) / 100,
+  );
 }
 
 export type GenerationCreditTier =
