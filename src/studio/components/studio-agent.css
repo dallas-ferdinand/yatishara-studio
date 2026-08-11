@@ -15,6 +15,16 @@
   min-height: 0;
 }
 
+/* Same centered reading column as Create (.studio-chat-composer-align) + DMs. */
+.studio-agent-pane .studio-chat-stream-inner {
+  width: 100%;
+  max-width: var(--studio-chat-column-max, min(92%, 36rem));
+  min-width: 0;
+  margin-inline: auto;
+  padding-inline: 12px;
+  box-sizing: border-box;
+}
+
 /* Empty Agent: true vertical center in the chat area (above composer). */
 .studio-agent-pane .studio-chat-stream-inner.is-empty {
   justify-content: center;
@@ -105,7 +115,11 @@
 
 /* Same shell width band as Create / DM composers. */
 .studio-agent-composer-dock .studio-dm-composer.is-split {
+  width: 100%;
   max-width: var(--studio-composer-shell-max, min(600px, 94vw));
+  margin-inline: auto;
+  padding-inline: 12px;
+  box-sizing: border-box;
 }
 
 .studio-agent-primary-btn,

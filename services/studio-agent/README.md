@@ -21,6 +21,16 @@ Convex must reach the worker via Coolify gateway (same pattern as CS Ops):
 
 Worker listens on `0.0.0.0:8796` so Docker Convex can call it.
 
+UFW must allow Coolify/docker bridges (same pattern as studio-cs `:8795`):
+
+```bash
+sudo ufw allow from 10.0.0.0/8 to any port 8796 proto tcp
+sudo ufw allow from 172.16.0.0/12 to any port 8796 proto tcp
+sudo ufw deny 8796/tcp
+```
+
+Without those rules, Convex actions fail with `fetch failed`.
+
 ## Local one-shot
 
 ```bash
