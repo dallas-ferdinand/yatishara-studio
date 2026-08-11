@@ -1,109 +1,165 @@
 /**
- * Progressive skill packs — short recipes loaded on demand (Anthropic Skills pattern).
+ * Studio Agent skills — markdown packs in ./skills/*.md (Studio branding only).
+ * Agent loads via Pi tool `skills` { id } when needed (progressive disclosure).
+ */
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SKILLS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "skills");
+
+/**
+ * @typedef {{
+ *   id: string,
+ *   title: string,
+ *   when: string,
+ *   tools: string[],
+ *   category: string,
+ *   body: string,
+ *   steps?: string[],
+ * }} SkillPack
  */
 
-/** @type {Array<{ id: string, title: string, when: string, steps: string[], tools: string[] }>} */
-export const SKILL_PACKS = [
-  {
-    id: "post-feed",
-    title: "Post to public profile",
-    when: "User wants to post/share/publish an owned image or video to the feed",
-    tools: ["studio_share_asset_post", "studio_is_asset_shared"],
-    steps: [
-      "Use attached asset id (or search if none).",
-      "invoke studio_share_asset_post { assetId, caption? }.",
-      "If approval card appears, stop — chat UI handles it.",
-      "After ok, invoke studio_is_asset_shared { assetId } before claiming posted.",
-    ],
-  },
-  {
-    id: "generate-image",
-    title: "Generate an image",
-    when: "User wants a new image / picture / still created",
-    tools: ["studio_estimate_generation", "studio_generate_image", "studio_view_media"],
-    steps: [
-      "If spend is unclear, invoke studio_estimate_generation { mode:\"image\", prompt } first.",
-      "invoke studio_generate_image { prompt, folderId? } (attached folder if present).",
-      "On approval card, stop.",
-      "After ok, note the new assetId; optionally studio_view_media to confirm.",
-    ],
-  },
-  {
-    id: "generate-video-people",
-    title: "Generate video with people",
-    when: "User wants a video clip, especially with people/characters",
-    tools: [
-      "studio_estimate_generation",
-      "studio_generate_image",
-      "studio_generate_video",
-    ],
-    steps: [
-      "Estimate if cost unclear.",
-      "People scenes: studio_generate_image storyboard still with refs first.",
-      "Then studio_generate_video with startFrameAssetId + same refs.",
-      "Wait for completion; never claim done without tool ok.",
-    ],
-  },
-  {
-    id: "move-items",
-    title: "Move items into a folder",
-    when: "User says move/put/place items into a folder",
-    tools: ["studio_bulk_move", "studio_folder_contents"],
-    steps: [
-      "Build items from attached chips: { kind: studioKind, id: studioId }.",
-      "invoke studio_bulk_move { targetFolderId, items }.",
-      "Optional verify: studio_folder_contents { folderId: targetFolderId }.",
-    ],
-  },
-  {
-    id: "trash-cleanup",
-    title: "Trash / delete",
-    when: "User wants to trash, delete, or remove Studio items",
-    tools: ["studio_trash", "studio_list_trash"],
-    steps: [
-      "invoke studio_trash { kind, id } for each attached item (approval likely).",
-      "Do not hard-delete; trash is soft-delete.",
-    ],
-  },
-  {
-    id: "send-dm",
-    title: "Send a DM",
-    when: "User wants to message someone in Studio DMs",
-    tools: ["studio_send_message", "studio_send_media_message"],
-    steps: [
-      "Text-only → studio_send_message { conversationId, body }.",
-      "Attached media → studio_send_media_message { conversationId, assetId|assetIds }.",
-      "Outbound needs approval unless YOLO is on.",
-    ],
-  },
-];
+/** @type {SkillPack[]|null} */
+let cache = null;
 
-export function listSkills() {
-  return SKILL_PACKS.map((s) => ({
+function parseFrontmatter(raw) {
+  const text = String(raw || "");
+  if (!text.startsWith("---")) {
+    return { meta: {}, body: text.trim() };
+  }
+  const end = text.indexOf("\n---", 3);
+  if (end < 0) return { meta: {}, body: text.trim() };
+  const fm = text.slice(3, end).trim();
+  const body = text.slice(end + 4).trim();
+  /** @type {Record<string, string>} */
+  const meta = {};
+  for (const line of fm.split("\n")) {
+    const m = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (!m) continue;
+    meta[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
+  }
+  return { meta, body };
+}
+
+function loadSkillsFromDisk() {
+  if (!fs.existsSync(SKILLS_DIR)) return [];
+  const files = fs
+    .readdirSync(SKILLS_DIR)
+    .filter((f) => f.endsWith(".md"))
+    .sort();
+  /** @type {SkillPack[]} */
+  const packs = [];
+  for (const file of files) {
+    const raw = fs.readFileSync(path.join(SKILLS_DIR, file), "utf8");
+    const { meta, body } = parseFrontmatter(raw);
+    const id = (meta.id || file.replace(/\.md$/, "")).trim();
+    if (!id) continue;
+    const tools = meta.tools
+      ? meta.tools.split(/[,\s]+/).map((t) => t.trim()).filter(Boolean)
+      : [];
+    packs.push({
+      id,
+      title: meta.title || id,
+      when: meta.when || "",
+      tools,
+      category: meta.category || "ops",
+      body,
+      steps: body
+        .split("\n")
+        .map((l) => l.replace(/^\d+\.\s*/, "").trim())
+        .filter((l) => l.startsWith("`") || /^[A-Z]/.test(l))
+        .slice(0, 8),
+    });
+  }
+  return packs;
+}
+
+export function allSkills() {
+  if (!cache) cache = loadSkillsFromDisk();
+  return cache;
+}
+
+/** Test helper / hot reload after edits in long-lived worker */
+export function reloadSkills() {
+  cache = null;
+  return allSkills();
+}
+
+export function listSkills(category) {
+  let packs = allSkills();
+  if (category) {
+    packs = packs.filter((s) => s.category === category);
+  }
+  return packs.map((s) => ({
     id: s.id,
     title: s.title,
     when: s.when,
+    category: s.category,
     tools: s.tools,
   }));
 }
 
 export function getSkill(id) {
   const needle = String(id || "").trim().toLowerCase();
-  return SKILL_PACKS.find((s) => s.id === needle) || null;
+  const pack = allSkills().find((s) => s.id === needle);
+  if (!pack) return null;
+  return {
+    id: pack.id,
+    title: pack.title,
+    when: pack.when,
+    category: pack.category,
+    tools: pack.tools,
+    body: pack.body,
+  };
 }
 
 export function matchSkills(query) {
   const q = String(query || "").toLowerCase();
   if (!q) return listSkills();
-  return SKILL_PACKS.filter(
-    (s) =>
-      s.id.includes(q) ||
-      s.title.toLowerCase().includes(q) ||
-      s.when.toLowerCase().includes(q) ||
-      s.tools.some((t) => t.includes(q)),
-  ).map((s) => ({ id: s.id, title: s.title, when: s.when, tools: s.tools }));
+  return allSkills()
+    .filter(
+      (s) =>
+        s.id.includes(q) ||
+        s.title.toLowerCase().includes(q) ||
+        s.when.toLowerCase().includes(q) ||
+        s.category.toLowerCase().includes(q) ||
+        s.body.toLowerCase().includes(q) ||
+        s.tools.some((t) => t.includes(q)),
+    )
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      when: s.when,
+      category: s.category,
+      tools: s.tools,
+    }));
 }
 
 export function skillPromptBlock() {
-  return `Skills: call skills (list) or skills {id} for recipes (post-feed, generate-image, generate-video-people, move-items, trash-cleanup, send-dm).`;
+  const promptIds = allSkills()
+    .filter((s) => s.category === "prompt" || s.id === "project-plan")
+    .map((s) => s.id)
+    .join(", ");
+  const opsIds = allSkills()
+    .filter((s) => s.category === "ops")
+    .map((s) => s.id)
+    .join(", ");
+  return `Skills: call skills (list) or skills {id} (full body) before craft/multi-step. Prompt: ${promptIds || "prompt-*"}. Ops: ${opsIds || "post-feed…"}. Studio voice only — model slugs like seedance-2.5 are OK.`;
 }
+
+/** @deprecated kept for older imports */
+export const SKILL_PACKS = new Proxy([], {
+  get(_t, prop) {
+    if (prop === "length") return allSkills().length;
+    if (prop === Symbol.iterator) {
+      return function* () {
+        yield* allSkills();
+      };
+    }
+    if (typeof prop === "string" && /^\d+$/.test(prop)) {
+      return allSkills()[Number(prop)];
+    }
+    return undefined;
+  },
+});

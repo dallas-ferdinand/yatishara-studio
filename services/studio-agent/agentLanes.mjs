@@ -70,13 +70,26 @@ export function detectActionLane(message, workingSet) {
   if (/\b(post|publish|share\s+(this|it|to\s+(feed|profile|public)))\b/.test(text) && hasAsset) {
     return "LANE: invoke studio_share_asset_post with attached asset id (+ optional caption). Do not advise; do not claim unavailable unless invoke fails.";
   }
+  // Prompt craft before generate — progressive skill load
+  if (/\b(hyper[\s-]?motion|whip|smash|fpv)\b/.test(text)) {
+    return "LANE: skills {id:\"prompt-hypermotion\"} then craft/generate. Prefer videoModel seedance-2.5. Studio branding only.";
+  }
+  if (/\b(cinematic|filmed|continuous[\s-]?take|lifestyle\s+ad)\b/.test(text)
+    && /\b(prompt|video|clip|ad|shot)\b/.test(text)) {
+    return "LANE: skills {id:\"prompt-cinematic\"} then craft/generate. Prefer videoModel seedance-2.5.";
+  }
+  if (/\b(image|product|hero|still)\b.{0,40}\bprompt\b/.test(text)
+    || /\bprompt\b.{0,40}\b(image|product|hero|still)\b/.test(text)
+    || /\b(craft|write|improve|optimize)\b.{0,40}\b(image\s+)?prompt\b/.test(text)) {
+    return "LANE: skills {id:\"prompt-image\"} then write/improve the prompt; generate only if asked.";
+  }
   if (/\b(generat(e|ing)|creat(e|ing)|make|draw|render)\b.{0,40}\b(image|picture|photo|still|art)\b/.test(text)
     || /\b(image|picture|photo)\b.{0,40}\b(generat|creat|make|draw|render)/.test(text)) {
-    return "LANE: invoke studio_generate_image with the user prompt. Do not claim image gen unavailable unless invoke fails.";
+    return "LANE: skills {id:\"generate-image\"} if multi-step; invoke studio_generate_image with the user prompt. Do not claim unavailable unless invoke fails.";
   }
   if (/\b(generat(e|ing)|creat(e|ing)|make|render)\b.{0,40}\b(video|clip|footage)\b/.test(text)
     || /\b(video|clip)\b.{0,40}\b(generat|creat|make|render)/.test(text)) {
-    return "LANE: invoke studio_generate_video (storyboard still first if people). Do not claim unavailable unless invoke fails.";
+    return "LANE: skills {id:\"generate-video\"} (+ prompt-cinematic or prompt-hypermotion as fits); storyboard still first if people. Then studio_generate_video.";
   }
   if (/\b(move|put|place|relocat)/.test(text) && hasMovable && hasFolder) {
     return "LANE: invoke studio_bulk_move { items:[{id,kind}], targetFolderId } using attached ids. kind=studioKind.";

@@ -650,13 +650,19 @@ export function createStudioPiTools(opts) {
     name: "skills",
     label: "Skills",
     description:
-      "List or load a short workflow recipe (post-feed, generate-image, generate-video-people, move-items, trash-cleanup, send-dm). Use before multi-step work.",
-    promptSnippet: "Load a Studio workflow skill pack",
+      "List or load a Studio skill pack (ops + prompt craft). Use before multi-step or when writing image/cinematic/hypermotion prompts. Pass id for full body; omit to list; q= to filter.",
+    promptSnippet: "Load a Studio skill pack",
     parameters: Type.Object({
       id: Type.Optional(
-        Type.String({ description: "Skill id, e.g. post-feed. Omit to list." }),
+        Type.String({
+          description:
+            "Skill id, e.g. prompt-hypermotion, prompt-image, project-plan. Omit to list.",
+        }),
       ),
       q: Type.Optional(Type.String({ description: "Filter skills by keyword" })),
+      category: Type.Optional(
+        Type.String({ description: "ops | prompt | workflow" }),
+      ),
     }),
     async execute(_toolCallId, params) {
       const id = textValue(params.id);
@@ -670,6 +676,13 @@ export function createStudioPiTools(opts) {
           });
         }
         return textResult({ ok: true, skill });
+      }
+      if (params.category) {
+        return textResult({
+          ok: true,
+          skills: listSkills(String(params.category)),
+          hint: skillPromptBlock(),
+        });
       }
       return textResult({
         ok: true,

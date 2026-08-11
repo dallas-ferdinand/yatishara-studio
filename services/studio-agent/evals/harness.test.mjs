@@ -33,7 +33,21 @@ export const GOLDEN_TASKS = [
     message: "create a video clip of dancers",
     workingSet: [],
     expectLaneIncludes: "studio_generate_video",
-    expectSkill: "generate-video-people",
+    expectSkill: "generate-video",
+  },
+  {
+    id: "prompt-hypermotion",
+    message: "write a hypermotion video prompt for a dance chaos ad",
+    workingSet: [],
+    expectLaneIncludes: "prompt-hypermotion",
+    expectSkill: "prompt-hypermotion",
+  },
+  {
+    id: "prompt-image",
+    message: "help me craft a better image prompt for a product hero",
+    workingSet: [],
+    expectLaneIncludes: "prompt-image",
+    expectSkill: "prompt-image",
   },
   {
     id: "move-items",
@@ -144,9 +158,13 @@ test("verify hints + auto-verify wiring", () => {
 });
 
 test("skills pack surface", () => {
-  assert.equal(listSkills().length, 6);
+  assert.equal(listSkills().length, 11);
   assert.ok(getSkill("post-feed"));
+  assert.ok(getSkill("prompt-cinematic"));
+  assert.ok(getSkill("prompt-hypermotion")?.body?.includes("seedance"));
+  assert.ok(!/higgs|cinedance|hell\s*grind/i.test(getSkill("prompt-cinematic")?.body || ""));
   assert.ok(matchSkills("image").some((s) => s.id === "generate-image"));
+  assert.ok(matchSkills("hypermotion").some((s) => s.id === "prompt-hypermotion"));
 });
 
 test("plan store", () => {

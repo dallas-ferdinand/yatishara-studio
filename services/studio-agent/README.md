@@ -55,7 +55,12 @@ npm start
 Tools: `catalog` / `describe` / `invoke` / `inspect` / `remember` / `skills` / `plan`
 from `piTools.mjs`. Studio HTTP via `@yatishara/studio-tools`.
 Harness extras: lean catalog, intent lanes, compact observations, hot-tool
-schemas, verify-after-act, skill packs, plan todos, trajectory logs.
+schemas, verify-after-act, markdown skill packs in `skills/` (Studio branding
+only — prompt craft + ops), plan todos, trajectory logs.
+
+Agent loads packs via `skills {id}` (progressive disclosure). Prompt packs:
+`prompt-image`, `prompt-cinematic`, `prompt-hypermotion`, `prompt-video-models`,
+`project-plan`. No third-party cinema brand names in skill text.
 
 ```bash
 npm test   # golden harness evals (no LLM)

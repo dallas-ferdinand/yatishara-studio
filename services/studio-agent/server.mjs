@@ -355,6 +355,7 @@ async function runPiTurn(body, abortSignal) {
       "Studio actions: invoke {name:\"studio_*\", args:{...}}. Never call studio_* as a top-level tool.",
       "catalog: starter set by default; q= or category= to search. describe if args unclear.",
       skillPromptBlock(),
+      "Before writing image/video prompts or choosing hypermotion vs cinematic, skills {id} for the matching prompt-* pack. Do not invent third-party brand names in prompts.",
       "plan: only for 3+ step jobs (set/update/get). Skip for one-shot post/move/send.",
       "Attached chips are primary scope — use their ids. Tokens like [asset:Name id=…] are chips.",
       "Orient: studio_workspace_tree {} or studio_search. folder_contents needs a real folderId.",
