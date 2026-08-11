@@ -220,30 +220,19 @@
 }
 
 .studio-agent-pane .studio-chat-bubble.is-assistant .mos-md :where(ul, ol) {
-  padding-left: 1.2em;
-  margin-top: 0.35em;
+  margin-top: 0.4em;
+  margin-bottom: 0.55em;
 }
 
-.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md ul {
-  list-style: disc;
-}
-
-.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md ol {
-  list-style: decimal;
-}
-
-.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md li {
-  margin: 0;
-  padding: 0.12em 0;
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md ul > li,
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md ol > li {
+  margin: 0.18em 0;
   line-height: 1.45;
 }
 
-.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md li + li {
-  margin-top: 0;
-}
-
-.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md li::marker {
-  color: color-mix(in srgb, var(--mos-ink, #1a1a1e) 42%, transparent);
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md ul > li::before {
+  background: color-mix(in srgb, var(--mos-ink, #1a1a1e) 45%, transparent);
+  opacity: 1;
 }
 
 .studio-agent-pane .studio-chat-bubble.is-assistant .mos-md hr {
