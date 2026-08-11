@@ -58,10 +58,46 @@ type SendTurnResult = {
   error?: string;
 };
 
+type AgentTurnAttachment = {
+  studioKind: string;
+  studioId: string;
+  kind?: string;
+  label?: string;
+  path?: string;
+};
+
+function safeText(value: unknown, max = 240): string {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+function safeAttachmentJson(input: AgentTurnAttachment[]): string | undefined {
+  const cleaned = input
+    .map((item) => ({
+      studioKind: safeText(item?.studioKind, 40),
+      studioId: safeText(item?.studioId, 80),
+      kind: safeText(item?.kind, 40) || undefined,
+      label: safeText(item?.label, 120) || undefined,
+      path: safeText(item?.path, 240) || undefined,
+    }))
+    .filter((item) => item.studioKind && item.studioId);
+  return cleaned.length ? JSON.stringify(cleaned) : undefined;
+}
+
 export const sendTurn = action({
   args: {
     threadId: v.id("agentThreads"),
     message: v.string(),
+    attachments: v.optional(
+      v.array(
+        v.object({
+          studioKind: v.string(),
+          studioId: v.string(),
+          kind: v.optional(v.string()),
+          label: v.optional(v.string()),
+          path: v.optional(v.string()),
+        }),
+      ),
+    ),
   },
   returns: v.object({
     ok: v.boolean(),
@@ -84,8 +120,10 @@ export const sendTurn = action({
     if (!thread) throw new Error("Agent thread not found");
 
     const message = args.message.trim();
-    if (!message) throw new Error("Type a message first");
+    const attachments = Array.isArray(args.attachments) ? args.attachments.slice(0, 12) : [];
+    if (!message && attachments.length === 0) throw new Error("Type a message or attach something first");
     if (message.length > 12000) throw new Error("Message too long");
+    const attachmentsJson = safeAttachmentJson(attachments);
 
     const piBase = workerUrl();
     if (!piBase) {
@@ -176,6 +214,7 @@ export const sendTurn = action({
       threadId: args.threadId,
       role: "user",
       content: message,
+      attachmentsJson,
     });
 
     const history: Array<{ role: string; content: string }> = await ctx.runQuery(
@@ -187,6 +226,126 @@ export const sendTurn = action({
       ownerId,
       limit: 12,
     });
+
+    const folderRows = await ctx.runQuery(internal.agentMessages.listFoldersForOwner, {
+      ownerId,
+    });
+    const folderById = new Map(folderRows.map((row) => [String(row._id), row]));
+    const folderPathFor = (folderId?: string | null): string | undefined => {
+      if (!folderId) return undefined;
+      const visited = new Set<string>();
+      const names: string[] = [];
+      let cursor = folderId;
+      while (cursor && !visited.has(cursor)) {
+        visited.add(cursor);
+        const row = folderById.get(cursor);
+        if (!row) break;
+        names.unshift(row.name);
+        cursor = row.parentId ? String(row.parentId) : "";
+      }
+      return names.length ? `/${names.join("/")}` : undefined;
+    };
+
+    const workingSet = [];
+    for (const item of attachments) {
+      const studioKind = safeText(item.studioKind, 40);
+      const rawId = safeText(item.studioId, 80);
+      if (!studioKind || !rawId) continue;
+      try {
+        if (studioKind === "asset") {
+          const asset = await ctx.runQuery(internal.assistanceWorkspace.getAssetForAgent, {
+            ownerId,
+            assetId: rawId as Id<"assets">,
+            expiresUnix: Math.floor(Date.now() / 1000) + 60 * 60,
+          });
+          if (asset) {
+            workingSet.push({
+              studioKind,
+              studioId: rawId,
+              kind: asset.kind,
+              label: asset.name,
+              mimeType: asset.mimeType,
+              folderId: String(asset.folderId),
+              folderPath: folderPathFor(String(asset.folderId)),
+            });
+          }
+          continue;
+        }
+        if (studioKind === "folder") {
+          const folder = await ctx.runQuery(internal.assistanceWorkspace.getFolderForAgent, {
+            ownerId,
+            folderId: rawId as Id<"folders">,
+          });
+          const contents = await ctx.runQuery(
+            internal.assistanceWorkspace.getFolderContentsForAgent,
+            {
+              ownerId,
+              folderId: rawId as Id<"folders">,
+              expiresUnix: Math.floor(Date.now() / 1000) + 60 * 60,
+            },
+          );
+          if (folder) {
+            workingSet.push({
+              studioKind,
+              studioId: rawId,
+              kind: "context",
+              label: folder.name,
+              path: folderPathFor(rawId),
+              preview: {
+                folders: contents.folders.slice(0, 20).map((row) => row.name),
+                assets: contents.assets.slice(0, 20).map((row) => ({
+                  id: String(row.id),
+                  name: row.name,
+                  kind: row.kind,
+                })),
+                documents: contents.documents.slice(0, 20).map((row) => row.title),
+                elements: contents.elements.slice(0, 20).map((row) => row.name),
+              },
+            });
+          }
+          continue;
+        }
+        if (studioKind === "document") {
+          const document = await ctx.runQuery(internal.assistanceWorkspace.getDocumentForAgent, {
+            ownerId,
+            documentId: rawId as Id<"documents">,
+          });
+          if (document) {
+            workingSet.push({
+              studioKind,
+              studioId: rawId,
+              kind: "file",
+              label: document.title,
+              folderId: String(document.folderId),
+              folderPath: folderPathFor(String(document.folderId)),
+              excerpt: document.contentMarkdown.slice(0, 1200),
+            });
+          }
+          continue;
+        }
+        if (studioKind === "element") {
+          const element = await ctx.runQuery(internal.assistanceWorkspace.getElementForAgent, {
+            ownerId,
+            elementId: rawId as Id<"elements">,
+            expiresUnix: Math.floor(Date.now() / 1000) + 60 * 60,
+          });
+          if (element) {
+            workingSet.push({
+              studioKind,
+              studioId: rawId,
+              kind: "context",
+              label: element.name,
+              elementType: element.type,
+              folderId: element.folderId ? String(element.folderId) : undefined,
+              folderPath: element.folderId ? folderPathFor(String(element.folderId)) : undefined,
+              description: element.description?.slice(0, 1200),
+            });
+          }
+        }
+      } catch {
+        // best-effort hydration; skip missing or stale attachments
+      }
+    }
 
     const runId = await ctx.runMutation(internal.agentRuns.createRun, {
       ownerId,
@@ -237,6 +396,8 @@ export const sendTurn = action({
           threadId: args.threadId,
           runId,
           message,
+          attachments,
+          workingSet,
           history,
           memories,
           role,

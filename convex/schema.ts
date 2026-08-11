@@ -1847,6 +1847,7 @@ export default defineSchema({
       v.literal("approval"),
     ),
     content: v.string(),
+    attachmentsJson: v.optional(v.string()),
     toolName: v.optional(v.string()),
     toolCallId: v.optional(v.string()),
     approvalId: v.optional(v.id("agentApprovals")),

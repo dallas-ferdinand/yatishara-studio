@@ -12,6 +12,7 @@ export const appendMessage = authedMutation({
       v.literal("system"),
     ),
     content: v.string(),
+    attachmentsJson: v.optional(v.string()),
     toolName: v.optional(v.string()),
     toolCallId: v.optional(v.string()),
     status: v.optional(
@@ -34,6 +35,7 @@ export const appendMessage = authedMutation({
       threadId: args.threadId,
       role: args.role,
       content: args.content,
+      attachmentsJson: args.attachmentsJson,
       toolName: args.toolName,
       toolCallId: args.toolCallId,
       status: args.status ?? "complete",
@@ -77,6 +79,7 @@ export const listRecentMessagesInternal = internalQuery({
     v.object({
       role: v.string(),
       content: v.string(),
+      attachmentsJson: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -91,7 +94,11 @@ export const listRecentMessagesInternal = internalQuery({
     return rows
       .reverse()
       .filter((row) => row.role === "user" || row.role === "assistant")
-      .map((row) => ({ role: row.role, content: row.content }));
+      .map((row) => ({
+        role: row.role,
+        content: row.content,
+        attachmentsJson: row.attachmentsJson,
+      }));
   },
 });
 
@@ -106,6 +113,7 @@ export const appendMessageInternal = internalMutation({
       v.literal("system"),
     ),
     content: v.string(),
+    attachmentsJson: v.optional(v.string()),
     toolName: v.optional(v.string()),
     status: v.optional(v.string()),
   },
@@ -121,6 +129,7 @@ export const appendMessageInternal = internalMutation({
       threadId: args.threadId,
       role: args.role,
       content: args.content,
+      attachmentsJson: args.attachmentsJson,
       toolName: args.toolName,
       status:
         args.status === "streaming" ||
