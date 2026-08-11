@@ -186,7 +186,7 @@ export function friendlyErrorLine(toolName: string, error?: string | null): stri
     return `Couldn't ${action} — session expired. Send again.`;
   }
   if (/insufficient|credit/i.test(raw)) {
-    return `Couldn't ${action} — need more credits.`;
+    return `Couldn't ${action} — need more balance.`;
   }
   if (/not found/i.test(raw)) {
     return `Couldn't ${action} — not found`;

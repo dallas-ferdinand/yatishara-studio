@@ -12,6 +12,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { ArrowUp, Loader2, Mic, Paperclip, RotateCcw, Settings, Square } from "lucide-react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { formatTtdFromCredits } from "@/studio/lib/money";
 import {
   readExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
@@ -502,6 +503,7 @@ export function StudioAgentPane({
   const sendTurn = useAction(api.agentActions.sendTurn);
   const retryRun = useAction(api.agentActions.retryRun);
   const transcribeVoice = useAction(api.voiceActions.transcribe);
+  const pricing = useQuery(api.billing.getPricing, {});
 
   const [draft, setDraft] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -834,7 +836,9 @@ export function StudioAgentPane({
       if (!result.ok && result.error) {
         toast.error(result.error);
       } else if (result.creditsSpent > 0) {
-        toast.message(`Agent turn · ${result.creditsSpent} credits`);
+        toast.message(
+          `Agent turn · ${formatTtdFromCredits(result.creditsSpent, pricing?.creditPriceCents)}`,
+        );
       } else if (result.usedByok) {
         toast.message("Agent turn · your API key");
       }

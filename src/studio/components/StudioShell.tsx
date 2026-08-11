@@ -4535,7 +4535,9 @@ export function StudioShell({
   function resolveAttachTargetTab() {
     if (
       typeof activeTab === "string" &&
-      (activeTab.startsWith("composer:") || activeTab.startsWith("thread:"))
+      (activeTab.startsWith("composer:") ||
+        activeTab.startsWith("thread:") ||
+        activeTab.startsWith("agent:"))
     ) {
       return activeTab;
     }
@@ -5940,6 +5942,17 @@ export function StudioShell({
     if (!attachment?.id) return false;
 
     const targetTab = resolveAttachTargetTab();
+    if (typeof targetTab === "string" && targetTab.startsWith("agent:")) {
+      window.dispatchEvent(
+        new CustomEvent("studio-agent-attach", {
+          detail: { attachment },
+        }),
+      );
+      if (!isMobile || mobileSection !== "files") {
+        openTab(targetTab);
+      }
+      return true;
+    }
     const prevCtx = composerContextsRef.current[targetTab] ?? {};
     const existing =
       composerContextKey === targetTab
@@ -27449,7 +27462,7 @@ function StudioComposer({
                   }
                   toast.success(
                     result.creditsSpent > 0
-                      ? `Enhanced · ${result.creditsSpent} credits`
+                      ? `Enhanced · ${formatTtdFromCredits(result.creditsSpent, pricing?.creditPriceCents)}`
                       : "Enhanced",
                   );
                 } catch (error) {
