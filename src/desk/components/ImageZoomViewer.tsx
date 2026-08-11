@@ -12,7 +12,7 @@ function clampScale(value) {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, +(value).toFixed(2)));
 }
 
-export function ImageZoomViewer({ thumbUrl, fullUrl, name: _name, onDownload }) {
+export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
   const [displayUrl, setDisplayUrl] = useState(thumbUrl || fullUrl);
   const [fullLoaded, setFullLoaded] = useState(false);
   const [scale, setScale] = useState(DEFAULT_SCALE);
@@ -217,7 +217,13 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name: _name, onDownload }) 
   return (
     <div className="desk-image-viewer">
       <div className="desk-image-viewer-toolbar">
-        <div className="desk-image-viewer-toolbar-left" />
+        <div className="desk-image-viewer-toolbar-left">
+          {name ? (
+            <span className="desk-image-viewer-name truncate" title={name}>
+              {name}
+            </span>
+          ) : null}
+        </div>
         <div className="desk-image-viewer-toolbar-center">
           <button type="button" className="cursor-icon-btn" title="Zoom out" onClick={() => zoom(-0.25)}>
             <Icon name="zoomOut" size={14} />

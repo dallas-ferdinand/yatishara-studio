@@ -171,20 +171,17 @@ export function StudioGenerationDetailSidebar({
       aria-label="Generation details"
     >
       <div className="studio-gen-detail-head">
-        <div className="studio-gen-detail-head-text">
-          <p className="studio-gen-detail-kicker">Details</p>
-          <h2 title={detail?.name}>
-            {detail?.name ?? (loading ? "Loading…" : "Generation")}
-          </h2>
-        </div>
+        <h2 className="truncate" title={detail?.name}>
+          {detail?.name ?? (loading ? "Loading…" : "Generation")}
+        </h2>
         <button
           type="button"
-          className="studio-gen-detail-close"
+          className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close"
           aria-label="Close preview"
           title="Close"
           onClick={onClose}
         >
-          <X className="h-4 w-4" aria-hidden="true" />
+          <X aria-hidden="true" />
         </button>
       </div>
 
@@ -274,7 +271,9 @@ export function StudioGenerationDetailSidebar({
                 {infoItems.map((item) => (
                   <div key={item.label} className="studio-gen-detail-info-card">
                     <span className="studio-gen-detail-info-label">{item.label}</span>
-                    <span className="studio-gen-detail-info-value">{item.value}</span>
+                    <span className="studio-gen-detail-info-value" title={item.value}>
+                      {item.value}
+                    </span>
                   </div>
                 ))}
               </div>

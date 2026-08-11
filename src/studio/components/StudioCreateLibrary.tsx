@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useConvex, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -9,8 +10,13 @@ import {
   StudioGenerationTile,
   type GenerationLibraryTile,
 } from "./StudioGenerationTile";
-import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
+import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
 import "./studio-create-library.css";
+
+const ImageZoomViewer = dynamic(
+  () => import("@/desk/components/ImageZoomViewer").then((m) => m.ImageZoomViewer),
+  { ssr: false },
+);
 
 const PAGE_SIZE = 24;
 
@@ -40,6 +46,7 @@ function useMasonryColumnCount() {
 type LightboxState = {
   jobId: string;
   url?: string;
+  thumbUrl?: string;
   kind: "image" | "video" | "audio";
   name: string;
   loading?: boolean;
@@ -165,18 +172,25 @@ export function StudioCreateLibrary({
     const stage = detailReady?.stage || tile?.stage;
     if (stage && stage !== "done") return null;
 
+    const thumbUrl = detailReady?.thumbnailUrl || tile?.thumbnailUrl;
     const url =
       detailReady?.playableUrl ||
-      detailReady?.thumbnailUrl ||
-      (tile ? previewUrl(tile) : undefined);
+      (tile ? previewUrl(tile) : undefined) ||
+      thumbUrl;
 
     if (!kind) {
       return { jobId: selectedJobId, name, kind: "image", loading: true };
     }
-    if (!url) {
+    if (!url && !thumbUrl) {
       return { jobId: selectedJobId, kind, name, loading: true };
     }
-    return { jobId: selectedJobId, url, kind, name };
+    return {
+      jobId: selectedJobId,
+      url,
+      thumbUrl,
+      kind,
+      name,
+    };
   }, [selectedJobId, tiles, lightboxDetail]);
 
   useEffect(() => {
@@ -187,6 +201,16 @@ export function StudioCreateLibrary({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, closePreview]);
+
+  const downloadLightbox = useCallback(() => {
+    if (!lightbox?.url) return;
+    const a = document.createElement("a");
+    a.href = lightbox.url;
+    a.download = lightbox.name || "download";
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.click();
+  }, [lightbox]);
 
   const loading = firstPage === undefined;
   const { ref: masonryRef, cols } = useMasonryColumnCount();
@@ -249,31 +273,40 @@ export function StudioCreateLibrary({
 
       {lightbox ? (
         <div
-          className="studio-gen-lightbox"
+          className="studio-gen-lightbox studio-asset-preview"
           role="dialog"
           aria-modal="true"
           aria-label={lightbox.name}
         >
-          <div className="studio-gen-lightbox-stage">
-            {lightbox.loading || !lightbox.url ? (
-              <div className="studio-gen-lightbox-loading">
-                <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
-              </div>
-            ) : lightbox.kind === "video" ? (
-              <video src={lightbox.url} controls autoPlay playsInline />
-            ) : lightbox.kind === "audio" ? (
-              <div className="studio-gen-lightbox-audio">
-                <StudioChatAudioPlayer
-                  variant="pane"
-                  src={lightbox.url}
-                  title={lightbox.name}
-                />
-              </div>
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={lightbox.url} alt={lightbox.name} />
-            )}
-          </div>
+          {lightbox.loading || (!lightbox.url && !lightbox.thumbUrl) ? (
+            <div className="studio-gen-lightbox-loading">
+              <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
+            </div>
+          ) : lightbox.kind === "video" && lightbox.url ? (
+            <DeskMediaPlayer
+              kind="video"
+              layout="studio-preview"
+              src={lightbox.url}
+              name={lightbox.name}
+              poster={lightbox.thumbUrl}
+              onDownload={downloadLightbox}
+            />
+          ) : lightbox.kind === "audio" && lightbox.url ? (
+            <DeskMediaPlayer
+              kind="audio"
+              layout="studio-preview"
+              src={lightbox.url}
+              name={lightbox.name}
+              onDownload={downloadLightbox}
+            />
+          ) : (
+            <ImageZoomViewer
+              thumbUrl={lightbox.thumbUrl || lightbox.url}
+              fullUrl={lightbox.url || lightbox.thumbUrl}
+              name={lightbox.name}
+              onDownload={downloadLightbox}
+            />
+          )}
         </div>
       ) : null}
     </div>
