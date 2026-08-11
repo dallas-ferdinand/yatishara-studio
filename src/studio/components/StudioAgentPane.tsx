@@ -34,6 +34,7 @@ type AgentAttachment = {
   studioId?: string;
   mimeType?: string;
   thumbnailUrl?: string;
+  mediaUrl?: string;
 };
 
 type StudioAgentPaneProps = {
@@ -113,12 +114,84 @@ function entryToAgentAttachment(entry: Record<string, unknown>): AgentAttachment
     studioId,
     mimeType: typeof entry.mimeType === "string" ? entry.mimeType : undefined,
     thumbnailUrl:
-      typeof entry.thumbnailUrl === "string" ? entry.thumbnailUrl : undefined,
+      typeof entry.thumbnailUrl === "string"
+        ? entry.thumbnailUrl
+        : typeof entry.previewUrl === "string"
+          ? entry.previewUrl
+          : typeof entry.thumbnailLqipUrl === "string"
+            ? entry.thumbnailLqipUrl
+            : undefined,
+    mediaUrl:
+      typeof entry.mediaUrl === "string"
+        ? entry.mediaUrl
+        : typeof entry.url === "string"
+          ? entry.url
+          : typeof entry.previewUrl === "string"
+            ? entry.previewUrl
+            : undefined,
   };
 }
 
 function isComposerAttachmentToken(node: Node | null | undefined) {
   return node?.nodeType === Node.ELEMENT_NODE && (node as Element).classList?.contains("studio-inline-tag");
+}
+
+function composerTokenIconKind(attachment: AgentAttachment) {
+  if (attachment.kind === "image" || attachment.kind === "video" || attachment.kind === "audio") {
+    return attachment.kind;
+  }
+  if (attachment.studioKind === "folder") return "folder";
+  if (attachment.studioKind === "document") return "file";
+  return attachment.kind ?? "file";
+}
+
+function createComposerTokenIcon(kind: string) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("width", "11");
+  svg.setAttribute("height", "11");
+  const lucidePaths: Record<string, string[]> = {
+    image: [
+      "M15 8h.01",
+      "M3 6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3Z",
+      "m3 14 4-4a3 3 0 0 1 4 0l5 5",
+      "m14 14 1-1a3 3 0 0 1 4 0l2 2",
+    ],
+    video: [
+      "m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5",
+      "M3 5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z",
+    ],
+    audio: [
+      "M9 18V5l12-2v13",
+      "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z",
+      "M21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z",
+    ],
+    folder: [
+      "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z",
+    ],
+    file: [
+      "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",
+      "M14 2v4a2 2 0 0 0 2 2h4",
+      "M10 9H8",
+      "M16 13H8",
+      "M16 17H8",
+    ],
+  };
+  const iconKey =
+    kind === "image" || kind === "video" || kind === "audio" || kind === "folder"
+      ? kind
+      : "file";
+  for (const d of lucidePaths[iconKey] ?? lucidePaths.file) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+  }
+  return svg;
 }
 
 function readComposerEditorText(editor: HTMLDivElement | null) {
@@ -155,17 +228,54 @@ function createComposerAttachmentToken(attachment: AgentAttachment) {
       "application/x-studio-composer-token",
       JSON.stringify({ ...attachment, tokenId: token.dataset.tokenId }),
     );
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+    }
   });
   token.addEventListener("dragend", () => token.classList.remove("is-dragging"));
 
   const kind = document.createElement("span");
   kind.className = "studio-inline-tag-kind";
-  kind.textContent =
-    attachment.kind === "image" ? "IMG" : attachment.kind === "video" ? "VID" : attachment.kind === "audio" ? "AUD" : attachment.studioKind === "folder" ? "DIR" : "REF";
+  const previewUrl = attachment.thumbnailUrl || attachment.mediaUrl;
+  const isPreviewAsset =
+    Boolean(previewUrl) && (attachment.kind === "image" || attachment.kind === "video");
+  if (isPreviewAsset && previewUrl) {
+    token.classList.add("studio-inline-tag--preview");
+    const media =
+      attachment.kind === "video"
+        ? document.createElement("video")
+        : document.createElement("img");
+    media.className = "studio-inline-tag-media";
+    media.src =
+      attachment.kind === "video"
+        ? attachment.mediaUrl || attachment.thumbnailUrl || previewUrl
+        : previewUrl;
+    if (attachment.kind === "video") {
+      (media as HTMLVideoElement).muted = true;
+      (media as HTMLVideoElement).playsInline = true;
+      (media as HTMLVideoElement).preload = "metadata";
+    } else {
+      (media as HTMLImageElement).alt = "";
+    }
+    kind.appendChild(media);
+  } else {
+    kind.appendChild(createComposerTokenIcon(composerTokenIconKind(attachment)));
+  }
+
   const label = document.createElement("span");
   label.className = "studio-inline-tag-label";
   label.textContent = attachment.label || attachment.filename || "Reference";
-  token.append(kind, label);
+
+  if ((attachment.kind === "image" || attachment.kind === "video") && previewUrl) {
+    token.classList.add("studio-inline-tag--image-only");
+    token.title = attachment.label || attachment.filename || (attachment.kind === "video" ? "Video" : "Image");
+    const overlay = document.createElement("span");
+    overlay.className = "studio-inline-tag-overlay";
+    overlay.appendChild(createComposerTokenIcon(attachment.kind === "video" ? "video" : "image"));
+    token.append(kind, overlay);
+  } else {
+    token.append(kind, label);
+  }
   return token;
 }
 
@@ -491,6 +601,8 @@ export function StudioAgentPane({
         for (const file of list) {
           const mimeType = file.type || "application/octet-stream";
           const kind = kindFromMime(mimeType);
+          const localPreview =
+            kind === "image" || kind === "video" ? URL.createObjectURL(file) : undefined;
           const assetId = await uploadStudioAsset({
             file,
             folderId,
@@ -499,7 +611,7 @@ export function StudioAgentPane({
             commitStagingUpload,
             name: file.name,
           });
-          nextAttachments.push({
+          const attachment: AgentAttachment = {
             id: `asset:${assetId}`,
             kind,
             label: file.name,
@@ -508,12 +620,17 @@ export function StudioAgentPane({
             studioKind: "asset",
             studioId: assetId,
             mimeType,
-          });
+            thumbnailUrl: localPreview,
+            mediaUrl: localPreview,
+          };
+          nextAttachments.push(attachment);
+          insertComposerAttachmentToken(editorRef.current, attachment);
         }
         setAttachments((prev) => {
           const seen = new Set(prev.map((item) => item.id));
           return [...prev, ...nextAttachments.filter((item) => !seen.has(item.id))];
         });
+        setDraft(readComposerEditorText(editorRef.current));
       } catch (error) {
         toast.error(friendlyConvexError(error, "Upload failed"));
       } finally {
