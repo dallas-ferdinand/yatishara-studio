@@ -83,6 +83,12 @@ function shortTitle(prompt: string, index: number) {
   return `${cleaned.slice(0, 16)}…`;
 }
 
+function optionLetter(index: number) {
+  if (index < 0) return "";
+  if (index < 26) return String.fromCharCode(65 + index);
+  return String(index + 1);
+}
+
 function draftFilled(draft?: AnswerDraft) {
   if (!draft) return false;
   return Boolean(draft.optionId || draft.customText?.trim());
@@ -278,9 +284,10 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
       <p className="studio-agent-ask-prompt">{current.prompt}</p>
 
       <div className="studio-agent-ask-options">
-        {current.options.map((opt) => {
+        {current.options.map((opt, optIndex) => {
           const selected =
             currentDraft?.optionId === opt.id && !currentDraft?.customText;
+          const letter = optionLetter(optIndex);
           return (
             <button
               key={opt.id}
@@ -289,13 +296,19 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
               disabled={busy}
               onClick={() => void chooseOption(opt)}
             >
-              {opt.label}
+              <span className="studio-agent-ask-option-letter" aria-hidden="true">
+                {letter}
+              </span>
+              <span className="studio-agent-ask-option-label">{opt.label}</span>
             </button>
           );
         })}
         {current.allowCustom !== false ? (
           customMode ? (
             <div className="studio-agent-ask-custom is-open">
+              <span className="studio-agent-ask-option-letter" aria-hidden="true">
+                {optionLetter(current.options.length)}
+              </span>
               <input
                 ref={customRef}
                 value={customText}
@@ -317,9 +330,14 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
               disabled={busy}
               onClick={openCustom}
             >
-              {currentDraft?.customText
-                ? currentDraft.customText
-                : "Something else…"}
+              <span className="studio-agent-ask-option-letter" aria-hidden="true">
+                {optionLetter(current.options.length)}
+              </span>
+              <span className="studio-agent-ask-option-label">
+                {currentDraft?.customText
+                  ? currentDraft.customText
+                  : "Something else…"}
+              </span>
             </button>
           )
         ) : null}
