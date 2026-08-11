@@ -17,7 +17,12 @@ export function buildStudioRequest(
     };
   }
   const used = new Set<string>();
-  const path = tool.http.pathTemplate.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => {
+  // Drop dynamic query placeholders (?{params}, ?q={q}). Static ?scope=mcp stays.
+  // GET/non-path args are rebuilt as a real query string below.
+  const pathTemplate = String(tool.http.pathTemplate).replace(/\?[^#]*$/, (queryPart) =>
+    /\{[a-zA-Z0-9_]+\}/.test(queryPart) ? "" : queryPart,
+  );
+  const path = pathTemplate.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => {
     used.add(key);
     const value = args[key];
     if (value == null || value === "") {

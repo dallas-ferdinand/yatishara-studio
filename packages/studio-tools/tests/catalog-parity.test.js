@@ -102,6 +102,30 @@ test('buildStudioRequest fills path params', () => {
   assert.match(req.path, /\/folders\/abc123/);
 });
 
+test('buildStudioRequest allows optional query templates', () => {
+  const tree = buildStudioRequest('studio_workspace_tree', {});
+  assert.equal(tree.method, 'GET');
+  assert.equal(tree.path, '/workspace/tree');
+
+  const folders = buildStudioRequest('studio_list_folders', { parentId: 'f1' });
+  assert.equal(folders.method, 'GET');
+  assert.equal(folders.path, '/folders?parentId=f1');
+});
+
+test('buildStudioRequest strips dynamic ?{params} and builds real query', () => {
+  const search = buildStudioRequest('studio_search', {
+    query: 'tree',
+    kinds: ['asset'],
+    limit: 20,
+  });
+  assert.equal(search.method, 'GET');
+  assert.equal(search.path, '/workspace/search?query=tree&kinds=asset&limit=20');
+
+  const resolve = buildStudioRequest('studio_resolve_path', { path: 'Ads/JAV' });
+  assert.equal(resolve.method, 'GET');
+  assert.equal(resolve.path, '/workspace/resolve-path?path=Ads%2FJAV');
+});
+
 test('mcp surface includes all tools', () => {
   assert.ok(mcpToolNames().length >= 200);
 });

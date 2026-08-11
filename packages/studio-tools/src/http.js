@@ -22,11 +22,21 @@ export function buildStudioRequest(toolName, args = {}) {
     };
   }
   const used = new Set();
-  const path = tool.http.pathTemplate.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => {
+  // Drop dynamic query placeholders (?{params}, ?q={q}). Static ?scope=mcp stays.
+  // GET/non-path args are rebuilt as a real query string below.
+  const pathTemplate = String(tool.http.pathTemplate).replace(/\?[^#]*$/, (queryPart) =>
+    /\{[a-zA-Z0-9_]+\}/.test(queryPart) ? '' : queryPart,
+  );
+  const path = pathTemplate.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+    const isOptionalSuffix = key === 'query' || key === 'suffix';
     used.add(key);
     const value = args[key];
     if (value == null || value === '') {
+      if (isOptionalSuffix) return '';
       throw new Error(`Missing path param ${key} for ${toolName}`);
+    }
+    if (isOptionalSuffix && typeof value === 'string') {
+      return value;
     }
     return encodeURIComponent(String(value));
   });

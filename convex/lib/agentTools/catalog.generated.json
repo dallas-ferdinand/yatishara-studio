@@ -3477,7 +3477,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/workspace/project-context?{params}"
+      "pathTemplate": "/workspace/project-context"
     },
     "inputSchema": {
       "type": "object",
@@ -3762,7 +3762,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/workspace/resolve-path?{params}"
+      "pathTemplate": "/workspace/resolve-path"
     },
     "inputSchema": {
       "type": "object",
@@ -3872,7 +3872,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/workspace/search?{params}"
+      "pathTemplate": "/workspace/search"
     },
     "inputSchema": {
       "type": "object",
