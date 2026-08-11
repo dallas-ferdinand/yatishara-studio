@@ -830,6 +830,7 @@ export const canGenerate = authedQuery({
     aspectRatio: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     hasReferenceInput: v.optional(v.boolean()),
+    referenceImageCount: v.optional(v.number()),
     hasVideoReferenceInput: v.optional(v.boolean()),
     hasNonVideoReferenceInput: v.optional(v.boolean()),
     audioEnabled: v.optional(v.boolean()),
@@ -874,6 +875,7 @@ export const canGenerate = authedQuery({
       aspectRatio: args.aspectRatio,
       durationSeconds: args.durationSeconds,
       hasReferenceInput: args.hasReferenceInput,
+      referenceImageCount: args.referenceImageCount,
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       audioEnabled: args.audioEnabled,
@@ -913,6 +915,7 @@ export const createQueuedJob = authedMutation({
     quality: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     hasReferenceInput: v.optional(v.boolean()),
+    referenceImageCount: v.optional(v.number()),
     hasVideoReferenceInput: v.optional(v.boolean()),
     hasNonVideoReferenceInput: v.optional(v.boolean()),
     hasStartFrame: v.optional(v.boolean()),
@@ -987,6 +990,7 @@ export const createQueuedJob = authedMutation({
       aspectRatio: args.aspectRatio,
       durationSeconds: args.durationSeconds,
       hasReferenceInput: args.hasReferenceInput,
+      referenceImageCount: args.referenceImageCount,
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       audioEnabled: args.audioEnabled,
@@ -1344,6 +1348,7 @@ export const internalCreateQueuedJob = internalMutation({
     resolution: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     hasReferenceInput: v.optional(v.boolean()),
+    referenceImageCount: v.optional(v.number()),
     hasVideoReferenceInput: v.optional(v.boolean()),
     hasNonVideoReferenceInput: v.optional(v.boolean()),
     hasStartFrame: v.optional(v.boolean()),
@@ -1374,6 +1379,7 @@ export const internalCreateQueuedJob = internalMutation({
       resolution: args.resolution,
       durationSeconds: args.durationSeconds,
       hasReferenceInput: args.hasReferenceInput,
+      referenceImageCount: args.referenceImageCount,
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       audioEnabled: args.audioEnabled,
@@ -1442,6 +1448,7 @@ export const prepareApiGeneration = internalMutation({
     quality: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     hasReferenceInput: v.optional(v.boolean()),
+    referenceImageCount: v.optional(v.number()),
     hasVideoReferenceInput: v.optional(v.boolean()),
     hasNonVideoReferenceInput: v.optional(v.boolean()),
     hasStartFrame: v.optional(v.boolean()),
@@ -1494,6 +1501,7 @@ export const prepareApiGeneration = internalMutation({
       aspectRatio: args.aspectRatio,
       durationSeconds: args.durationSeconds,
       hasReferenceInput: args.hasReferenceInput,
+      referenceImageCount: args.referenceImageCount,
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       audioEnabled: args.audioEnabled,
@@ -2408,6 +2416,7 @@ function generationCreditCost(args: {
   aspectRatio?: string;
   durationSeconds?: number;
   hasReferenceInput?: boolean;
+  referenceImageCount?: number;
   hasVideoReferenceInput?: boolean;
   hasNonVideoReferenceInput?: boolean;
   audioEnabled?: boolean;
@@ -2423,6 +2432,7 @@ function generationCreditCost(args: {
     aspectRatio: args.aspectRatio,
     durationSeconds: args.durationSeconds,
     hasReferenceInput: args.hasReferenceInput,
+    referenceImageCount: args.referenceImageCount,
     hasVideoReferenceInput: args.hasVideoReferenceInput,
     hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
     audioEnabled: args.audioEnabled,
@@ -2441,6 +2451,7 @@ async function reserveCreditsForJob(
     aspectRatio?: string;
     durationSeconds?: number;
     hasReferenceInput?: boolean;
+    referenceImageCount?: number;
     hasVideoReferenceInput?: boolean;
     hasNonVideoReferenceInput?: boolean;
     audioEnabled?: boolean;
@@ -2463,6 +2474,7 @@ async function reserveCreditsForUser(
     aspectRatio?: string;
     durationSeconds?: number;
     hasReferenceInput?: boolean;
+    referenceImageCount?: number;
     hasVideoReferenceInput?: boolean;
     hasNonVideoReferenceInput?: boolean;
     audioEnabled?: boolean;
@@ -2552,6 +2564,8 @@ export const chargeTextGeneration = authedMutation({
     imageReferenceCount: v.optional(v.number()),
     videoReferenceCount: v.optional(v.number()),
     audioReferenceCount: v.optional(v.number()),
+    /** BytePlus text tier: lite (default) or mini (DM Improve). */
+    textModel: v.optional(v.union(v.literal("lite"), v.literal("mini"))),
   },
   returns: v.id("creditTransactions"),
   handler: async (ctx, args) => {
@@ -2560,13 +2574,14 @@ export const chargeTextGeneration = authedMutation({
       .query("billingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
       .unique();
-    // Measured gateway tokens only — estimates are for UI quotes, not ledger charges.
+    // Measured tokens only — estimates are for UI quotes, not ledger charges.
     void args.imageReferenceCount;
     void args.videoReferenceCount;
     void args.audioReferenceCount;
     const cost = textCreditCost({
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
+      textModel: args.textModel ?? "lite",
     });
     const now = Date.now();
     if (!account || account.creditBalance < cost) {

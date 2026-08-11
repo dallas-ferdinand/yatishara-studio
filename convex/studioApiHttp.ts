@@ -1770,6 +1770,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           mode === "video"
             ? Boolean(referenceInputsList.length || startFrameUrl)
             : Boolean(referenceUrls?.length),
+        referenceImageCount:
+          mode === "image" ? (referenceUrls?.length ?? 0) : undefined,
         hasVideoReferenceInput:
           mode === "video" && referenceInputsList.some((input) => input.kind === "video"),
         hasNonVideoReferenceInput:

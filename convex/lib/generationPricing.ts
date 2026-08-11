@@ -1,26 +1,25 @@
 /**
  * Generation pricing.
  *
- * Image + video + text: 2× BytePlus ModelArk COGS, rounded up to the next
- * TT$0.50 (text rounds to TT$0.01). FX: US$1 = TT$10. Ledger: TT$0.50 per credit.
- * No platform fee on top of the 2× markup.
+ * Image + video + text: **exact BytePlus ModelArk list COGS × 2**, then round
+ * (media → next TT$0.50; text → next TT$0.01). FX: US$1 = TT$10.
+ * Ledger: TT$0.50 per credit. No platform fee on top of the 2× markup.
  *
- * Seedance 2.5: $10.70/M tokens (no video input) / $6.40/M (with video input).
- * Customer quotes use the no-video rate.
- * tokens ≈ (height × width × 24fps × seconds) / 1024. Audio included.
- * Resolutions 480p/720p; max 30s.
+ * Seedance 2.5 list: $10.70/M (no video input) / $6.40/M (with video input).
+ * tokens ≈ (height × width × 24fps × seconds) / 1024. Audio included in rate.
+ * Resolutions 480p/720p; max 30s. Quotes use the matching input-type rate.
  *
- * Seedance 2.0: no-video rates by tier —
- * 480p/720p $7/M, 1080p $7.7/M, 4k $4/M; with-video $4.30/M (not used for quotes).
+ * Seedance 2.0 list (no video input): 480p/720p $7/M, 1080p $7.7/M, 4k $4/M.
+ * With video input: 480p/720p $4.30/M, 1080p $4.70/M, 4k $2.40/M.
  * Resolutions 480p/720p/1080p/4k; max 15s.
  *
- * Seedream 5.0 Pro: $0.045/image ≤2.36MP (Studio 1K); $0.09 >2.36MP (Studio 2K).
- * Studio 4K clamps to 2K. First reference image free; each extra ref +$0.003 COGS
- * (customer surcharge via IMAGE_REFERENCE_SURCHARGE on 2K).
+ * Seedream 5.0 Pro list: $0.045/image ≤2.36MP (Studio 1K); $0.09 >2.36MP
+ * (Studio 2K). Studio 4K clamps to 2K. First reference image free; each
+ * additional reference +$0.003 COGS (then ×2 markup).
  *
- * Text / Assistance (Seed 2.0 Lite): $0.25/M input / $2.00/M output.
- * DM Improve (Seed 2.0 Mini): same formula; cheaper model billed from measured tokens.
- * Customer price is 2× measured provider COGS, rounded up to TT$0.01.
+ * Text — Seed 2.0 Lite (≤128k): $0.25/M in / $2.00/M out.
+ * DM Improve — Seed 2.0 Mini (≤128k): $0.10/M in / $0.40/M out.
+ * Measured-token charges use the model that ran. Customer = 2× COGS.
  */
 
 export const CREDIT_PRICE_TTD = 0.5;
@@ -30,16 +29,15 @@ export const MIN_GROSS_MARGIN = 0.35;
 /** Legacy GPT Image quality — ignored for Seedream billing (compat for callers). */
 export type ImageQuality = "low" | "medium" | "high";
 
-/**
- * Seedream 5.0 Pro USD per output image by Studio resolution tier.
- * 1K = ≤2.36MP ($0.045); 2K/4K = >2.36MP ($0.09). 4K is clamped to 2K at gen time.
- * Quality keys kept for API compat — all map to the same Seedream rate.
- */
+/** Seedream 5.0 Pro — USD per output image by Studio resolution tier. */
 const SEEDREAM_USD_BY_TIER: Record<"1K" | "2K" | "4K", number> = {
   "1K": 0.045,
   "2K": 0.09,
   "4K": 0.09,
 };
+
+/** Seedream 5.0 Pro — USD per additional reference image (first ref is free). */
+export const SEEDREAM_USD_EXTRA_REFERENCE = 0.003;
 
 /** @deprecated Prefer SEEDREAM_USD_BY_TIER — kept for any direct IMAGE_MODEL_USD reads. */
 const IMAGE_MODEL_USD: Record<
@@ -70,18 +68,30 @@ export const IMAGE_CREDITS_BY_RESOLUTION: Record<string, number> = {
   "4K": 2,
 };
 
-/** +TT$1 (2 credits) when reference images are used on 2K/4K (extra Seedream refs). */
-export const IMAGE_REFERENCE_SURCHARGE = 2;
+/**
+ * Display helper: customer credits for **one billed** extra Seedream reference
+ * (after the free first ref), at 2× markup rounded like image jobs.
+ */
+export const IMAGE_REFERENCE_SURCHARGE = Math.max(
+  1,
+  Math.round(
+    (Math.ceil((SEEDREAM_USD_EXTRA_REFERENCE * USD_TO_TTD * 2) / CREDIT_PRICE_TTD) *
+      CREDIT_PRICE_TTD) /
+      CREDIT_PRICE_TTD,
+  ),
+);
 
-/** Seedance 2.5 — USD per million video tokens (customer quotes use no-video rate). */
+/** Seedance 2.5 — USD per million video tokens. */
 export const SEEDANCE_USD_PER_M_TOKENS_NO_VIDEO = 10.7;
-/** Pass-through when video is in the input — not used for customer quotes. */
 export const SEEDANCE_USD_PER_M_TOKENS_WITH_VIDEO = 6.4;
 /** Seedance 2.0 no-video rates by resolution tier. */
 export const SEEDANCE_20_USD_PER_M_TOKENS_NO_VIDEO = 7;
 export const SEEDANCE_20_USD_PER_M_TOKENS_1080P = 7.7;
 export const SEEDANCE_20_USD_PER_M_TOKENS_4K = 4;
+/** Seedance 2.0 with-video rates by resolution tier. */
 export const SEEDANCE_20_USD_PER_M_TOKENS_WITH_VIDEO = 4.3;
+export const SEEDANCE_20_USD_PER_M_TOKENS_1080P_WITH_VIDEO = 4.7;
+export const SEEDANCE_20_USD_PER_M_TOKENS_4K_WITH_VIDEO = 2.4;
 export const SEEDANCE_FPS = 24;
 export const SEEDANCE_25_MAX_DURATION_SECONDS = 30;
 export const SEEDANCE_20_MAX_DURATION_SECONDS = 15;
@@ -151,16 +161,23 @@ export const PLATFORM_OVERHEAD_CREDITS_MEDIA = 0;
 export const PLATFORM_OVERHEAD_CREDITS_TEXT = 0;
 
 /**
- * Seed 2.0 Lite (GATEWAY_TEXT_MODEL_ID + GATEWAY_ASSISTANT_MODEL_ID) —
- * USD per million tokens. Audio input billed at 2× text input when measured separately.
+ * Seed 2.0 Lite (≤128k) — Assistance / enhance / scripts.
+ * Seed 2.0 Mini (≤128k) — DM Improve.
  */
+export type TextPricingModel = "lite" | "mini";
+
 export const TEXT_USD_PER_M_INPUT = 0.25;
 export const TEXT_USD_PER_M_OUTPUT = 2.0;
-export const TEXT_USD_PER_M_AUDIO_INPUT = 0.5;
+/** Seed Lite has no separate audio line on ModelArk list — bill audio input at text input rate. */
+export const TEXT_USD_PER_M_AUDIO_INPUT = TEXT_USD_PER_M_INPUT;
+
+export const TEXT_MINI_USD_PER_M_INPUT = 0.1;
+export const TEXT_MINI_USD_PER_M_OUTPUT = 0.4;
+export const TEXT_MINI_USD_PER_M_AUDIO_INPUT = TEXT_MINI_USD_PER_M_INPUT;
 
 /**
  * Typical Assistance / script / element-notes turn on Seed 2.0 Lite
- * (calibrated shape; re-measure after cutover).
+ * (estimate shape for UI quotes; ledger uses measured tokens).
  */
 export const TEXT_BASE_INPUT_TOKENS = 2_000;
 export const TEXT_BASE_OUTPUT_TOKENS = 600;
@@ -172,7 +189,7 @@ export const TEXT_AUDIO_REF_INPUT_TOKENS = 5_000;
 
 /**
  * Text / Assistance floor + step: TT$0.01 (0.02 credits at TT$0.50 each).
- * Customer charge = 2× Seed Lite provider COGS, rounded up to this cent.
+ * Customer charge = 2× BytePlus text provider COGS, rounded up to this cent.
  */
 export const TEXT_MIN_SELL_TTD = 0.01;
 
@@ -205,25 +222,55 @@ export function normalizeImageQuality(
   return "medium";
 }
 
-function isSquareAspectRatio(_aspectRatio: string | undefined): boolean {
-  void _aspectRatio;
-  return false;
-}
-
 /** Round up to the next TT$0.50 (1.20→1.50, 1.80→2.00). */
 export function roundUpToHalfTtd(ttd: number): number {
   return Math.ceil(ttd / CREDIT_PRICE_TTD) * CREDIT_PRICE_TTD;
+}
+
+function textRates(model: TextPricingModel = "lite"): {
+  input: number;
+  output: number;
+  audioInput: number;
+} {
+  if (model === "mini") {
+    return {
+      input: TEXT_MINI_USD_PER_M_INPUT,
+      output: TEXT_MINI_USD_PER_M_OUTPUT,
+      audioInput: TEXT_MINI_USD_PER_M_AUDIO_INPUT,
+    };
+  }
+  return {
+    input: TEXT_USD_PER_M_INPUT,
+    output: TEXT_USD_PER_M_OUTPUT,
+    audioInput: TEXT_USD_PER_M_AUDIO_INPUT,
+  };
+}
+
+function seedreamReferenceImageCount(args: {
+  referenceImageCount?: number;
+  hasReferenceInput?: boolean;
+}): number {
+  if (args.referenceImageCount != null && Number.isFinite(args.referenceImageCount)) {
+    return Math.max(0, Math.floor(args.referenceImageCount));
+  }
+  return args.hasReferenceInput ? 1 : 0;
 }
 
 export function estimateImageModelUsd(args: {
   resolution?: string;
   quality?: string;
   aspectRatio?: string;
+  referenceImageCount?: number;
+  hasReferenceInput?: boolean;
 }): number {
   const tier = normalizeImageResolutionLabel(args.resolution);
   void args.quality;
   void args.aspectRatio;
-  return SEEDREAM_USD_BY_TIER[tier];
+  const refs = seedreamReferenceImageCount(args);
+  const billedExtraRefs = Math.max(0, refs - 1); // BytePlus: first ref free
+  return (
+    SEEDREAM_USD_BY_TIER[tier] + billedExtraRefs * SEEDREAM_USD_EXTRA_REFERENCE
+  );
 }
 
 /** Customer TT$ for an image = 2× model COGS, rounded up to TT$0.50. */
@@ -231,6 +278,8 @@ export function imageSellPriceTtd(args: {
   resolution?: string;
   quality?: string;
   aspectRatio?: string;
+  referenceImageCount?: number;
+  hasReferenceInput?: boolean;
 }): number {
   const modelTtd = estimateImageModelUsd(args) * USD_TO_TTD;
   return roundUpToHalfTtd(modelTtd * 2);
@@ -241,13 +290,10 @@ export function imageCreditCost(args: {
   quality?: string;
   aspectRatio?: string;
   hasReferenceInput?: boolean;
+  referenceImageCount?: number;
 }): number {
-  const label = normalizeImageResolutionLabel(args.resolution);
   const sellTtd = imageSellPriceTtd(args);
-  const baseCredits = Math.round(sellTtd / CREDIT_PRICE_TTD);
-  const referenceSurcharge =
-    args.hasReferenceInput && label !== "1K" ? IMAGE_REFERENCE_SURCHARGE : 0;
-  return Math.max(1, baseCredits + referenceSurcharge);
+  return Math.max(1, Math.round(sellTtd / CREDIT_PRICE_TTD));
 }
 
 export function videoDurationSeconds(
@@ -297,7 +343,17 @@ export function normalizeVideoResolutionKey(
 
 function seedance20UsdPerMTokens(
   resolutionKey: ReturnType<typeof normalizeVideoResolutionKey>,
+  withVideoInput: boolean,
 ): number {
+  if (withVideoInput) {
+    if (resolutionKey === "1920x1080") {
+      return SEEDANCE_20_USD_PER_M_TOKENS_1080P_WITH_VIDEO;
+    }
+    if (resolutionKey === "3840x2160") {
+      return SEEDANCE_20_USD_PER_M_TOKENS_4K_WITH_VIDEO;
+    }
+    return SEEDANCE_20_USD_PER_M_TOKENS_WITH_VIDEO;
+  }
   if (resolutionKey === "1920x1080") return SEEDANCE_20_USD_PER_M_TOKENS_1080P;
   if (resolutionKey === "3840x2160") return SEEDANCE_20_USD_PER_M_TOKENS_4K;
   return SEEDANCE_20_USD_PER_M_TOKENS_NO_VIDEO;
@@ -329,9 +385,9 @@ export function estimateVideoModelUsd(args: {
   videoModel?: VideoPricingModel;
 }): number {
   const videoModel = args.videoModel ?? "seedance-2.5";
-  // Seedance — same customer price with or without video refs (no-video rate).
-  void args.hasVideoReferenceInput;
+  // Audio is included in Seedance list rates (no separate surcharge).
   void args.audioEnabled;
+  const withVideoInput = Boolean(args.hasVideoReferenceInput);
   const tokens = seedanceOutputTokens({
     resolution: args.resolution,
     durationSeconds: args.durationSeconds,
@@ -346,8 +402,10 @@ export function estimateVideoModelUsd(args: {
   }
   const usdPerM =
     videoModel === "seedance-2.0"
-      ? seedance20UsdPerMTokens(pricedKey)
-      : SEEDANCE_USD_PER_M_TOKENS_NO_VIDEO;
+      ? seedance20UsdPerMTokens(pricedKey, withVideoInput)
+      : withVideoInput
+        ? SEEDANCE_USD_PER_M_TOKENS_WITH_VIDEO
+        : SEEDANCE_USD_PER_M_TOKENS_NO_VIDEO;
   return (tokens * usdPerM) / 1_000_000;
 }
 
@@ -387,12 +445,9 @@ export function videoCreditCost(args: {
   audioEnabled?: boolean;
   videoModel?: VideoPricingModel;
 }): number {
-  // Image / non-video refs do not change Vercel Seedance token rates.
-  // Video refs keep the same customer price as no-ref (2.5 $10.70/M or 2.0 $7/M).
-  // Kling rates swap only on audio; start-frame/image is already in the I2V base.
+  // Image / audio refs do not change Seedance list $/M (only video input does).
   void args.hasReferenceInput;
   void args.hasNonVideoReferenceInput;
-  void args.hasVideoReferenceInput;
 
   const sellTtd = videoSellPriceTtd({
     resolution: args.resolution,
@@ -408,7 +463,9 @@ export function estimateTextModelUsd(args: {
   imageReferenceCount?: number;
   videoReferenceCount?: number;
   audioReferenceCount?: number;
+  textModel?: TextPricingModel;
 }): number {
+  const rates = textRates(args.textModel ?? "lite");
   const imageRefs = Math.max(0, Math.ceil(args.imageReferenceCount ?? 0));
   const videoRefs = Math.max(0, Math.ceil(args.videoReferenceCount ?? 0));
   const audioRefs = Math.max(0, Math.ceil(args.audioReferenceCount ?? 0));
@@ -420,9 +477,9 @@ export function estimateTextModelUsd(args: {
   const audioInputTokens = audioRefs * TEXT_AUDIO_REF_INPUT_TOKENS;
 
   return (
-    (textImageVideoInputTokens * TEXT_USD_PER_M_INPUT) / 1_000_000 +
-    (audioInputTokens * TEXT_USD_PER_M_AUDIO_INPUT) / 1_000_000 +
-    (TEXT_BASE_OUTPUT_TOKENS * TEXT_USD_PER_M_OUTPUT) / 1_000_000
+    (textImageVideoInputTokens * rates.input) / 1_000_000 +
+    (audioInputTokens * rates.audioInput) / 1_000_000 +
+    (TEXT_BASE_OUTPUT_TOKENS * rates.output) / 1_000_000
   );
 }
 
@@ -435,24 +492,34 @@ export type MeasuredTextUsage = {
   outputTokens?: number;
 };
 
-/** Provider USD for Gemini 3.5 Flash text tokens. */
-export function textProviderCostUsd(usage: MeasuredTextUsage): number {
+/** Provider USD for Seed Lite / Mini text tokens. */
+export function textProviderCostUsd(
+  usage: MeasuredTextUsage,
+  textModel: TextPricingModel = "lite",
+): number {
+  const rates = textRates(textModel);
   const inputTokens = Math.max(0, Math.floor(usage.inputTokens ?? 0));
   const outputTokens = Math.max(0, Math.floor(usage.outputTokens ?? 0));
   return (
-    (inputTokens * TEXT_USD_PER_M_INPUT) / 1_000_000 +
-    (outputTokens * TEXT_USD_PER_M_OUTPUT) / 1_000_000
+    (inputTokens * rates.input) / 1_000_000 +
+    (outputTokens * rates.output) / 1_000_000
   );
 }
 
 /** Customer TT$ = 2× measured provider USD, rounded up to TT$0.01. */
-export function textSellPriceFromUsageTtd(usage: MeasuredTextUsage): number {
-  const raw = textProviderCostUsd(usage) * USD_TO_TTD * 2;
+export function textSellPriceFromUsageTtd(
+  usage: MeasuredTextUsage,
+  textModel: TextPricingModel = "lite",
+): number {
+  const raw = textProviderCostUsd(usage, textModel) * USD_TO_TTD * 2;
   return Math.max(TEXT_MIN_SELL_TTD, roundUpToCentTtd(raw));
 }
 
-export function textCreditsFromMeasuredUsage(usage: MeasuredTextUsage): number {
-  const sellTtd = textSellPriceFromUsageTtd(usage);
+export function textCreditsFromMeasuredUsage(
+  usage: MeasuredTextUsage,
+  textModel: TextPricingModel = "lite",
+): number {
+  const sellTtd = textSellPriceFromUsageTtd(usage, textModel);
   return Math.round((sellTtd / CREDIT_PRICE_TTD) * 100) / 100;
 }
 
@@ -476,11 +543,12 @@ export function measuredTextUsageFromGateway(usage: {
   };
 }
 
-/** Customer TT$ for script / Assistance / element text = 2× Gemini 3.5 Flash COGS, min / step TT$0.01. */
+/** Customer TT$ for script / Assistance / element text = 2× Seed text COGS, min / step TT$0.01. */
 export function textSellPriceTtd(args: {
   imageReferenceCount?: number;
   videoReferenceCount?: number;
   audioReferenceCount?: number;
+  textModel?: TextPricingModel;
 }): number {
   const raw = estimateTextModelUsd(args) * USD_TO_TTD * 2;
   return Math.max(TEXT_MIN_SELL_TTD, roundUpToCentTtd(raw));
@@ -492,12 +560,16 @@ export function textCreditCost(args: {
   audioReferenceCount?: number;
   inputTokens?: number;
   outputTokens?: number;
+  textModel?: TextPricingModel;
 }): number {
   if (args.inputTokens != null || args.outputTokens != null) {
-    return textCreditsFromMeasuredUsage({
-      inputTokens: args.inputTokens,
-      outputTokens: args.outputTokens,
-    });
+    return textCreditsFromMeasuredUsage(
+      {
+        inputTokens: args.inputTokens,
+        outputTokens: args.outputTokens,
+      },
+      args.textModel ?? "lite",
+    );
   }
   const sellTtd = textSellPriceTtd(args);
   // Fractional credits so TT$0.01 → 0.02 credits (ledger is TT$0.50 / credit).
@@ -583,6 +655,7 @@ export function creditCostForGeneration(args: {
   aspectRatio?: string;
   durationSeconds?: number;
   hasReferenceInput?: boolean;
+  referenceImageCount?: number;
   hasVideoReferenceInput?: boolean;
   hasNonVideoReferenceInput?: boolean;
   audioEnabled?: boolean;
@@ -605,5 +678,6 @@ export function creditCostForGeneration(args: {
     quality: args.quality,
     aspectRatio: args.aspectRatio,
     hasReferenceInput: args.hasReferenceInput,
+    referenceImageCount: args.referenceImageCount,
   });
 }

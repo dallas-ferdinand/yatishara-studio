@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   CREDIT_PRICE_TTD,
+  IMAGE_REFERENCE_SURCHARGE,
+  SEEDREAM_USD_EXTRA_REFERENCE,
   TEXT_MIN_SELL_TTD,
+  estimateImageModelUsd,
+  imageCreditCost,
   textCreditsFromMeasuredUsage,
   textCreditCost,
   textSellPriceFromUsageTtd,
+  videoCreditCost,
 } from "./generationPricing";
 
 describe("measured text usage pricing", () => {
@@ -32,8 +37,24 @@ describe("measured text usage pricing", () => {
     ).toBe(0.26);
   });
 
+  it("bills DM Improve at Seed Mini list rates", () => {
+    // 10k @ $0.10/M + 2k @ $0.40/M = $0.0018 → ×20 = TT$0.036 → ceil 0.04
+    expect(
+      textSellPriceFromUsageTtd(
+        { inputTokens: 10_000, outputTokens: 2_000 },
+        "mini",
+      ),
+    ).toBe(0.04);
+    expect(
+      textCreditCost({
+        inputTokens: 10_000,
+        outputTokens: 2_000,
+        textModel: "mini",
+      }),
+    ).toBe(0.08);
+  });
+
   it("rounds fractional TT$ up to the next cent", () => {
-    // 1 input token → tiny USD → still floors at TT$0.01
     expect(
       textSellPriceFromUsageTtd({
         inputTokens: 1,
@@ -41,7 +62,6 @@ describe("measured text usage pricing", () => {
       }),
     ).toBe(TEXT_MIN_SELL_TTD);
 
-    // 100 input @ $0.25/M + 50 output @ $2/M = $0.000125 → ×20 = TT$0.0025 → ceil $0.01
     expect(
       textSellPriceFromUsageTtd({
         inputTokens: 100,
@@ -49,8 +69,6 @@ describe("measured text usage pricing", () => {
       }),
     ).toBe(0.01);
 
-    // 5_000 input + 500 output:
-    // (5000*0.25 + 500*2)/1e6 = 0.00225 USD → ×20 = TT$0.045 → ceil 0.05
     expect(
       textSellPriceFromUsageTtd({
         inputTokens: 5_000,
@@ -71,5 +89,50 @@ describe("measured text usage pricing", () => {
         imageReferenceCount: 99,
       }),
     ).toBeGreaterThan(measured);
+  });
+});
+
+describe("Seedream exact BytePlus image pricing", () => {
+  it("uses $0.045 / $0.09 with first ref free and $0.003 extras", () => {
+    expect(estimateImageModelUsd({ resolution: "1K" })).toBe(0.045);
+    expect(estimateImageModelUsd({ resolution: "2K" })).toBe(0.09);
+    expect(estimateImageModelUsd({ resolution: "4K" })).toBe(0.09);
+    expect(
+      estimateImageModelUsd({ resolution: "2K", referenceImageCount: 1 }),
+    ).toBe(0.09);
+    expect(
+      estimateImageModelUsd({ resolution: "2K", referenceImageCount: 3 }),
+    ).toBe(0.09 + 2 * SEEDREAM_USD_EXTRA_REFERENCE);
+    expect(IMAGE_REFERENCE_SURCHARGE).toBe(1);
+  });
+
+  it("charges 2 / 4 credits for 1K / 2K with no refs", () => {
+    expect(imageCreditCost({ resolution: "1K" })).toBe(2);
+    expect(imageCreditCost({ resolution: "2K" })).toBe(4);
+    // First ref free — still 4 credits at 2K
+    expect(
+      imageCreditCost({ resolution: "2K", referenceImageCount: 1 }),
+    ).toBe(4);
+  });
+});
+
+describe("Seedance with-video list rate", () => {
+  it("uses cheaper $/M when a video reference is present", () => {
+    const noVideo = videoCreditCost({
+      resolution: "720p",
+      durationSeconds: 15,
+      videoModel: "seedance-2.5",
+      hasVideoReferenceInput: false,
+    });
+    const withVideo = videoCreditCost({
+      resolution: "720p",
+      durationSeconds: 15,
+      videoModel: "seedance-2.5",
+      hasVideoReferenceInput: true,
+    });
+    expect(noVideo).toBe(139);
+    expect(withVideo).toBeLessThan(noVideo);
+    // $6.40/$10.70 of 139 ≈ 83.1 → round 83
+    expect(withVideo).toBe(83);
   });
 });
