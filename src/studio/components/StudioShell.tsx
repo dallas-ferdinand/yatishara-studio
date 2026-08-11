@@ -15646,6 +15646,21 @@ export function StudioShell({
           box-shadow: none !important;
           transition: none;
         }
+        /* Create detail rail: zero layout width so no gap beside the sidebar. */
+        .studio-polish .studio-workspace-panels .studio-gen-detail-resize {
+          width: 0 !important;
+          min-width: 0 !important;
+          flex: 0 0 0 !important;
+          margin-inline: 0 !important;
+        }
+        .studio-polish .studio-workspace-panels .studio-gen-detail-resize::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: -6px;
+          width: 12px;
+        }
         .studio-polish .cursor-resize:hover,
         .studio-polish .cursor-resize[data-resize-handle-active] {
           background: transparent !important;
@@ -34105,14 +34120,14 @@ function StudioWorkspaceColumn({
         <Panel id="studio-gen-detail-main" order={1} defaultSize={72} minSize={42} className="min-h-0 min-w-0">
           {children}
         </Panel>
-        <PanelResizeHandle className="cursor-resize" />
+        <PanelResizeHandle className="cursor-resize studio-gen-detail-resize" />
         <Panel
           id="studio-gen-detail-side"
           order={2}
           defaultSize={28}
           minSize={18}
           maxSize={42}
-          className="min-h-0 min-w-0"
+          className="min-h-0 min-w-0 studio-gen-detail-panel"
         >
           {generationDetailPanel}
         </Panel>

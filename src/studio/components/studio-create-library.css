@@ -534,8 +534,11 @@
   justify-content: space-between;
   gap: 10px;
   flex-shrink: 0;
-  min-height: 52px;
-  padding: 10px 12px;
+  box-sizing: border-box;
+  min-height: var(--cursor-head-h, 52px);
+  height: var(--cursor-head-h, 52px);
+  max-height: var(--cursor-head-h, 52px);
+  padding: 0 10px 0 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border, #fff) 14%, transparent);
 }
 
@@ -962,15 +965,24 @@
   width: 100%;
   flex-shrink: 0;
   z-index: 1;
+  box-sizing: border-box;
+  min-height: var(--cursor-head-h, 52px);
+  height: var(--cursor-head-h, 52px);
+  max-height: var(--cursor-head-h, 52px);
 }
 
 .studio-gen-lightbox .desk-image-viewer-name {
-  display: block;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
+}
+
+[data-appearance="light"] .studio-gen-lightbox .desk-image-viewer,
+[data-appearance="light"] .studio-gen-lightbox .desk-media-player--studio-preview,
+[data-appearance="light"] .studio-gen-lightbox .desk-image-viewer-toolbar,
+[data-appearance="light"] .studio-gen-lightbox .desk-media-player--studio-preview .desk-image-viewer-toolbar,
+[data-appearance="light"] .studio-gen-lightbox .desk-image-viewer-stage,
+[data-appearance="light"] .studio-gen-lightbox .desk-media-player--studio-preview .desk-media-player-stage,
+[data-appearance="light"] .studio-gen-lightbox .desk-media-player--studio-preview .desk-image-viewer-stage {
+  background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
 }
 
 .studio-gen-lightbox .desk-image-viewer-stage,

@@ -287,7 +287,6 @@ export function StudioCreateLibrary({
               kind="video"
               layout="studio-preview"
               src={lightbox.url}
-              name={lightbox.name}
               poster={lightbox.thumbUrl}
               onDownload={downloadLightbox}
             />
@@ -296,14 +295,12 @@ export function StudioCreateLibrary({
               kind="audio"
               layout="studio-preview"
               src={lightbox.url}
-              name={lightbox.name}
               onDownload={downloadLightbox}
             />
           ) : (
             <ImageZoomViewer
               thumbUrl={lightbox.thumbUrl || lightbox.url}
               fullUrl={lightbox.url || lightbox.thumbUrl}
-              name={lightbox.name}
               onDownload={downloadLightbox}
             />
           )}
