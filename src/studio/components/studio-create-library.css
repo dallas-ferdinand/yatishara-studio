@@ -4,6 +4,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
   height: 100%;
   min-height: 0;
   min-width: 0;
@@ -21,6 +22,11 @@
   min-height: 0;
   overflow: auto;
   padding: 10px 12px 24px;
+}
+
+/* Preview mode: drop masonry under the lightbox and fill flush under tabs. */
+.studio-create-library.is-previewing .studio-create-library-scroll {
+  display: none;
 }
 
 .studio-create-library-empty {
@@ -950,6 +956,15 @@
   min-height: 0;
   background: color-mix(in srgb, #000 88%, transparent);
   padding: 0;
+}
+
+.studio-create-library.is-previewing .studio-gen-lightbox {
+  position: relative;
+  inset: auto;
+  flex: 1 1 0;
+  width: 100%;
+  height: auto;
+  min-height: 0;
 }
 
 [data-appearance="light"] .studio-gen-lightbox {
