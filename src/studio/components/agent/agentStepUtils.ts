@@ -35,6 +35,8 @@ export type AgentAttachmentChip = {
   studioKind?: string;
   studioId?: string;
   path?: string;
+  thumbnailUrl?: string;
+  mediaUrl?: string;
 };
 
 export type AgentRunRow = {
@@ -115,6 +117,9 @@ export function parseAgentAttachments(raw?: string | null): AgentAttachmentChip[
         studioKind: typeof row.studioKind === "string" ? row.studioKind : undefined,
         studioId: typeof row.studioId === "string" ? row.studioId : undefined,
         path: typeof row.path === "string" ? row.path : undefined,
+        thumbnailUrl:
+          typeof row.thumbnailUrl === "string" ? row.thumbnailUrl : undefined,
+        mediaUrl: typeof row.mediaUrl === "string" ? row.mediaUrl : undefined,
       };
       if (chip.studioId || chip.label) out.push(chip);
     }

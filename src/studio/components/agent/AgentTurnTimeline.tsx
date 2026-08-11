@@ -1,7 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import {
+  FileText,
+  Folder,
+  Image as ImageIcon,
+  Loader2,
+  Music,
+  Shapes,
+  Video,
+} from "lucide-react";
+import { useQuery } from "convex/react";
+import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { StudioChatMarkdown } from "../StudioChatMarkdown";
 import { AgentApprovalStep } from "./AgentApprovalStep";
@@ -34,6 +44,78 @@ type AgentTurnTimelineProps = {
   onOpenFolder?: (folderId: Id<"folders">) => void;
 };
 
+function chipLabel(attachment: AgentAttachmentChip) {
+  return (
+    attachment.label ||
+    attachment.path ||
+    attachment.studioId ||
+    "Attachment"
+  );
+}
+
+function ChipGlyph({ attachment }: { attachment: AgentAttachmentChip }) {
+  const size = 11;
+  if (attachment.kind === "video") return <Video size={size} aria-hidden="true" />;
+  if (attachment.kind === "audio") return <Music size={size} aria-hidden="true" />;
+  if (attachment.kind === "image") return <ImageIcon size={size} aria-hidden="true" />;
+  if (attachment.studioKind === "folder") return <Folder size={size} aria-hidden="true" />;
+  if (attachment.studioKind === "document") return <FileText size={size} aria-hidden="true" />;
+  if (attachment.studioKind === "element") return <Shapes size={size} aria-hidden="true" />;
+  return <FileText size={size} aria-hidden="true" />;
+}
+
+function AgentBubbleChip({
+  attachment,
+  previewUrl,
+  resolvedKind,
+}: {
+  attachment: AgentAttachmentChip;
+  previewUrl?: string;
+  resolvedKind?: string;
+}) {
+  const label = chipLabel(attachment);
+  const kind = resolvedKind || attachment.kind;
+  const isVideo = kind === "video";
+  const isImage = kind === "image";
+  const showThumb = Boolean(previewUrl) && (isImage || isVideo);
+
+  if (showThumb && previewUrl) {
+    return (
+      <span
+        className="studio-inline-tag studio-inline-tag--preview studio-inline-tag--image-only studio-agent-attachment-chip is-static is-inline"
+        title={label}
+      >
+        <span className="studio-inline-tag-kind">
+          {isVideo ? (
+            <video
+              className="studio-inline-tag-media"
+              src={previewUrl}
+              muted
+              playsInline
+              preload="metadata"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="studio-inline-tag-media" src={previewUrl} alt="" />
+          )}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="studio-inline-tag studio-agent-attachment-chip is-static is-inline"
+      title={label}
+    >
+      <span className="studio-inline-tag-kind">
+        <ChipGlyph attachment={{ ...attachment, kind: kind || attachment.kind }} />
+      </span>
+      <span className="studio-inline-tag-label">{label}</span>
+    </span>
+  );
+}
+
 function TurnBlock({
   turn,
   expandedStepId,
@@ -41,6 +123,7 @@ function TurnBlock({
   approvalById,
   onDecideApproval,
   onOpenFolder,
+  thumbById,
 }: {
   turn: AgentTurn;
   expandedStepId: string | null;
@@ -48,60 +131,59 @@ function TurnBlock({
   approvalById: Map<string, AgentApprovalRow>;
   onDecideApproval: AgentTurnTimelineProps["onDecideApproval"];
   onOpenFolder?: (folderId: Id<"folders">) => void;
+  thumbById: Map<string, { url: string; kind: string }>;
 }) {
   const inline = useMemo(
     () => splitUserTextWithAttachments(turn.userText, turn.attachments ?? []),
     [turn.userText, turn.attachments],
   );
 
+  const previewFor = (attachment: AgentAttachmentChip) => {
+    const local = attachment.thumbnailUrl || attachment.mediaUrl;
+    if (local) {
+      return { url: local, kind: attachment.kind };
+    }
+    if (attachment.studioKind === "asset" && attachment.studioId) {
+      return thumbById.get(attachment.studioId);
+    }
+    return undefined;
+  };
+
   return (
     <section className="studio-agent-turn" aria-label="Agent turn">
       {inline.parts.length || turn.userText ? (
         <article className="studio-chat-bubble is-user studio-agent-user-bubble">
           {inline.parts.length
-            ? inline.parts.map((part) =>
-                part.type === "text" ? (
-                  <span key={part.key}>{part.value}</span>
-                ) : (
-                  <span
+            ? inline.parts.map((part) => {
+                if (part.type === "text") {
+                  return <span key={part.key}>{part.value}</span>;
+                }
+                const preview = previewFor(part.attachment);
+                return (
+                  <AgentBubbleChip
                     key={part.key}
-                    className="studio-inline-tag studio-agent-attachment-chip is-static is-inline"
-                    title={
-                      part.attachment.path ||
-                      part.attachment.label ||
-                      part.attachment.studioId ||
-                      "Attachment"
-                    }
-                  >
-                    <span className="studio-inline-tag-kind">
-                      {chipKindLabel(part.attachment)}
-                    </span>
-                    <span className="studio-inline-tag-label">
-                      {part.attachment.label ||
-                        part.attachment.path ||
-                        part.attachment.studioId ||
-                        "Attachment"}
-                    </span>
-                  </span>
-                ),
-              )
+                    attachment={part.attachment}
+                    previewUrl={preview?.url}
+                    resolvedKind={preview?.kind || part.attachment.kind}
+                  />
+                );
+              })
             : turn.userText}
         </article>
       ) : null}
       {inline.leftover.length ? (
         <div className="studio-agent-turn-attachments" aria-label="Attached items">
-          {inline.leftover.map((attachment, index) => (
-            <span
-              key={`${attachment.studioId ?? attachment.label ?? "attachment"}-${index}`}
-              className="studio-inline-tag studio-agent-attachment-chip is-static"
-              title={attachment.path || attachment.label || attachment.studioId || "Attachment"}
-            >
-              <span className="studio-inline-tag-kind">{chipKindLabel(attachment)}</span>
-              <span className="studio-inline-tag-label">
-                {attachment.label || attachment.path || attachment.studioId || "Attachment"}
-              </span>
-            </span>
-          ))}
+          {inline.leftover.map((attachment, index) => {
+            const preview = previewFor(attachment);
+            return (
+              <AgentBubbleChip
+                key={`${attachment.studioId ?? attachment.label ?? "attachment"}-${index}`}
+                attachment={attachment}
+                previewUrl={preview?.url}
+                resolvedKind={preview?.kind || attachment.kind}
+              />
+            );
+          })}
         </div>
       ) : null}
 
@@ -154,16 +236,6 @@ function TurnBlock({
   );
 }
 
-function chipKindLabel(attachment: AgentAttachmentChip) {
-  if (attachment.kind === "image") return "IMG";
-  if (attachment.kind === "video") return "VID";
-  if (attachment.kind === "audio") return "AUD";
-  if (attachment.studioKind === "folder") return "DIR";
-  if (attachment.studioKind === "document") return "DOC";
-  if (attachment.studioKind === "element") return "EL";
-  return "REF";
-}
-
 function splitUserTextWithAttachments(
   text: string,
   attachments: AgentAttachmentChip[],
@@ -203,6 +275,22 @@ function splitUserTextWithAttachments(
   return { parts, leftover };
 }
 
+function collectAssetIds(
+  turns: AgentTurn[],
+  pendingAttachments?: AgentAttachmentChip[] | null,
+): Id<"assets">[] {
+  const ids = new Set<string>();
+  for (const turn of turns) {
+    for (const item of turn.attachments ?? []) {
+      if (item.studioKind === "asset" && item.studioId) ids.add(item.studioId);
+    }
+  }
+  for (const item of pendingAttachments ?? []) {
+    if (item.studioKind === "asset" && item.studioId) ids.add(item.studioId);
+  }
+  return [...ids].slice(0, 40) as Id<"assets">[];
+}
+
 export function AgentTurnTimeline({
   messages,
   toolCalls,
@@ -234,8 +322,37 @@ export function AgentTurnTimeline({
         pendingUserText,
         pendingAttachments,
       }),
-    [messages, toolCalls, runs, approvals, busy, activeRunId, pendingUserText, pendingAttachments],
+    [
+      messages,
+      toolCalls,
+      runs,
+      approvals,
+      busy,
+      activeRunId,
+      pendingUserText,
+      pendingAttachments,
+    ],
   );
+
+  const assetIds = useMemo(
+    () => collectAssetIds(turns, pendingAttachments),
+    [turns, pendingAttachments],
+  );
+  const assets = useQuery(
+    api.assets.listByIds,
+    assetIds.length ? { assetIds, quality: "thumb" as const } : "skip",
+  );
+  const thumbById = useMemo(() => {
+    const map = new Map<string, { url: string; kind: string }>();
+    for (const asset of assets ?? []) {
+      const url =
+        asset.signedThumbnailUrl ||
+        asset.signedThumbnailLqipUrl ||
+        (asset.kind === "image" ? asset.signedReadUrl : undefined);
+      if (url) map.set(String(asset._id), { url, kind: asset.kind });
+    }
+    return map;
+  }, [assets]);
 
   function toggleStep(id: string) {
     setExpandedStepId((prev) => (prev === id ? null : id));
@@ -252,6 +369,7 @@ export function AgentTurnTimeline({
           approvalById={approvalById}
           onDecideApproval={onDecideApproval}
           onOpenFolder={onOpenFolder}
+          thumbById={thumbById}
         />
       ))}
     </>
