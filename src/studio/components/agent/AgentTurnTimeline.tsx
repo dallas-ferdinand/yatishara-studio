@@ -242,38 +242,42 @@ function TurnBlock({
       ) : null}
 
       {visibleSteps.length > 0 || showThinking ? (
-        <div className="studio-agent-turn-steps" role="list">
-          {visibleSteps.map((step) => {
-            const approval =
-              step.approvalId != null
-                ? approvalById.get(String(step.approvalId))
-                : undefined;
-            if (step.kind === "approval" && approval) {
-              return (
-                <AgentApprovalStep
-                  key={step.id}
-                  step={step}
-                  approval={approval}
-                  expanded={expandedStepId === step.id}
-                  onToggle={() => onToggleStep(step.id)}
-                  onDecide={onDecideApproval}
-                  onOpenFolder={onOpenFolder}
-                  previewUrl={primaryPreview?.url}
-                  previewKind={primaryPreview?.kind}
-                />
-              );
-            }
-            return (
-              <AgentStepRow
-                key={step.id}
-                step={step}
-                expanded={expandedStepId === step.id}
-                onToggle={() => onToggleStep(step.id)}
-                onOpenFolder={onOpenFolder}
-                onOpenDocument={onOpenDocument}
-              />
-            );
-          })}
+        <div className="studio-agent-turn-activity">
+          {visibleSteps.length > 0 ? (
+            <div className="studio-agent-turn-steps" role="list">
+              {visibleSteps.map((step) => {
+                const approval =
+                  step.approvalId != null
+                    ? approvalById.get(String(step.approvalId))
+                    : undefined;
+                if (step.kind === "approval" && approval) {
+                  return (
+                    <AgentApprovalStep
+                      key={step.id}
+                      step={step}
+                      approval={approval}
+                      expanded={expandedStepId === step.id}
+                      onToggle={() => onToggleStep(step.id)}
+                      onDecide={onDecideApproval}
+                      onOpenFolder={onOpenFolder}
+                      previewUrl={primaryPreview?.url}
+                      previewKind={primaryPreview?.kind}
+                    />
+                  );
+                }
+                return (
+                  <AgentStepRow
+                    key={step.id}
+                    step={step}
+                    expanded={expandedStepId === step.id}
+                    onToggle={() => onToggleStep(step.id)}
+                    onOpenFolder={onOpenFolder}
+                    onOpenDocument={onOpenDocument}
+                  />
+                );
+              })}
+            </div>
+          ) : null}
           {showThinking ? <AgentThinkingCard key="thinking" label="Thinking" /> : null}
         </div>
       ) : null}
