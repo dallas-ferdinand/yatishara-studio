@@ -2354,6 +2354,43 @@ export const failJob = internalMutation({
   },
 });
 
+/** Owner stop from Create library — refunds reserved credits like failJob. */
+export const cancelMyJob = authedMutation({
+  args: {
+    jobId: v.id("generationJobs"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("generationJobs", args.jobId);
+    if (!job || job.ownerId !== ctx.user._id) {
+      throw new Error("Unauthorized");
+    }
+    if (job.stage === "done" || job.stage === "failed") {
+      return null;
+    }
+    const error = "Cancelled by you.";
+    const now = Date.now();
+    if (job.reservedCreditTransactionId) {
+      await refundReservedCredits(ctx, job, error);
+    }
+    await ctx.db.patch(job._id, {
+      stage: "failed",
+      error,
+      updatedAt: now,
+    });
+    await ctx.db.insert("generationEvents", {
+      ownerId: job.ownerId,
+      threadId: job.threadId,
+      kind: "stage",
+      order: now,
+      stage: "failed",
+      generationJobId: job._id,
+      createdAt: now,
+    });
+    return null;
+  },
+});
+
 async function requireThreadOwner(
   ctx: (QueryCtx | MutationCtx) & { user: Doc<"users"> & { _id: Id<"users"> } },
   threadId: Id<"generationThreads">,

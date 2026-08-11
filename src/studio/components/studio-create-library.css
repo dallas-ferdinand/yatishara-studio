@@ -120,12 +120,94 @@
   object-fit: cover;
 }
 
-.studio-gen-tile-media.is-audio,
-.studio-gen-tile-media.is-pending {
+.studio-gen-tile-media.is-square,
+.studio-gen-tile-media.is-audio:not(.is-audio-player),
+.studio-gen-tile.is-busy .studio-gen-tile-media,
+.studio-gen-tile.is-failed .studio-gen-tile-media {
   aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.studio-gen-tile-media.is-audio-player {
+  aspect-ratio: auto;
+  min-height: 0;
+  display: block;
+  padding: 8px;
+  background: var(--studio-grid-tile-bg, color-mix(in srgb, var(--color-cursor-fg, #fff) 4%, transparent));
+}
+
+.studio-gen-tile-audio {
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-gen-tile-audio .studio-chat-audio-player {
+  width: 100%;
+}
+
+.studio-gen-tile-spinner {
+  opacity: 0.55;
+  color: var(--color-cursor-muted, #8b8b8b);
+}
+
+.studio-gen-tile-stop {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  margin: auto;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #fff 22%, transparent);
+  background: color-mix(in srgb, #000 48%, transparent);
+  color: #fff;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.studio-gen-tile-stop.is-static {
+  pointer-events: none;
+  cursor: default;
+  opacity: 0.92;
+}
+
+.studio-gen-tile-stop:hover:not(.is-static):not(:disabled) {
+  background: color-mix(in srgb, #000 66%, transparent);
+}
+
+.studio-gen-tile-stop:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.studio-gen-tile.is-failed .studio-gen-tile-media {
+  background: color-mix(in srgb, var(--mos-bg, #000) 28%, transparent);
+}
+
+[data-appearance="light"] .studio-gen-tile.is-failed .studio-gen-tile-media {
+  background: color-mix(in srgb, #000 5%, #fff);
+}
+
+.studio-gen-tile-audio-details {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-cursor-border, #fff) 22%, transparent);
+  background: color-mix(in srgb, var(--mos-panel, #111) 78%, transparent);
+  color: var(--color-cursor-fg, #e8e8e8);
+  cursor: pointer;
 }
 
 .studio-gen-tile-badge {

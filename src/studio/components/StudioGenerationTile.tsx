@@ -1,14 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import {
+  Ban,
   Expand,
   Film,
   Info,
   Loader2,
   Play,
-  Sparkles,
 } from "lucide-react";
+import { toast } from "sonner";
+import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import {
+  StudioChatAudioPlayer,
+  StudioChatAudioPlayerLoading,
+} from "./StudioChatAudioPlayer";
 
 export type GenerationLibraryTile = {
   jobId: string;
@@ -46,6 +55,10 @@ function isBusy(stage: GenerationLibraryTile["stage"]) {
   return stage === "queued" || stage === "generating" || stage === "saving";
 }
 
+function wasCancelled(error?: string) {
+  return /cancell?ed by you/i.test(String(error ?? ""));
+}
+
 export function StudioGenerationTile({
   tile,
   selected,
@@ -56,14 +69,20 @@ export function StudioGenerationTile({
   onGenerateVideo,
   isMobile,
 }: StudioGenerationTileProps) {
+  const cancelJob = useMutation(api.generation.cancelMyJob);
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const busy = isBusy(tile.stage);
   const failed = tile.stage === "failed";
+  const cancelled = failed && wasCancelled(tile.error);
+  const squareFrame = busy || failed;
+  const doneAudio = tile.kind === "audio" && tile.stage === "done" && Boolean(tile.playableUrl);
   const canPlay =
     Boolean(tile.playableUrl || tile.thumbnailUrl) &&
     tile.stage === "done" &&
-    (tile.kind === "video" || tile.kind === "audio" || tile.kind === "image");
+    tile.kind !== "audio" &&
+    (tile.kind === "video" || tile.kind === "image");
   const canUpscale = tile.kind === "image" && tile.stage === "done" && Boolean(tile.assetId);
   const canVideo = tile.kind === "image" && tile.stage === "done" && Boolean(tile.assetId);
 
@@ -80,6 +99,10 @@ export function StudioGenerationTile({
   }, [overlayOpen, isMobile]);
 
   function handleTileClick() {
+    if (doneAudio) {
+      onSelect(tile);
+      return;
+    }
     if (isMobile) {
       if (!overlayOpen) {
         setOverlayOpen(true);
@@ -92,11 +115,38 @@ export function StudioGenerationTile({
     onSelect(tile);
   }
 
+  async function handleStop(event: MouseEvent) {
+    event.stopPropagation();
+    if (!busy || stopping) return;
+    setStopping(true);
+    try {
+      await cancelJob({ jobId: tile.jobId as Id<"generationJobs"> });
+      toast.message("Generation stopped");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not stop generation."));
+    } finally {
+      setStopping(false);
+    }
+  }
+
+  const mediaClass = [
+    "studio-gen-tile-media",
+    squareFrame ? "is-square" : "",
+    tile.kind === "audio" ? "is-audio" : "",
+    doneAudio ? "is-audio-player" : "",
+    busy ? "is-busy" : "",
+    failed ? "is-failed" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <div
       ref={rootRef}
       className={`studio-gen-tile${selected ? " is-selected" : ""}${
         overlayOpen ? " is-overlay-open" : ""
+      }${failed ? " is-failed" : ""}${busy ? " is-busy" : ""}${
+        doneAudio ? " is-audio-ready" : ""
       }`}
       role="button"
       tabIndex={0}
@@ -109,77 +159,126 @@ export function StudioGenerationTile({
       }}
       aria-label={tile.name}
     >
-      <div
-        className={`studio-gen-tile-media${
-          tile.kind === "audio" || (!tile.thumbnailUrl && busy) ? ` is-${tile.kind === "audio" ? "audio" : "pending"}` : ""
-        }`}
-      >
-        {tile.kind === "video" && tile.playableUrl && !tile.thumbnailUrl ? (
+      <div className={mediaClass}>
+        {doneAudio ? (
+          <div
+            className="studio-gen-tile-audio"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <StudioChatAudioPlayer
+              src={tile.playableUrl!}
+              title={tile.name}
+              compact
+              durationHint={tile.durationSeconds}
+            />
+          </div>
+        ) : tile.kind === "audio" && busy ? (
+          <StudioChatAudioPlayerLoading
+            label={tile.stage}
+            ariaLabel={`Generating audio (${tile.stage})`}
+          />
+        ) : tile.kind === "video" && tile.playableUrl && !tile.thumbnailUrl && !failed ? (
           <video src={tile.playableUrl} muted playsInline preload="metadata" />
-        ) : tile.thumbnailUrl ? (
+        ) : tile.thumbnailUrl && !failed ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={tile.thumbnailUrl} alt="" draggable={false} />
         ) : busy ? (
-          <Loader2 className="h-6 w-6 animate-spin opacity-70" aria-hidden="true" />
-        ) : (
-          <Sparkles className="h-6 w-6 opacity-50" aria-hidden="true" />
-        )}
+          <Loader2 className="studio-gen-tile-spinner h-6 w-6 animate-spin" aria-hidden="true" />
+        ) : null}
+
+        {/* Kind badge stays normal even when failed */}
+        <span className="studio-gen-tile-badge">{tile.kind}</span>
 
         {busy ? (
-          <span className="studio-gen-tile-badge is-busy">{tile.stage}</span>
-        ) : failed ? (
-          <span className="studio-gen-tile-badge is-failed">failed</span>
-        ) : (
-          <span className="studio-gen-tile-badge">{tile.kind}</span>
-        )}
-
-        <div className="studio-gen-tile-overlay" onClick={(event) => event.stopPropagation()}>
-          {canPlay ? (
-            <button
-              type="button"
-              className="studio-gen-tile-action"
-              title="Play"
-              aria-label="Play"
-              onClick={() => onPlay(tile)}
-            >
-              <Play className="h-4 w-4" aria-hidden="true" />
-            </button>
-          ) : null}
-          {canUpscale && onUpscale ? (
-            <button
-              type="button"
-              className="studio-gen-tile-action"
-              title="Upscale"
-              aria-label="Upscale"
-              onClick={() => onUpscale(tile)}
-            >
-              <Expand className="h-4 w-4" aria-hidden="true" />
-            </button>
-          ) : null}
-          {canVideo && onGenerateVideo ? (
-            <button
-              type="button"
-              className="studio-gen-tile-action"
-              title="Generate video"
-              aria-label="Generate video"
-              onClick={() => onGenerateVideo(tile)}
-            >
-              <Film className="h-4 w-4" aria-hidden="true" />
-            </button>
-          ) : null}
           <button
             type="button"
-            className="studio-gen-tile-action"
+            className={`studio-gen-tile-stop${stopping ? " is-busy" : ""}`}
+            title="Stop"
+            aria-label="Stop generation"
+            disabled={stopping}
+            onClick={(event) => void handleStop(event)}
+          >
+            {stopping ? (
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Ban className="h-5 w-5" aria-hidden="true" />
+            )}
+          </button>
+        ) : null}
+
+        {failed ? (
+          <div
+            className="studio-gen-tile-stop is-static"
+            title={cancelled ? "Stopped" : "Failed"}
+            aria-hidden="true"
+          >
+            <Ban className="h-5 w-5" />
+          </div>
+        ) : null}
+
+        {!doneAudio ? (
+          <div className="studio-gen-tile-overlay" onClick={(event) => event.stopPropagation()}>
+            {canPlay ? (
+              <button
+                type="button"
+                className="studio-gen-tile-action"
+                title="Play"
+                aria-label="Play"
+                onClick={() => onPlay(tile)}
+              >
+                <Play className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : null}
+            {canUpscale && onUpscale ? (
+              <button
+                type="button"
+                className="studio-gen-tile-action"
+                title="Upscale"
+                aria-label="Upscale"
+                onClick={() => onUpscale(tile)}
+              >
+                <Expand className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : null}
+            {canVideo && onGenerateVideo ? (
+              <button
+                type="button"
+                className="studio-gen-tile-action"
+                title="Generate video"
+                aria-label="Generate video"
+                onClick={() => onGenerateVideo(tile)}
+              >
+                <Film className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="studio-gen-tile-action"
+              title="Open details"
+              aria-label="Open details"
+              onClick={() => {
+                onOpenDetails(tile);
+                setOverlayOpen(false);
+              }}
+            >
+              <Info className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="studio-gen-tile-audio-details"
             title="Open details"
             aria-label="Open details"
-            onClick={() => {
+            onClick={(event) => {
+              event.stopPropagation();
               onOpenDetails(tile);
-              setOverlayOpen(false);
             }}
           >
-            <Info className="h-4 w-4" aria-hidden="true" />
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
-        </div>
+        )}
       </div>
     </div>
   );
