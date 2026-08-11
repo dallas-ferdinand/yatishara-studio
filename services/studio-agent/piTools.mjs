@@ -16,6 +16,21 @@ import {
   DESCRIBE_EXAMPLES,
   agentDescription,
 } from "./agentLanes.mjs";
+import { compactObservation, observationByteBudget } from "./agentCompact.mjs";
+import { validateHotToolArgs, HOT_SCHEMAS } from "./agentSchemas.mjs";
+import {
+  listSkills,
+  getSkill,
+  matchSkills,
+  skillPromptBlock,
+} from "./agentSkills.mjs";
+import {
+  verifyHintFor,
+  autoVerifyTool,
+  autoVerifyArgs,
+} from "./agentVerify.mjs";
+import { createPlanStore } from "./agentPlan.mjs";
+import { createTrajectory } from "./agentTrajectory.mjs";
 
 function textResult(payload) {
   const text =
@@ -95,6 +110,7 @@ async function fetchImageBlock(url, fallbackMimeType = "") {
  *   localHandlers?: Record<string, (args: Record<string, unknown>) => Promise<any>>,
  *   onBeforeInvoke?: (info: { toolName: string, args: Record<string, unknown> }) => Promise<{ toolCallId?: string }|void>,
  *   onAfterInvoke?: (info: { toolCallId?: string, toolName: string, ok: boolean, result?: any, error?: string }) => Promise<void>,
+ *   trajectory?: ReturnType<typeof createTrajectory>,
  * }} opts
  */
 export function createStudioPiTools(opts) {
@@ -109,6 +125,8 @@ export function createStudioPiTools(opts) {
       "marketplace",
     ];
   const localHandlers = opts.localHandlers ?? {};
+  const planStore = createPlanStore();
+  const trajectory = opts.trajectory || createTrajectory();
 
   const catalog = defineTool({
     name: "catalog",
@@ -117,8 +135,9 @@ export function createStudioPiTools(opts) {
       "List Studio tools (lean). Default = high-use starter set. Pass q or category to search. Then describe/invoke by name. Never invent studio_* as top-level Pi tools.",
     promptSnippet: "List Studio API tools (then invoke by name)",
     promptGuidelines: [
-      "Only Pi tools are catalog, describe, invoke, inspect, remember.",
+      "Only Pi tools are catalog, describe, invoke, inspect, remember, skills, plan.",
       "Prefer catalog with q= (e.g. q=post, q=generate, q=move) — avoid dumping everything.",
+      "Load a skill pack with skills before multi-step work.",
       "Never call studio_* as a top-level tool name.",
     ],
     parameters: Type.Object({
@@ -184,6 +203,7 @@ export function createStudioPiTools(opts) {
       }
       const auth = authorizeTool(params.name, { surface: "agent", role, scopes });
       const example = DESCRIBE_EXAMPLES[params.name];
+      const hot = HOT_SCHEMAS[params.name];
       return textResult({
         ok: auth.ok,
         ...(auth.ok ? {} : { error: auth.error }),
@@ -196,6 +216,13 @@ export function createStudioPiTools(opts) {
           requiresApproval: info.requiresApproval,
           inputSchema: info.inputSchema,
           ...(example ? { exampleArgs: example } : {}),
+          ...(hot
+            ? {
+                requiredArgs: hot.required,
+                ...(hot.enums ? { enums: hot.enums } : {}),
+                ...(hot.oneOfGroups ? { oneOfGroups: hot.oneOfGroups } : {}),
+              }
+            : {}),
         },
       });
     },
@@ -205,12 +232,13 @@ export function createStudioPiTools(opts) {
     name: "invoke",
     label: "Invoke",
     description:
-      "Run a Studio tool: { name:\"studio_*\", args:{...} }. Reads/safe writes run now. Paid/destructive/outbound/admin → approval card (YOLO may auto-run).",
+      "Run a Studio tool: { name:\"studio_*\", args:{...} }. Results are compacted. Paid/destructive/outbound/admin → approval card (YOLO may auto-run). Pass verbose:true only if you need more fields.",
     promptSnippet: "Run a Studio tool via name + args",
     promptGuidelines: [
       "Always pass the Studio tool name in invoke.name (e.g. studio_create_folder).",
       "Pass arguments in invoke.args as a JSON object.",
       "Do the action — don't explain how unless the user asked how.",
+      "Follow verifyHint in the result before claiming success.",
     ],
     parameters: Type.Object({
       name: Type.String({
@@ -221,6 +249,11 @@ export function createStudioPiTools(opts) {
           description: "Arguments object for that Studio tool",
         }),
       ),
+      verbose: Type.Optional(
+        Type.Boolean({
+          description: "If true, return a larger (still slimmed) observation",
+        }),
+      ),
     }),
     async execute(toolCallId, params, _signal, onUpdate) {
       const toolName = String(params.name || "").trim();
@@ -228,11 +261,28 @@ export function createStudioPiTools(opts) {
         params.args && typeof params.args === "object" && !Array.isArray(params.args)
           ? params.args
           : {};
+      const verbose = Boolean(params.verbose);
       if (!toolName) {
         return textResult({
           ok: false,
           error:
             "invoke requires name (Studio tool id). Example: { name: \"studio_create_folder\", args: { name: \"X\" } }",
+        });
+      }
+
+      const validated = validateHotToolArgs(toolName, toolArgs);
+      if (!validated.ok) {
+        trajectory.recordTool({
+          toolName,
+          ok: false,
+          error: validated.error,
+        });
+        return textResult({
+          ok: false,
+          toolName,
+          error: validated.error,
+          example: validated.example,
+          hint: "Fix args (see example) or call describe for the tool.",
         });
       }
 
@@ -242,7 +292,7 @@ export function createStudioPiTools(opts) {
       });
 
       const started = opts.onBeforeInvoke
-        ? await opts.onBeforeInvoke({ toolName, args: toolArgs })
+        ? await opts.onBeforeInvoke({ toolName, args: validated.args })
         : null;
       const trackId = started?.toolCallId;
 
@@ -259,6 +309,7 @@ export function createStudioPiTools(opts) {
                 ? `Call catalog with q=${toolName.replace(/^studio_/, "").slice(0, 24)} then describe the match before retrying invoke.`
                 : undefined,
           };
+          trajectory.recordTool({ toolName, ok: false, error: auth.error });
           await opts.onAfterInvoke?.({
             toolCallId: trackId,
             toolName,
@@ -272,7 +323,7 @@ export function createStudioPiTools(opts) {
           if (typeof opts.onApprovalRequired === "function") {
             const approval = await opts.onApprovalRequired({
               toolName,
-              args: toolArgs,
+              args: validated.args,
               tool: auth.tool,
               toolCallId: trackId,
             });
@@ -285,7 +336,18 @@ export function createStudioPiTools(opts) {
                   result: approval,
                 });
               }
-              return textResult(approval);
+              const compact = compactObservation(toolName, approval, {
+                verifyHint: approval?.pendingApproval
+                  ? "Approval pending in chat — stop and wait."
+                  : verifyHintFor(toolName, validated.args, approval) || undefined,
+              });
+              trajectory.recordTool({
+                toolName,
+                ok: true,
+                pendingApproval: Boolean(approval?.pendingApproval),
+                bytes: observationByteBudget(compact),
+              });
+              return textResult(compact);
             }
           } else {
             const fail = {
@@ -294,6 +356,7 @@ export function createStudioPiTools(opts) {
               toolName,
               error: "Approval required but no approval handler configured",
             };
+            trajectory.recordTool({ toolName, ok: false, error: fail.error });
             await opts.onAfterInvoke?.({
               toolCallId: trackId,
               toolName,
@@ -306,7 +369,7 @@ export function createStudioPiTools(opts) {
 
         let result;
         if (localHandlers[toolName]) {
-          const data = await localHandlers[toolName](toolArgs);
+          const data = await localHandlers[toolName](validated.args);
           result = { ok: true, toolName, data };
         } else {
           const token = await opts.getBearerToken();
@@ -314,20 +377,58 @@ export function createStudioPiTools(opts) {
             opts.apiBase,
             token,
             toolName,
-            toolArgs,
+            validated.args,
           );
         }
 
+        const ok = Boolean(result?.ok !== false);
+        let verified;
+        const autoName = ok ? autoVerifyTool(toolName) : null;
+        if (autoName && !result?.pendingApproval) {
+          const vArgs = autoVerifyArgs(autoName, validated.args, result);
+          if (vArgs) {
+            try {
+              const token = await opts.getBearerToken();
+              const vRes = await invokeStudioTool(
+                opts.apiBase,
+                token,
+                autoName,
+                vArgs,
+              );
+              verified = compactObservation(autoName, vRes);
+            } catch (error) {
+              verified = {
+                ok: false,
+                toolName: autoName,
+                error: error instanceof Error ? error.message : String(error),
+              };
+            }
+          }
+        }
+
+        const compact = compactObservation(toolName, result, {
+          verbose,
+          verifyHint: verifyHintFor(toolName, validated.args, result) || undefined,
+          ...(verified ? { verified } : {}),
+        });
+
+        trajectory.recordTool({
+          toolName,
+          ok,
+          error: result?.error,
+          bytes: observationByteBudget(compact),
+        });
         await opts.onAfterInvoke?.({
           toolCallId: trackId,
           toolName,
-          ok: Boolean(result?.ok !== false),
-          result,
+          ok,
+          result: compact,
           error: result?.error,
         });
-        return textResult(result);
+        return textResult(compact);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        trajectory.recordTool({ toolName, ok: false, error: message });
         await opts.onAfterInvoke?.({
           toolCallId: trackId,
           toolName,
@@ -543,5 +644,89 @@ export function createStudioPiTools(opts) {
     },
   });
 
-  return [catalog, describe, invoke, inspect, remember];
+  const skills = defineTool({
+    name: "skills",
+    label: "Skills",
+    description:
+      "List or load a short workflow recipe (post-feed, generate-image, generate-video-people, move-items, trash-cleanup, send-dm). Use before multi-step work.",
+    promptSnippet: "Load a Studio workflow skill pack",
+    parameters: Type.Object({
+      id: Type.Optional(
+        Type.String({ description: "Skill id, e.g. post-feed. Omit to list." }),
+      ),
+      q: Type.Optional(Type.String({ description: "Filter skills by keyword" })),
+    }),
+    async execute(_toolCallId, params) {
+      const id = textValue(params.id);
+      if (id) {
+        const skill = getSkill(id);
+        if (!skill) {
+          return textResult({
+            ok: false,
+            error: `Unknown skill: ${id}`,
+            available: listSkills().map((s) => s.id),
+          });
+        }
+        return textResult({ ok: true, skill });
+      }
+      return textResult({
+        ok: true,
+        skills: matchSkills(params.q),
+        hint: skillPromptBlock(),
+      });
+    },
+  });
+
+  const plan = defineTool({
+    name: "plan",
+    label: "Plan",
+    description:
+      "Optional multi-step checklist for jobs with 3+ steps. Actions: get | set | update | clear. Skip for one-shot post/move/send.",
+    promptSnippet: "Maintain a short todo plan for this turn",
+    parameters: Type.Object({
+      action: Type.Union([
+        Type.Literal("get"),
+        Type.Literal("set"),
+        Type.Literal("update"),
+        Type.Literal("clear"),
+      ]),
+      goal: Type.Optional(Type.String()),
+      steps: Type.Optional(
+        Type.Array(
+          Type.Union([
+            Type.String(),
+            Type.Object({
+              id: Type.Optional(Type.String()),
+              text: Type.Optional(Type.String()),
+              title: Type.Optional(Type.String()),
+              status: Type.Optional(Type.String()),
+            }),
+          ]),
+        ),
+      ),
+      id: Type.Optional(Type.String()),
+      status: Type.Optional(Type.String()),
+    }),
+    async execute(_toolCallId, params) {
+      const action = params.action;
+      if (action === "get") return textResult({ ok: true, plan: planStore.get() });
+      if (action === "clear") return textResult(planStore.clear());
+      if (action === "set") {
+        return textResult({
+          ok: true,
+          plan: planStore.set(params.goal || "", params.steps || []),
+        });
+      }
+      if (action === "update") {
+        return textResult(
+          planStore.update(String(params.id || ""), String(params.status || "")),
+        );
+      }
+      return textResult({ ok: false, error: "unknown plan action" });
+    },
+  });
+
+  return [catalog, describe, invoke, inspect, remember, skills, plan];
 }
+
+export { createTrajectory };

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "dev": "node --watch server.mjs"
+    "dev": "node --watch server.mjs",
+    "test": "node --test evals/*.test.mjs",
+    "test:harness": "node --test evals/*.test.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.1",

@@ -52,9 +52,15 @@ export STUDIO_AGENT_WORKER_TOKEN=dev
 npm start
 ```
 
-Tools: dynamic `catalog` / `describe` / `invoke` / `remember` from
-`services/studio-agent/piTools.mjs` (Pi `defineTool` + TypeBox +
-`AgentToolResult`). Studio HTTP via `@yatishara/studio-tools`.
+Tools: `catalog` / `describe` / `invoke` / `inspect` / `remember` / `skills` / `plan`
+from `piTools.mjs`. Studio HTTP via `@yatishara/studio-tools`.
+Harness extras: lean catalog, intent lanes, compact observations, hot-tool
+schemas, verify-after-act, skill packs, plan todos, trajectory logs.
+
+```bash
+npm test   # golden harness evals (no LLM)
+```
+
 MCP is not on the in-app path.
 
 Do **not** register raw JSON-Schema tools with `execute(args)` — Pi expects

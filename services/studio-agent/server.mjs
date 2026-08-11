@@ -14,8 +14,9 @@ import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { createStudioPiTools } from "./piTools.mjs";
+import { createStudioPiTools, createTrajectory } from "./piTools.mjs";
 import { detectActionLane } from "./agentLanes.mjs";
+import { skillPromptBlock } from "./agentSkills.mjs";
 import { invokeStudioTool } from "../../packages/studio-tools/src/http.js";
 
 const PORT = Number(process.env.STUDIO_AGENT_PORT || process.env.PORT || 8796);
@@ -191,6 +192,15 @@ async function runPiTurn(body, abortSignal) {
     const mod = await import("@earendil-works/pi-coding-agent");
     const { createAgentSession, SessionManager } = mod;
 
+    const laneEarly = detectActionLane(
+      expandAttachmentTokens(message, workingSet).trim() || message,
+      workingSet,
+    );
+    const trajectory = createTrajectory({
+      lane: laneEarly,
+      message: String(message || ""),
+    });
+
     const tools = createStudioPiTools({
       apiBase: studioApiBase,
       role,
@@ -203,6 +213,7 @@ async function runPiTurn(body, abortSignal) {
           "social",
           "marketplace",
         ],
+      trajectory,
       getBearerToken: async () => capabilityToken,
       onBeforeInvoke: async ({ toolName, args }) =>
         callback(callbackBase, workerCallbackToken, "tool-start", {
@@ -336,19 +347,25 @@ async function runPiTurn(body, abortSignal) {
 
     const userMessage =
       expandAttachmentTokens(message, workingSet).trim() || "(attachments only)";
-    const lane = detectActionLane(userMessage, workingSet);
+    const lane = laneEarly || detectActionLane(userMessage, workingSet);
 
     const system = [
       "Yatishara Studio Agent. Act with tools — don't advise how unless asked.",
-      "Pi tools only: catalog, describe, invoke, inspect, remember.",
+      "Pi tools: catalog, describe, invoke, inspect, remember, skills, plan.",
       "Studio actions: invoke {name:\"studio_*\", args:{...}}. Never call studio_* as a top-level tool.",
-      "catalog: default=starter set; use q= or category= to search. describe before invoke if args unclear.",
-      "Attached chips are primary scope — use their ids. Tokens like [asset:Name id=...] are chips.",
-      "Orient: studio_workspace_tree {} or studio_search. studio_folder_contents needs a real folderId.",
-      "Paid/destructive/outbound/admin → approval card (stop; chat UI handles it). Never claim success without tool ok.",
-      "inspect: only when you need to see image pixels beyond attached vision; max 8 assetIds; videos → pull frames first.",
-      "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets for lists. No ids/JSON/debug talk.",
-      "remember for durable prefs. Admin tools only if admin. Never touch other users' data.",
+      "catalog: starter set by default; q= or category= to search. describe if args unclear.",
+      skillPromptBlock(),
+      "plan: only for 3+ step jobs (set/update/get). Skip for one-shot post/move/send.",
+      "Attached chips are primary scope — use their ids. Tokens like [asset:Name id=…] are chips.",
+      "Orient: studio_workspace_tree {} or studio_search. folder_contents needs a real folderId.",
+      "Ambiguity: if attached ids cover the action, invoke now. Ask only when a required arg is missing.",
+      "Cost: for paid generate, estimate first when the user did not clearly confirm spend.",
+      "Paid/destructive/outbound/admin → approval card (stop; chat UI handles it).",
+      "Done criteria: never claim success unless invoke ok (or pendingApproval). Follow verifyHint / verified.",
+      "Failures: on error → fix args or catalog/describe → retry once → then tell the user the error. Never invent 'tool unavailable'.",
+      "inspect: only for pixels beyond attached vision; max 8; videos → pull frames first.",
+      "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets. No ids/JSON/debug talk.",
+      "remember for durable prefs. Admin only if admin. Never touch other users' data.",
       lane,
       byokFallbackNote || "",
       memoryBlock,
@@ -436,10 +453,13 @@ async function runPiTurn(body, abortSignal) {
       } catch {
         // ignore dispose errors
       }
+      const traj = trajectory.snapshot();
+      console.log("[studio-agent] trajectory", JSON.stringify(traj));
       return {
         pendingApproval: true,
         usage: { inputTokens, outputTokens },
         model: `${session.model?.provider || PLATFORM_PROVIDER}/${session.model?.id || PLATFORM_MODEL}`,
+        trajectory: traj,
       };
     }
     if (!String(assistantText).trim()) {
@@ -452,10 +472,13 @@ async function runPiTurn(body, abortSignal) {
     } catch {
       // ignore dispose errors
     }
+    const traj = trajectory.snapshot();
+    console.log("[studio-agent] trajectory", JSON.stringify(traj));
     return {
       assistantText: String(assistantText),
       usage: { inputTokens, outputTokens },
       model: `${session.model?.provider || PLATFORM_PROVIDER}/${session.model?.id || PLATFORM_MODEL}`,
+      trajectory: traj,
     };
   } finally {
     clearInterval(cancelPoll);
@@ -470,9 +493,19 @@ const server = createServer(async (req, res) => {
         JSON.stringify({
           ok: true,
           harness: "pi",
+          version: "harness-2026-08-11",
           sessions: sessions.size,
           authRequired: true,
           catalog: "studio-tools",
+          tools: [
+            "catalog",
+            "describe",
+            "invoke",
+            "inspect",
+            "remember",
+            "skills",
+            "plan",
+          ],
         }),
       );
       return;
