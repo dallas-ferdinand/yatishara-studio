@@ -133,15 +133,39 @@ export function deriveStepKind(
 }
 
 export function friendlyErrorLine(toolName: string, error?: string | null): string {
-  const title = humanToolTitle(toolName);
+  const action = humanToolTitle(toolName).toLowerCase();
   const raw = String(error || "").trim();
-  if (!raw) return `Couldn't complete ${title.toLowerCase()}.`;
+  if (!raw) return `Couldn't ${action}`;
+
   if (/invalid or expired agent capability/i.test(raw)) {
-    return `Couldn't ${title.toLowerCase()} — session expired. Send again.`;
+    return `Couldn't ${action} — session expired. Send again.`;
   }
   if (/insufficient|credit/i.test(raw)) {
-    return `Couldn't ${title.toLowerCase()} — need more credits.`;
+    return `Couldn't ${action} — need more credits.`;
   }
-  if (raw.length > 120) return `Couldn't ${title.toLowerCase()} — see details.`;
-  return `Couldn't ${title.toLowerCase()} — ${raw}`;
+  if (/not found/i.test(raw)) {
+    return `Couldn't ${action} — not found`;
+  }
+  // Internal invoke / catalog / HTTP noise — keep the chip human.
+  if (
+    /missing path param/i.test(raw) ||
+    /unknown tool/i.test(raw) ||
+    /http\s*\d{3}/i.test(raw) ||
+    /pathTemplate/i.test(raw) ||
+    /argumentvalidation|extra field/i.test(raw) ||
+    /\bstudio_[a-z0-9_]+\b/i.test(raw)
+  ) {
+    return `Couldn't ${action}`;
+  }
+
+  let cleaned = raw
+    .replace(/\bstudio_[a-z0-9_]+\b/gi, "")
+    .replace(/\bMissing path param\b[^.]*/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s—\-–:,.]+|[\s—\-–:,.]+$/g, "")
+    .trim();
+  if (!cleaned || cleaned.length > 72 || /[{}\[\]`\\/]/.test(cleaned)) {
+    return `Couldn't ${action}`;
+  }
+  return `Couldn't ${action} — ${cleaned}`;
 }
