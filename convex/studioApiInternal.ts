@@ -1123,10 +1123,18 @@ export const createDocumentForApi = internalMutation({
   handler: async (ctx, args) => {
     await requireFolderForUser(ctx, args.userId, args.folderId, args.sandboxFolderId);
     const now = Date.now();
+    const title = args.title.trim();
+    const content = String(args.contentMarkdown ?? "").trim();
+    // Same gate as documents.create — agent HTTP must not land empty Scripts/Prompts.
+    if (!content && /prompt|script/i.test(title)) {
+      throw new Error(
+        "Script content is empty. Pass contentMarkdown with the full prompt/script body.",
+      );
+    }
     return await ctx.db.insert("documents", {
       ownerId: args.userId,
       folderId: args.folderId,
-      title: args.title.trim(),
+      title,
       contentMarkdown: args.contentMarkdown ?? "",
       createdAt: now,
       updatedAt: now,

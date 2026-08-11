@@ -55,6 +55,8 @@ type AgentTurnTimelineProps = {
     }>,
   ) => Promise<void> | void;
   onOpenFolder?: (folderId: Id<"folders">) => void;
+  onOpenDocument?: (documentId: Id<"documents">) => void;
+  onOpenAsset?: (assetId: Id<"assets">) => void;
 };
 
 function chipLabel(attachment: AgentAttachmentChip) {
@@ -137,6 +139,8 @@ function TurnBlock({
   onDecideApproval,
   onAnswerQuestions,
   onOpenFolder,
+  onOpenDocument,
+  onOpenAsset,
   thumbById,
   questions,
 }: {
@@ -147,6 +151,8 @@ function TurnBlock({
   onDecideApproval: AgentTurnTimelineProps["onDecideApproval"];
   onAnswerQuestions: AgentTurnTimelineProps["onAnswerQuestions"];
   onOpenFolder?: (folderId: Id<"folders">) => void;
+  onOpenDocument?: (documentId: Id<"documents">) => void;
+  onOpenAsset?: (assetId: Id<"assets">) => void;
   thumbById: Map<string, { url: string; kind: string; readUrl?: string }>;
   questions: AgentQuestionRow[];
 }) {
@@ -264,6 +270,7 @@ function TurnBlock({
                 expanded={expandedStepId === step.id}
                 onToggle={() => onToggleStep(step.id)}
                 onOpenFolder={onOpenFolder}
+                onOpenDocument={onOpenDocument}
               />
             );
           })}
@@ -333,6 +340,15 @@ function TurnBlock({
                     {media.name ? (
                       <span className="studio-agent-media-caption">{media.name}</span>
                     ) : null}
+                    {media.assetId && onOpenAsset ? (
+                      <button
+                        type="button"
+                        className="studio-agent-media-open"
+                        onClick={() => onOpenAsset(media.assetId as Id<"assets">)}
+                      >
+                        Open
+                      </button>
+                    ) : null}
                   </div>
                 );
               }
@@ -349,10 +365,39 @@ function TurnBlock({
                     {media.name ? (
                       <span className="studio-agent-media-caption">{media.name}</span>
                     ) : null}
+                    {media.assetId && onOpenAsset ? (
+                      <button
+                        type="button"
+                        className="studio-agent-media-open"
+                        onClick={() => onOpenAsset(media.assetId as Id<"assets">)}
+                      >
+                        Open
+                      </button>
+                    ) : null}
                   </div>
                 );
               }
               if (previewUrl || fullUrl) {
+                if (media.assetId && onOpenAsset) {
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className="studio-agent-media-card is-image is-openable"
+                      onClick={() => onOpenAsset(media.assetId as Id<"assets">)}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        className="studio-agent-media-frame"
+                        src={previewUrl || fullUrl}
+                        alt={media.name || "Generated image"}
+                      />
+                      {media.name ? (
+                        <span className="studio-agent-media-caption">{media.name}</span>
+                      ) : null}
+                    </button>
+                  );
+                }
                 return (
                   <div key={key} className="studio-agent-media-card is-image">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -455,6 +500,8 @@ export function AgentTurnTimeline({
   onDecideApproval,
   onAnswerQuestions,
   onOpenFolder,
+  onOpenDocument,
+  onOpenAsset,
 }: AgentTurnTimelineProps) {
   const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
 
@@ -565,6 +612,8 @@ export function AgentTurnTimeline({
             onDecideApproval={onDecideApproval}
             onAnswerQuestions={onAnswerQuestions}
             onOpenFolder={onOpenFolder}
+            onOpenDocument={onOpenDocument}
+            onOpenAsset={onOpenAsset}
             thumbById={thumbById}
             questions={attached}
           />

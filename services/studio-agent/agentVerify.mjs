@@ -40,6 +40,19 @@ export const VERIFY_MAP = {
   studio_trash: {
     hint: () => "VERIFY: item should be gone from folder; list_trash if user asks.",
   },
+  studio_create_document: {
+    hint: (_args, result) => {
+      const id =
+        result?.data?.documentId ||
+        result?.data?._id ||
+        result?.data?.id ||
+        result?.data?.document?._id ||
+        result?.data?.document?.id;
+      return id
+        ? `VERIFY: Script id=${id}. Use that id for studio_get_document / patch — never invent ids. Never create empty Prompt/Script bodies.`
+        : "VERIFY: create must return document id; never claim saved without id; never empty Script contentMarkdown.";
+    },
+  },
   studio_send_message: {
     hint: () => "VERIFY: only claim sent if invoke ok (or approval pending).",
   },

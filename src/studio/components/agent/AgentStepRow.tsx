@@ -21,6 +21,7 @@ type AgentStepRowProps = {
   expanded: boolean;
   onToggle: () => void;
   onOpenFolder?: (folderId: Id<"folders">) => void;
+  onOpenDocument?: (documentId: Id<"documents">) => void;
   approvalSlot?: React.ReactNode;
 };
 
@@ -75,11 +76,13 @@ export function AgentStepRow({
   expanded,
   onToggle,
   onOpenFolder,
+  onOpenDocument,
   approvalSlot,
 }: AgentStepRowProps) {
   const isError = step.kind === "error" || step.status === "failed";
   const canExpand = isError && Boolean(step.error || step.resultJson);
   const folderId = step.outcome?.folderId;
+  const documentId = step.outcome?.documentId;
   // Prefer friendly action title; append compact outcome when useful (search counts, model list).
   const label = isError
     ? step.subtitle || step.title
@@ -91,6 +94,10 @@ export function AgentStepRow({
       : step.title;
 
   function handleClick() {
+    if (documentId && onOpenDocument) {
+      onOpenDocument(documentId);
+      return;
+    }
     if (folderId && onOpenFolder) {
       onOpenFolder(folderId);
       return;
@@ -98,7 +105,9 @@ export function AgentStepRow({
     if (canExpand) onToggle();
   }
 
-  const interactive = Boolean((folderId && onOpenFolder) || canExpand);
+  const interactive = Boolean(
+    (documentId && onOpenDocument) || (folderId && onOpenFolder) || canExpand,
+  );
 
   return (
     <div

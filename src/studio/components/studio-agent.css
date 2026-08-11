@@ -30,9 +30,9 @@
 }
 
 .studio-agent-pane .studio-chat-stream {
-  /* Small end pad only; docked composer already clears the viewport. */
-  padding-bottom: 12px;
-  scroll-padding-bottom: 12px;
+  /* Extra end pad so last steps / generate tiles clear the composer dock. */
+  padding-bottom: 64px;
+  scroll-padding-bottom: 64px;
 }
 
 /* Message column 18px narrower than composer — same as DM .studio-dm-messages. */

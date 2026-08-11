@@ -25396,6 +25396,16 @@ export function StudioShell({
                 setFilesDockExpanded(true);
               }
             }}
+            onOpenDocument={(documentId) => {
+              if (!documentId) return;
+              openTab(`document:${documentId}`);
+              if (isMobile) setMobileSection("composer");
+            }}
+            onOpenAsset={(assetId) => {
+              if (!assetId) return;
+              openTab(`asset:${assetId}`);
+              if (isMobile) setMobileSection("composer");
+            }}
             expiresUnix={assetUrlExpiresUnix}
             generationDetailJobId={generationDetail?.jobId ?? null}
             isMobileLayout={isMobile}
@@ -31565,6 +31575,8 @@ function ActivePane({
   onBindAgentThreadTab,
   onOpenNewAgentTab,
   onOpenFolder,
+  onOpenDocument,
+  onOpenAsset,
   expiresUnix,
   generationDetailJobId = null,
   onSelectGenerationTile,
@@ -31759,6 +31771,8 @@ function ActivePane({
         onBindThreadTab={onBindAgentThreadTab}
         onOpenNewAgentTab={onOpenNewAgentTab}
         onOpenFolder={onOpenFolder}
+        onOpenDocument={onOpenDocument}
+        onOpenAsset={onOpenAsset}
         activeFolderId={activeFolderId}
         isMobile={isMobileLayout}
         expiresUnix={expiresUnix}

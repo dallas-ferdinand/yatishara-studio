@@ -667,21 +667,35 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       if (!body.title?.trim()) {
         return finish(errorResponse("title is required"));
       }
+      const title = body.title.trim();
+      const content = String(body.contentMarkdown ?? "").trim();
+      if (!content && /prompt|script/i.test(title)) {
+        return finish(
+          errorResponse(
+            "Script content is empty. Pass contentMarkdown with the full prompt/script body.",
+          ),
+        );
+      }
       const folderId = await resolveFolderId(ctx, auth, body.folderId);
-      const documentId = await ctx.runMutation(internal.studioApiInternal.createDocumentForApi, {
-        userId: auth.userId,
-        sandboxFolderId: auth.sandboxFolderId,
-        folderId,
-        title: body.title,
-        contentMarkdown: body.contentMarkdown,
-      });
-      const document = await ctx.runQuery(internal.studioApiInternal.getDocument, {
-        userId: auth.userId,
-        sandboxFolderId: auth.sandboxFolderId,
-        documentId,
-        expiresUnix,
-      });
-      return finish(jsonResponse({ document }, 201));
+      try {
+        const documentId = await ctx.runMutation(internal.studioApiInternal.createDocumentForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          folderId,
+          title: body.title,
+          contentMarkdown: body.contentMarkdown,
+        });
+        const document = await ctx.runQuery(internal.studioApiInternal.getDocument, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          documentId,
+          expiresUnix,
+        });
+        return finish(jsonResponse({ document }, 201));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Create failed";
+        return finish(errorResponse(msg, 400));
+      }
     }
 
     const documentPatchMatch = route.match(/^documents\/([^/]+)\/patch$/);

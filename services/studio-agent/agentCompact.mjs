@@ -110,6 +110,7 @@ const FIELD_HINTS = {
     "thumbnailUrl",
     "url",
     "id",
+    "_id",
   ],
   studio_generate_video: [
     "assetId",
@@ -123,6 +124,7 @@ const FIELD_HINTS = {
     "thumbnailUrl",
     "url",
     "id",
+    "_id",
   ],
   studio_generate_audio: [
     "assetId",
@@ -135,6 +137,7 @@ const FIELD_HINTS = {
     "assetIds",
     "url",
     "id",
+    "_id",
   ],
   studio_estimate_generation: [
     "credits",
@@ -146,6 +149,7 @@ const FIELD_HINTS = {
     "ok",
   ],
   studio_create_document: ["id", "_id", "documentId", "folderId", "title", "name"],
+  studio_get_document: ["id", "_id", "documentId", "folderId", "title", "name", "contentMarkdown"],
   studio_patch_document: ["id", "_id", "documentId", "applied", "replacements", "title"],
   studio_update_document: ["id", "_id", "documentId", "folderId", "title", "name"],
   studio_bulk_move: ["moved", "errors", "count", "targetFolderId"],
@@ -154,11 +158,63 @@ const FIELD_HINTS = {
   studio_search: ["results", "items", "count", "query"],
   studio_workspace_tree: ["roots", "folders", "count", "truncated"],
   studio_folder_contents: ["folders", "assets", "documents", "elements"],
-  studio_get_asset: ["_id", "id", "name", "kind", "folderId", "mimeType"],
-  studio_view_media: ["thumbnailUrl", "preferredViewUrl", "url", "kind"],
+  studio_get_asset: ["_id", "id", "assetId", "name", "kind", "folderId", "mimeType"],
+  studio_view_media: ["thumbnailUrl", "preferredViewUrl", "url", "kind", "assetId", "id", "_id"],
   studio_send_message: ["messageId", "conversationId", "ok"],
   studio_send_media_message: ["messageIds", "conversationId", "ok", "delivered"],
 };
+
+/**
+ * Flatten nested `{ document }` / `{ asset }` wrappers so FIELD_HINTS can pick ids.
+ * Without this, create/get observations lose documentId/assetId and later opens fail.
+ * @param {string} toolName
+ * @param {Record<string, unknown>} data
+ */
+function flattenNestedPayload(toolName, data) {
+  if (!data || typeof data !== "object") return data;
+  let next = data;
+
+  if (/document/i.test(toolName) && data.document && typeof data.document === "object") {
+    const doc = data.document;
+    const id =
+      (typeof doc._id === "string" && doc._id) ||
+      (typeof doc.id === "string" && doc.id) ||
+      (typeof data.documentId === "string" && data.documentId) ||
+      null;
+    next = {
+      ...next,
+      ...(id ? { id, _id: id, documentId: id } : {}),
+      folderId: doc.folderId ?? next.folderId,
+      title: doc.title ?? next.title,
+      name: doc.title ?? next.name,
+    };
+  }
+
+  if (
+    (/generate_|get_asset|view_media/i.test(toolName) || /asset/i.test(toolName)) &&
+    data.asset &&
+    typeof data.asset === "object"
+  ) {
+    const asset = data.asset;
+    const id =
+      (typeof asset._id === "string" && asset._id) ||
+      (typeof asset.id === "string" && asset.id) ||
+      (typeof asset.assetId === "string" && asset.assetId) ||
+      (typeof data.assetId === "string" && data.assetId) ||
+      null;
+    next = {
+      ...next,
+      ...(id ? { id, _id: id, assetId: id } : {}),
+      folderId: asset.folderId ?? next.folderId,
+      name: asset.name ?? next.name,
+      kind: asset.kind ?? next.kind,
+      url: asset.url ?? next.url,
+      thumbnailUrl: asset.thumbnailUrl ?? next.thumbnailUrl,
+    };
+  }
+
+  return next;
+}
 
 /**
  * @param {string} toolName
@@ -196,13 +252,14 @@ export function compactObservation(toolName, result, extra = {}) {
     return { ...base, data: rewriteMoneyFields(slimValue(result.data ?? result)) };
   }
 
-  const data = result.data && typeof result.data === "object" ? result.data : result;
+  let data = result.data && typeof result.data === "object" ? result.data : result;
+  data = flattenNestedPayload(name, data);
   const keys = FIELD_HINTS[name];
   if (keys) {
     const picked = pick(data, keys);
     // Also pull nested data if empty
     if (Object.keys(picked).length === 0 && result.data) {
-      Object.assign(picked, pick(result.data, keys));
+      Object.assign(picked, pick(flattenNestedPayload(name, result.data), keys));
     }
     // Arrays: keep short summaries; generation assets keep media urls
     for (const [k, v] of Object.entries(picked)) {

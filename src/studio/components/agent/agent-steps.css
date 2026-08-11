@@ -373,6 +373,38 @@
   min-width: 0;
 }
 
+button.studio-agent-media-card {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button.studio-agent-media-card.is-openable:hover .studio-agent-media-frame {
+  outline: 2px solid color-mix(in srgb, var(--mos-accent, #0a7) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.studio-agent-media-open {
+  align-self: flex-start;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--mos-accent, #0a7);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .studio-agent-media-card.is-pending {
   aspect-ratio: var(--agent-gen-aspect, 16 / 9);
   max-height: 360px;

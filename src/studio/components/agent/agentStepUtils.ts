@@ -61,6 +61,8 @@ export type StepOutcome = {
   label: string;
   folderId?: Id<"folders">;
   folderName?: string;
+  documentId?: Id<"documents">;
+  documentTitle?: string;
 };
 
 export type AgentMediaPreview = {
@@ -187,6 +189,38 @@ export function extractOutcome(
     }
   }
 
+  if (
+    toolName === "studio_create_document" ||
+    toolName === "studio_update_document" ||
+    toolName === "studio_patch_document" ||
+    toolName === "studio_get_document"
+  ) {
+    const doc =
+      payload.document && typeof payload.document === "object"
+        ? (payload.document as Record<string, unknown>)
+        : payload;
+    const title =
+      (typeof doc.title === "string" && doc.title) ||
+      (typeof doc.name === "string" && doc.name) ||
+      undefined;
+    const idRaw =
+      (typeof doc.documentId === "string" && doc.documentId) ||
+      (typeof doc.id === "string" && doc.id) ||
+      (typeof doc._id === "string" && doc._id) ||
+      undefined;
+    if (idRaw) {
+      return {
+        label: title ? (toolName === "studio_create_document" ? `Created ${title}` : title) : "Script",
+        documentId: idRaw as Id<"documents">,
+        documentTitle: title,
+        folderId:
+          typeof doc.folderId === "string"
+            ? (doc.folderId as Id<"folders">)
+            : undefined,
+      };
+    }
+  }
+
   if (toolName === "studio_search") {
     const results = payload.results;
     if (Array.isArray(results)) {
@@ -277,10 +311,18 @@ export function extractGeneratedMedia(
       if (item && typeof item === "object") pushAsset(item as Record<string, unknown>);
     }
   }
+  if (
+    !out.length &&
+    payload.asset &&
+    typeof payload.asset === "object"
+  ) {
+    pushAsset(payload.asset as Record<string, unknown>);
+  }
   if (!out.length) {
     const assetId =
       (typeof payload.assetId === "string" && payload.assetId) ||
       (typeof payload.id === "string" && payload.id) ||
+      (typeof payload._id === "string" && payload._id) ||
       undefined;
     if (assetId || payload.thumbnailUrl || payload.url) {
       pushAsset(payload);

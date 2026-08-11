@@ -60,6 +60,8 @@ type StudioAgentPaneProps = {
   onBindThreadTab?: (threadId: Id<"agentThreads">) => void;
   onOpenNewAgentTab?: () => void;
   onOpenFolder?: (folderId: Id<"folders">) => void;
+  onOpenDocument?: (documentId: Id<"documents">) => void;
+  onOpenAsset?: (assetId: Id<"assets">) => void;
   /** Files pane folder currently open — agent saves prompts/media here by default. */
   activeFolderId?: Id<"folders"> | null;
   isMobile?: boolean;
@@ -552,6 +554,8 @@ export function StudioAgentPane({
   onOpenAgentSettings,
   onBindThreadTab,
   onOpenFolder,
+  onOpenDocument,
+  onOpenAsset,
   activeFolderId = null,
   isMobile = false,
   expiresUnix,
@@ -1116,6 +1120,8 @@ export function StudioAgentPane({
                 onDecideApproval={handleDecide}
                 onAnswerQuestions={handleAnswerQuestions}
                 onOpenFolder={onOpenFolder}
+                onOpenDocument={onOpenDocument}
+                onOpenAsset={onOpenAsset}
               />
             )}
           </div>

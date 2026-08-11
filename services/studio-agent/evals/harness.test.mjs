@@ -155,6 +155,45 @@ test("compact observations shrink fat payloads", () => {
   assert.ok(compact.verifyHint === undefined || typeof compact.verifyHint === "string");
 });
 
+test("compactObservation keeps document id from nested document payload", () => {
+  const compact = compactObservation("studio_create_document", {
+    ok: true,
+    data: {
+      document: {
+        _id: "doc_abc",
+        title: "Script — Degreaser",
+        folderId: "fold_1",
+        contentMarkdown: "body",
+      },
+    },
+  });
+  assert.equal(compact.ok, true);
+  assert.equal(compact.data.documentId, "doc_abc");
+  assert.equal(compact.data._id, "doc_abc");
+  assert.equal(compact.data.folderId, "fold_1");
+  assert.equal(compact.data.title, "Script — Degreaser");
+});
+
+test("compactObservation keeps assetId from nested asset payload", () => {
+  const compact = compactObservation("studio_generate_image", {
+    ok: true,
+    data: {
+      asset: {
+        _id: "ast_1",
+        name: "flyer.png",
+        kind: "image",
+        folderId: "fold_1",
+        url: "https://example/u",
+        thumbnailUrl: "https://example/t",
+      },
+      generationId: "gen_1",
+    },
+  });
+  assert.equal(compact.data.assetId, "ast_1");
+  assert.equal(compact.data._id, "ast_1");
+  assert.equal(compact.data.folderId, "fold_1");
+});
+
 test("verify hints + auto-verify wiring", () => {
   const hint = verifyHintFor("studio_share_asset_post", { assetId: "a1" }, { ok: true });
   assert.match(String(hint), /studio_is_asset_shared/);

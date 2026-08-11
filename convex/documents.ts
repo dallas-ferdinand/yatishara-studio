@@ -76,7 +76,7 @@ export const create = authedMutation({
     const title = args.title.trim();
     const content = String(args.contentMarkdown ?? "").trim();
     // Scripts/prompts must not land as empty shells — agent + Files New both use this path.
-    if (!content && /^(prompt|script)\b/i.test(title)) {
+    if (!content && /prompt|script/i.test(title)) {
       throw new Error(
         "Script content is empty. Pass contentMarkdown with the full prompt/script body.",
       );
