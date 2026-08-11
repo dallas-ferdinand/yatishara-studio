@@ -21323,7 +21323,7 @@ export function StudioShell({
           isolation: isolate;
         }
         .studio-academy-hero-bg.public-offers-hero-bg {
-          background-image: url("/academy/academy-hero-4k.webp");
+          background-image: url("/academy/academy-hero.webp");
           opacity: 0.62;
         }
         [data-appearance="dark"] .studio-academy-hero-bg.public-offers-hero-bg {

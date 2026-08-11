@@ -255,10 +255,13 @@ export const PREVIEW_TRANSFORM: BunnyImageTransform = {
   format: "webp",
 };
 
-/** Academy lesson / course hero covers in the player — sharp, near-full HD. */
+/**
+ * Academy lesson / course covers in the in-app player.
+ * Sized for pane width (not full 4k origin) so covers paint fast.
+ */
 export const ACADEMY_COVER_TRANSFORM: BunnyImageTransform = {
-  width: 1920,
-  quality: 92,
+  width: 1280,
+  quality: 82,
   format: "webp",
 };
 

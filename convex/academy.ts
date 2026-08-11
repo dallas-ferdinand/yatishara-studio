@@ -256,7 +256,7 @@ export const listMyCourses = authedQuery({
         slug: course.slug,
         blurb: blurbFromMarkdown(course.descriptionMarkdown),
         ...pricingFieldsForCourse(course),
-        coverUrl: await coverUrlFor(course.coverBunnyPath),
+        coverUrl: await coverUrlFor(course.coverBunnyPath, CN_CARD_TRANSFORM),
         owned: true,
         lessonCount: lessons.length,
         sortOrder: course.sortOrder,

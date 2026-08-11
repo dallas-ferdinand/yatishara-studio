@@ -671,7 +671,7 @@ function OffersCatalogInner() {
     const link = document.createElement("link");
     link.rel = "preload";
     link.as = "image";
-    link.href = "/branding/creative-network-banner-4k.webp";
+    link.href = "/branding/creative-network-banner.webp";
     document.head.appendChild(link);
     return () => {
       link.remove();

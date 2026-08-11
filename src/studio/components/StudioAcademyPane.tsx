@@ -55,11 +55,27 @@ function localCoverUrl(slug: string): string | undefined {
   return `/academy/${slug}.webp`;
 }
 
+/** Prefer Bunny Optimizer URL; static /academy/*.webp is fallback only. */
 function courseBannerUrl(course: {
   slug: string;
   coverUrl?: string;
 }): string | undefined {
-  return localCoverUrl(course.slug) || course.coverUrl;
+  return course.coverUrl || localCoverUrl(course.slug);
+}
+
+const ACADEMY_HERO_BANNER = "/academy/academy-hero.webp";
+
+function usePreloadAcademyHero() {
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = ACADEMY_HERO_BANNER;
+    document.head.appendChild(link);
+    return () => {
+      link.remove();
+    };
+  }, []);
 }
 
 function useNowTick(intervalMs = 1_000) {
@@ -480,6 +496,7 @@ export function StudioAcademyPane({
 }) {
   const price = creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
   const academy = useStudioAcademy();
+  usePreloadAcademyHero();
   const now = useNowTick();
   const { isMobile } = useMobileLayout();
   const catalog = useQuery(api.academy.listPublishedCourses, {});
@@ -762,7 +779,7 @@ export function StudioAcademyPane({
               </div>
             ) : (
               <ul className="public-offers-grid studio-academy-grid">
-                {list.map((course) => {
+                {list.map((course, index) => {
                   const banner = courseBannerUrl(course);
                   const comingSoon = Boolean(course.comingSoon);
                   const compareAt = course.compareAtCredits;
@@ -802,8 +819,9 @@ export function StudioAcademyPane({
                                 <img
                                   src={banner}
                                   alt=""
-                                  loading="lazy"
+                                  loading={index < 3 ? "eager" : "lazy"}
                                   decoding="async"
+                                  fetchPriority={index === 0 ? "high" : undefined}
                                   onLoad={onLoad}
                                   onError={onError}
                                 />

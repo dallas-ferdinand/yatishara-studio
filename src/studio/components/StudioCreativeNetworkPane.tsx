@@ -123,7 +123,8 @@ function OfferStatsChips({
   );
 }
 
-const CN_HERO_BANNER = "/branding/creative-network-banner-4k.webp";
+/** Display-sized hero (not 4k) — ~1600w WebP for fast catalog paint. */
+const CN_HERO_BANNER = "/branding/creative-network-banner.webp";
 
 function usePreloadCreativeNetworkHero() {
   useEffect(() => {
