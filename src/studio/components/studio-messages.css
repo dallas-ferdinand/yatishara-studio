@@ -377,7 +377,8 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 12px 16px 10px;
+  /* Match composer dock inset so bubbles + box share one column edge. */
+  padding: 12px 12px 10px;
   scrollbar-width: none;
 }
 
@@ -923,7 +924,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 10px 0;
+  padding: 8px 10px;
 }
 
 .studio-dm-attach-preview.is-feed-share .studio-dm-attach-clear {
@@ -1085,9 +1086,21 @@
   align-items: center;
   gap: 10px;
   flex: 0 0 auto;
-  padding: 8px 12px;
-  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
-  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+  margin: 0 12px 6px;
+  padding: 8px 10px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--studio-composer-glass-border, var(--color-cursor-border-soft)) 40%,
+      transparent
+    );
+  border-radius: 14px;
+  background: var(
+    --studio-composer-glass-muted,
+    color-mix(in srgb, var(--mos-bg, #05080f) 78%, transparent)
+  );
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
 }
 
 .studio-dm-reply-preview.is-voice {
@@ -1095,7 +1108,10 @@
 }
 
 [data-appearance="light"] .studio-dm-reply-preview {
-  background: var(--mos-panel, #f5f5f7);
+  background: var(
+    --studio-composer-glass-muted,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 90%, transparent)
+  );
 }
 
 .studio-dm-reply-preview-icon {
@@ -1302,28 +1318,84 @@
 
 .studio-dm-error {
   margin: 0;
-  padding: 4px 16px;
+  padding: 4px 12px;
   color: #ff8f8f;
   font-size: var(--desk-text-sm, 12px);
 }
 
 .studio-dm-composer {
   flex: 0 0 auto;
-  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
-  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+  border-top: none;
+  background: transparent;
 }
 
 [data-appearance="light"] .studio-dm-composer {
-  background: var(--mos-panel, #f5f5f7);
+  background: transparent;
 }
 
-/* Desktop-only split composer (two flat rows). */
+/*
+  Create-like dock: inset from chat edges, one rounded glass box.
+  Recording row internals stay the existing DM controls.
+*/
 .studio-dm-composer.is-split {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0;
-  padding: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px max(10px, env(safe-area-inset-bottom, 0px));
+}
+
+.studio-dm-composer-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--studio-composer-glass-border, var(--color-cursor-border, var(--mos-border))) 42%,
+      transparent
+    );
+  background: var(
+    --studio-composer-glass,
+    color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent)
+  );
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(170%) blur(18px));
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(170%) blur(18px));
+  box-shadow: var(
+    --studio-composer-glass-shadow,
+    0 20px 48px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08)
+  );
+  transition: box-shadow 280ms cubic-bezier(0.45, 0, 0.2, 1);
+}
+
+[data-appearance="light"] .studio-dm-composer-box {
+  background: var(
+    --studio-composer-glass,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 92%, transparent)
+  );
+  box-shadow:
+    0 12px 28px color-mix(in srgb, #000 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent);
+}
+
+.studio-dm-composer-box:focus-within {
+  border-color: transparent;
+  box-shadow:
+    var(
+      --studio-composer-glass-shadow,
+      0 20px 48px rgba(0, 0, 0, 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08)
+    ),
+    0 0 28px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 14%, transparent);
 }
 
 .studio-dm-composer.is-split .studio-dm-composer-row {
@@ -1338,12 +1410,17 @@
   /* Slimmer than chat-head (32px) — text can read larger without a tall band. */
   min-height: 28px;
   padding: 0;
-  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--studio-composer-glass-border, var(--color-cursor-border-soft)) 38%,
+      transparent
+    );
 }
 
 .studio-dm-composer.is-split .studio-dm-composer-row.is-extras {
   min-height: 34px;
-  padding: 4px 6px;
+  padding: 4px 8px;
   gap: 6px;
 }
 
@@ -1526,22 +1603,7 @@
   border: none;
 }
 
-/* Message band: accent top+bottom when the textarea is focused. */
-.studio-dm-composer.is-split {
-  transition: border-top-color 160ms ease;
-}
-
-.studio-dm-composer.is-split .studio-dm-composer-row.is-message {
-  transition: border-bottom-color 160ms ease;
-}
-
-.studio-dm-composer.is-split:has(.studio-dm-composer-row.is-message:focus-within) {
-  border-top-color: var(--cursor-accent, var(--mos-accent));
-}
-
-.studio-dm-composer.is-split .studio-dm-composer-row.is-message:focus-within {
-  border-bottom-color: var(--cursor-accent, var(--mos-accent));
-}
+/* Focus glow lives on .studio-dm-composer-box — no full-bleed accent bars. */
 
 .studio-polish .studio-dm-composer.is-split .studio-composer-circle-btn.studio-dm-composer-circle:hover:not(:disabled) :where(svg, .icon-inline) {
   color: inherit !important;
@@ -2030,13 +2092,28 @@
   align-items: center;
   gap: 10px;
   flex: 0 0 auto;
-  padding: 8px 12px;
-  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
-  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+  margin: 0 12px 6px;
+  padding: 8px 10px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--studio-composer-glass-border, var(--color-cursor-border-soft)) 40%,
+      transparent
+    );
+  border-radius: 14px;
+  background: var(
+    --studio-composer-glass-muted,
+    color-mix(in srgb, var(--mos-bg, #05080f) 78%, transparent)
+  );
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
 }
 
 [data-appearance="light"] .studio-dm-attach-preview {
-  background: var(--mos-panel, #f5f5f7);
+  background: var(
+    --studio-composer-glass-muted,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 90%, transparent)
+  );
 }
 
 .studio-dm-attach-thumbs {

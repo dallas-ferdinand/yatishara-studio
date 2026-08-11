@@ -3872,7 +3872,7 @@ export function StudioMessagesPane({
             event.target.value = "";
           }}
         />
-                  <>
+        <div className="studio-dm-composer-box">
             <div
               className={`studio-dm-composer-row is-message${recState !== "idle" ? " is-recording" : ""}`}
               {...(recState !== "idle"
@@ -4105,7 +4105,7 @@ export function StudioMessagesPane({
                 )}
               </button>
             </div>
-          </>
+        </div>
       </footer>
 
       {attachMenu ? (
