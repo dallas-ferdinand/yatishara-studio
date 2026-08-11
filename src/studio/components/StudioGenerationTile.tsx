@@ -8,8 +8,8 @@ import {
   Ban,
   Expand,
   Film,
-  Info,
   Loader2,
+  PanelRight,
   Play,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -264,9 +264,9 @@ export function StudioGenerationTile({
             onClick={(event) => void handleStop(event)}
           >
             {stopping ? (
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
             ) : (
-              <Ban className="h-5 w-5" aria-hidden="true" />
+              <Ban className="h-3.5 w-3.5" aria-hidden="true" />
             )}
           </button>
         ) : null}
@@ -319,28 +319,28 @@ export function StudioGenerationTile({
             <button
               type="button"
               className="studio-gen-tile-action"
-              title="Open details"
+              title="Details"
               aria-label="Open details"
               onClick={() => {
                 onOpenDetails(tile);
                 setOverlayOpen(false);
               }}
             >
-              <Info className="h-4 w-4" aria-hidden="true" />
+              <PanelRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         ) : (
           <button
             type="button"
             className="studio-gen-tile-audio-details"
-            title="Open details"
+            title="Details"
             aria-label="Open details"
             onClick={(event) => {
               event.stopPropagation();
               onOpenDetails(tile);
             }}
           >
-            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+            <PanelRight className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}
       </div>

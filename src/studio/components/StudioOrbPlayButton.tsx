@@ -59,8 +59,8 @@ const ORB_PALETTES: [string, string][] = [
   ["#F0E0F3", "#C09FC9"],
 ];
 
-/** Browsers typically allow ~8–16 WebGL contexts; keep headroom for Create masonry. */
-const MAX_LIVE_ORBS = 16;
+/** Browsers typically allow ~8–16 WebGL contexts; stay conservative in masonry. */
+const MAX_LIVE_ORBS = 8;
 const liveOrbHolders = new Set<string>();
 const liveOrbWaiters = new Set<() => void>();
 

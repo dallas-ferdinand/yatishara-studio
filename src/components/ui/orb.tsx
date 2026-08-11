@@ -42,6 +42,18 @@ export function Orb({
     <div className={className ?? "relative h-full w-full"}>
       <Canvas
         resize={{ debounce: resizeDebounce }}
+        // Parent <button> owns clicks; skip R3F event connect (null target crash).
+        events={() => ({
+          enabled: false,
+          priority: 0,
+          connected: false,
+          handlers: {},
+          update: () => undefined,
+          connect: () => undefined,
+          disconnect: () => undefined,
+          filter: () => true,
+          compute: () => undefined,
+        })}
         gl={{
           alpha: true,
           antialias: true,
@@ -230,6 +242,7 @@ function Scene({
 
   useEffect(() => {
     const canvas = gl.domElement
+    if (!canvas?.addEventListener) return
     const onContextLost = (event: Event) => {
       event.preventDefault()
       setTimeout(() => {

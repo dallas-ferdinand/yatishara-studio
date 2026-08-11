@@ -69,6 +69,8 @@ export function StudioCreateLibrary({
       seen.add(tile.jobId);
       out.push(tile as GenerationLibraryTile);
     }
+    // Always newest first (createdAt desc) regardless of page merge order.
+    out.sort((a, b) => b.createdAt - a.createdAt || b.updatedAt - a.updatedAt);
     return out;
   }, [firstPage, moreTiles]);
 

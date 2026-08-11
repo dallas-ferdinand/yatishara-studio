@@ -51,6 +51,8 @@
 .studio-create-masonry {
   column-count: 2;
   column-gap: 10px;
+  /* Fill top→bottom then next column so newest (first DOM) stays top-left */
+  column-fill: auto;
 }
 
 @media (min-width: 720px) {
@@ -144,24 +146,31 @@
 }
 
 .studio-gen-tile-progress {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   height: 100%;
   min-height: 96px;
-  padding: 16px;
+  padding: 20px 16px;
   box-sizing: border-box;
+  pointer-events: none;
 }
 
 .studio-gen-tile-progress-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: lowercase;
-  color: color-mix(in srgb, var(--color-cursor-muted, #8b8b8b) 90%, transparent);
+  color: color-mix(in srgb, var(--color-cursor-fg, #e8e8e8) 72%, transparent);
+}
+
+[data-appearance="light"] .studio-gen-tile-progress-label {
+  color: color-mix(in srgb, #1a1a1a 68%, transparent);
 }
 
 .studio-gen-tile-ghost-loader {
@@ -234,8 +243,10 @@
 .studio-gen-tile-audio .studio-chat-audio-player.is-pane.is-compact {
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  gap: 6px;
+  justify-content: space-evenly;
+  align-items: stretch;
+  gap: 0;
+  padding: 4px 0 2px;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-orb-hero {
@@ -243,16 +254,16 @@
   display: grid;
   place-items: center;
   margin: 0 !important;
-  padding-top: 4px;
+  padding: 0;
   min-height: 0;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-meta {
   flex: 0 0 auto;
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   width: 100%;
-  padding: 0 2px;
+  padding: 0;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-row {
@@ -262,20 +273,21 @@
 }
 
 .studio-gen-tile-audio .studio-chat-audio-row.is-wave-fill {
-  flex: 1 1 auto;
-  min-height: 56px;
+  flex: 0 0 auto;
+  min-height: 48px;
+  height: 48px;
   align-items: stretch;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-wave {
   min-width: 0;
   width: 100%;
-  height: 100% !important;
-  min-height: 56px;
+  height: 48px !important;
+  min-height: 48px;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-player.is-pane .studio-chat-audio-wave {
-  height: 100% !important;
+  height: 48px !important;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-waveform {
@@ -284,7 +296,10 @@
 }
 
 .studio-gen-tile-audio .studio-chat-audio-time {
-  font-size: 10px;
+  font-size: 11px;
+  text-align: center;
+  justify-content: center;
+  width: 100%;
 }
 
 /*
@@ -330,30 +345,38 @@
 
 .studio-gen-tile-stop {
   position: absolute;
-  inset: 0;
+  top: 8px;
+  right: 8px;
+  inset: auto;
   z-index: 4;
-  margin: auto;
-  width: 44px;
-  height: 44px;
+  margin: 0;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, #fff 22%, transparent);
-  background: color-mix(in srgb, #000 48%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 28%, transparent);
+  background: color-mix(in srgb, #000 55%, transparent);
   color: #fff;
   cursor: pointer;
   pointer-events: auto;
 }
 
 .studio-gen-tile-stop.is-static {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
   pointer-events: none;
   cursor: default;
   opacity: 0.92;
 }
 
 .studio-gen-tile-stop:hover:not(.is-static):not(:disabled) {
-  background: color-mix(in srgb, #000 66%, transparent);
+  background: color-mix(in srgb, #000 72%, transparent);
 }
 
 .studio-gen-tile-stop:disabled {
@@ -380,10 +403,17 @@
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--color-cursor-border, #fff) 22%, transparent);
-  background: color-mix(in srgb, var(--mos-panel, #111) 78%, transparent);
-  color: var(--color-cursor-fg, #e8e8e8);
+  border: 1px solid color-mix(in srgb, #000 18%, transparent);
+  background: color-mix(in srgb, #000 58%, transparent);
+  color: #fff;
   cursor: pointer;
+}
+
+[data-appearance="light"] .studio-gen-tile-audio-details {
+  border-color: color-mix(in srgb, #000 14%, transparent);
+  background: color-mix(in srgb, #fff 92%, #000);
+  color: #1a1a1a;
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 16%, transparent);
 }
 
 .studio-gen-tile-badge {
@@ -448,14 +478,25 @@
   width: 32px;
   height: 32px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, #fff 22%, transparent);
-  background: color-mix(in srgb, #000 45%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 28%, transparent);
+  background: color-mix(in srgb, #000 52%, transparent);
   color: #fff;
   cursor: pointer;
 }
 
 .studio-gen-tile-action:hover {
-  background: color-mix(in srgb, #000 62%, transparent);
+  background: color-mix(in srgb, #000 68%, transparent);
+}
+
+[data-appearance="light"] .studio-gen-tile-action {
+  border-color: color-mix(in srgb, #000 12%, transparent);
+  background: color-mix(in srgb, #fff 94%, #000);
+  color: #1a1a1a;
+  box-shadow: 0 1px 4px color-mix(in srgb, #000 18%, transparent);
+}
+
+[data-appearance="light"] .studio-gen-tile-action:hover {
+  background: #fff;
 }
 
 .studio-create-library-more {
@@ -492,8 +533,9 @@
 }
 
 [data-appearance="light"] .studio-gen-detail {
-  background: var(--mos-panel, #f0f0f3);
-  border-left-color: color-mix(in srgb, var(--color-cursor-border, #d0d0d5) 80%, transparent);
+  background: #f5f5f7;
+  border-left-color: color-mix(in srgb, #000 12%, transparent);
+  color: #1a1a1a;
 }
 
 .studio-gen-detail-head {
@@ -506,6 +548,10 @@
   border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border, #fff) 14%, transparent);
 }
 
+[data-appearance="light"] .studio-gen-detail-head {
+  border-bottom-color: color-mix(in srgb, #000 10%, transparent);
+}
+
 .studio-gen-detail-head h2 {
   margin: 0;
   font-size: 13px;
@@ -514,6 +560,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: inherit;
 }
 
 .studio-gen-detail-close {
@@ -532,6 +579,15 @@
 .studio-gen-detail-close:hover {
   background: color-mix(in srgb, var(--color-cursor-fg, #fff) 8%, transparent);
   color: var(--color-cursor-fg, var(--mos-fg, #e8e8e8));
+}
+
+[data-appearance="light"] .studio-gen-detail-close {
+  color: #5c5c66;
+}
+
+[data-appearance="light"] .studio-gen-detail-close:hover {
+  background: color-mix(in srgb, #000 6%, transparent);
+  color: #1a1a1a;
 }
 
 .studio-gen-detail-body {
@@ -605,6 +661,10 @@
   color: var(--color-cursor-fg, var(--mos-fg, #e8e8e8));
 }
 
+[data-appearance="light"] .studio-gen-detail-prompt {
+  color: #1a1a1a;
+}
+
 .studio-gen-detail-meta {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -624,6 +684,14 @@
   overflow-wrap: anywhere;
 }
 
+[data-appearance="light"] .studio-gen-detail-meta dt {
+  color: #6b6b76;
+}
+
+[data-appearance="light"] .studio-gen-detail-meta dd {
+  color: #1a1a1a;
+}
+
 .studio-gen-detail-actions {
   display: flex;
   flex-wrap: wrap;
@@ -637,8 +705,18 @@
   color: var(--color-cursor-fg, var(--mos-fg, #e8e8e8));
   font-size: 12px;
   font-weight: 500;
-  padding: 7px 10px;
+  padding: 6px 10px;
   cursor: pointer;
+}
+
+[data-appearance="light"] .studio-gen-detail-actions button {
+  border-color: color-mix(in srgb, #000 14%, transparent);
+  background: #fff;
+  color: #1a1a1a;
+}
+
+[data-appearance="light"] .studio-gen-detail-label {
+  color: #6b6b76;
 }
 
 .studio-gen-detail-actions button:hover {

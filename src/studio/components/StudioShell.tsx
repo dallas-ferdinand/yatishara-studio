@@ -7645,9 +7645,6 @@ export function StudioShell({
       return;
     }
 
-    const prompt = IMAGE_UPSCALE_PROMPT;
-    const nextAttachments = [attachment];
-    const userPrompt = buildPromptWithAttachments(prompt, nextAttachments);
     const poolAsset = assetLookupPool?.find(
       (asset) => asset._id === attachment.studioId || asset.studioId === attachment.studioId,
     );
@@ -7656,112 +7653,31 @@ export function StudioShell({
       fullEntry.height ?? poolAsset?.height,
     );
 
+    // Fill composer only — user hits send. Do not auto-run generation.
     setMode("image");
     setImageQuality("high");
     setImageResolution("4K");
     if (nextAspect) setAspectRatio(nextAspect);
     handleSelectDirect();
     if (isMobile) setMobileSection("composer");
-
-    setFlowPending(true);
-    try {
-      if (presets === undefined) {
-        throw new Error("Style options are still loading. Try again in a moment.");
-      }
-      const preset = directPreset;
-      if (!preset) {
-        throw new Error("Direct generation preset is not ready yet.");
-      }
-      if (entitlement && !entitlement.canGenerate) {
-        openSettingsTab("billing");
-        throw new Error(entitlement.reason ?? "Content generation is not available right now.");
-      }
-
-      // Always re-sign at 100% — preview URLs may be lower quality for faster loads.
-      const referenceUrl = await convex.query(api.assets.signedReadUrl, {
-        assetId: attachment.studioId,
-        expiresUnix: assetUrlExpiresUnix,
-        quality: 100,
+    attachEntry(fullEntry);
+    setDraft(IMAGE_UPSCALE_PROMPT);
+    const chatKey = composerContextKeyForTab(activeTab);
+    const liveEditor = editorRef.current;
+    if (liveEditor && composerContextKeyForTab(activeTab) === chatKey) {
+      applyComposerContextToEditor(liveEditor, {
+        draft: IMAGE_UPSCALE_PROMPT,
+        attachments: [attachment],
       });
-      if (!referenceUrl || !/^https?:\/\//i.test(referenceUrl)) {
-        throw new Error("Could not load this image for upscale.");
-      }
-
-      const reuseThreadId =
-        activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
-          ? activeThreadId
-          : null;
-      let threadId = reuseThreadId;
-      if (!threadId) {
-        threadId = await ensureCreateThread({
-          title: threadTitleFromPrompt(prompt, nextAttachments, "image"),
-        });
-      }
-
-      const aspectForRun = nextAspect ?? aspectRatio;
-      // Library tiles cover in-progress gens — skip chat optimistic events.
-      setDraft("");
-      setAttachments([]);
-      if (editorRef.current) editorRef.current.replaceChildren();
-      const chatKey = composerContextKeyForTab(activeTab);
-      composerContextsRef.current[chatKey] = {
-        ...(composerContextsRef.current[chatKey] ?? {}),
-        draft: "",
-        attachments: [],
-        editorHtml: "",
-        mode: "image",
-        imageQuality: "high",
-        imageResolution: "4K",
-        aspectRatio: aspectForRun,
-        boundThreadId: threadId,
-      };
-      setFlowPending(false);
-
-      const flowArgs = {
-        threadId,
-        mode: "image",
-        tier: "image",
-        stylePresetId: preset._id,
-        userPrompt,
-        aspectRatio: aspectForRun,
-        resolution: "4K",
-        quality: "high",
-        folderId: generationSaveFolderId(threadId),
-        referenceUrls: [referenceUrl],
-        skipPromptEnhancement: true,
-        referenceIntent: "match_reference",
-        hasRawImageReference: true,
-        hasElementReference: false,
-      };
-      void runFlow(flowArgs).catch((error) => {
-        console.error("Upscale image failed", error);
-        toast.error(friendlyConvexError(error, "Could not start upscale."));
-      });
-
-      // Leave composer at high/4K with the source image attachable for follow-ups.
-      composerContextsRef.current[chatKey] = {
-        ...(composerContextsRef.current[chatKey] ?? {}),
-        draft: "",
-        attachments: nextAttachments,
-        editorHtml: "",
-        mode: "image",
-        imageQuality: "high",
-        imageResolution: "4K",
-        aspectRatio: aspectForRun,
-        boundThreadId: threadId,
-      };
-      appendAttachmentChipToComposerContext(composerContextsRef, chatKey, attachment);
-      setAttachments(nextAttachments);
-      const liveEditor = editorRef.current;
-      if (liveEditor && composerContextKeyForTab(activeTab) === chatKey) {
-        applyComposerContextToEditor(liveEditor, composerContextsRef.current[chatKey]);
-      }
-    } catch (error) {
-      console.error("Upscale image failed", error);
-      toast.error(friendlyConvexError(error, "Could not start upscale."));
-    } finally {
-      setFlowPending(false);
     }
+    composerContextsRef.current[chatKey] = {
+      ...(composerContextsRef.current[chatKey] ?? {}),
+      draft: IMAGE_UPSCALE_PROMPT,
+      mode: "image",
+      imageQuality: "high",
+      imageResolution: "4K",
+      aspectRatio: nextAspect ?? aspectRatio,
+    };
   }
 
   async function handleCancelAssistanceTurn() {
