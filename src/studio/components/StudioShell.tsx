@@ -21922,8 +21922,9 @@ export function StudioShell({
             inset 0 1px 0 rgba(255, 255, 255, 0.72);
         }
         .studio-academy-lesson-num {
-          width: 100%;
-          height: 100%;
+          width: 28px;
+          height: 28px;
+          min-width: 28px;
           border-radius: 999px;
           flex: 0 0 auto;
           display: grid;
@@ -21934,35 +21935,6 @@ export function StudioShell({
           color: var(--color-cursor-muted);
           background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-        }
-        .studio-academy-lesson-thumb {
-          width: 28px;
-          height: 28px;
-          border-radius: 999px;
-          flex: 0 0 auto;
-          overflow: hidden;
-          display: grid;
-          place-items: center;
-          background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
-          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-        }
-        .studio-academy-lesson-thumb-frame.media-load-frame,
-        .studio-academy-lesson-thumb-frame.media-load-frame.is-ready {
-          width: 100%;
-          height: 100%;
-        }
-        .studio-academy-lesson-thumb .media-load-frame-placeholder,
-        .studio-academy-lesson-thumb .media-load-frame-wave {
-          background: transparent;
-        }
-        .studio-academy-lesson-thumb img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
-        .studio-academy-lesson-row.is-active .studio-academy-lesson-thumb {
-          border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
         }
         .studio-academy-lesson-row.is-active .studio-academy-lesson-num {
           color: var(--color-cursor-text-bright, var(--mos-text));
@@ -21976,13 +21948,19 @@ export function StudioShell({
           gap: 1px;
         }
         .studio-academy-lesson-meta strong {
-          font-size: 12px;
+          display: block;
+          font-size: 13px;
+          font-weight: 600;
+          line-height: 1.25;
+          color: var(--color-cursor-text-bright, var(--mos-text));
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
         .studio-academy-lesson-meta small {
+          display: block;
           font-size: 11px;
+          line-height: 1.3;
           color: var(--color-cursor-muted);
           overflow: hidden;
           text-overflow: ellipsis;
