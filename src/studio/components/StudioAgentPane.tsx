@@ -969,21 +969,25 @@ export function StudioAgentPane({
 
   const chatColumn = (
     <div className="studio-agent-chat-column">
-      {activeThreadId ? (
-        <AgentChatHeader
-          title={threadMeta?.title || "Agent chat"}
-          busy={busy}
-          sidebarOpen={infoOpen}
-          onRename={async (title) => {
-            try {
-              await renameThread({ threadId: activeThreadId, title });
-            } catch (error) {
-              toast.error(friendlyConvexError(error, "Could not rename chat"));
-            }
-          }}
-          onToggleSidebar={() => setInfoOpen((open) => !open)}
-        />
-      ) : null}
+      <AgentChatHeader
+        title={
+          activeThreadId
+            ? threadMeta?.title || "Agent chat"
+            : "New chat"
+        }
+        busy={busy}
+        canRename={Boolean(activeThreadId)}
+        sidebarOpen={infoOpen}
+        onRename={async (title) => {
+          if (!activeThreadId) return;
+          try {
+            await renameThread({ threadId: activeThreadId, title });
+          } catch (error) {
+            toast.error(friendlyConvexError(error, "Could not rename chat"));
+          }
+        }}
+        onToggleSidebar={() => setInfoOpen((open) => !open)}
+      />
       <div className="studio-chat-render-area">
         <div
           className="studio-chat-stream"
@@ -1174,8 +1178,8 @@ export function StudioAgentPane({
     </div>
   );
 
-  const infoSidebar =
-    activeThreadId && infoOpen ? (
+  const infoSidebar = infoOpen ? (
+    activeThreadId ? (
       <AgentChatSidebar
         threadId={activeThreadId}
         open={infoOpen}
@@ -1184,9 +1188,32 @@ export function StudioAgentPane({
         agentBusy={busy}
         variant={isMobile ? "sheet" : "docked"}
       />
-    ) : null;
+    ) : (
+      <aside
+        className={`studio-agent-chat-sidebar${isMobile ? " is-sheet" : ""}`}
+        aria-label="Agent chat info"
+      >
+        <div className="cursor-panel-head">
+          <strong>Chat</strong>
+          <button
+            type="button"
+            className="studio-composer-circle-btn"
+            aria-label="Close"
+            onClick={() => setInfoOpen(false)}
+          >
+            ×
+          </button>
+        </div>
+        <div className="studio-agent-chat-sidebar-body">
+          <p className="studio-agent-sidebar-empty">
+            Send a message to start this chat — cost, media, and to-dos will show here.
+          </p>
+        </div>
+      </aside>
+    )
+  ) : null;
 
-  if (isMobile || !infoOpen || !activeThreadId) {
+  if (isMobile || !infoOpen) {
     return (
       <div className="studio-agent-pane" data-studio-agent="">
         {chatColumn}

@@ -6,6 +6,7 @@ import { Hammer } from "lucide-react";
 type AgentChatHeaderProps = {
   title: string;
   busy?: boolean;
+  canRename?: boolean;
   sidebarOpen?: boolean;
   onRename: (title: string) => Promise<void> | void;
   onToggleSidebar: () => void;
@@ -14,6 +15,7 @@ type AgentChatHeaderProps = {
 export function AgentChatHeader({
   title,
   busy,
+  canRename = true,
   sidebarOpen,
   onRename,
   onToggleSidebar,
@@ -36,14 +38,14 @@ export function AgentChatHeader({
   async function commit() {
     const next = draft.trim() || title;
     setEditing(false);
-    if (next !== title) await onRename(next);
+    if (canRename && next !== title) await onRename(next);
     else setDraft(title);
   }
 
   return (
-    <header className="studio-agent-chat-head">
+    <header className="studio-dm-chat-head studio-agent-chat-head">
       <div className="studio-agent-chat-head-main">
-        {editing ? (
+        {editing && canRename ? (
           <input
             ref={inputRef}
             className="studio-agent-chat-title-input"
@@ -66,10 +68,12 @@ export function AgentChatHeader({
           <button
             type="button"
             className="studio-agent-chat-title"
-            onDoubleClick={() => setEditing(true)}
-            title="Double-click to rename"
+            onDoubleClick={() => {
+              if (canRename) setEditing(true);
+            }}
+            title={canRename ? "Double-click to rename" : "Send a message to start this chat"}
           >
-            {title || "Agent chat"}
+            {title || "New chat"}
           </button>
         )}
         {busy ? (
@@ -78,10 +82,10 @@ export function AgentChatHeader({
           </span>
         ) : null}
       </div>
-      <div className="cursor-panel-head-tools studio-agent-chat-head-tools">
+      <div className="cursor-panel-head-tools studio-dm-chat-head-tools studio-agent-chat-head-tools">
         <button
           type="button"
-          className={`studio-composer-circle-btn${sidebarOpen ? " is-on" : ""}`}
+          className={`studio-composer-circle-btn studio-dm-peer-toggle${sidebarOpen ? " is-on" : ""}`}
           aria-label={sidebarOpen ? "Close Action" : "Action"}
           aria-pressed={Boolean(sidebarOpen)}
           title={sidebarOpen ? "Close Action" : "Action"}
