@@ -544,8 +544,8 @@
   max-width: var(--studio-chat-bubble-max, 88%);
   width: fit-content;
   padding: 7px 10px;
-  border-radius: 14px;
-  border-bottom-left-radius: 5px;
+  /* Create chat: straighter top-outer corner (TL), not bottom. */
+  border-radius: 8px 18px 18px 18px;
   background: var(--mos-plate, var(--mos-panel));
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   overflow: hidden;
@@ -576,8 +576,8 @@
 }
 
 .studio-dm-bubble-row.is-mine .studio-dm-bubble {
-  border-radius: 14px;
-  border-bottom-right-radius: 5px;
+  /* Create .is-user: straighter top-right. */
+  border-radius: 18px 8px 18px 18px;
   background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 16%, var(--mos-plate, var(--mos-panel)));
   border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 26%, var(--color-cursor-border-soft, var(--mos-border-soft)));
 }
