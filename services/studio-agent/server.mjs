@@ -349,6 +349,7 @@ async function runPiTurn(body, abortSignal) {
       "User text may include [asset:Name id=...] / [folder:Name id=...] tokens — those are the attached chips. Use those ids directly.",
       "For move/place requests: if the working set already has source item(s) and a target folder, immediately invoke studio_bulk_move with args { items: [{ id, kind }], targetFolderId }. kind must be studioKind (asset|document|element|folder). Do not ask the user for ids that are already in the working set.",
       "If the user asks to post/share/publish an attached image or video publicly, use invoke name=studio_share_asset_post with the attached asset id. Do not say posting is unavailable unless invoke/catalog actually proves the tool is unavailable.",
+      "If the user asks to generate or create an image, use invoke name=studio_generate_image. Do not claim image generation is unavailable unless invoke/catalog actually proves the tool is unavailable.",
       "If an attached image is already visible in the turn, do not call inspect first unless you need more workspace media beyond the attached set.",
       "For visual tasks, first list/search/filter likely image assets, then call inspect with up to 8 assetIds before claiming what an image shows.",
       "Never claim visual understanding from filenames or URLs alone when inspect is needed.",
