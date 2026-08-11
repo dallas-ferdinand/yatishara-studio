@@ -395,9 +395,10 @@ export const settleApprovalToolCall = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     if (!args.runId) return null;
+    const runId = args.runId;
     const rows = await ctx.db
       .query("agentToolCalls")
-      .withIndex("by_run_and_started", (q) => q.eq("runId", args.runId))
+      .withIndex("by_run_and_started", (q) => q.eq("runId", runId))
       .collect();
     const row = rows.find((item) => item.approvalId === args.approvalId);
     if (!row) return null;

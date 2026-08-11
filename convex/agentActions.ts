@@ -56,6 +56,7 @@ type SendTurnResult = {
   usedByok: boolean;
   runId?: string;
   error?: string;
+  pendingApproval?: boolean;
 };
 
 type AgentTurnAttachment = {
