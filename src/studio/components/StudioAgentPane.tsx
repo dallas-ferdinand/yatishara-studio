@@ -5,7 +5,7 @@
  */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -520,6 +520,8 @@ export function StudioAgentPane({
   const stickToBottomRef = useRef(true);
   const micBusyRef = useRef(false);
   const micStartedRef = useRef(0);
+  /** Suppress studio-agent-attach when HTML5 drop already inserted the same id. */
+  const recentHtmlDropIdsRef = useRef<Map<string, number>>(new Map());
 
   const messages = useQuery(
     api.agentThreads.listMessages,
@@ -567,12 +569,18 @@ export function StudioAgentPane({
       const detail = (event as CustomEvent<{ attachment?: AgentAttachment }>).detail;
       const attachment = detail?.attachment;
       if (!attachment?.id) return;
+      const recentAt = recentHtmlDropIdsRef.current.get(attachment.id);
+      if (recentAt && Date.now() - recentAt < 500) {
+        // Shell attachEntry also fired after our HTML5 composer drop — ignore twin.
+        return;
+      }
       setAttachments((prev) => {
         if (prev.some((item) => item.id === attachment.id)) return prev;
         insertComposerAttachmentToken(editorRef.current, attachment);
         setDraft(readComposerEditorText(editorRef.current));
         return [...prev, attachment];
       });
+      window.requestAnimationFrame(() => pruneDuplicateComposerTokens(editorRef.current));
     }
     window.addEventListener(AGENT_ATTACH_EVENT, onAttach as EventListener);
     return () => window.removeEventListener(AGENT_ATTACH_EVENT, onAttach as EventListener);
@@ -592,12 +600,18 @@ export function StudioAgentPane({
   ) => {
     const attachment = entry ? entryToAgentAttachment(entry) : null;
     if (!attachment?.id) return false;
+    let inserted = false;
     setAttachments((prev) => {
       if (prev.some((item) => item.id === attachment.id)) return prev;
       insertComposerAttachmentToken(editorRef.current, attachment, insertRange);
       setDraft(readComposerEditorText(editorRef.current));
+      inserted = true;
       return [...prev, attachment];
     });
+    if (inserted) {
+      recentHtmlDropIdsRef.current.set(attachment.id, Date.now());
+      pruneDuplicateComposerTokens(editorRef.current);
+    }
     return true;
   }, []);
 
@@ -649,6 +663,50 @@ export function StudioAgentPane({
       }
     },
     [commitStagingUpload, ensureMessagesFolder, reserveUpload],
+  );
+
+  const handleComposerDrop = useCallback(
+    (event: DragEvent) => {
+      // Capture-phase owner: kill CE native drop + any bubbled twin handlers.
+      event.preventDefault();
+      event.stopPropagation();
+      setDragOver(false);
+      const tokenAttachment = readComposerTokenDragData(event.dataTransfer) as
+        | (AgentAttachment & { tokenId?: string })
+        | null;
+      const entry = readExplorerDragData(event.dataTransfer) as
+        | Record<string, unknown>
+        | null;
+      if (tokenAttachment) {
+        moveComposerDraggedToken(editorRef.current, tokenAttachment.tokenId ?? "");
+        insertComposerAttachmentToken(
+          editorRef.current,
+          tokenAttachment,
+          rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
+        );
+        if (tokenAttachment.id) {
+          recentHtmlDropIdsRef.current.set(tokenAttachment.id, Date.now());
+        }
+        pruneDuplicateComposerTokens(editorRef.current);
+        window.requestAnimationFrame(() => {
+          pruneDuplicateComposerTokens(editorRef.current);
+          setDraft(readComposerEditorText(editorRef.current));
+        });
+        return;
+      }
+      if (entry) {
+        attachAgentEntry(
+          entry,
+          rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
+        );
+        window.requestAnimationFrame(() => pruneDuplicateComposerTokens(editorRef.current));
+        return;
+      }
+      if (event.dataTransfer?.files?.length) {
+        void uploadAgentFiles(event.dataTransfer.files);
+      }
+    },
+    [attachAgentEntry, uploadAgentFiles],
   );
 
   const ensureThread = useCallback(async () => {
@@ -841,58 +899,27 @@ export function StudioAgentPane({
         </div>
       </div>
 
-      <div className="studio-agent-composer-dock">
+      <div
+        className="studio-agent-composer-dock"
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragOver(true);
+        }}
+        onDragOverCapture={(event) => {
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+          setDragOver(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setDragOver(false);
+          }
+        }}
+        onDropCapture={handleComposerDrop}
+      >
         <footer
           className={`studio-dm-composer is-split${isMobile ? " is-mobile-icons" : ""}${dragOver ? " is-drop-target is-touch-drop-hover" : ""}`}
           data-drop-target="composer"
-          onDragEnter={(event) => {
-            event.preventDefault();
-            setDragOver(true);
-          }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-            setDragOver(true);
-          }}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-              setDragOver(false);
-            }
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setDragOver(false);
-            const tokenAttachment = readComposerTokenDragData(event.dataTransfer) as
-              | (AgentAttachment & { tokenId?: string })
-              | null;
-            const entry = readExplorerDragData(event.dataTransfer) as
-              | Record<string, unknown>
-              | null;
-            if (tokenAttachment) {
-              // Exact Create path: remove original, insert once, then hard-dedupe.
-              moveComposerDraggedToken(editorRef.current, tokenAttachment.tokenId ?? "");
-              insertComposerAttachmentToken(
-                editorRef.current,
-                tokenAttachment,
-                rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
-              );
-              pruneDuplicateComposerTokens(editorRef.current);
-              setDraft(readComposerEditorText(editorRef.current));
-              return;
-            }
-            if (entry) {
-              attachAgentEntry(
-                entry,
-                rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
-              );
-              pruneDuplicateComposerTokens(editorRef.current);
-              return;
-            }
-            if (event.dataTransfer?.files?.length) {
-              void uploadAgentFiles(event.dataTransfer.files);
-            }
-          }}
         >
           <input
             ref={uploadInputRef}
@@ -925,45 +952,6 @@ export function StudioAgentPane({
                 suppressContentEditableWarning
                 data-placeholder="Ask the agent to set up a project, generate, or work across Studio…"
                 className="cursor-composer-mention-editor"
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-                }}
-                onDrop={(event) => {
-                  // Own the drop here so contentEditable cannot clone, then stop bubble.
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setDragOver(false);
-                  const tokenAttachment = readComposerTokenDragData(event.dataTransfer) as
-                    | (AgentAttachment & { tokenId?: string })
-                    | null;
-                  const entry = readExplorerDragData(event.dataTransfer) as
-                    | Record<string, unknown>
-                    | null;
-                  if (tokenAttachment) {
-                    moveComposerDraggedToken(editorRef.current, tokenAttachment.tokenId ?? "");
-                    insertComposerAttachmentToken(
-                      editorRef.current,
-                      tokenAttachment,
-                      rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
-                    );
-                    pruneDuplicateComposerTokens(editorRef.current);
-                    setDraft(readComposerEditorText(editorRef.current));
-                    return;
-                  }
-                  if (entry) {
-                    attachAgentEntry(
-                      entry,
-                      rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY),
-                    );
-                    pruneDuplicateComposerTokens(editorRef.current);
-                    return;
-                  }
-                  if (event.dataTransfer?.files?.length) {
-                    void uploadAgentFiles(event.dataTransfer.files);
-                  }
-                }}
                 onInput={() => {
                   setDraft(readComposerEditorText(editorRef.current));
                   pruneDuplicateComposerTokens(editorRef.current);
