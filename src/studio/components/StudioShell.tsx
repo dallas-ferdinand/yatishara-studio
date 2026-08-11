@@ -19618,7 +19618,15 @@ export function StudioShell({
           background: var(--color-cursor-bg) !important;
         }
         [data-appearance="light"] .studio-document-preview .cursor-doc-toolbar.has-name {
-          background: var(--mos-panel, #f5f5f7) !important;
+          background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
+        }
+        /* Fence plate = Files sidebar (--mos-page), not --color-cursor-sidebar/plate. */
+        .studio-document-preview .mos-code,
+        .studio-document-preview .code-shell,
+        .studio-document-preview .mos-code-bar,
+        .studio-document-preview .code-shell-head {
+          background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
+          border-color: transparent;
         }
         .studio-document-preview .desk-image-viewer-name {
           color: var(--color-cursor-text);
@@ -21909,8 +21917,8 @@ export function StudioShell({
             inset 0 1px 0 rgba(255, 255, 255, 0.72);
         }
         .studio-academy-lesson-num {
-          width: 100%;
-          height: 100%;
+          width: 28px;
+          height: 28px;
           border-radius: 999px;
           flex: 0 0 auto;
           display: grid;
@@ -21921,35 +21929,6 @@ export function StudioShell({
           color: var(--color-cursor-muted);
           background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-        }
-        .studio-academy-lesson-thumb {
-          width: 28px;
-          height: 28px;
-          border-radius: 999px;
-          flex: 0 0 auto;
-          overflow: hidden;
-          display: grid;
-          place-items: center;
-          background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
-          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-        }
-        .studio-academy-lesson-thumb-frame.media-load-frame,
-        .studio-academy-lesson-thumb-frame.media-load-frame.is-ready {
-          width: 100%;
-          height: 100%;
-        }
-        .studio-academy-lesson-thumb .media-load-frame-placeholder,
-        .studio-academy-lesson-thumb .media-load-frame-wave {
-          background: transparent;
-        }
-        .studio-academy-lesson-thumb img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
-        .studio-academy-lesson-row.is-active .studio-academy-lesson-thumb {
-          border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
         }
         .studio-academy-lesson-row.is-active .studio-academy-lesson-num {
           color: var(--color-cursor-text-bright, var(--mos-text));
