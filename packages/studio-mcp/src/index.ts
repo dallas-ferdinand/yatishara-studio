@@ -5,7 +5,10 @@ import { registerGuideResources } from "./resources/guides.js";
 import { registerAccountTools } from "./tools/account.js";
 import { registerAccountExtraTools } from "./tools/accountExtra.js";
 import { registerAssistanceTools } from "./tools/assistance.js";
-import { AGENT_BLOCKED_TOOL_NAMES } from "./lib/agentBlockedTools.js";
+import {
+  AGENT_BLOCKED_TOOL_NAMES,
+  catalogVersion,
+} from "@yatishara/studio-tools";
 import { registerAssetTools } from "./tools/assets.js";
 import { registerContextTools } from "./tools/context.js";
 import { registerDocumentTools } from "./tools/documents.js";
@@ -24,10 +27,14 @@ requireConfig();
 
 const server = new McpServer({
   name: "yatishara-studio",
-  version: "0.8.3",
+  version: "0.8.4",
 });
 
-/** When set, Assist/Elements/style write tools are not registered (Agent Mode surface). */
+/**
+ * Positive surfaces from @yatishara/studio-tools:
+ * - default MCP: full mcp+admin catalog (external agents)
+ * - STUDIO_MCP_AGENT_SURFACE=1: agent surface only (no retired Assist/Elements/style)
+ */
 const agentSurface = process.env.STUDIO_MCP_AGENT_SURFACE === "1";
 
 registerGuideResources(server);
@@ -43,12 +50,11 @@ if (!agentSurface) {
 registerGenerationTools(server);
 registerVoiceTools(server);
 if (!agentSurface) {
-  // Assist brief/approve tools retired from Agent allowlist; ops MCP keeps them.
   registerAssistanceTools(server);
 } else {
   // eslint-disable-next-line no-console
   console.error(
-    `[studio-mcp] Agent surface: blocked ${AGENT_BLOCKED_TOOL_NAMES.length} Assist/Elements/style tools`,
+    `[studio-mcp] Agent surface (${catalogVersion()}): excluded ${AGENT_BLOCKED_TOOL_NAMES.length} non-agent tools`,
   );
 }
 registerEditTools(server);

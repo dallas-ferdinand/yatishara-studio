@@ -1,0 +1,4670 @@
+[
+  {
+    "name": "studio_accept_job_delivery",
+    "description": "Buyer accepts delivered work — releases escrow to platform/seller payout.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/jobs/{jobId}/accept"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_add_comment",
+    "description": "Add a comment (or reply) on a public post.",
+    "category": "social",
+    "scope": "social",
+    "risk": "outbound",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/feed/posts/{postId}/comments"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_add_peer_note",
+    "description": "Add a private note about a peer. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/peers/{peerUserId}/notes"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_admin_approve_listing",
+    "description": "Admin: approve a pending stock listing.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/admin/listings/{listingId}/approve"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_decide_seller",
+    "description": "Admin: approve | reject | suspend a seller. Reject requires reason.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/admin/sellers/{sellerId}/decide"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_get_seller_application",
+    "description": "Admin: get one seller application with signed KYC document URLs.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/admin/sellers/{sellerId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_list_asset_submissions",
+    "description": "Admin: list stock-audio listing submissions.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/admin/listings?{q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_list_jobs",
+    "description": "Admin: list hire jobs (booked offers).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/admin/jobs{suffix}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_list_offers",
+    "description": "Admin: list marketplace offers.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/admin/offers{suffix}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_list_payouts",
+    "description": "Admin: list seller payouts (owed/paid).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/admin/payouts{suffix}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_list_sellers",
+    "description": "Admin: list seller applications. Optional status filter.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/admin/sellers{suffix}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_mark_payout_paid",
+    "description": "Admin: mark a seller payout as paid (manual bank transfer).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/admin/payouts/{payoutId}/paid"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_refund_job",
+    "description": "Admin: refund escrow on a job (delivered/in_progress/in_escrow).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/admin/jobs/{jobId}/refund"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_reject_listing",
+    "description": "Admin: reject a pending stock listing (reason required).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/admin/listings/{listingId}/reject"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_remove_listing",
+    "description": "Admin: remove a listing and profit-ban it.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/admin/listings/{listingId}/remove"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_admin_set_offer_status",
+    "description": "Admin: set offer status to paused | published | archived.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": "admin",
+    "surfaces": [
+      "admin",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/admin/offers/{offerId}/status"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_approve_brief",
+    "description": "Approve a review_ready brief and start generation. Returns jobId / documentId / elementId. Requires generate scope.",
+    "category": "assistance",
+    "scope": "generate",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assistance/briefs/{args}/approve"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assistance.ts"
+  },
+  {
+    "name": "studio_block_peer",
+    "description": "Block a peer (they cannot DM you). Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/peers/{peerUserId}/block"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_book_offer",
+    "description": "Book a published offer — holds payment in escrow and starts the job. Requires marketplace scope + balance.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/offers/{offerId}/book"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_bootstrap",
+    "description": "[preferred] Start here. One-shot: account/credits + workspace tree + agent start-here hints. Optionally pass folderId or path for project_context. Replaces separate health + tree + BFS list_folders.",
+    "category": "context",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/account"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "context.ts"
+  },
+  {
+    "name": "studio_browse_network_listings",
+    "description": "Browse listed Creative Network stock audio (music/sfx).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/listings?{q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_build_style_sheet",
+    "description": "Build Style Sheet visual board. Retired from Agent Mode.",
+    "category": "elements",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/elements/{elementId}/generate-sheet"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_bulk_move",
+    "description": "[preferred] Move up to 50 assets/documents/elements/folders into targetFolderId. Requires write scope. Partial success returns moved + errors.",
+    "category": "context",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/workspace/bulk-move"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "context.ts"
+  },
+  {
+    "name": "studio_cancel_job",
+    "description": "Cancel a job before delivery (buyer or seller) — refunds escrow.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/jobs/{jobId}/cancel"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_cancel_seller_request",
+    "description": "Withdraw a pending seller application (before admin approval).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/seller/cancel"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_change_username",
+    "description": "Rename the owner's public username (profile must already exist).",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/profiles/change-username"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_check_username_available",
+    "description": "Check whether a username can be claimed/changed by the API key owner.",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/profiles/username-available{username})}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_claim_username",
+    "description": "Claim or set the owner's public username (creates profile if missing).",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/profiles/claim-username"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_commit_list_on_network",
+    "description": "Step 3 of listing stock audio: commit listing after Bunny copy is ready. Use fields returned from prepare (+ copy).",
+    "category": "network",
+    "scope": "read",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/listings/commit"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_commit_seller_doc_upload",
+    "description": "Promote a staged KYC blob to Bunny. Returns { bunnyPath } for studio_request_seller_access.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/seller/docs/commit"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_complete_upload",
+    "description": "Step 2 of two-step upload. Pass assetId from studio_reserve_upload and storageId from the uploadUrl response.",
+    "category": "assets",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assets/upload"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assets.ts"
+  },
+  {
+    "name": "studio_create_dm_label",
+    "description": "Create a DM label. icon must be a known Lucide-style slug (tag, heart, star, …). Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/labels"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_create_document",
+    "description": "Create a markdown document in a folder. Requires write scope.",
+    "category": "documents",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/documents"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "documents.ts"
+  },
+  {
+    "name": "studio_create_edit",
+    "description": "[preferred] Create a video edit project. Pass assetIds to seed sequential clips on the timeline (video/image on track-v1, audio on audio tracks). Before cutting: studio_pull_frames on each source (startSec/endSec/count). Keep source audio unless user asks mute (do NOT set effects.volume 0 by default). Open editor live-syncs MCP writes — still prefer studio_get_edit after big replaces.",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_create_element",
+    "description": "Creates the element record ONLY (buildStatus=unbuilt). Retired from Agent Mode surface.",
+    "category": "elements",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/elements"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_create_folder",
+    "description": "Create a single folder. For nested paths prefer studio_ensure_path. Requires write scope.",
+    "category": "folders",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/folders"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "folders.ts"
+  },
+  {
+    "name": "studio_create_offer",
+    "description": "Create a draft Creative Network offer. Requires approved seller + marketplace write scope.",
+    "category": "network",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/offers"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_create_style_sheet",
+    "description": "Create Style Sheet element. Retired from Agent Mode.",
+    "category": "elements",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/elements"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_credit_balance",
+    "description": "Alias of studio_health — account info + credit balance.",
+    "category": "account",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/account"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "account.ts"
+  },
+  {
+    "name": "studio_decide_assistance_approval",
+    "description": "Approve or deny a workspace side-effect approval (trash/move/element_build).",
+    "category": "assistance",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assistance/approvals/{approvalId}/decide"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assistance.ts"
+  },
+  {
+    "name": "studio_delete_comment",
+    "description": "Delete a comment (author or post owner).",
+    "category": "social",
+    "scope": "social",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "DELETE",
+      "pathTemplate": "/feed/comments/{commentId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_delete_dm_label",
+    "description": "Delete a DM label and its memberships. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "DELETE",
+      "pathTemplate": "/messages/labels/{labelId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_delete_message",
+    "description": "Delete a DM. scope=me hides for you only; scope=everyone (sender only) tombstones for both. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/messages/{messageId}/delete"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_delete_peer_note",
+    "description": "Delete a private peer note. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "DELETE",
+      "pathTemplate": "/messages/notes/{noteId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_deliver_job",
+    "description": "Seller delivers assetIds for a job (moves status to delivered).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/jobs/{jobId}/deliver"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_download_clip_segment",
+    "description": "[preferred] Download a trimmed clip segment (Save as video/audio). Prefer clipId on a project; or pass assetId + trimIn + trimOut. Returns short-lived { url, filename, contentType }. Requires generate scope.",
+    "category": "edits",
+    "scope": "generate",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/clips/download"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_download_edit_package",
+    "description": "[preferred] Portable .studio package manifest for a video edit (project.json + signed media URLs + icon). Same payload the Files/Export UI zips client-side. Optional expiresUnix (default ~1h).",
+    "category": "edits",
+    "scope": "read",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/package"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_duplicate_asset",
+    "description": "Duplicate an asset (same Bunny bytes, new row). Optional target folderId and name. Requires write scope.",
+    "category": "assets",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assets/{assetId}/duplicate"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assets.ts"
+  },
+  {
+    "name": "studio_edit_add_text",
+    "description": "[preferred] Add a title/text overlay clip. Creates a Title track if needed. Patch text later via studio_edit_update_clips.",
+    "category": "edits",
+    "scope": "read",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/text"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_append_clips",
+    "description": "[preferred] Append image/video/audio clips to an edit. Pass assetIds for simple sequential append, or clips[] for trim/start/track control.",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/clips"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_apply_text_preset",
+    "description": "[preferred] Apply a built-in text style template by id (from studio_list_text_presets). Pass clipId to restyle an existing text clip, or omit clipId to add a new text clip with that look. Optional text overrides the caption body.",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/edits/{projectId}/clips"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_brief",
+    "description": "Patch assisted brief content fields (subject, objective, keyMessage, production, notes, etc.). Requires expectedRevision. Prefer studio_patch_brief_production for production-only knobs.",
+    "category": "assistance",
+    "scope": "read",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/assistance/briefs/{briefId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assistance.ts"
+  },
+  {
+    "name": "studio_edit_detach_audio",
+    "description": "CapCut-style: mute the video clip and add a synced audio bed from the same asset.",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/clips/detach-audio"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_duplicate_clip",
+    "description": "Duplicate a clip immediately after it on the same track.",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/clips/duplicate"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_message",
+    "description": "Edit your own text DM or photo caption. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/messages/messages/{messageId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_edit_remove_clips",
+    "description": "Remove clips by id. Set ripple=true to close gaps on the same track.",
+    "category": "edits",
+    "scope": "write",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "DELETE",
+      "pathTemplate": "/edits/{projectId}/clips"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_reorder_clips",
+    "description": "Reorder all clips on a track. clipIds must list every clip on that track exactly once; startTimes are recomputed.",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/clips/reorder"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_set_frame_ratio",
+    "description": "Set canvas frame ratio: 16:9 | 9:16 | 1:1 (affects export composition).",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/frame-ratio"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_set_track_muted",
+    "description": "Mute or unmute a timeline track (video/audio/text).",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/edits/{projectId}/tracks/{trackId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_set_transition",
+    "description": "Set or clear transitionOut on a clip (applies into the following clip on export). Types: none, crossfade, dipToBlack, dipToWhite, wipeLeft, wipeRight, wipeUp, slideLeft, zoomIn, blur.",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/clips/transition"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_split_clip",
+    "description": "Split a clip at a timeline timeSec (must fall inside the clip).",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/clips/split"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_edit_update_clips",
+    "description": "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects (volume/fades/speed/scale/x/y/rotation), transitionOut, text (text clips). Per-clip mute = effects.volume 0 — only when the user asks to mute; exports will be silent if volume is 0. Default leave volume unset/1 to keep source audio.",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/edits/{projectId}/clips"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_element_sheet_guide",
+    "description": "READ FIRST before character/prop/location sheets. Returns min/recommended reference photo counts, upload checklist, fidelity locks, output layout, and step-by-step MCP workflow.",
+    "category": "elements",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/elements/sheet-guide?type=character"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_ensure_brief",
+    "description": "Ensure an assisted production brief (creates a thread if needed). Does not run the chat co-pilot — set production knobs then approve when review_ready.",
+    "category": "assistance",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assistance/briefs"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assistance.ts"
+  },
+  {
+    "name": "studio_ensure_path",
+    "description": "[preferred] Create nested folders for a path in one call (e.g. Clients/JAV/refs). Case-insensitive reuse of existing segments. Prefer over repeated studio_create_folder. Requires write scope.",
+    "category": "context",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/workspace/ensure-path"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "context.ts"
+  },
+  {
+    "name": "studio_estimate_batch",
+    "description": "[preferred] Estimate total production budget for multiple generation items with contingency. Call before studio_generate_batch / cartoon budget approval. Alias: studio_estimate_production.",
+    "category": "generations",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/generations/estimate-batch"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_estimate_generation",
+    "description": "[preferred] Estimate credit cost before generating. Call before studio_generate_* or studio_generate_batch.",
+    "category": "generations",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/generations/estimate"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_estimate_production",
+    "description": "Alias of studio_estimate_batch — estimate total production budget for multiple generation items with contingency. Call before studio_generate_batch / cartoon budget approval.",
+    "category": "generations",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/generations/estimate-batch"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_explore_voices",
+    "description": "Browse ElevenLabs voices for voiceover generation. Use voice_id as elevenVoiceId in studio_generate_audio.",
+    "category": "voices",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/voices{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "voices.ts"
+  },
+  {
+    "name": "studio_export_edit",
+    "description": "Export a saved edit to a Studio asset (ffmpeg). Requires generate scope. Returns { assetId }. exportKind=video (default) or audio. Video: exportResolution 720p|1080p|4K (default 1080p). Audio: audioFormat mp3|wav|m4a (default mp3). Optional name overrides filename.",
+    "category": "edits",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/export"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_fail_list_copy",
+    "description": "Mark a failed Public catalog copy after studio_prepare_list_on_network (cleanup pending asset).",
+    "category": "network",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/listings/fail-copy"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_fail_purchase_copy",
+    "description": "Refund/void a purchase when Bunny copy fails after prepare-purchase.",
+    "category": "network",
+    "scope": "read",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/purchases/{purchaseId}/fail"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_finalize_purchase_copy",
+    "description": "Step 3 of purchase: finalize buyer asset after Bunny copy succeeded.",
+    "category": "network",
+    "scope": "read",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/purchases/{purchaseId}/finalize"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_folder_contents",
+    "description": "List breadcrumb, subfolders, assets, documents, and elements in a folder. For a fuller pack use studio_project_context.",
+    "category": "folders",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/folders/{folderId}/contents"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "folders.ts"
+  },
+  {
+    "name": "studio_follow",
+    "description": "Follow a public profile by profileId.",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/profiles/{profileId}/follow"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_generate_audio",
+    "description": "[preferred] Generate voiceover (TTS), SFX, or music and save to a folder. Call studio_estimate_generation with mode=audio first. Voiceover: requires elevenVoiceId (from studio_explore_voices or studio_list_saved_voices). Prompt = spoken text (max ~3000 chars). SFX: prompt = sound description; optional durationSeconds 0.5–30 (omit = Auto ~5s). Music: prompt = track description; durationSeconds 3–300 (default 30); forceInstrumental defaults true. Async by default (wait=false) then polls up to 3 min (music may need longer — raise wait or poll).",
+    "category": "generations",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/generations"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_generate_batch",
+    "description": "[preferred] Queue multiple generations then poll until done. Prefer for props/shots packs after studio_estimate_batch. Rules: - Max 8 items per call. - Images/scripts/audio can run in parallel. - Videos are queued with ≥65s spacing (gateway 1 req/min). - Call studio_estimate_batch first for budget. - Inspect outputs with studio_view_media before another round. ${directHandoffHint}",
+    "category": "generations",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/generations"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_generate_element_sheet",
+    "description": "Builds reference sheet image. Retired from Agent Mode.",
+    "category": "elements",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/elements/{elementId}/generate-sheet"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_generate_element_text_sheet",
+    "description": "Generates markdown production bible from reference photos. Retired from Agent Mode.",
+    "category": "elements",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/elements/{elementId}/generate-text-sheet"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_generate_image",
+    "description": "[preferred] Generate an image and save it to a Studio folder. Call studio_estimate_generation first. Uses wait=true (usually completes in seconds). DEFAULT: Direct handoff (verbatim prompt). Pass styleSheetElementId to enable the enhancement sticking layer. ${directHandoffHint}",
+    "category": "generations",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/generations"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_generate_script",
+    "description": "[preferred] Generate a script document in a folder. Call studio_estimate_generation with mode=script first. ${directHandoffHint}",
+    "category": "generations",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/generations"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_generate_video",
+    "description": "[preferred] Generate a video and save it to a Studio folder. Call studio_estimate_generation first. Async + poll (up to 5 min). DEFAULT: Direct handoff (verbatim prompt). Pass styleSheetElementId to enable the enhancement sticking layer. VIDEO WITH PEOPLE (required workflow): 1. studio_generate_image — storyboard still with referenceElementIds 2. studio_generate_video — pass startFrameAssetId from step 1 + referenceElementIds for prop/location lock. Wait ≥65s between video calls (1 req/min gateway quota). For packs use studio_generate_batch. ${directHandoffHint}",
+    "category": "generations",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/generations"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_get_asset",
+    "description": "Get asset metadata and signed read/thumbnail URLs (1h TTL).",
+    "category": "assets",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/assets/{assetId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assets.ts"
+  },
+  {
+    "name": "studio_get_brief",
+    "description": "Get an assisted brief by briefId, or by threadId (pass threadId only).",
+    "category": "assistance",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/assistance/briefs/{briefId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assistance.ts"
+  },
+  {
+    "name": "studio_get_document",
+    "description": "Get a document by ID including markdown content.",
+    "category": "documents",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/documents/{documentId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "documents.ts"
+  },
+  {
+    "name": "studio_get_edit",
+    "description": "Get a video edit project including project JSON (tracks/clips).",
+    "category": "edits",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/edits/{projectId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_get_element",
+    "description": "Get an element by ID. Returns buildStatus, referenceAssetIds (upload refs), sheetAssetId/sheetUrl (built sheet).",
+    "category": "elements",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/elements/{elementId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_get_folder",
+    "description": "Get a single folder by ID (name, parentId, icon).",
+    "category": "folders",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/folders/{folderId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "folders.ts"
+  },
+  {
+    "name": "studio_get_generation",
+    "description": "Poll a generation job by ID. Returns status, prompts, model, settings, creditsSpent, and output assets.",
+    "category": "generations",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/generations/{jobId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_get_job",
+    "description": "Get a marketplace job detail (events, deliverables, review eligibility).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/jobs/{jobId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_get_my_listing_detail",
+    "description": "Seller listing detail with orders and unlist/release flags.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/me/listings/{listingId}?{q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_get_my_listing_for_asset",
+    "description": "Find the seller's listing row for a given assetId (if any).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/me/listings/for-asset/{assetId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_get_my_payout_account",
+    "description": "Get the seller payout bank details (Settings → Payouts).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "admin",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/me/payout"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_get_my_profile",
+    "description": "Get the authenticated API key owner's Studio public profile (username, bio, counts).",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/profiles/me"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_get_my_seller_status",
+    "description": "Get the API key owner's Creative Network seller application status (or null if never applied).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/me/seller"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_get_network_listing",
+    "description": "Get a single listed stock-audio listing card (preview URL, ownership).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/listings/{listingId}?{q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_get_network_offer",
+    "description": "Get a published Creative Network offer by slug (full gallery).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/offers/{slug}?{q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_get_payment",
+    "description": "Get one payment by id (includes receipt URL when available). Requires read scope.",
+    "category": "accountExtra",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/account/payments/{paymentId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "accountExtra.ts"
+  },
+  {
+    "name": "studio_get_post_media",
+    "description": "Get signed thumbnail/media URLs for a public post.",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/posts/{postId}/media"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_get_pricing",
+    "description": "Credit unit price and sample generation credit costs. Requires read scope.",
+    "category": "accountExtra",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/account/pricing"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "accountExtra.ts"
+  },
+  {
+    "name": "studio_get_profile",
+    "description": "Get a public profile by username (includes isFollowing / isOwner for the API key user).",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/profiles/{username}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_get_storage",
+    "description": "Storage usage, projected monthly charge (TTD), outstanding balance, and upload-block status. Requires read scope.",
+    "category": "accountExtra",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/account/storage"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "accountExtra.ts"
+  },
+  {
+    "name": "studio_get_subscription",
+    "description": "Credit balance plus active subscription summary (plan name, period, included credits). Requires read scope. Prefer studio_credit_balance for balance-only.",
+    "category": "accountExtra",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/account/subscription"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "accountExtra.ts"
+  },
+  {
+    "name": "studio_get_thread_history",
+    "description": "Get chat/generation event history for a thread (prompts, stages, job/asset ids). Paginate with beforeOrder from nextBeforeOrder.",
+    "category": "assistance",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/assistance/threads/{threadId}/history{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assistance.ts"
+  },
+  {
+    "name": "studio_health",
+    "description": "Validate API key and return account info plus credit balance. Prefer studio_bootstrap at session start (includes this + tree + hints).",
+    "category": "account",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/account"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "account.ts"
+  },
+  {
+    "name": "studio_is_approved_seller",
+    "description": "Check whether a userId is an approved Creative Network seller.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/sellers/approved/{targetUserId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_is_asset_shared",
+    "description": "Check whether an asset is currently shared on the owner's profile.",
+    "category": "social",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/assets/{assetId}/shared"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_list_comment_replies",
+    "description": "List replies under a parent comment.",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/comments/{parentId}/replies{limit})}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_list_comments",
+    "description": "List top-level comments on a public post.",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/posts/{postId}/comments{limit})}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_list_conversations",
+    "description": "List DM conversations (newest first). Optional labelId filters to peers in that label. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/messages/conversations{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_list_credit_transactions",
+    "description": "Paginated credit ledger (spends, grants, refunds, storage charges). Pass continueCursor as cursor for the next page. Requires read scope.",
+    "category": "accountExtra",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/account/credits{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "accountExtra.ts"
+  },
+  {
+    "name": "studio_list_dm_labels",
+    "description": "List the caller's DM labels (lists). Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/messages/labels"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_list_edits",
+    "description": "List video edit projects in a folder (defaults to API key sandbox).",
+    "category": "edits",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/edits{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_list_elements",
+    "description": "List creative elements (characters, props, locations, docs). Filter by folderId or type.",
+    "category": "elements",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/elements{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_list_feed",
+    "description": "List ranked feed posts (forYou or following). Viewer like/save state included.",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed{seedPostId})}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_list_folders",
+    "description": "List child folders one level deep. For orientation prefer studio_bootstrap / studio_workspace_tree / studio_search.",
+    "category": "folders",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/folders{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "folders.ts"
+  },
+  {
+    "name": "studio_list_generations",
+    "description": "List recent generation jobs with status and output assets.",
+    "category": "generations",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/generations{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_list_jobs_with_peer",
+    "description": "Jobs between the viewer and a peer (DM sidebar). Returns asBuyer / asSeller / sellerTotals.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/jobs/with/{peerUserId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_list_messages",
+    "description": "List messages in a conversation (oldest → newest). Optional limit (default 120, max 200). Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/messages/conversations/{conversationId}/messages{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_list_my_buyer_jobs",
+    "description": "List jobs where the API key owner is the buyer.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/jobs/buyer"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_list_my_collection",
+    "description": "List the owner's saved, liked, or shared collection posts.",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/collection{limit})}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_list_my_following",
+    "description": "List profiles the API key owner follows.",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/profiles/me/following{limit})}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_list_my_listings",
+    "description": "List the seller's stock-audio listings (manage pane).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/me/listings"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_list_my_offers",
+    "description": "List the seller's own Creative Network offers (all statuses). Requires approved seller.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/me/offers?{q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_list_my_seller_jobs",
+    "description": "List jobs where the API key owner is the seller. Optional offerId filter.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/jobs/seller${qs ? "
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_list_my_shared_asset_ids",
+    "description": "List asset IDs currently shared on the owner's public profile.",
+    "category": "social",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/shared-asset-ids"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_list_network_offers",
+    "description": "List published Creative Network offers (public catalog). Optional category filter.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/offers?{q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_list_network_offers_by_username",
+    "description": "List published offers for a seller username (Hire Me / profile).",
+    "category": "network",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/sellers/{username}/offers?{q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_list_notifications",
+    "description": "List in-app notifications (generation completed/failed, payment status). Requires social scope.",
+    "category": "accountExtra",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/notifications"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "accountExtra.ts"
+  },
+  {
+    "name": "studio_list_offer_reviews",
+    "description": "List verified-purchase reviews for a published offer.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/offers/{offerId}/reviews${qs ? "
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_list_on_network",
+    "description": "List owned stock audio on Creative Network (prepare → Bunny copy → commit). Requires approved seller.",
+    "category": "network",
+    "scope": "read",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/listings"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_list_payments",
+    "description": "List recent top-up / payment history for this account (up to 50). Requires read scope.",
+    "category": "accountExtra",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/account/payments"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "accountExtra.ts"
+  },
+  {
+    "name": "studio_list_peer_labels",
+    "description": "List which of the caller's labels are assigned to a peer. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/messages/peers/{peerUserId}/labels"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_list_peer_notes",
+    "description": "List private notes about a peer. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/messages/peers/{peerUserId}/notes"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_list_pending_approvals",
+    "description": "List pending review_ready briefs and workspace side-effect approvals.",
+    "category": "assistance",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/assistance/approvals{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assistance.ts"
+  },
+  {
+    "name": "studio_list_platform_people",
+    "description": "List public profiles the owner does not follow (people directory).",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/profiles/people{limit})}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_list_presets",
+    "description": "[deprecated] Style Sheets replaced presets. Returns Direct/unstyled only — use studio_list_style_sheets for styled work.",
+    "category": "generations",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/style-presets{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_list_public_posts",
+    "description": "List public posts for a username (profile grid).",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/posts{limit})}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_list_reference_intents",
+    "description": "List referenceIntent values for styled/Direct generation (auto, stylize, match_reference, element_lock).",
+    "category": "generations",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/catalog/reference-intents"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_list_saved_voices",
+    "description": "List Studio favorite voices for this API key owner.",
+    "category": "voices",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/voices/saved"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "voices.ts"
+  },
+  {
+    "name": "studio_list_script_types",
+    "description": "List script output types for studio_generate_script (production, storyboard, vo_script, etc.).",
+    "category": "generations",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/catalog/script-types"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_list_style_sheets",
+    "description": "[preferred] List Style Sheet elements (drafts + built). Styled generation needs styleRules and/or built sheetAssetId.",
+    "category": "generations",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/style-sheets"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_list_subscription_plans",
+    "description": "List enabled subscription plans (catalog). Requires read scope.",
+    "category": "accountExtra",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/account/plans"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "accountExtra.ts"
+  },
+  {
+    "name": "studio_list_text_presets",
+    "description": "[preferred] List CapCut-like built-in text style templates (Grease, Dark Pill, etc.). Use studio_edit_apply_text_preset to apply. Filter by category: title | pop | soft | neon | badge | all.",
+    "category": "edits",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": null,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_list_threads",
+    "description": "List recent generation/assistance threads (id, title, folderId, updatedAt). Use before studio_get_thread_history.",
+    "category": "assistance",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/assistance/threads{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assistance.ts"
+  },
+  {
+    "name": "studio_list_trash",
+    "description": "List soft-deleted folders, assets, documents, and elements.",
+    "category": "trash",
+    "scope": "write",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/trash{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "trash.ts"
+  },
+  {
+    "name": "studio_list_video_models",
+    "description": "List video models for MCP selection (Seedance 2.5 / 2.0 via BytePlus Ark).",
+    "category": "generations",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/video-models?scope=mcp"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
+    "name": "studio_mark_conversation_read",
+    "description": "Mark a DM conversation as read (advances read + delivery watermarks). Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/conversations/{conversationId}/read"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_mark_notification_read",
+    "description": "Mark a single notification as read. Requires social scope.",
+    "category": "accountExtra",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/notifications/{notificationId}/read"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "accountExtra.ts"
+  },
+  {
+    "name": "studio_my_asset_store_summary",
+    "description": "Seller asset-store summary: listed/pending counts and funds (TTD cents).",
+    "category": "network",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/me/listings/summary?{q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_network_hire_label",
+    "description": "Whether a username has hireable published offers; returns Hire Me / Hire Us label or null.",
+    "category": "network",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/sellers/{username}/hire"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_open_conversation",
+    "description": "Open or create a DM conversation with a public profile username. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/conversations"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_patch_brief_production",
+    "description": "Patch production knobs on a brief (aspectRatio, duration, resolution, etc.). Requires expectedRevision for optimistic concurrency.",
+    "category": "assistance",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/assistance/briefs/{briefId}/production"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assistance.ts"
+  },
+  {
+    "name": "studio_peer_panel",
+    "description": "DM peer sidebar payload: profile, seller tag, labels, block state. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/messages/peers/{peerUserId}/panel"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_prepare_list_on_network",
+    "description": "Step 1 of listing stock audio: prepare Public catalog copy paths. Prefer studio_list_on_network for the full pipeline. On copy failure call studio_fail_list_copy.",
+    "category": "network",
+    "scope": "read",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/listings/prepare"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_prepare_purchase_listing",
+    "description": "Step 1 of purchase: debit/escrow + return copy paths. Prefer studio_purchase_network_listing for the full pipeline.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/listings/{listingId}/prepare-purchase"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_prepare_seller_doc_upload",
+    "description": "Get a Convex staging upload URL for a seller KYC document. Upload the file to uploadUrl, then studio_commit_seller_doc_upload.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/seller/docs/prepare"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_production_guide",
+    "description": "READ FIRST for character/prop/location pipelines. Explains unbuilt vs built states, when to use sheet vs upload refs, and direct-prompt generation defaults (unstyled + skipPromptEnhancement — no Flash rewrite before Seedance).",
+    "category": "elements",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/elements/production-guide"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_project_context",
+    "description": "[preferred] One-shot project pack for a folder: breadcrumb, shallow tree, element summaries, active style sheet, recent generations, counts.",
+    "category": "context",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/workspace/project-context?{params}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "context.ts"
+  },
+  {
+    "name": "studio_pull_frame",
+    "description": "[preferred] Extract one still from an open edit via ffmpeg (saved in sibling Pulled Frames folder). Pass timeSec for timeline playhead, or assetId + localTimeSec for a source. Then Read preferredViewUrl. For multi-frame pulls on a source clip, use studio_pull_frames instead.",
+    "category": "edits",
+    "scope": "generate",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/edits/{projectId}/frame"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_pull_frames",
+    "description": "[preferred] Pull N stills from a source video between startSec and endSec (or exact timesSec). Saves Frame · *.jpg into a sibling Pulled Frames folder (not next to the clip). Returns preferredViewUrl per frame — Cursor Read those images. No edit project required. See MCP resource studio://guides/pull-frames. Uses generate+write scope.",
+    "category": "assets",
+    "scope": "write",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assets/{assetId}/frames"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assets.ts"
+  },
+  {
+    "name": "studio_purchase_network_listing",
+    "description": "Purchase a stock-audio listing (prepare → Bunny copy → finalize). Debits balance.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/listings/{listingId}/purchase"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_quote_book_offer",
+    "description": "Quote escrow price/credits to book an offer (optional packageIndex).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/offers/{offerId}/quote${qs ? "
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_quote_list_price",
+    "description": "Quote whether an owned audio asset can be listed and at what price.",
+    "category": "network",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/network/listings/quote?{q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_record_post_view",
+    "description": "Record a view on a public feed post.",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/feed/posts/{postId}/view"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_record_share",
+    "description": "Record a share engagement on a public feed post (bumps shareCount).",
+    "category": "social",
+    "scope": "read",
+    "risk": "outbound",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/feed/posts/{postId}/share"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_reject_brief",
+    "description": "Reject / abandon an assisted brief. Requires write scope.",
+    "category": "assistance",
+    "scope": "write",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assistance/briefs/{briefId}/reject"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assistance.ts"
+  },
+  {
+    "name": "studio_release_listing_to_platform",
+    "description": "Release a sold stock listing to the platform (future profits = platform). Seller only.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/listings/{listingId}/release"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_remove_voice",
+    "description": "Remove a saved voice favorite. Requires write scope.",
+    "category": "voices",
+    "scope": "write",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "DELETE",
+      "pathTemplate": "/voices/saved/{voiceId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "voices.ts"
+  },
+  {
+    "name": "studio_request_seller_access",
+    "description": "Submit Creative Network seller KYC application. Upload docs via prepare→commit first; pass returned bunnyPaths. Paths must be under users/{userId}/marketplace-kyc/.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/seller/apply"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_reserve_upload",
+    "description": "Step 1 of two-step upload for large files. Returns { assetId, uploadUrl }. PUT/POST file bytes to uploadUrl, then call studio_complete_upload with the storageId from the upload response.",
+    "category": "assets",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assets/upload"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assets.ts"
+  },
+  {
+    "name": "studio_resolve_path",
+    "description": "[preferred] Resolve a Studio-relative folder path (e.g. Ads/JAV/scene-1) to folderId + breadcrumb. Does not create — use studio_ensure_path for that.",
+    "category": "context",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/workspace/resolve-path?{params}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "context.ts"
+  },
+  {
+    "name": "studio_restore",
+    "description": "Restore a trashed folder, asset, document, or element. Requires write scope.",
+    "category": "trash",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/{collection}/{id}/restore"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "trash.ts"
+  },
+  {
+    "name": "studio_sample_video_frames",
+    "description": "[deprecated] Alias of studio_pull_frames. Prefer studio_pull_frames (startSec/endSec/count → Pulled Frames folder).",
+    "category": "assets",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assets/{assetId}/frames"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assets.ts"
+  },
+  {
+    "name": "studio_save_my_payout_account",
+    "description": "Save seller payout bank details. Requires an existing seller application/row.",
+    "category": "network",
+    "scope": "social",
+    "risk": "admin",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "PUT",
+      "pathTemplate": "/network/me/payout"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_save_voice",
+    "description": "Save a voice favorite for faster reuse. Requires write scope.",
+    "category": "voices",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/voices/saved"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "voices.ts"
+  },
+  {
+    "name": "studio_search",
+    "description": "[preferred] Search folders, assets, documents, and elements by name/title. Use before exploring blindly.",
+    "category": "context",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/workspace/search?{params}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "context.ts"
+  },
+  {
+    "name": "studio_search_messages",
+    "description": "Unified DM sidebar search: people, chats, message bodies, and labels. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/messages/search?q={q}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_send_image_message",
+    "description": "Send an image DM using a billable Studio image asset (Messages folder). Optional caption + reply. Requires messages scope. For video or multi-file Choose/Share parity, use studio_send_media_message.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "outbound",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/conversations/{conversationId}/images"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_send_media_message",
+    "description": "Send Studio media into a DM like the UI Choose/Share flow. Default delivery=file copies into the peer's Messages folder and posts image/video bubbles (supports video). Pass assetId, assetIds, and/or items[{itemKind,itemId}]. delivery=access grants live Shared-with-me links. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "outbound",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/conversations/{conversationId}/media"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_send_message",
+    "description": "Send a text DM. Optional replyToMessageId for quote-reply. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "outbound",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/conversations/{conversationId}/messages"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_send_voice_message",
+    "description": "Send a voice DM using a billable Studio audio asset in the Messages folder. durationSec is client-measured length (1s–300s). Optional reply. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "outbound",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/conversations/{conversationId}/voice"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_set_active_style_sheet",
+    "description": "MCP/API has no session store — pass styleSheetElementId on each studio_generate_image|video|script call for styled work (enhancement sticks style + context). Omit for Direct verbatim handoff.",
+    "category": "elements",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/style-sheets/active"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_set_offer_status",
+    "description": "Set offer status: draft | published | paused | archived. Requires approved seller.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/offers/{offerId}/status"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_set_peer_labels",
+    "description": "Replace which labels a peer belongs to (full set). Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PUT",
+      "pathTemplate": "/messages/peers/{peerUserId}/labels"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_share_asset_post",
+    "description": "Share an owned image/video asset to the public profile feed.",
+    "category": "social",
+    "scope": "social",
+    "risk": "outbound",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/feed/posts"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_share_post_to_dm",
+    "description": "Share a feed post (or comment) into a DM conversation. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "outbound",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/conversations/{conversationId}/share"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_submit_job_review",
+    "description": "Buyer leaves a 1–5 star review after a completed job (optional body).",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/jobs/{jobId}/review"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_suggest_hashtags",
+    "description": "Autocomplete hashtag suggestions for captions.",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/suggest/hashtags{limit})}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_suggest_people",
+    "description": "Autocomplete @mention people suggestions.",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/suggest/people{limit})}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_toggle_comment_like",
+    "description": "Toggle like on a comment.",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/feed/comments/{commentId}/like"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_toggle_like",
+    "description": "Toggle like on a public feed post.",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/feed/posts/{postId}/like"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_toggle_save",
+    "description": "Toggle save/bookmark on a public feed post.",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/feed/posts/{postId}/save"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_trash",
+    "description": "Move a folder, asset, document, or element to trash (soft delete). Requires write scope.",
+    "category": "trash",
+    "scope": "write",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "DELETE",
+      "pathTemplate": "/{collection}/{id}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "trash.ts"
+  },
+  {
+    "name": "studio_unblock_peer",
+    "description": "Unblock a peer. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/messages/peers/{peerUserId}/unblock"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_unfollow",
+    "description": "Unfollow a public profile by profileId.",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "DELETE",
+      "pathTemplate": "/profiles/{profileId}/follow"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_unlist_from_network",
+    "description": "Unlist / withdraw a seller listing (no purchases). Does not delete the asset.",
+    "category": "network",
+    "scope": "read",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/network/me/listings/{listingId}/unlist"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_unread_count",
+    "description": "Count conversations with unseen inbound messages. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/messages/unread-count"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_unshare_post",
+    "description": "Unshare a previously shared asset from the public profile (by assetId).",
+    "category": "social",
+    "scope": "social",
+    "risk": "destructive",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "DELETE",
+      "pathTemplate": "/feed/posts/by-asset/{assetId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_update_asset",
+    "description": "Rename an asset (image, video, audio) or move it to another folder. Requires write scope.",
+    "category": "assets",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/assets/{assetId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assets.ts"
+  },
+  {
+    "name": "studio_update_dm_label",
+    "description": "Rename or change icon on a DM label. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/messages/labels/{labelId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_update_document",
+    "description": "Rename a document (title), edit markdown content, or move it to another folder. Requires write scope.",
+    "category": "documents",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/documents/{documentId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "documents.ts"
+  },
+  {
+    "name": "studio_update_edit",
+    "description": "Save full project JSON (PUT) and/or rename/move (set name/folderId). Prefer granular studio_edit_* tools for clip ops. Pass project for full timeline replace when remove/append races or mute state is stuck. Open editor adopts newer Convex updatedAt automatically; verify with studio_get_edit then studio_export_edit.",
+    "category": "edits",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PUT",
+      "pathTemplate": "/edits/{projectId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "edits.ts"
+  },
+  {
+    "name": "studio_update_element",
+    "description": "Update element fields / referenceAssetIds. Retired from Agent Mode surface.",
+    "category": "elements",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/elements/{elementId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "elements.ts"
+  },
+  {
+    "name": "studio_update_folder",
+    "description": "Rename a folder or move it under another parent. Requires write scope. Cannot move the API key sandbox root folder.",
+    "category": "folders",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/folders/{folderId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "folders.ts"
+  },
+  {
+    "name": "studio_update_my_profile",
+    "description": "Update the owner's profile (bio, visibility, contact links, avatar, seller display name).",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/profiles/me"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_update_offer",
+    "description": "Update an owned Creative Network offer. Requires approved seller.",
+    "category": "network",
+    "scope": "marketplace",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/network/me/offers/{offerId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "network.ts"
+  },
+  {
+    "name": "studio_update_peer_note",
+    "description": "Update a private peer note by noteId. Requires messages scope.",
+    "category": "messages",
+    "scope": "messages",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/messages/notes/{noteId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_update_post_caption",
+    "description": "Update the caption/description on an owned published post.",
+    "category": "social",
+    "scope": "social",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "PATCH",
+      "pathTemplate": "/feed/posts/{postId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts"
+  },
+  {
+    "name": "studio_upload_asset",
+    "description": "Upload a reference photo or media file to a folder (inline base64, max 50MB). For larger files use studio_reserve_upload + studio_complete_upload. Requires write scope.",
+    "category": "assets",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assets/upload-inline"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assets.ts"
+  },
+  {
+    "name": "studio_validate_production_gates",
+    "description": "Optional pre-flight gate check before studio_generate_* when using production-state.json (from archived cartoon-ad-production). Returns canProceed, blockers, warnings. Not required for Studio Assistance / direct gen.",
+    "category": "production",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": null,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "production.ts"
+  },
+  {
+    "name": "studio_view_media",
+    "description": "Return signed media URLs for the host client to view (e.g. Cursor Read on preferredViewUrl). Does NOT call Studio AI and uses no generation credits. Prefer thumbnailUrl/preferredViewUrl for images. For VIDEO stills before editing, use studio_pull_frames (Cursor cannot scrub MP4 via Read).",
+    "category": "assets",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/assets/{assetId}/media"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "assets.ts"
+  },
+  {
+    "name": "studio_workspace_tree",
+    "description": "[preferred] Nested folder tree (paths + ids). Prefer over BFS studio_list_folders.",
+    "category": "context",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/workspace/tree{query}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "context.ts"
+  }
+]
