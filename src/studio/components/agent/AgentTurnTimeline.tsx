@@ -14,6 +14,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { StudioChatMarkdown } from "../StudioChatMarkdown";
+import { LogoLoader } from "../logo-loader";
 import { AgentApprovalStep } from "./AgentApprovalStep";
 import { AgentStepRow } from "./AgentStepRow";
 import {
@@ -22,6 +23,7 @@ import {
   type AgentAttachmentChip,
   type AgentApprovalRow,
   type AgentMessageRow,
+  type AgentPendingMedia,
   type AgentRunRow,
   type AgentToolCallRow,
   type AgentTurn,
@@ -241,9 +243,36 @@ function TurnBlock({
 
       {(() => {
         const mediaItems = turn.steps.flatMap((step) => step.media ?? []);
-        if (!mediaItems.length) return null;
+        const pendingItems = turn.steps
+          .filter(
+            (step) =>
+              (step.status === "started" || step.status === "pending_approval") &&
+              step.pendingMedia &&
+              !(step.media && step.media.length),
+          )
+          .map((step) => step.pendingMedia!) as AgentPendingMedia[];
+        if (!mediaItems.length && !pendingItems.length) return null;
         return (
           <div className="studio-agent-turn-media" aria-label="Generated media">
+            {pendingItems.map((pending, index) => (
+              <div
+                key={`pending-${pending.kind}-${index}`}
+                className={`studio-agent-media-card is-pending is-${pending.kind}`}
+                style={{ ["--agent-gen-aspect" as string]: pending.aspectRatio }}
+                role="status"
+                aria-label={
+                  pending.kind === "video"
+                    ? "Generating video"
+                    : pending.kind === "audio"
+                      ? "Generating audio"
+                      : "Generating image"
+                }
+              >
+                <div className="studio-agent-media-pending-plate">
+                  <LogoLoader size="md" />
+                </div>
+              </div>
+            ))}
             {mediaItems.map((media, index) => {
               const resolved = media.assetId
                 ? thumbById.get(media.assetId)

@@ -372,6 +372,28 @@
   min-width: 0;
 }
 
+.studio-agent-media-card.is-pending {
+  aspect-ratio: var(--agent-gen-aspect, 16 / 9);
+  max-height: 360px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--mos-ink, #111) 6%, transparent);
+}
+
+.studio-agent-media-card.is-pending.is-audio {
+  aspect-ratio: var(--agent-gen-aspect, 3 / 1);
+  max-height: 120px;
+}
+
+.studio-agent-media-pending-plate {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .studio-agent-media-frame {
   display: block;
   width: 100%;

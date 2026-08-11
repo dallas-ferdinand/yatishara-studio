@@ -70,6 +70,15 @@ export type AgentMediaPreview = {
   thumbnailUrl?: string;
 };
 
+/** While generate is in flight — reserve the output frame. */
+export type AgentPendingMedia = {
+  kind: "image" | "video" | "audio";
+  /** CSS-friendly ratio e.g. "16 / 9" */
+  aspectRatio: string;
+  /** Original arg e.g. "16:9" */
+  aspectLabel?: string;
+};
+
 export type DisplayStep = {
   id: string;
   toolCallId?: Id<"agentToolCalls">;
@@ -85,6 +94,7 @@ export type DisplayStep = {
   error?: string;
   outcome?: StepOutcome;
   media?: AgentMediaPreview[];
+  pendingMedia?: AgentPendingMedia;
   collapsedGroupCount?: number;
   isGroupSummary?: boolean;
   isLive?: boolean;
@@ -273,6 +283,51 @@ export function extractGeneratedMedia(
   return out.slice(0, 8);
 }
 
+/** Parse "16:9" / "16/9" / "1.777" → CSS aspect-ratio value. */
+export function cssAspectRatio(raw?: string | null, fallback = "16 / 9"): string {
+  const text = String(raw || "").trim();
+  if (!text) return fallback;
+  const colon = text.match(/^(\d+(?:\.\d+)?)\s*[:/x×]\s*(\d+(?:\.\d+)?)$/i);
+  if (colon) return `${colon[1]} / ${colon[2]}`;
+  const num = Number(text);
+  if (Number.isFinite(num) && num > 0) return `${num} / 1`;
+  return fallback;
+}
+
+export function extractPendingGenerateMedia(
+  toolName: string,
+  argsJson?: string | null,
+): AgentPendingMedia | undefined {
+  if (!/studio_generate_(image|video|audio)|generate_batch/i.test(toolName)) {
+    return undefined;
+  }
+  const kind: AgentPendingMedia["kind"] = toolName.includes("audio")
+    ? "audio"
+    : toolName.includes("video")
+      ? "video"
+      : "image";
+  const parsed = parseJsonSafe(argsJson);
+  const root =
+    parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : {};
+  // invoke wrapper: { name, args: { aspectRatio } } OR direct studio args
+  const nested =
+    root.args && typeof root.args === "object"
+      ? (root.args as Record<string, unknown>)
+      : root;
+  const label =
+    (typeof nested.aspectRatio === "string" && nested.aspectRatio) ||
+    (typeof root.aspectRatio === "string" && root.aspectRatio) ||
+    undefined;
+  const fallback = kind === "audio" ? "3 / 1" : "16 / 9";
+  return {
+    kind,
+    aspectRatio: cssAspectRatio(label, fallback),
+    aspectLabel: label || (kind === "audio" ? "3:1" : "16:9"),
+  };
+}
+
 function resolveToolName(row: AgentToolCallRow): string {
   const raw = String(row.toolName || "").trim();
   if (raw && raw !== "invoke") return raw;
@@ -318,6 +373,10 @@ function toolCallToStep(
       : outcome?.label && outcome.label !== title
         ? outcome.label
         : undefined;
+  const pendingMedia =
+    effectiveStatus === "started" || effectiveStatus === "pending_approval"
+      ? extractPendingGenerateMedia(toolName, row.argsJson)
+      : undefined;
 
   return {
     id: String(row._id),
@@ -334,6 +393,7 @@ function toolCallToStep(
     error: salvaged ? undefined : row.error,
     outcome,
     media: media.length ? media : undefined,
+    pendingMedia,
   };
 }
 
