@@ -29,6 +29,7 @@ const approvalStatus = v.union(
 const approvalReturn = v.object({
   _id: v.id("agentApprovals"),
   threadId: v.id("agentThreads"),
+  runId: v.optional(v.id("agentRuns")),
   action: v.string(),
   toolName: v.optional(v.string()),
   title: v.string(),
@@ -57,6 +58,7 @@ export const listForThread = authedQuery({
       .map((row) => ({
         _id: row._id,
         threadId: row.threadId,
+        runId: row.runId,
         action: row.action,
         toolName: row.toolName,
         title: row.title,
@@ -89,6 +91,16 @@ export const decide = authedMutation({
         status: "denied",
         decidedAt: now,
         updatedAt: now,
+      });
+      await ctx.runMutation(internal.agentRuns.settleApprovalToolCall, {
+        runId: approval.runId,
+        approvalId: approval._id,
+        status: "cancelled",
+        error: "Cancelled by user",
+      });
+      await finalizeApprovalReply(ctx, approval, {
+        outcome: "cancelled",
+        assistantText: cancelledReplyForApproval(approval),
       });
       return null;
     }
@@ -362,10 +374,15 @@ export const markCompleted = internalMutation({
       resultJson: args.resultJson,
       updatedAt: now,
     });
-    await appendAgentSystemMessage(ctx, {
-      ownerId: row.ownerId,
-      threadId: row.threadId,
-      content: `Approved action completed: ${row.title}`,
+    await ctx.runMutation(internal.agentRuns.settleApprovalToolCall, {
+      runId: row.runId,
+      approvalId: row._id,
+      status: "completed",
+      resultJson: args.resultJson,
+    });
+    await finalizeApprovalReply(ctx, row, {
+      outcome: "completed",
+      assistantText: successReplyForApproval(row),
     });
     return null;
   },
@@ -386,10 +403,15 @@ export const markFailed = internalMutation({
       error: args.error.slice(0, 500),
       updatedAt: now,
     });
-    await appendAgentSystemMessage(ctx, {
-      ownerId: row.ownerId,
-      threadId: row.threadId,
-      content: `Approved action failed: ${args.error.slice(0, 300)}`,
+    await ctx.runMutation(internal.agentRuns.settleApprovalToolCall, {
+      runId: row.runId,
+      approvalId: row._id,
+      status: "failed",
+      error: args.error,
+    });
+    await finalizeApprovalReply(ctx, row, {
+      outcome: "failed",
+      assistantText: failedReplyForApproval(row, args.error),
     });
     return null;
   },
@@ -424,7 +446,7 @@ export const runCreateFolder = internalMutation({
   },
 });
 
-async function appendAgentSystemMessage(
+async function appendAgentAssistantMessage(
   ctx: MutationCtx,
   args: {
     ownerId: Id<"users">;
@@ -436,10 +458,102 @@ async function appendAgentSystemMessage(
   await ctx.db.insert("agentMessages", {
     ownerId: args.ownerId,
     threadId: args.threadId,
-    role: "system",
+    role: "assistant",
     content: args.content,
     status: "complete",
     createdAt: now,
   });
   await ctx.db.patch(args.threadId, { updatedAt: now });
+}
+
+async function finalizeApprovalReply(
+  ctx: MutationCtx,
+  approval: {
+    _id: Id<"agentApprovals">;
+    ownerId: Id<"users">;
+    threadId: Id<"agentThreads">;
+    runId?: Id<"agentRuns">;
+  },
+  args: {
+    outcome: "completed" | "failed" | "cancelled";
+    assistantText: string;
+  },
+) {
+  await appendAgentAssistantMessage(ctx, {
+    ownerId: approval.ownerId,
+    threadId: approval.threadId,
+    content: args.assistantText,
+  });
+  if (!approval.runId) return;
+  if (args.outcome === "completed") {
+    await ctx.runMutation(internal.agentRuns.completeRun, {
+      runId: approval.runId,
+      assistantText: args.assistantText,
+    });
+    return;
+  }
+  if (args.outcome === "cancelled") {
+    await ctx.runMutation(internal.agentRuns.cancelRunWithAssistant, {
+      runId: approval.runId,
+      assistantText: args.assistantText,
+    });
+    return;
+  }
+  await ctx.runMutation(internal.agentRuns.failRun, {
+    runId: approval.runId,
+    error: args.assistantText,
+  });
+}
+
+function humanActionName(toolName?: string | null, title?: string | null) {
+  if (title && !/^studio_/i.test(title)) return title.trim();
+  const raw = String(toolName || title || "Action").trim();
+  if (!raw) return "Action";
+  const cleaned = raw.replace(/^studio_/, "").replace(/_/g, " ").trim();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+function successReplyForApproval(row: {
+  toolName?: string;
+  title: string;
+}) {
+  const toolName = String(row.toolName || "");
+  if (toolName === "studio_share_asset_post") {
+    return "Done. Your post is live now.";
+  }
+  if (toolName === "studio_send_message") {
+    return "Done. Your message has been sent.";
+  }
+  if (toolName === "studio_trash") {
+    return "Done. That was moved to trash.";
+  }
+  return `Done. ${humanActionName(row.toolName, row.title)} is complete.`;
+}
+
+function cancelledReplyForApproval(row: {
+  toolName?: string;
+  title: string;
+}) {
+  const toolName = String(row.toolName || "");
+  if (toolName === "studio_share_asset_post") {
+    return "Cancelled. I didn't post it.";
+  }
+  if (toolName === "studio_send_message") {
+    return "Cancelled. I didn't send anything.";
+  }
+  return `Cancelled. I didn't go through with ${humanActionName(row.toolName, row.title).toLowerCase()}.`;
+}
+
+function failedReplyForApproval(
+  row: {
+    toolName?: string;
+    title: string;
+  },
+  error: string,
+) {
+  const base = humanActionName(row.toolName, row.title).toLowerCase();
+  const message = String(error || "").trim();
+  return message
+    ? `I couldn't finish ${base}. ${message}`
+    : `I couldn't finish ${base}.`;
 }

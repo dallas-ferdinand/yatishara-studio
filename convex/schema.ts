@@ -1916,6 +1916,13 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_owner", ["ownerId"]),
 
+  agentPreferences: defineTable({
+    ownerId: v.id("users"),
+    autoApprove: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
+
   /** Short-lived Agent Mode API capability (hashed bearer `ysa_cap_…`). */
   agentCapabilitySessions: defineTable({
     ownerId: v.id("users"),

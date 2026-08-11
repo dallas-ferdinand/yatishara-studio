@@ -90,6 +90,7 @@ export const agentWorkerCallback = httpAction(async (ctx, request) => {
         ownerId: string;
         threadId: string;
         runId?: string;
+        toolCallId?: string;
         toolName: string;
         title?: string;
         summary?: string;
@@ -117,6 +118,12 @@ export const agentWorkerCallback = httpAction(async (ctx, request) => {
           role: body.role ?? "user",
         },
       );
+      if (body.toolCallId) {
+        await ctx.runMutation(internal.agentRuns.recordToolPendingApproval, {
+          toolCallId: body.toolCallId as Id<"agentToolCalls">,
+          approvalId,
+        });
+      }
       return jsonResponse({
         ok: true,
         pendingApproval: true,

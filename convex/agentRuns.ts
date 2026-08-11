@@ -126,6 +126,33 @@ export const failRun = internalMutation({
   },
 });
 
+export const cancelRunWithAssistant = internalMutation({
+  args: {
+    runId: v.id("agentRuns"),
+    assistantText: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("agentRuns", args.runId);
+    if (!row) return null;
+    if (
+      row.status === "completed" ||
+      row.status === "failed" ||
+      row.status === "cancelled"
+    ) {
+      return null;
+    }
+    const now = Date.now();
+    await ctx.db.patch(row._id, {
+      status: "cancelled",
+      assistantText: args.assistantText,
+      finishedAt: now,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
 export const requestCancel = authedMutation({
   args: { runId: v.id("agentRuns") },
   returns: v.null(),
@@ -349,6 +376,33 @@ export const recordToolResult = internalMutation({
     if (!row) return null;
     await ctx.db.patch(row._id, {
       status: args.ok ? "completed" : "failed",
+      resultJson: args.resultJson?.slice(0, 50000),
+      error: args.error?.slice(0, 1000),
+      finishedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const settleApprovalToolCall = internalMutation({
+  args: {
+    runId: v.optional(v.id("agentRuns")),
+    approvalId: v.id("agentApprovals"),
+    status: toolStatus,
+    resultJson: v.optional(v.string()),
+    error: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    if (!args.runId) return null;
+    const rows = await ctx.db
+      .query("agentToolCalls")
+      .withIndex("by_run_and_started", (q) => q.eq("runId", args.runId))
+      .collect();
+    const row = rows.find((item) => item.approvalId === args.approvalId);
+    if (!row) return null;
+    await ctx.db.patch(row._id, {
+      status: args.status,
       resultJson: args.resultJson?.slice(0, 50000),
       error: args.error?.slice(0, 1000),
       finishedAt: Date.now(),

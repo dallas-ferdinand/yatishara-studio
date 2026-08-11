@@ -498,12 +498,14 @@ export function StudioAgentPane({
   const decideApproval = useMutation(api.agentApprovals.decide);
   const cancelRun = useMutation(api.agentRuns.requestCancel);
   const ensureMessagesFolder = useMutation(api.folders.ensureMessagesFolderForMe);
+  const setAgentPreferences = useMutation((api as any).agentPreferences.setMine);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const sendTurn = useAction(api.agentActions.sendTurn);
   const retryRun = useAction(api.agentActions.retryRun);
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const pricing = useQuery(api.billing.getPricing, {});
+  const agentPreferences = useQuery((api as any).agentPreferences.getMine, {});
 
   const [draft, setDraft] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -514,6 +516,7 @@ export function StudioAgentPane({
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [autoApproveBusy, setAutoApproveBusy] = useState(false);
   const [activeRunId, setActiveRunId] = useState<Id<"agentRuns"> | null>(null);
   const streamRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -559,6 +562,11 @@ export function StudioAgentPane({
       )?._id ?? null),
     [activeRunId, runs],
   );
+  const awaitingApproval = useMemo(
+    () => (runs ?? []).some((row: { status: string }) => row.status === "awaiting_approval"),
+    [runs],
+  );
+  const autoApprove = Boolean(agentPreferences?.autoApprove);
 
   // Stick to latest like DMs — layout settle, rAF, ResizeObserver, short retries.
   useLayoutEffect(() => {
@@ -809,7 +817,7 @@ export function StudioAgentPane({
 
   async function handleSend() {
     const text = draft.trim();
-    if ((!text && attachments.length === 0) || busy) return;
+    if ((!text && attachments.length === 0) || busy || awaitingApproval) return;
     setBusy(true);
     stickToBottomRef.current = true;
     try {
@@ -822,6 +830,7 @@ export function StudioAgentPane({
       const result = await (sendTurn as any)({
         threadId,
         message: text,
+        autoApprove,
         attachments: attachments.map((item) => ({
           studioKind: item.studioKind,
           studioId: item.studioId,
@@ -888,8 +897,22 @@ export function StudioAgentPane({
     }
   }
 
+  async function handleToggleAutoApprove() {
+    if (autoApproveBusy || busy) return;
+    setAutoApproveBusy(true);
+    try {
+      await setAgentPreferences({ autoApprove: !autoApprove });
+      toast.success(!autoApprove ? "Auto mode on" : "Auto mode off");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not update Auto mode"));
+    } finally {
+      setAutoApproveBusy(false);
+    }
+  }
+
   const hasMessages = hasTurns;
-  const canSend = (Boolean(draft.trim()) || attachments.length > 0) && !busy;
+  const composerLocked = busy || awaitingApproval;
+  const canSend = (Boolean(draft.trim()) || attachments.length > 0) && !composerLocked;
 
   return (
     <div className="studio-agent-pane" data-studio-agent="">
@@ -973,7 +996,7 @@ export function StudioAgentPane({
                 ref={editorRef}
                 role="textbox"
                 aria-multiline="true"
-                contentEditable={!busy}
+                contentEditable={!composerLocked}
                 suppressContentEditableWarning
                 data-placeholder="Ask the agent to set up a project, generate, or work across Studio…"
                 className="cursor-composer-mention-editor"
@@ -1016,7 +1039,7 @@ export function StudioAgentPane({
                 className="studio-composer-circle-btn studio-dm-composer-circle"
                 title={uploading ? "Uploading..." : "Upload media"}
                 aria-label={uploading ? "Uploading media" : "Upload media"}
-                disabled={busy || recording || transcribing}
+                disabled={composerLocked || recording || transcribing}
                 onClick={() => uploadInputRef.current?.click()}
               >
                 {uploading ? (
@@ -1031,7 +1054,7 @@ export function StudioAgentPane({
                 title={transcribing ? "Turning voice into text..." : recording ? "Stop recording" : "Use your voice"}
                 aria-label={transcribing ? "Turning voice into text" : recording ? "Stop recording" : "Use your voice"}
                 onClick={() => void toggleVoice()}
-                disabled={transcribing || uploading || busy}
+                disabled={transcribing || uploading || composerLocked}
               >
                 {transcribing ? (
                   <Loader2 size={14} strokeWidth={2.25} className="animate-spin" aria-hidden="true" />
@@ -1040,6 +1063,20 @@ export function StudioAgentPane({
                 ) : (
                   <Mic size={14} strokeWidth={2.25} aria-hidden="true" />
                 )}
+              </button>
+              <button
+                type="button"
+                className={`studio-agent-auto-toggle${autoApprove ? " is-on" : ""}`}
+                aria-pressed={autoApprove}
+                title={autoApprove ? "Auto mode on" : "Auto mode off"}
+                onClick={() => void handleToggleAutoApprove()}
+                disabled={autoApproveBusy || busy}
+              >
+                <span className="studio-agent-auto-toggle-dot" aria-hidden="true" />
+                <span className="studio-agent-auto-toggle-copy">
+                  <strong>Auto</strong>
+                  <span>{autoApprove ? "YOLO on" : "Ask before risky actions"}</span>
+                </span>
               </button>
               <button
                 type="button"

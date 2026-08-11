@@ -149,6 +149,7 @@ async function runPiTurn(body, abortSignal) {
     runId,
     role = "user",
     scopes,
+    autoApprove = false,
     capabilityToken,
     studioApiBase,
     callbackBase,
@@ -185,6 +186,7 @@ async function runPiTurn(body, abortSignal) {
   }, 2500);
 
   try {
+    let approvalCreated = false;
     const mod = await import("@earendil-works/pi-coding-agent");
     const { createAgentSession, SessionManager } = mod;
 
@@ -221,7 +223,11 @@ async function runPiTurn(body, abortSignal) {
           error,
         });
       },
-      onApprovalRequired: async ({ toolName, args, tool }) => {
+      onApprovalRequired: async ({ toolName, args, tool, toolCallId }) => {
+        if (autoApprove) {
+          return null;
+        }
+        approvalCreated = true;
         const idempotencyKey = createHash("sha256")
           .update(
             `${runId || ""}:${toolName}:${JSON.stringify(args || {})}`,
@@ -237,6 +243,7 @@ async function runPiTurn(body, abortSignal) {
             ownerId: userId,
             threadId,
             runId,
+            toolCallId,
             toolName,
             title: tool?.name || toolName,
             summary: `Approve ${toolName} (${tool?.risk || "risk"})`,
@@ -249,8 +256,7 @@ async function runPiTurn(body, abortSignal) {
           ok: true,
           pendingApproval: true,
           approvalId: approval?.approvalId,
-          message:
-            "Approval card created in Studio. Wait for the user to approve before claiming success.",
+          message: "Waiting for confirmation in chat.",
         };
       },
       localHandlers: {
@@ -347,6 +353,7 @@ async function runPiTurn(body, abortSignal) {
       "Never claim visual understanding from filenames or URLs alone when inspect is needed.",
       "Prefer inspect with thumbnails first; if more than 8 images need review, inspect them in batches.",
       "Paid/destructive/outbound/admin tools create approval cards — never claim they already ran.",
+      "If a tool creates an approval card, stop there. Do not tell the user to approve elsewhere; the chat UI handles confirmation.",
       "Admin tools only if this user is admin. Never access other users' data.",
       "Use remember for durable preferences/decisions.",
       "Never say Done unless a tool actually succeeded. If a tool fails, report the error.",
@@ -433,6 +440,18 @@ async function runPiTurn(body, abortSignal) {
       (typeof session.getLastAssistantText === "function"
         ? session.getLastAssistantText()
         : null) || "";
+    if (approvalCreated) {
+      try {
+        session.dispose?.();
+      } catch {
+        // ignore dispose errors
+      }
+      return {
+        pendingApproval: true,
+        usage: { inputTokens, outputTokens },
+        model: `${session.model?.provider || PLATFORM_PROVIDER}/${session.model?.id || PLATFORM_MODEL}`,
+      };
+    }
     if (!String(assistantText).trim()) {
       throw new Error(
         "Model returned no text (refusing fake Done). Check provider balance / ARK_API_KEY.",
@@ -499,6 +518,7 @@ const server = createServer(async (req, res) => {
         res.end(
           JSON.stringify({
             assistantText: turn.assistantText,
+            pendingApproval: Boolean(turn.pendingApproval),
             usage: turn.usage,
             // Ledger charge is Convex-owned (measured usage → textCreditCost).
             usedByok: Boolean(body.usedByok),

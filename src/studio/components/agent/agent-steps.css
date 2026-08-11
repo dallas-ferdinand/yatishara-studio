@@ -137,6 +137,68 @@
   align-items: center;
 }
 
+.studio-agent-approval-card-wrap {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.studio-agent-approval-card {
+  width: 100%;
+  max-width: min(100%, 34rem);
+  margin-left: 19px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 12%, transparent);
+  border-radius: 14px;
+  background: var(--mos-plate, var(--mos-panel, #fff));
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 10%, transparent),
+    0 3px 10px color-mix(in srgb, #000 8%, transparent);
+  box-sizing: border-box;
+}
+
+.studio-agent-approval-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.studio-agent-approval-card-title,
+.studio-agent-approval-card-status,
+.studio-agent-approval-card-summary,
+.studio-agent-approval-card-cost {
+  margin: 0;
+}
+
+.studio-agent-approval-card-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--mos-ink, var(--color-cursor-text));
+}
+
+.studio-agent-approval-card-status {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 55%, transparent);
+  white-space: nowrap;
+}
+
+.studio-agent-approval-card-summary {
+  font-size: 12px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 82%, transparent);
+}
+
+.studio-agent-approval-card-cost {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mos-ink, var(--color-cursor-text));
+}
+
 .studio-agent-live-progress {
   display: inline-flex;
   align-items: center;

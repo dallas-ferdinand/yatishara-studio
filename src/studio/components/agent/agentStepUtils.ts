@@ -48,6 +48,7 @@ export type AgentRunRow = {
 
 export type AgentApprovalRow = {
   _id: Id<"agentApprovals">;
+  runId?: Id<"agentRuns">;
   title: string;
   summary: string;
   status: string;
@@ -345,6 +346,32 @@ export function buildAgentTurns(args: {
           toolCallToStep(tc, tc.approvalId ? approvalById.get(tc.approvalId) : undefined),
         )
       : [];
+    if (runId) {
+      const linkedApprovalIds = new Set(
+        rawSteps
+          .map((step) => step.approvalId)
+          .filter(Boolean)
+          .map((id) => String(id)),
+      );
+      const orphanApprovalSteps = approvals
+        .filter(
+          (approval) =>
+            approval.runId === runId &&
+            approval.status === "pending" &&
+            !linkedApprovalIds.has(String(approval._id)),
+        )
+        .map((approval) => ({
+          id: `approval-${String(approval._id)}`,
+          approvalId: approval._id,
+          toolName: approval.toolName,
+          kind: "approval" as const,
+          title: approval.title,
+          subtitle: undefined,
+          status: "pending_approval" as const,
+          isLive: true,
+        }));
+      rawSteps.push(...orphanApprovalSteps);
+    }
     const steps = collapseQuietSteps(rawSteps);
     const assistant = assistantMessages[idx];
 

@@ -87,6 +87,7 @@ export const sendTurn = action({
   args: {
     threadId: v.id("agentThreads"),
     message: v.string(),
+    autoApprove: v.optional(v.boolean()),
     attachments: v.optional(
       v.array(
         v.object({
@@ -106,6 +107,7 @@ export const sendTurn = action({
     usedByok: v.boolean(),
     runId: v.optional(v.string()),
     error: v.optional(v.string()),
+    pendingApproval: v.optional(v.boolean()),
   }),
   handler: async (ctx, args): Promise<SendTurnResult> => {
     const me = await ctx.runQuery(api.users.current, {});
@@ -402,6 +404,7 @@ export const sendTurn = action({
           memories,
           role,
           scopes,
+          autoApprove: Boolean(args.autoApprove),
           capabilityToken,
           studioApiBase: apiBase,
           callbackBase,
@@ -421,6 +424,7 @@ export const sendTurn = action({
         creditsSpent?: number;
         usedByok?: boolean;
         error?: string;
+        pendingApproval?: boolean;
         usage?: { inputTokens?: number; outputTokens?: number };
       } = {};
       try {
@@ -450,6 +454,18 @@ export const sendTurn = action({
           usedByok,
           runId: String(runId),
           error: err,
+        };
+      }
+
+      if (body.pendingApproval) {
+        await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
+        return {
+          ok: true,
+          assistantText: "",
+          creditsSpent: 0,
+          usedByok,
+          runId: String(runId),
+          pendingApproval: true,
         };
       }
 

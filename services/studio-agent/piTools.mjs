@@ -238,14 +238,19 @@ export function createStudioPiTools(opts) {
               toolName,
               args: toolArgs,
               tool: auth.tool,
-            });
-            await opts.onAfterInvoke?.({
               toolCallId: trackId,
-              toolName,
-              ok: true,
-              result: approval,
             });
-            return textResult(approval);
+            if (approval != null) {
+              if (!approval?.pendingApproval) {
+                await opts.onAfterInvoke?.({
+                  toolCallId: trackId,
+                  toolName,
+                  ok: true,
+                  result: approval,
+                });
+              }
+              return textResult(approval);
+            }
           }
           const fail = {
             ok: false,
