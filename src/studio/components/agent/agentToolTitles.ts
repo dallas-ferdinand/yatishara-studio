@@ -173,7 +173,7 @@ const GENERATE_TOOLS = new Set([
   "studio_generate_script",
 ]);
 
-/** Quiet meta — may collapse in long runs. */
+/** Quiet meta — may collapse only for duplicate catalog peeks. */
 const META_TOOLS = new Set(["catalog", "describe"]);
 
 /** Always show as their own chip (never collapse into "Checked workspace"). */
@@ -183,6 +183,9 @@ const ALWAYS_VISIBLE_TOOLS = new Set([
   "plan",
   "ask",
   "inspect",
+  "catalog",
+  "describe",
+  "invoke",
 ]);
 
 const READ_PREFIXES = [

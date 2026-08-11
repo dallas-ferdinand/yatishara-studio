@@ -2,18 +2,25 @@
 
 import {
   AlertCircle,
+  ArchiveRestore,
   BookOpen,
   Brain,
+  CircleDollarSign,
   Eye,
   FileText,
   FolderInput,
   FolderPlus,
+  FolderTree,
   HelpCircle,
+  Image as ImageIcon,
   ListTodo,
   Loader2,
   Search,
+  Send,
+  Share2,
   Sparkles,
   Trash2,
+  Upload,
   Wrench,
 } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -44,50 +51,62 @@ function StepIcon({
   if (kind === "error") {
     return <AlertCircle size={13} aria-hidden="true" />;
   }
+
   const name = String(toolName || "");
-  if (name === "skills") {
-    return <BookOpen size={13} aria-hidden="true" />;
+
+  // Exact Pi tools
+  if (name === "skills") return <BookOpen size={13} aria-hidden="true" />;
+  if (name === "remember") return <Brain size={13} aria-hidden="true" />;
+  if (name === "plan") return <ListTodo size={13} aria-hidden="true" />;
+  if (name === "ask") return <HelpCircle size={13} aria-hidden="true" />;
+  if (name === "catalog" || name === "describe") {
+    return <Search size={13} aria-hidden="true" />;
   }
-  if (name === "remember") {
-    return <Brain size={13} aria-hidden="true" />;
+  if (name === "inspect") return <Eye size={13} aria-hidden="true" />;
+
+  // Studio tools by family
+  if (name.includes("trash") || name.includes("delete")) {
+    return <Trash2 size={13} aria-hidden="true" />;
   }
-  if (name === "plan") {
-    return <ListTodo size={13} aria-hidden="true" />;
-  }
-  if (name === "ask") {
-    return <HelpCircle size={13} aria-hidden="true" />;
+  if (name.includes("restore")) {
+    return <ArchiveRestore size={13} aria-hidden="true" />;
   }
   if (name.includes("document") || name.includes("script")) {
     return <FileText size={13} aria-hidden="true" />;
   }
-  if (
-    name.includes("search") ||
-    name.includes("catalog") ||
-    name.includes("describe")
-  ) {
+  if (name.includes("estimate") || name.includes("credit") || name.includes("pricing")) {
+    return <CircleDollarSign size={13} aria-hidden="true" />;
+  }
+  if (name.includes("generate")) {
+    return <Sparkles size={13} aria-hidden="true" />;
+  }
+  if (name.includes("send_")) {
+    return <Send size={13} aria-hidden="true" />;
+  }
+  if (name.includes("share") || name.includes("unshare") || name.includes("post")) {
+    return <Share2 size={13} aria-hidden="true" />;
+  }
+  if (name.includes("upload")) {
+    return <Upload size={13} aria-hidden="true" />;
+  }
+  if (name.includes("view_media") || name.includes("get_asset") || name.includes("asset")) {
+    return <ImageIcon size={13} aria-hidden="true" />;
+  }
+  if (name.includes("search") || name.includes("list_video")) {
     return <Search size={13} aria-hidden="true" />;
   }
   if (name.includes("bulk_move") || name.includes("move") || name.includes("ensure_path")) {
     return <FolderInput size={13} aria-hidden="true" />;
   }
-  if (name.includes("trash") || name.includes("delete")) {
-    return <Trash2 size={13} aria-hidden="true" />;
+  if (name.includes("workspace") || name.includes("project_context")) {
+    return <FolderTree size={13} aria-hidden="true" />;
   }
-  if (name.includes("folder") || name.includes("workspace") || name.includes("resolve")) {
+  if (name.includes("folder") || name.includes("resolve_path")) {
     return <FolderPlus size={13} aria-hidden="true" />;
   }
-  if (name.includes("inspect") || name.includes("view_media")) {
-    return <Eye size={13} aria-hidden="true" />;
-  }
-  if (kind === "generate" || name.includes("generate")) {
-    return <Sparkles size={13} aria-hidden="true" />;
-  }
-  if (kind === "read" || kind === "meta") {
-    return <Search size={13} aria-hidden="true" />;
-  }
-  if (kind === "write") {
-    return <FolderInput size={13} aria-hidden="true" />;
-  }
+  if (kind === "generate") return <Sparkles size={13} aria-hidden="true" />;
+  if (kind === "read" || kind === "meta") return <Search size={13} aria-hidden="true" />;
+  if (kind === "write") return <FolderInput size={13} aria-hidden="true" />;
   return <Wrench size={13} aria-hidden="true" />;
 }
 
@@ -103,18 +122,10 @@ export function AgentStepRow({
   const canExpand = isError && Boolean(step.error || step.resultJson);
   const folderId = step.outcome?.folderId;
   const documentId = step.outcome?.documentId;
-  // Prefer friendly action title; append compact outcome when useful (search counts, model list).
+  // Prefer friendly action title; append compact outcome when useful.
   const label = isError
     ? step.subtitle || step.title
-    : step.subtitle &&
-        (/\d+\s+result/i.test(step.subtitle) ||
-          step.toolName === "studio_list_video_models" ||
-          step.toolName === "skills" ||
-          step.toolName === "remember" ||
-          step.toolName === "plan" ||
-          step.toolName === "describe" ||
-          step.toolName === "catalog" ||
-          /Seedance/i.test(step.subtitle))
+    : step.subtitle
       ? `${step.title} · ${step.subtitle}`
       : step.title;
 
@@ -144,27 +155,19 @@ export function AgentStepRow({
         type="button"
         className="studio-agent-step-btn"
         onClick={handleClick}
-        aria-expanded={canExpand ? expanded : undefined}
         disabled={!interactive}
-        title={isError ? step.subtitle || step.error : label}
+        title={label}
       >
-        <span className="studio-agent-step-icon">
-          <StepIcon
-            toolName={step.toolName}
-            kind={isError ? "error" : step.kind}
-            status={step.status}
-          />
+        <span className="studio-agent-step-icon" aria-hidden="true">
+          <StepIcon toolName={step.toolName} kind={step.kind} status={step.status} />
         </span>
         <span className="studio-agent-step-label">{label}</span>
       </button>
-
-      {approvalSlot ? (
-        <div className="studio-agent-step-approval-actions">{approvalSlot}</div>
-      ) : null}
-
+      {approvalSlot}
       {expanded && canExpand ? (
         <div className="studio-agent-step-details">
-          <pre>{step.error || step.resultJson}</pre>
+          {step.error ? <pre>{step.error}</pre> : null}
+          {step.resultJson ? <pre>{step.resultJson.slice(0, 4000)}</pre> : null}
         </div>
       ) : null}
     </div>

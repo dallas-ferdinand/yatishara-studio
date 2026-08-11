@@ -509,13 +509,28 @@ function toolCallToStep(
   };
 }
 
-/** Collapse older quiet read/meta steps, but keep the newest 3 visible. */
+/** Collapse only long runs of quiet folder peeks — never hide skills/memory/plan/tools. */
 export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
   const out: DisplayStep[] = [];
   const visibleTail = 3;
   let i = 0;
   while (i < steps.length) {
     const step = steps[i]!;
+    // Never collapse named Pi tools or writes/generates/errors.
+    if (
+      isAlwaysVisibleTool(step.toolName) ||
+      step.kind === "write" ||
+      step.kind === "generate" ||
+      step.kind === "approval" ||
+      step.kind === "error" ||
+      step.status === "failed" ||
+      step.status === "pending_approval"
+    ) {
+      out.push(step);
+      i += 1;
+      continue;
+    }
+
     const next = steps[i + 1];
     const duplicateQuietPair =
       next &&
@@ -523,13 +538,13 @@ export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
       next.toolName === step.toolName &&
       next.title === step.title &&
       (step.kind === "read" || step.kind === "meta") &&
-      (next.kind === "read" || next.kind === "meta");
+      (next.kind === "read" || next.kind === "meta") &&
+      !isAlwaysVisibleTool(next.toolName);
     if (duplicateQuietPair) {
       i += 1;
       continue;
     }
     const isQuiet =
-      !isAlwaysVisibleTool(step.toolName) &&
       (step.kind === "read" || step.kind === "meta") &&
       (step.status === "completed" || step.status === "started");
     if (!isQuiet) {
@@ -539,11 +554,11 @@ export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
     }
     let j = i + 1;
     while (j < steps.length) {
-      const next = steps[j]!;
+      const peek = steps[j]!;
       const nextQuiet =
-        !isAlwaysVisibleTool(next.toolName) &&
-        (next.kind === "read" || next.kind === "meta") &&
-        (next.status === "completed" || next.status === "started");
+        !isAlwaysVisibleTool(peek.toolName) &&
+        (peek.kind === "read" || peek.kind === "meta") &&
+        (peek.status === "completed" || peek.status === "started");
       if (!nextQuiet) break;
       j += 1;
     }
