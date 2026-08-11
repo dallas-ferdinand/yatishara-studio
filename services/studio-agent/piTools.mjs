@@ -251,20 +251,21 @@ export function createStudioPiTools(opts) {
               }
               return textResult(approval);
             }
+          } else {
+            const fail = {
+              ok: false,
+              pendingApproval: true,
+              toolName,
+              error: "Approval required but no approval handler configured",
+            };
+            await opts.onAfterInvoke?.({
+              toolCallId: trackId,
+              toolName,
+              ok: false,
+              error: fail.error,
+            });
+            return textResult(fail);
           }
-          const fail = {
-            ok: false,
-            pendingApproval: true,
-            toolName,
-            error: "Approval required but no approval handler configured",
-          };
-          await opts.onAfterInvoke?.({
-            toolCallId: trackId,
-            toolName,
-            ok: false,
-            error: fail.error,
-          });
-          return textResult(fail);
         }
 
         let result;
