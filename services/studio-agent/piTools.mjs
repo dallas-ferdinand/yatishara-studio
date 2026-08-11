@@ -21,6 +21,65 @@ function textResult(payload) {
   };
 }
 
+function objectValue(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : null;
+}
+
+function textValue(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function inferImageMimeType(url = "", fallback = "") {
+  const hinted = textValue(fallback).split(";")[0].trim();
+  if (hinted.startsWith("image/")) return hinted;
+  const clean = String(url).split("?")[0].toLowerCase();
+  if (clean.endsWith(".png")) return "image/png";
+  if (clean.endsWith(".webp")) return "image/webp";
+  if (clean.endsWith(".gif")) return "image/gif";
+  if (clean.endsWith(".jpeg") || clean.endsWith(".jpg")) return "image/jpeg";
+  return hinted || "image/jpeg";
+}
+
+function pickImageUrl(media, prefer = "thumb") {
+  const root = objectValue(media) ?? {};
+  const data = objectValue(root.data) ?? root;
+  const candidates =
+    prefer === "full"
+      ? [
+          textValue(data.preferredViewUrl),
+          textValue(data.thumbnailUrl),
+          textValue(data.url),
+        ]
+      : [
+          textValue(data.thumbnailUrl),
+          textValue(data.preferredViewUrl),
+          textValue(data.url),
+        ];
+  return candidates.find(Boolean) || "";
+}
+
+async function fetchImageBlock(url, fallbackMimeType = "") {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Image fetch failed (${res.status})`);
+  }
+  const mimeType = inferImageMimeType(
+    url,
+    res.headers.get("content-type") || fallbackMimeType,
+  );
+  if (!mimeType.startsWith("image/")) {
+    throw new Error(`Expected image, got ${mimeType}`);
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  return {
+    type: "image",
+    data: buf.toString("base64"),
+    mimeType,
+  };
+}
+
 /**
  * @param {{
  *   apiBase: string,
@@ -238,6 +297,179 @@ export function createStudioPiTools(opts) {
     },
   });
 
+  const inspect = defineTool({
+    name: "inspect",
+    label: "Inspect",
+    description:
+      "Inspect owned Studio media with the multimodal model. Pass up to 8 assetIds; images are fetched as inline vision inputs. For videos, first use studio_pull_frames then inspect those frame assets.",
+    promptSnippet: "Inspect Studio media visually",
+    promptGuidelines: [
+      "Use this when the task depends on what an image actually shows, not just its filename.",
+      "Pass up to 8 assetIds at a time.",
+      "For videos, pull frames first, then inspect the frame assets.",
+    ],
+    parameters: Type.Object({
+      assetIds: Type.Array(Type.String(), {
+        description: "Up to 8 Studio asset ids to inspect visually",
+      }),
+      prefer: Type.Optional(
+        Type.Union([Type.Literal("thumb"), Type.Literal("full")], {
+          description: "Prefer lightweight thumbnails by default",
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params, _signal, onUpdate) {
+      const assetIds = Array.isArray(params.assetIds)
+        ? params.assetIds
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
+            .slice(0, 8)
+        : [];
+      const prefer = params.prefer === "full" ? "full" : "thumb";
+      if (!assetIds.length) {
+        return textResult({
+          ok: false,
+          error: "inspect requires assetIds (1-8 Studio asset ids)",
+        });
+      }
+
+      onUpdate?.({
+        content: [{ type: "text", text: `Inspecting ${assetIds.length} asset(s)…` }],
+        details: { toolName: "inspect", phase: "start", count: assetIds.length },
+      });
+
+      const started = opts.onBeforeInvoke
+        ? await opts.onBeforeInvoke({ toolName: "inspect", args: { assetIds, prefer } })
+        : null;
+      const trackId = started?.toolCallId;
+
+      try {
+        const token = await opts.getBearerToken();
+        const content = [];
+        const inspected = [];
+        const skipped = [];
+
+        for (const assetId of assetIds) {
+          const assetRes = await invokeStudioTool(
+            opts.apiBase,
+            token,
+            "studio_get_asset",
+            { assetId },
+          );
+          if (assetRes?.ok === false) {
+            skipped.push({ assetId, reason: assetRes.error || "asset_lookup_failed" });
+            continue;
+          }
+
+          const asset = objectValue(assetRes?.data) ?? objectValue(assetRes) ?? {};
+          const kind = textValue(asset.kind) || "unknown";
+          const name = textValue(asset.name) || assetId;
+          const mimeType = textValue(asset.mimeType);
+
+          if (kind === "video") {
+            skipped.push({
+              assetId,
+              name,
+              reason: "video_needs_frames",
+            });
+            content.push({
+              type: "text",
+              text: `${name} (${assetId}) is a video. Use studio_pull_frames first, then inspect the returned frame assets.`,
+            });
+            continue;
+          }
+          if (kind !== "image") {
+            skipped.push({
+              assetId,
+              name,
+              reason: kind === "audio" ? "audio_not_supported_in_v1" : "non_image_asset",
+            });
+            content.push({
+              type: "text",
+              text: `${name} (${assetId}) is ${kind || "not an image"}; inspect currently supports images only.`,
+            });
+            continue;
+          }
+
+          const mediaRes = await invokeStudioTool(
+            opts.apiBase,
+            token,
+            "studio_view_media",
+            { assetId },
+          );
+          if (mediaRes?.ok === false) {
+            skipped.push({
+              assetId,
+              name,
+              reason: mediaRes.error || "media_lookup_failed",
+            });
+            continue;
+          }
+
+          const media = objectValue(mediaRes?.data) ?? objectValue(mediaRes) ?? {};
+          const imageUrl = pickImageUrl(media, prefer);
+          if (!imageUrl) {
+            skipped.push({ assetId, name, reason: "image_url_missing" });
+            continue;
+          }
+
+          content.push({
+            type: "text",
+            text: `Asset ${name} (${assetId})\nkind: image\nmime: ${mimeType || inferImageMimeType(imageUrl)}`,
+          });
+          content.push(await fetchImageBlock(imageUrl, mimeType));
+          inspected.push({ assetId, name, mimeType: mimeType || inferImageMimeType(imageUrl) });
+        }
+
+        if (!content.length) {
+          const fail = {
+            ok: false,
+            toolName: "inspect",
+            error: "No inspectable images found for the requested assetIds",
+            inspectedCount: 0,
+            skipped,
+          };
+          await opts.onAfterInvoke?.({
+            toolCallId: trackId,
+            toolName: "inspect",
+            ok: false,
+            result: fail,
+            error: fail.error,
+          });
+          return textResult(fail);
+        }
+
+        const details = {
+          ok: true,
+          toolName: "inspect",
+          inspectedCount: inspected.length,
+          inspected,
+          skipped,
+          prefer,
+        };
+        await opts.onAfterInvoke?.({
+          toolCallId: trackId,
+          toolName: "inspect",
+          ok: true,
+          result: details,
+        });
+        return {
+          content,
+          details,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await opts.onAfterInvoke?.({
+          toolCallId: trackId,
+          toolName: "inspect",
+          ok: false,
+          error: message,
+        });
+        return textResult({ ok: false, toolName: "inspect", error: message });
+      }
+    },
+  });
+
   const remember = defineTool({
     name: "remember",
     label: "Remember",
@@ -269,5 +501,5 @@ export function createStudioPiTools(opts) {
     },
   });
 
-  return [catalog, describe, invoke, remember];
+  return [catalog, describe, invoke, inspect, remember];
 }

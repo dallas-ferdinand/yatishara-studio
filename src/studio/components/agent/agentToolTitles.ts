@@ -12,6 +12,7 @@ const TITLE_MAP: Record<string, string> = {
   catalog: "Look up tools",
   describe: "Inspect tool",
   invoke: "Run Studio action",
+  inspect: "Inspect media",
   remember: "Save memory",
   studio_bootstrap: "Load workspace",
   studio_search: "Search",
@@ -80,6 +81,7 @@ export function deriveStepKind(
   if (status === "failed" || error) return "error";
   if (status === "pending_approval") return "approval";
   if (META_TOOLS.has(toolName)) return "meta";
+  if (toolName === "inspect") return "read";
   if (GENERATE_TOOLS.has(toolName)) return "generate";
   if (WRITE_TOOLS.has(toolName)) return "write";
   if (READ_PREFIXES.some((p) => toolName.startsWith(p))) return "read";
