@@ -244,6 +244,21 @@ export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
   let i = 0;
   while (i < steps.length) {
     const step = steps[i]!;
+    const next = steps[i + 1];
+    const duplicateQuietPair =
+      next &&
+      step.toolName &&
+      next.toolName === step.toolName &&
+      next.title === step.title &&
+      (step.kind === "read" || step.kind === "meta") &&
+      step.status === "completed" &&
+      (next.status === "started" ||
+        next.status === "pending_approval" ||
+        next.status === "completed");
+    if (duplicateQuietPair) {
+      i += 1;
+      continue;
+    }
     const isQuiet =
       (step.kind === "read" || step.kind === "meta") &&
       (step.status === "completed" || step.status === "started");
