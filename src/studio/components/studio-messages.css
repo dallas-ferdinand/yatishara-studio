@@ -449,7 +449,7 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 3px;
   width: 100%;
-  max-width: var(--studio-chat-column-max, min(92%, 36rem));
+  max-width: calc(var(--studio-chat-column-max, min(92%, 36rem)) - 18px);
   min-width: 0;
   margin: 0 auto;
   padding-inline: 12px;
@@ -3290,7 +3290,7 @@
   gap: 6px;
   flex: 1 1 auto;
   width: 100%;
-  max-width: var(--studio-chat-column-max, min(92%, 36rem));
+  max-width: calc(var(--studio-chat-column-max, min(92%, 36rem)) - 18px);
   min-height: 0;
   margin-inline: auto;
   padding: 42px 24px;
