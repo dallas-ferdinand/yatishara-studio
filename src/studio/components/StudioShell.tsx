@@ -21705,6 +21705,43 @@ export function StudioShell({
           object-fit: cover;
           background: #000;
         }
+        .studio-academy-player-empty {
+          position: absolute;
+          inset: 0;
+          background: #111;
+        }
+        .studio-academy-player-play {
+          position: absolute;
+          inset: 0;
+          margin: auto;
+          width: 48px;
+          height: 48px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 0;
+          border-radius: 999px;
+          background: #fff;
+          color: #111;
+          box-shadow: 0 2px 14px rgba(0, 0, 0, 0.28);
+          cursor: pointer;
+          z-index: 2;
+        }
+        .studio-academy-player-play svg {
+          width: 18px;
+          height: 18px;
+          margin-left: 2px;
+        }
+        .studio-academy-player-play:hover:not(:disabled) {
+          transform: scale(1.04);
+        }
+        .studio-academy-player-play:disabled {
+          opacity: 0.72;
+          cursor: wait;
+        }
+        .studio-academy-player-play:disabled svg {
+          margin-left: 0;
+        }
         .studio-academy-banner {
           width: 100%;
           aspect-ratio: 16 / 8;

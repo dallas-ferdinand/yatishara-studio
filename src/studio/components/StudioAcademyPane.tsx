@@ -9,6 +9,7 @@ import {
   Loader2,
   Lock,
   MessageCircle,
+  Play,
   Tag,
   Zap,
 } from "lucide-react";
@@ -389,6 +390,16 @@ function CheckoutDock({
   );
 }
 
+function withEmbedAutoplay(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set("autoplay", "true");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 function BannerStage({
   bannerUrl,
   embedUrl,
@@ -423,7 +434,7 @@ function BannerStage({
 
   return (
     <div className="studio-academy-player">
-      {bannerUrl && !posterReady ? (
+      {bannerUrl ? (
         <MediaLoadFrame
           kind="image"
           src={bannerUrl}
@@ -450,23 +461,25 @@ function BannerStage({
           )}
         </MediaLoadFrame>
       ) : (
-        <>
-          {/* Placeholder until Bunny Stream intros/lessons are live. */}
-          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-          <video
-            className="studio-academy-player-video"
-            controls
-            playsInline
-            preload="metadata"
-            poster={bannerUrl}
-            src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
-            title={playLabel}
-            onPlay={() => {
-              if (!loading) onPlay();
-            }}
-          />
-        </>
+        <div className="studio-academy-player-empty" aria-hidden="true" />
       )}
+      {posterReady || !bannerUrl ? (
+        <button
+          type="button"
+          className="studio-academy-player-play"
+          aria-label={playLabel}
+          disabled={loading}
+          onClick={() => {
+            if (!loading) onPlay();
+          }}
+        >
+          {loading ? (
+            <Loader2 aria-hidden="true" className="animate-spin" />
+          ) : (
+            <Play aria-hidden="true" fill="currentColor" />
+          )}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -712,7 +725,7 @@ export function StudioAcademyPane({
     setLoadingPlay(true);
     try {
       const playback = await getIntroPlayback({ courseId: academy.courseId });
-      setIntroEmbed(playback.embedUrl);
+      setIntroEmbed(withEmbedAutoplay(playback.embedUrl));
     } catch (error) {
       toast.error(friendlyConvexError(error, "Could not load intro"));
     } finally {
@@ -725,7 +738,7 @@ export function StudioAcademyPane({
     setLoadingPlay(true);
     try {
       const playback = await getLessonPlayback({ lessonId: selectedLesson._id });
-      setLessonEmbed(playback.embedUrl);
+      setLessonEmbed(withEmbedAutoplay(playback.embedUrl));
     } catch (error) {
       toast.error(friendlyConvexError(error, "Could not load lesson"));
     } finally {
