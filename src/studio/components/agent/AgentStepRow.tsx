@@ -76,10 +76,13 @@ export function AgentStepRow({
   const isError = step.kind === "error" || step.status === "failed";
   const canExpand = isError && Boolean(step.error || step.resultJson);
   const folderId = step.outcome?.folderId;
-  // Always prefer the friendly action title — never replace with "Done".
+  // Prefer friendly action title; append compact outcome when useful (search counts, model list).
   const label = isError
     ? step.subtitle || step.title
-    : step.subtitle && /\d+\s+result/i.test(step.subtitle)
+    : step.subtitle &&
+        (/\d+\s+result/i.test(step.subtitle) ||
+          step.toolName === "studio_list_video_models" ||
+          /Seedance/i.test(step.subtitle))
       ? `${step.title} · ${step.subtitle}`
       : step.title;
 

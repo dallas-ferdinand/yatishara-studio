@@ -8,14 +8,22 @@ category: prompt
 
 # Studio video models
 
-Always confirm with `studio_list_video_models` when the user cares about model choice.
+Confirm with `studio_list_video_models` when the user cares about model choice. Use each model's **description** field as the voice — talk about what the model does (motion, light, resolution, length).
+
+## Voice (required)
+
+- Name the model and its strengths. Cap limits (seconds / res) are fine.
+- **Never** say: legacy, deprecated, old pipeline, older pipeline, older style, outdated.
+- Do not invent marketing lines. Stick to `studio_list_video_models` (or this table).
 
 ## Slugs (pass on generate / estimate)
 
-| Slug | Use when |
+| Slug | What it is |
 |---|---|
-| `seedance-2.5` | **Default** for new cinematic and hypermotion work |
-| `seedance-2.0` | User asks for 2.0, or a locked older pipeline |
+| `seedance-2.5` | **Default.** Strong motion, natural light, smooth camera — up to 30s at 480p/720p |
+| `seedance-2.0` | Higher detail through 1080p/4K — clips up to 15s |
+
+Pick `seedance-2.5` unless the user asks for 2.0 or needs 1080p/4K.
 
 ## Prompt vs args
 

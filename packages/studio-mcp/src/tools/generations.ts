@@ -164,7 +164,7 @@ export function registerGenerationTools(server: McpServer) {
 
   server.tool(
     "studio_list_video_models",
-    "List video models for MCP selection (Seedance 2.5 / 2.0 via BytePlus Ark).",
+    "List Studio video models (Seedance 2.5 / 2.0).",
     {},
     async () => jsonResult(await studioFetch("/video-models?scope=mcp")),
   );

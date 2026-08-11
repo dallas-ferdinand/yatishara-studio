@@ -3201,7 +3201,7 @@
   },
   {
     "name": "studio_list_video_models",
-    "description": "List video models for MCP selection (Seedance 2.5 / 2.0 via BytePlus Ark).",
+    "description": "List Studio video models (Seedance 2.5 / 2.0).",
     "category": "generations",
     "scope": "read",
     "risk": "read",

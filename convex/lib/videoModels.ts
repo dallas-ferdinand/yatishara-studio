@@ -58,7 +58,8 @@ export const VIDEO_MODELS: VideoModelDef[] = [
     slug: "seedance-2.5",
     label: "Seedance 2.5",
     gatewayModelId: ARK_MODEL_IDS.video25,
-    description: "Default — up to 30s, 480p/720p",
+    description:
+      "Default. Strong motion, natural light, smooth camera — up to 30s at 480p/720p",
     requiresStartFrame: false,
     supportsMultimodalRefs: true,
     maxDurationSeconds: 30,
@@ -70,7 +71,8 @@ export const VIDEO_MODELS: VideoModelDef[] = [
     slug: "seedance-2.0",
     label: "Seedance 2.0",
     gatewayModelId: ARK_MODEL_IDS.video20,
-    description: "Up to 15s — 480p/720p/1080p/4K",
+    description:
+      "Higher detail through 1080p/4K — clips up to 15s",
     requiresStartFrame: false,
     supportsMultimodalRefs: true,
     maxDurationSeconds: 15,

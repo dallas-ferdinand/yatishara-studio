@@ -12,7 +12,7 @@ Goal: looks **shot**, not slideshow. Prefer one continuous beat with readable bl
 
 ## Model
 
-- Prefer `videoModel: "seedance-2.5"` for new cinematic work unless the user asks for `seedance-2.0`.
+- Prefer `videoModel: "seedance-2.5"` for cinematic work unless the user asks for `seedance-2.0` (e.g. 1080p/4K).
 - Call `studio_list_video_models` if unsure.
 - Put duration / aspect / resolution in **args**, not inside the prompt text.
 

@@ -28101,8 +28101,8 @@ function StudioComposerInlineSettings({
     { value: "high", label: "High", meta: "Best detail" },
   ];
   const videoModelItems = [
-    { value: "seedance-2.5", label: "Seedance 2.5", meta: "Up to 30s · 480p/720p" },
-    { value: "seedance-2.0", label: "Seedance 2.0", meta: "Up to 15s · 1080p/4K" },
+    { value: "seedance-2.5", label: "Seedance 2.5", meta: "Motion · up to 30s · 480p/720p" },
+    { value: "seedance-2.0", label: "Seedance 2.0", meta: "Detail · up to 15s · 1080p/4K" },
   ];
   const resolutionItems = activeVideoModel.resolutionOptions.map((item) => ({
     value: item.value,

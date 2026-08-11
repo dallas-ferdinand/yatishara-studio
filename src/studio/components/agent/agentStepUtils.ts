@@ -205,6 +205,25 @@ export function extractOutcome(
     }
   }
 
+  if (toolName === "studio_list_video_models") {
+    const models = Array.isArray(payload.models) ? payload.models : [];
+    if (models.length) {
+      const bits = models.map((raw) => {
+        if (!raw || typeof raw !== "object") return "";
+        const m = raw as Record<string, unknown>;
+        const label =
+          (typeof m.label === "string" && m.label) ||
+          (typeof m.slug === "string" && m.slug) ||
+          "model";
+        const desc = typeof m.description === "string" ? m.description.trim() : "";
+        return desc ? `${label} — ${desc}` : label;
+      }).filter(Boolean);
+      if (bits.length) {
+        return { label: bits.join(" · ") };
+      }
+    }
+  }
+
   // Never label successful tools as generic "Done" — UI uses displayToolTitle.
   return undefined;
 }

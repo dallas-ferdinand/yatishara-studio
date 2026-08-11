@@ -21,7 +21,7 @@ Hypermotion = **severe spatial kinetic** with a readable story — not micro-str
 
 ## Model
 
-- Default `videoModel: "seedance-2.5"` unless user pins `seedance-2.0`.
+- Default `videoModel: "seedance-2.5"` unless the user asks for `seedance-2.0`.
 - Duration/aspect in args only.
 
 ## Prompt law
