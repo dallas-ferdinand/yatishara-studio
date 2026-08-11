@@ -109,6 +109,7 @@ export function StudioGenerationDetailSidebar({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- prompt parse is pure; detail.prompt is the only input
   const promptParsed = useMemo(() => {
     if (!detail?.prompt) return { body: "", refs: [] as ReturnType<typeof parseStudioPrompt>["refs"] };
     const parsed = parseStudioPrompt(detail.prompt);
@@ -119,6 +120,7 @@ export function StudioGenerationDetailSidebar({
     return { body, refs: parsed.refs };
   }, [detail?.prompt]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- references fall back to prompt chips
   const references = useMemo(() => {
     if (detail?.references?.length) return detail.references;
     // Fallback chips from prompt text when assets couldn't be resolved.

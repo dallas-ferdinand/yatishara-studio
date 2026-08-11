@@ -29,7 +29,6 @@ export function AgentApprovalStep({
   const approvalTitle = approval.toolName
     ? humanToolTitle(approval.toolName)
     : approval.title || step.title;
-  const Icon = approvalIcon(approval.toolName);
   const statusLabel = isPending
     ? "Waiting for your confirmation"
     : approval.status === "completed"
@@ -52,7 +51,7 @@ export function AgentApprovalStep({
         <div className="studio-agent-approval-card-head">
           <div className="studio-agent-approval-card-head-main">
             <span className="studio-agent-approval-card-icon" aria-hidden="true">
-              <Icon size={14} />
+              <ApprovalToolIcon toolName={approval.toolName} />
             </span>
             <div className="studio-agent-approval-card-head-copy">
               <p className="studio-agent-approval-card-kicker">
@@ -127,13 +126,13 @@ export function AgentApprovalStep({
   );
 }
 
-function approvalIcon(toolName?: string) {
+function ApprovalToolIcon({ toolName }: { toolName?: string }) {
   const name = String(toolName || "");
-  if (name.includes("share") || name.includes("post")) return Share2;
-  if (name.includes("send")) return Send;
-  if (name.includes("trash") || name.includes("delete")) return Trash2;
-  if (name.includes("generate")) return Sparkles;
-  return Share2;
+  if (name.includes("share") || name.includes("post")) return <Share2 size={14} />;
+  if (name.includes("send")) return <Send size={14} />;
+  if (name.includes("trash") || name.includes("delete")) return <Trash2 size={14} />;
+  if (name.includes("generate")) return <Sparkles size={14} />;
+  return <Share2 size={14} />;
 }
 
 function approvalSummary(approval: AgentApprovalRow) {

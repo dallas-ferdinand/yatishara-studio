@@ -26,6 +26,8 @@ import { StudioEmptyLogoButton } from "./StudioEmptyLogoButton";
 import { AgentTurnTimeline } from "./agent/AgentTurnTimeline";
 import { AgentChatHeader } from "./agent/AgentChatHeader";
 import { AgentChatSidebar } from "./agent/AgentChatSidebar";
+import type { AgentQuestionRow } from "./agent/AgentQuestionStep";
+import type { AgentMessageRow } from "./agent/agentStepUtils";
 import "./studio-messages.css";
 import "./studio-agent.css";
 
@@ -517,7 +519,7 @@ export function StudioAgentPane({
   const retryRun = useAction(api.agentActions.retryRun);
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const pricing = useQuery(api.billing.getPricing, {});
-  const agentPreferences = useQuery((api as any).agentPreferences.getMine, {});
+  const agentPreferences = useQuery(api.agentPreferences.getMine, {});
 
   const [draft, setDraft] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -857,7 +859,7 @@ export function StudioAgentPane({
       clearComposerEditor(editorRef.current);
       setDraft("");
       setAttachments([]);
-      const result = await (sendTurn as any)({
+      const result = await sendTurn({
         threadId,
         message: text,
         autoApprove,
@@ -941,7 +943,7 @@ export function StudioAgentPane({
     try {
       const result = await answerQuestions({ questionId, answers });
       if (!result.ok || !result.continueMessage) return;
-      const turn = await (sendTurn as any)({
+      const turn = await sendTurn({
         threadId: result.threadId,
         message: result.continueMessage,
         autoApprove,
@@ -1009,11 +1011,11 @@ export function StudioAgentPane({
               </div>
             ) : (
               <AgentTurnTimeline
-                messages={(messages ?? []) as any}
+                messages={(messages ?? []) as AgentMessageRow[]}
                 toolCalls={toolCalls ?? []}
                 runs={runs ?? []}
                 approvals={approvals ?? []}
-                questions={(questions ?? []) as any}
+                questions={(questions ?? []) as AgentQuestionRow[]}
                 busy={busy}
                 activeRunId={cancellableRunId}
                 pendingUserText={pendingUserText}

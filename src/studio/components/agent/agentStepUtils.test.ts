@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Id } from "../../../../convex/_generated/dataModel";
 import { buildAgentTurns, extractOutcome } from "./agentStepUtils";
 
 describe("buildAgentTurns optimistic send", () => {
@@ -6,13 +7,13 @@ describe("buildAgentTurns optimistic send", () => {
     const turns = buildAgentTurns({
       messages: [
         {
-          _id: "u1" as any,
+          _id: "u1" as Id<"agentMessages">,
           role: "user",
           content: "first",
           createdAt: 1,
         },
         {
-          _id: "a1" as any,
+          _id: "a1" as Id<"agentMessages">,
           role: "assistant",
           content: "reply one with steps",
           createdAt: 2,
@@ -20,8 +21,8 @@ describe("buildAgentTurns optimistic send", () => {
       ],
       toolCalls: [
         {
-          _id: "t1" as any,
-          runId: "r1" as any,
+          _id: "t1" as Id<"agentToolCalls">,
+          runId: "r1" as Id<"agentRuns">,
           toolName: "studio_generate_image",
           argsJson: "{}",
           status: "completed",
@@ -31,10 +32,10 @@ describe("buildAgentTurns optimistic send", () => {
       ],
       runs: [
         {
-          _id: "r1" as any,
+          _id: "r1" as Id<"agentRuns">,
           status: "completed",
           createdAt: 1,
-        } as any,
+        },
       ],
       approvals: [],
       busy: true,
@@ -56,20 +57,26 @@ describe("buildAgentTurns optimistic send", () => {
     const turns = buildAgentTurns({
       messages: [
         {
-          _id: "u1" as any,
+          _id: "u1" as Id<"agentMessages">,
           role: "user",
           content: "ok",
           createdAt: 1,
         },
         {
-          _id: "a1" as any,
+          _id: "a1" as Id<"agentMessages">,
           role: "assistant",
           content: "done",
           createdAt: 2,
         },
       ],
       toolCalls: [],
-      runs: [{ _id: "r1" as any, status: "completed", createdAt: 1 } as any],
+      runs: [
+        {
+          _id: "r1" as Id<"agentRuns">,
+          status: "completed",
+          createdAt: 1,
+        },
+      ],
       approvals: [],
       busy: true,
       pendingUserText: "ok",

@@ -12,10 +12,10 @@ import "./studio-agent.css";
  */
 export function StudioAgentSettings() {
   const byok = useQuery(api.userAgentKeys.getMine, {});
-  const agentPreferences = useQuery((api as any).agentPreferences.getMine, {});
+  const agentPreferences = useQuery(api.agentPreferences.getMine, {});
   const saveByok = useAction(api.userAgentKeysActions.saveMine);
   const clearByok = useMutation(api.userAgentKeys.clearMine);
-  const setAgentPreferences = useMutation((api as any).agentPreferences.setMine);
+  const setAgentPreferences = useMutation(api.agentPreferences.setMine);
   const [provider, setProvider] = useState<
     "openai" | "anthropic" | "zai" | "openrouter"
   >("openai");

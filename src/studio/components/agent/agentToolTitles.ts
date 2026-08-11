@@ -206,7 +206,7 @@ export function friendlyErrorLine(toolName: string, error?: string | null): stri
     return `Couldn't ${action}`;
   }
 
-  let cleaned = raw
+  const cleaned = raw
     .replace(/\bstudio_[a-z0-9_]+\b/gi, "")
     .replace(/\bMissing path param\b[^.]*/gi, "")
     .replace(/\s{2,}/g, " ")
