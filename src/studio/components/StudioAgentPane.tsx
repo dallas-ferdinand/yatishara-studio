@@ -1039,24 +1039,22 @@ export function StudioAgentPane({
               </button>
               <button
                 type="button"
-                className="studio-pill-btn studio-agent-composer-pill"
+                className="studio-composer-circle-btn studio-dm-composer-circle"
                 title="Agent settings"
                 aria-label="Agent settings"
                 onClick={() => onOpenAgentSettings?.()}
               >
-                <Settings aria-hidden="true" />
-                <span className="studio-dm-extra-pill-label">Settings</span>
+                <Settings size={14} strokeWidth={2.25} aria-hidden="true" />
               </button>
               {!busy && latestFailedRun ? (
                 <button
                   type="button"
-                  className="studio-pill-btn studio-agent-composer-pill"
+                  className="studio-composer-circle-btn studio-dm-composer-circle"
                   title="Retry last failed run"
                   aria-label="Retry last failed run"
                   onClick={() => void handleRetry()}
                 >
-                  <RotateCcw aria-hidden="true" />
-                  <span className="studio-dm-extra-pill-label">Retry</span>
+                  <RotateCcw size={14} strokeWidth={2.25} aria-hidden="true" />
                 </button>
               ) : null}
               <span className="studio-dm-extras-spacer" aria-hidden="true" />
