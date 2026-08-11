@@ -6,13 +6,20 @@
   height: 100%;
   min-height: 0;
   position: relative;
-  /* Bland solid plate — no scenic wallpaper bleed (match DM/Files). */
+  /* Solid light/dark plate only — never scenic wallpaper / glass. */
   background: var(--mos-page, var(--mos-bg, #121214));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  isolation: isolate;
   color: var(--mos-ink, var(--color-cursor-text));
 }
 
 [data-appearance="light"] .studio-agent-pane {
   background: var(--mos-panel, #f5f5f7);
+}
+
+[data-appearance="dark"] .studio-agent-pane {
+  background: var(--mos-page, var(--mos-bg, #121214));
 }
 
 .studio-agent-pane .studio-chat-render-area {
@@ -673,13 +680,19 @@
 /* Secondary chat head + info sidebar (DM Action pattern). */
 .studio-agent-pane.is-split {
   overflow: hidden;
-  background: transparent;
+  /* Keep opaque plate — do not clear to transparent (wallpaper bleed). */
+  background: var(--mos-page, var(--mos-bg, #121214));
+}
+
+[data-appearance="light"] .studio-agent-pane.is-split {
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-agent-info-panels {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+  background: inherit;
 }
 
 .studio-agent-chat-column {
@@ -690,6 +703,13 @@
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  background: var(--mos-page, var(--mos-bg, #121214));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+[data-appearance="light"] .studio-agent-chat-column {
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-agent-chat-head {
@@ -801,8 +821,15 @@
   height: 100%;
   min-height: 0;
   min-width: 0;
-  background: var(--mos-page, var(--color-cursor-bg));
+  background: var(--mos-page, var(--mos-bg, #121214));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  isolation: isolate;
   border-left: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+[data-appearance="light"] .studio-agent-chat-sidebar {
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-agent-chat-sidebar.is-sheet {
