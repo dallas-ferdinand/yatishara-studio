@@ -153,7 +153,13 @@ export function StudioGenerationDetailSidebar({
   const infoItems = !detail
     ? []
     : [
-        { label: "Model", value: detail.modelLabel ?? detail.resolvedModel ?? "—" },
+        {
+          label: "Model",
+          value: detail.modelLabel ?? detail.resolvedModel ?? "—",
+          title: detail.resolvedModel && detail.modelLabel !== detail.resolvedModel
+            ? detail.resolvedModel
+            : undefined,
+        },
         detail.resolution ? { label: "Resolution", value: detail.resolution } : null,
         detail.quality ? { label: "Quality", value: detail.quality } : null,
         detail.durationSeconds != null
@@ -163,7 +169,7 @@ export function StudioGenerationDetailSidebar({
           ? { label: "Credits", value: String(detail.creditsSpent) }
           : null,
         { label: "Created", value: formatWhen(detail.createdAt) },
-      ].filter(Boolean) as Array<{ label: string; value: string }>;
+      ].filter(Boolean) as Array<{ label: string; value: string; title?: string }>;
 
   return (
     <aside
@@ -271,7 +277,10 @@ export function StudioGenerationDetailSidebar({
                 {infoItems.map((item) => (
                   <div key={item.label} className="studio-gen-detail-info-card">
                     <span className="studio-gen-detail-info-label">{item.label}</span>
-                    <span className="studio-gen-detail-info-value" title={item.value}>
+                    <span
+                      className="studio-gen-detail-info-value"
+                      title={item.title || item.value}
+                    >
                       {item.value}
                     </span>
                   </div>

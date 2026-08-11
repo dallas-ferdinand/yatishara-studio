@@ -517,6 +517,8 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  container-type: inline-size;
+  container-name: gen-detail;
   background: var(--mos-panel, var(--color-cursor-panel, #141414));
   border-left: 1px solid color-mix(in srgb, var(--color-cursor-border, #fff) 16%, transparent);
   color: var(--color-cursor-fg, var(--mos-fg, #e8e8e8));
@@ -668,7 +670,14 @@
   word-break: break-word;
   font-size: 13px;
   line-height: 1.5;
+  /* Cap at a 1:1 square of the sidebar width, then scroll inside. */
+  max-height: 100cqw;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
   color: var(--color-cursor-fg, var(--mos-fg, #e8e8e8));
+  scrollbar-width: thin;
 }
 
 [data-appearance="light"] .studio-gen-detail-prompt {

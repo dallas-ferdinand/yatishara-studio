@@ -97,10 +97,40 @@ function assetIdsFromPromptReferences(prompt: string | undefined): string[] {
 function modelLabel(resolvedModel: string | undefined): string | undefined {
   const raw = resolvedModel?.trim();
   if (!raw) return undefined;
-  // Prefer a short readable tail after the last slash / colon.
-  const parts = raw.split(/[/:]/);
-  const tail = parts[parts.length - 1]?.trim();
-  return tail || raw;
+  const lower = raw.toLowerCase();
+
+  // Prefer product names users see in the composer, not gateway / Ark ids.
+  const rules: Array<{ test: RegExp; label: string }> = [
+    { test: /seedance[-_/.\s]?2[.\-_]?5|dreamina-seedance-2-5/i, label: "Seedance 2.5" },
+    { test: /seedance[-_/.\s]?2[.\-_]?0|dreamina-seedance-2-0/i, label: "Seedance 2.0" },
+    { test: /seedream[-_/.\s]?5|dola-seedream-5/i, label: "Seedream 5.0" },
+    { test: /seedream[-_/.\s]?4[.\-_]?5/i, label: "Seedream 4.5" },
+    { test: /seedream[-_/.\s]?4|seedream-4-0/i, label: "Seedream 4.0" },
+    { test: /seedream[-_/.\s]?3/i, label: "Seedream 3.0" },
+    { test: /gpt[-_/.\s]?image[-_/.\s]?2|openai\/gpt-image/i, label: "GPT Image 2" },
+    { test: /nano[-_/.\s]?banana/i, label: "Nano Banana" },
+    { test: /eleven_text_to_sound|sound_v2|text_to_sound/i, label: "ElevenLabs SFX" },
+    { test: /elevenlabs\/music|music_v2/i, label: "ElevenLabs Music" },
+    { test: /eleven_v3|elevenlabs\/eleven_v3|eleven[-_/]?v3/i, label: "ElevenLabs Voice" },
+    { test: /elevenlabs/i, label: "ElevenLabs" },
+  ];
+  for (const rule of rules) {
+    if (rule.test.test(raw) || rule.test.test(lower)) return rule.label;
+  }
+
+  const tail = (raw.split(/[/:]/).pop() || raw).trim();
+  return humanizeModelId(tail) || raw;
+}
+
+/** Last-resort readable label from a raw model id (drops date stamps). */
+function humanizeModelId(id: string): string {
+  const cleaned = id
+    .replace(/[-_]?\d{6,8}$/g, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return id;
+  return cleaned.replace(/\b([a-z])/g, (ch) => ch.toUpperCase());
 }
 
 async function creditsForJob(
