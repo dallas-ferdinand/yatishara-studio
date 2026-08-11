@@ -581,41 +581,42 @@ export function buildAgentTurns(args: {
       : [];
     const pendingText = pendingUserText?.trim();
     const hasPendingAttachments = Boolean(pendingAttachments?.length);
-    const liveTurn =
-      (pendingText
-        ? [...turns].reverse().find((turn) => turn.userText === pendingText)
-        : undefined) ??
-      (!pendingText && hasPendingAttachments ? undefined : turns[turns.length - 1]);
+    const hasOptimisticSend = Boolean(pendingText) || hasPendingAttachments;
+    const lastTurn = turns[turns.length - 1];
+    // Convex caught up: newest user row is this send and still has no assistant.
+    // Never fall back to an older completed turn — that blanks prior reply/steps for a beat.
+    const lastIsThisSend =
+      hasOptimisticSend &&
+      Boolean(lastTurn) &&
+      (!pendingText || lastTurn!.userText === pendingText) &&
+      !lastTurn!.assistantText;
 
-    if (liveTurn) {
-      liveTurn.isLive = true;
-      if (liveSteps.length) {
-        liveTurn.steps = liveSteps.map((step) => ({
-          ...step,
-          isLive:
-            step.status === "started" ||
-            step.status === "queued" ||
-            step.status === "pending_approval",
-        }));
-      }
-      if (liveRunId) liveTurn.runId = liveRunId;
-      if (pendingAttachments?.length) liveTurn.attachments = pendingAttachments;
-      liveTurn.assistantText = undefined;
-    } else if (pendingText || hasPendingAttachments) {
+    const markLiveSteps = (steps: DisplayStep[]) =>
+      steps.map((step) => ({
+        ...step,
+        isLive:
+          step.status === "started" ||
+          step.status === "queued" ||
+          step.status === "pending_approval",
+      }));
+
+    if (hasOptimisticSend && !lastIsThisSend) {
       turns.push({
         id: "pending-user",
         userText: pendingText ?? "",
         attachments: pendingAttachments ?? [],
-        steps: liveSteps.map((step) => ({
-          ...step,
-          isLive:
-            step.status === "started" ||
-            step.status === "queued" ||
-            step.status === "pending_approval",
-        })),
+        steps: markLiveSteps(liveSteps),
         isLive: true,
         runId: liveRunId,
       });
+    } else if (lastTurn) {
+      lastTurn.isLive = true;
+      if (liveSteps.length) {
+        lastTurn.steps = markLiveSteps(liveSteps);
+      }
+      if (liveRunId) lastTurn.runId = liveRunId;
+      if (pendingAttachments?.length) lastTurn.attachments = pendingAttachments;
+      // Keep any assistant text already synced — do not wipe completed prior turns.
     }
   }
 
