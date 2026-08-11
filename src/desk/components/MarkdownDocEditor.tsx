@@ -36,8 +36,15 @@ export function MarkdownDocEditor({ value, onChange, onSave, name }) {
 
   useEffect(() => {
     const md = value ?? "";
-    if (md === lastMarkdownRef.current && dirtyRef.current) return;
-    if (document.activeElement === editorRef.current && dirtyRef.current) return;
+    if (md === lastMarkdownRef.current) return;
+    // Keep in-progress typing, but always accept hydrate when local body is still empty.
+    if (
+      dirtyRef.current &&
+      document.activeElement === editorRef.current &&
+      !(String(lastMarkdownRef.current).trim() === "" && String(md).trim() !== "")
+    ) {
+      return;
+    }
     syncFromMarkdown(md);
   }, [value, syncFromMarkdown]);
 

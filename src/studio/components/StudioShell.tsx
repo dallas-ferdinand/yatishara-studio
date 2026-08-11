@@ -2469,6 +2469,39 @@ export function StudioShell({
       : activeFolder?._id
         ? readStudioLive(folderDocumentsCacheKey(activeFolder._id)) ?? undefined
         : undefined;
+  const activeDocumentId =
+    typeof activeTab === "string" && activeTab.startsWith("document:")
+      ? activeTab.slice("document:".length)
+      : null;
+  const activeDocumentDoc = useQuery(
+    api.documents.get,
+    hasCurrentUser && activeDocumentId ? { documentId: activeDocumentId } : "skip",
+  );
+  useEffect(() => {
+    if (!activeDocumentId || !activeDocumentDoc) return;
+    const key = `document:${activeDocumentId}`;
+    const nextDescription = activeDocumentDoc.contentMarkdown ?? "";
+    setTabEntrySnapshots((snapshots) => {
+      const prev = snapshots[key];
+      if (
+        prev?.bodyHydrated &&
+        prev.description === nextDescription &&
+        prev.name === `${activeDocumentDoc.title}.md` &&
+        prev.studioId === activeDocumentDoc._id
+      ) {
+        return snapshots;
+      }
+      return {
+        ...snapshots,
+        [key]: {
+          ...(prev ?? {}),
+          ...documentToEntry(activeDocumentDoc),
+          description: nextDescription,
+          bodyHydrated: true,
+        },
+      };
+    });
+  }, [activeDocumentId, activeDocumentDoc]);
   const videoEditorEnabled = isVideoEditorPreviewEnabled();
   const videoEditsRaw = useQuery(
     api.videoEdits.listByFolder,
@@ -25290,7 +25323,25 @@ export function StudioShell({
             onBuildElementSheet={buildElementSheet}
             stylePresets={presets}
             onDocumentChange={(entry, contentMarkdown) => {
-              void updateDocument({ documentId: entry.studioId, contentMarkdown });
+              const next = String(contentMarkdown ?? "");
+              const key =
+                entry?.studioKind === "document" && entry?.studioId
+                  ? `document:${entry.studioId}`
+                  : null;
+              const snap = key ? tabEntrySnapshots[key] : null;
+              // listByFolder blanks bodies; editor can emit "" before hydrate — never wipe.
+              if (!next.trim() && !snap?.bodyHydrated) return;
+              void updateDocument({ documentId: entry.studioId, contentMarkdown: next });
+              if (key) {
+                setTabEntrySnapshots((snapshots) => ({
+                  ...snapshots,
+                  [key]: {
+                    ...(snapshots[key] ?? entry),
+                    description: next,
+                    bodyHydrated: true,
+                  },
+                }));
+              }
               if (entry?.studioId) {
                 setRecentFileRows(
                   recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.edited),
@@ -31966,31 +32017,8 @@ function ActivePane({
     return wrapPane(null);
   }
   if (activeEntry?.studioKind === "document") {
-    const markdown = String(activeEntry.description ?? "");
-    const canRunPrompt =
-      looksLikePromptScript(markdown) ||
-      /^Prompt\s*[—–-]/i.test(String(activeEntry.name ?? "")) ||
-      parsePromptDocument(markdown).references.length > 0;
     return wrapPane(
       <div className="studio-asset-preview studio-document-preview">
-        {canRunPrompt ? (
-          <div className="studio-document-prompt-actions" role="toolbar" aria-label="Prompt actions">
-            <button
-              type="button"
-              className="studio-agent-primary-btn"
-              onClick={() => onRunDocumentInCreate?.(activeEntry)}
-            >
-              Run in Create
-            </button>
-            <button
-              type="button"
-              className="studio-agent-secondary-btn"
-              onClick={() => onUseDocumentInAgent?.(activeEntry)}
-            >
-              Use in Agent
-            </button>
-          </div>
-        ) : null}
         <MarkdownDocEditor
           name={activeEntry.name}
           value={activeEntry.description ?? ""}
@@ -37060,8 +37088,25 @@ function findEntryByTab(key, { assets, documents, videoEdits, elements, snapshot
     return snapshot;
   }
   if (key.startsWith("document:")) {
-    const item = documents?.find((doc) => doc._id === key.slice("document:".length));
-    return item ? documentToEntry(item) : snapshots?.[key] ?? null;
+    const id = key.slice("document:".length);
+    const item = documents?.find((doc) => doc._id === id);
+    const snapshot = snapshots?.[key] ?? null;
+    if (item) {
+      const entry = documentToEntry(item);
+      // listByFolder intentionally blanks contentMarkdown — prefer hydrated snapshot body.
+      const description =
+        (typeof snapshot?.description === "string" && snapshot.description.length > 0
+          ? snapshot.description
+          : null) ??
+        entry.description ??
+        "";
+      return {
+        ...mergeEntrySnapshot(entry, snapshot),
+        description,
+        bodyHydrated: Boolean(snapshot?.bodyHydrated),
+      };
+    }
+    return snapshot;
   }
   if (key.startsWith("videoEdit:")) {
     const item = videoEdits?.find((project) => project._id === key.slice("videoEdit:".length));
