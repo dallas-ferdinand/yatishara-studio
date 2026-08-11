@@ -19,7 +19,6 @@ import "./studio-agent.css";
 type StudioAgentPaneProps = {
   activeThreadId: Id<"agentThreads"> | null;
   onActiveThreadChange: (id: Id<"agentThreads"> | null) => void;
-  onOpenCreate?: () => void;
   onOpenAgentSettings?: () => void;
   /** After minting a thread, promote agent:main → agent:<id> like Create→thread. */
   onBindThreadTab?: (threadId: Id<"agentThreads">) => void;
@@ -38,7 +37,6 @@ function autosizeAgentComposer(el: HTMLTextAreaElement | null) {
 export function StudioAgentPane({
   activeThreadId,
   onActiveThreadChange,
-  onOpenCreate,
   onOpenAgentSettings,
   onBindThreadTab,
   onOpenNewAgentTab,
@@ -200,28 +198,6 @@ export function StudioAgentPane({
             {!hasMessages && !busy ? (
               <div className="studio-agent-empty-hero">
                 <StudioEmptyLogoButton />
-                <h2>Studio Agent</h2>
-                <p>
-                  Full Studio tool access for your account — discover, invoke,
-                  approve paid/destructive work, and keep project memory.
-                </p>
-                <div className="studio-agent-empty-actions">
-                  <button
-                    type="button"
-                    className="studio-agent-secondary-btn"
-                    onClick={() => onOpenCreate?.()}
-                  >
-                    Open Create
-                  </button>
-                  <button
-                    type="button"
-                    className="studio-agent-secondary-btn"
-                    onClick={() => onOpenAgentSettings?.()}
-                  >
-                    <Settings size={14} aria-hidden="true" />
-                    Agent settings
-                  </button>
-                </div>
               </div>
             ) : null}
 

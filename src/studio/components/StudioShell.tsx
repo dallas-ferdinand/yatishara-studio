@@ -31536,7 +31536,6 @@ function ActivePane({
       <StudioAgentPane
         activeThreadId={activeAgentThreadId}
         onActiveThreadChange={onActiveAgentThreadChange}
-        onOpenCreate={onOpenCreate}
         onOpenAgentSettings={onOpenAgentSettings}
         onBindThreadTab={onBindAgentThreadTab}
         onOpenNewAgentTab={onOpenNewAgentTab}

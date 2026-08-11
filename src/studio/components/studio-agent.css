@@ -15,44 +15,42 @@
   min-height: 0;
 }
 
+/* Empty Agent: true vertical center in the chat area (above composer). */
+.studio-agent-pane .studio-chat-stream-inner.is-empty {
+  justify-content: center;
+  align-items: center;
+}
+
+.studio-agent-pane .studio-chat-stream-inner.is-empty > .studio-agent-empty-hero {
+  margin-top: 0; /* override chat pin-to-bottom (.studio-chat-stream-inner > :first-child) */
+  margin-bottom: 0;
+  flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
 .studio-agent-empty-hero {
-  margin: auto;
   text-align: center;
-  max-width: 28rem;
+  max-width: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 0;
   opacity: 0.9;
-  padding: 24px 12px;
 }
 
 .studio-agent-empty-hero .studio-empty-logo-wrap {
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
 .studio-agent-empty-hero .studio-empty-logo-btn {
-  /* Match Create / workspace empty logo scale. */
   transform: scale(1);
-}
-
-.studio-agent-empty-hero h2 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-
-.studio-agent-empty-hero p {
-  margin: 0;
-  line-height: 1.45;
-  opacity: 0.8;
-}
-
-.studio-agent-empty-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  margin-top: 8px;
 }
 
 .studio-agent-meta {
