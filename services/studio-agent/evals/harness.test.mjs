@@ -32,7 +32,14 @@ export const GOLDEN_TASKS = [
     id: "generate-video",
     message: "create a video clip of dancers",
     workingSet: [],
-    expectLaneIncludes: "studio_generate_video",
+    expectLaneIncludes: "studio_estimate_generation",
+    expectSkill: "generate-video",
+  },
+  {
+    id: "animate-still",
+    message: "animate this into a video",
+    workingSet: [{ studioKind: "asset", studioId: "a1" }],
+    expectLaneIncludes: "studio_estimate_generation",
     expectSkill: "generate-video",
   },
   {

@@ -32,7 +32,9 @@ export const INTENT_BLURBS = {
   studio_view_media:
     "Get media URLs for an asset. Args:{assetId}.",
   studio_estimate_generation:
-    "Price a generation before paid generate. Args:{mode,prompt,...}.",
+    "Price a generation before paid generate. Args:{mode,prompt,...}. Prefer this before generate when spend isn't confirmed.",
+  studio_list_video_models:
+    "List real Studio video models + descriptions/caps. Call before inventing model details. Never invent legacy/pipeline marketing.",
 };
 
 /** Curated starter set when catalog has no q/category (token budget). */
@@ -87,9 +89,10 @@ export function detectActionLane(message, workingSet) {
     || /\b(image|picture|photo)\b.{0,40}\b(generat|creat|make|draw|render)/.test(text)) {
     return "LANE: skills {id:\"generate-image\"} if multi-step; invoke studio_generate_image with the user prompt. Do not claim unavailable unless invoke fails.";
   }
-  if (/\b(generat(e|ing)|creat(e|ing)|make|render)\b.{0,40}\b(video|clip|footage)\b/.test(text)
-    || /\b(video|clip)\b.{0,40}\b(generat|creat|make|render)/.test(text)) {
-    return "LANE: skills {id:\"generate-video\"} (+ prompt-cinematic or prompt-hypermotion as fits); storyboard still first if people. Then studio_generate_video.";
+  if (/\b(generat(e|ing)|creat(e|ing)|make|render|animat)\b.{0,40}\b(video|clip|footage)\b/.test(text)
+    || /\b(video|clip)\b.{0,40}\b(generat|creat|make|render|animat)/.test(text)
+    || /\banimat(e|ing)\b/.test(text)) {
+    return "LANE: Assume defaults (seedance-2.5, sensible duration/aspect from stills). skills generate-video (+ prompt pack). invoke studio_estimate_generation NOW, then studio_generate_video (or storyboard still first if people). No menus. No invented caps.";
   }
   if (/\b(move|put|place|relocat)/.test(text) && hasMovable && hasFolder) {
     return "LANE: invoke studio_bulk_move { items:[{id,kind}], targetFolderId } using attached ids. kind=studioKind.";

@@ -25,6 +25,8 @@ Confirm with `studio_list_video_models` when the user cares about model choice. 
 
 Pick `seedance-2.5` unless the user asks for 2.0 or needs 1080p/4K.
 
+If the user only wants a video made: **do not stop at listing models** — estimate with defaults, then generate (approval). Use this pack when they ask which model or when caps matter.
+
 ## Prompt vs args
 
 - Prompt body = picture + motion + audio language  
