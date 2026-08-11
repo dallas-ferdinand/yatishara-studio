@@ -1,12 +1,21 @@
+/**
+ * Agent approval cards — validated args, idempotent exactly-once execution
+ * via Studio /api/v1 + short-lived capability. No false-success placeholders.
+ */
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import {
-  internalAction,
   internalMutation,
   type MutationCtx,
 } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import {
+  authorizeTool,
+  buildStudioRequest,
+  catalogVersion,
+  getTool,
+} from "./lib/agentTools";
 
 const approvalStatus = v.union(
   v.literal("pending"),
@@ -21,6 +30,7 @@ const approvalReturn = v.object({
   _id: v.id("agentApprovals"),
   threadId: v.id("agentThreads"),
   action: v.string(),
+  toolName: v.optional(v.string()),
   title: v.string(),
   summary: v.string(),
   status: approvalStatus,
@@ -48,6 +58,7 @@ export const listForThread = authedQuery({
         _id: row._id,
         threadId: row.threadId,
         action: row.action,
+        toolName: row.toolName,
         title: row.title,
         summary: row.summary,
         status: row.status,
@@ -86,7 +97,7 @@ export const decide = authedMutation({
       decidedAt: now,
       updatedAt: now,
     });
-    await ctx.scheduler.runAfter(0, internal.agentApprovals.execute, {
+    await ctx.scheduler.runAfter(0, internal.agentApprovalsNode.execute, {
       approvalId: approval._id,
     });
     return null;
@@ -101,6 +112,9 @@ export const createPending = authedMutation({
     summary: v.string(),
     payloadJson: v.string(),
     estimatedCredits: v.optional(v.number()),
+    toolName: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
+    runId: v.optional(v.id("agentRuns")),
   },
   returns: v.id("agentApprovals"),
   handler: async (ctx, args) => {
@@ -108,14 +122,48 @@ export const createPending = authedMutation({
     if (!thread || thread.ownerId !== ctx.user._id) {
       throw new Error("Agent thread not found");
     }
+    if (args.idempotencyKey) {
+      const existing = await ctx.db
+        .query("agentApprovals")
+        .withIndex("by_idempotency", (q) =>
+          q.eq("ownerId", ctx.user._id).eq("idempotencyKey", args.idempotencyKey),
+        )
+        .unique();
+      if (existing) return existing._id;
+    }
+    const toolName = args.toolName?.trim();
+    if (toolName) {
+      const auth = authorizeTool(toolName, {
+        surface: "agent",
+        role: ctx.user.role,
+        scopes: ["read", "write", "generate", "messages", "social", "marketplace"],
+      });
+      if (!auth.ok) throw new Error(auth.error || "Tool not allowed");
+      // Validate payload can build a request when HTTP-backed
+      try {
+        const payload = JSON.parse(args.payloadJson || "{}") as Record<
+          string,
+          unknown
+        >;
+        buildStudioRequest(toolName, payload);
+      } catch (error) {
+        throw new Error(
+          error instanceof Error ? error.message : "Invalid tool arguments",
+        );
+      }
+    }
     const now = Date.now();
     const approvalId = await ctx.db.insert("agentApprovals", {
       ownerId: ctx.user._id,
       threadId: args.threadId,
+      runId: args.runId,
       action: args.action.trim(),
+      toolName,
       title: args.title.trim() || "Approval required",
       summary: args.summary.trim(),
       payloadJson: args.payloadJson,
+      catalogVersion: catalogVersion(),
+      idempotencyKey: args.idempotencyKey,
       status: "pending",
       estimatedCredits: args.estimatedCredits,
       createdAt: now,
@@ -135,68 +183,128 @@ export const createPending = authedMutation({
   },
 });
 
-export const execute = internalAction({
-  args: { approvalId: v.id("agentApprovals") },
-  returns: v.null(),
+export const createPendingInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("agentThreads"),
+    runId: v.optional(v.id("agentRuns")),
+    toolName: v.string(),
+    title: v.string(),
+    summary: v.string(),
+    payloadJson: v.string(),
+    estimatedCredits: v.optional(v.number()),
+    idempotencyKey: v.string(),
+    role: v.union(
+      v.literal("user"),
+      v.literal("admin"),
+      v.literal("super_admin"),
+    ),
+  },
+  returns: v.id("agentApprovals"),
   handler: async (ctx, args) => {
-    await ctx.runMutation(internal.agentApprovals.markExecuting, {
-      approvalId: args.approvalId,
+    const existing = await ctx.db
+      .query("agentApprovals")
+      .withIndex("by_idempotency", (q) =>
+        q.eq("ownerId", args.ownerId).eq("idempotencyKey", args.idempotencyKey),
+      )
+      .unique();
+    if (existing) return existing._id;
+
+    const auth = authorizeTool(args.toolName, {
+      surface: "agent",
+      role: args.role,
+      scopes: ["read", "write", "generate", "messages", "social", "marketplace"],
     });
-    try {
-      const approval = await ctx.runMutation(
-        internal.agentApprovals.loadForExecute,
-        { approvalId: args.approvalId },
-      );
-      if (!approval) return null;
-      const payload = JSON.parse(approval.payloadJson || "{}") as Record<
-        string,
-        unknown
-      >;
-      let result: Record<string, unknown> = { ok: true };
+    if (!auth.ok) throw new Error(auth.error || "Tool not allowed");
 
-      if (approval.action === "generate_image" || approval.action === "generate_video") {
-        const mode = approval.action === "generate_video" ? "video" : "image";
-        const folderId = payload.folderId as Id<"folders"> | undefined;
-        const userPrompt = String(payload.userPrompt ?? "").trim();
-        if (!folderId || !userPrompt) {
-          throw new Error("Missing folderId or userPrompt for generation");
-        }
-        // Queue via generationActions.runFlow through public action bridge.
-        result = await ctx.runAction(internal.agentApprovals.runApprovedGeneration, {
-          ownerId: approval.ownerId,
-          folderId,
-          mode,
-          userPrompt,
-          videoModel:
-            typeof payload.videoModel === "string" ? payload.videoModel : undefined,
-        });
-      } else if (approval.action === "create_folder") {
-        result = await ctx.runMutation(internal.agentApprovals.runCreateFolder, {
-          ownerId: approval.ownerId,
-          parentId: payload.parentId as Id<"folders"> | undefined,
-          name: String(payload.name ?? "New folder"),
-        });
-      } else if (approval.action === "trash") {
-        result = {
-          ok: true,
-          note: "Trash via Agent approval recorded; open Files to confirm items.",
-          payload,
-        };
-      } else {
-        result = { ok: true, action: approval.action, payload };
-      }
+    const payload = JSON.parse(args.payloadJson || "{}") as Record<string, unknown>;
+    buildStudioRequest(args.toolName, payload);
 
-      await ctx.runMutation(internal.agentApprovals.markCompleted, {
-        approvalId: args.approvalId,
-        resultJson: JSON.stringify(result),
-      });
-    } catch (error) {
-      await ctx.runMutation(internal.agentApprovals.markFailed, {
-        approvalId: args.approvalId,
-        error: error instanceof Error ? error.message : String(error),
+    const tool = getTool(args.toolName);
+    const now = Date.now();
+    const approvalId = await ctx.db.insert("agentApprovals", {
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+      runId: args.runId,
+      action: args.toolName,
+      toolName: args.toolName,
+      title: args.title.trim() || tool?.name || "Approval required",
+      summary: args.summary.trim(),
+      payloadJson: args.payloadJson,
+      catalogVersion: catalogVersion(),
+      idempotencyKey: args.idempotencyKey,
+      status: "pending",
+      estimatedCredits: args.estimatedCredits,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("agentMessages", {
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+      role: "approval",
+      content: args.summary.trim() || args.title,
+      approvalId,
+      status: "complete",
+      createdAt: now,
+    });
+    await ctx.db.patch(args.threadId, { updatedAt: now });
+    if (args.runId) {
+      await ctx.db.patch(args.runId, {
+        status: "awaiting_approval",
+        updatedAt: now,
       });
     }
-    return null;
+    return approvalId;
+  },
+});
+
+export const claimForExecute = internalMutation({
+  args: { approvalId: v.id("agentApprovals") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      ownerId: v.id("users"),
+      threadId: v.id("agentThreads"),
+      runId: v.optional(v.id("agentRuns")),
+      action: v.string(),
+      toolName: v.optional(v.string()),
+      payloadJson: v.string(),
+      role: v.union(
+        v.literal("user"),
+        v.literal("admin"),
+        v.literal("super_admin"),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("agentApprovals", args.approvalId);
+    if (!row) return null;
+    // Exactly-once: only approved → executing transition wins
+    if (row.status === "executing" || row.status === "completed") {
+      return null;
+    }
+    if (row.status !== "approved") return null;
+    const user = await ctx.db.get("users", row.ownerId);
+    if (!user) return null;
+    const thread = await ctx.db.get("agentThreads", row.threadId);
+    if (!thread || thread.ownerId !== row.ownerId) {
+      throw new Error("Thread ownership changed");
+    }
+    const now = Date.now();
+    await ctx.db.patch(row._id, {
+      status: "executing",
+      executionStartedAt: now,
+      updatedAt: now,
+    });
+    return {
+      ownerId: row.ownerId,
+      threadId: row.threadId,
+      runId: row.runId,
+      action: row.action,
+      toolName: row.toolName,
+      payloadJson: row.payloadJson,
+      role: user.role,
+    };
   },
 });
 
@@ -206,7 +314,11 @@ export const markExecuting = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get("agentApprovals", args.approvalId);
     if (!row || row.status !== "approved") return null;
-    await ctx.db.patch(row._id, { status: "executing", updatedAt: Date.now() });
+    await ctx.db.patch(row._id, {
+      status: "executing",
+      executionStartedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
     return null;
   },
 });
@@ -243,6 +355,7 @@ export const markCompleted = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get("agentApprovals", args.approvalId);
     if (!row) return null;
+    if (row.status === "completed") return null; // idempotent
     const now = Date.now();
     await ctx.db.patch(row._id, {
       status: "completed",
@@ -282,6 +395,7 @@ export const markFailed = internalMutation({
   },
 });
 
+/** Kept for any legacy direct folder creates from older agent turns. */
 export const runCreateFolder = internalMutation({
   args: {
     ownerId: v.id("users"),
@@ -307,65 +421,6 @@ export const runCreateFolder = internalMutation({
       updatedAt: now,
     });
     return { ok: true, folderId };
-  },
-});
-
-export const runApprovedGeneration = internalAction({
-  args: {
-    ownerId: v.id("users"),
-    folderId: v.id("folders"),
-    mode: v.union(v.literal("image"), v.literal("video")),
-    userPrompt: v.string(),
-    videoModel: v.optional(v.string()),
-  },
-  returns: v.any(),
-  handler: async (ctx, args) => {
-    // v1: queue intent is recorded; client Create / Agent follow-up runs generation
-    // with full auth. Soft handoff payload for StudioAgentPane / Create.
-    await ctx.runMutation(internal.agentApprovals.recordGenerationHandoff, {
-      ownerId: args.ownerId,
-      folderId: args.folderId,
-      mode: args.mode,
-      userPrompt: args.userPrompt,
-      videoModel: args.videoModel ?? "seedance-2.5",
-    });
-    return {
-      ok: true,
-      queued: true,
-      handoff: "create",
-      mode: args.mode,
-      folderId: args.folderId,
-      userPrompt: args.userPrompt,
-      videoModel: args.videoModel ?? "seedance-2.5",
-      note: "Approved. Open Create to run this prompt, or ask the agent to refine it.",
-    };
-  },
-});
-
-export const recordGenerationHandoff = internalMutation({
-  args: {
-    ownerId: v.id("users"),
-    folderId: v.id("folders"),
-    mode: v.union(v.literal("image"), v.literal("video")),
-    userPrompt: v.string(),
-    videoModel: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    // Find most recent agent thread for owner and append a system tip.
-    const threads = await ctx.db
-      .query("agentThreads")
-      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
-      .order("desc")
-      .take(1);
-    const thread = threads[0];
-    if (!thread) return null;
-    await appendAgentSystemMessage(ctx, {
-      ownerId: args.ownerId,
-      threadId: thread._id,
-      content: `Generation approved (${args.mode}). Prompt ready in Create:\n${args.userPrompt.slice(0, 500)}`,
-    });
-    return null;
   },
 });
 

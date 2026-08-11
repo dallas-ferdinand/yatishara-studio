@@ -1,68 +1,36 @@
 #!/usr/bin/env node
 /**
- * Studio Agent Pi worker (optional).
+ * Studio Agent Pi worker (canonical).
  *
  * Convex agentActions.sendTurn posts here when STUDIO_AGENT_URL is set.
- * Tools are Studio MCP HTTP only — no computer-use. Assist/Elements/style
- * tools are blocked (see AGENT_BLOCKED_TOOL_NAMES).
+ * Tools: dynamic catalog/describe/invoke → Studio /api/v1 with per-user
+ * capability token. No MCP bridge. No global STUDIO_API_TOKEN identity.
  *
  * Env:
  *   STUDIO_AGENT_PORT / PORT
- *   STUDIO_AGENT_WORKER_TOKEN
- *   STUDIO_MCP_HTTP_URL
- *   STUDIO_API_TOKEN
- *   STUDIO_MCP_AGENT_SURFACE=1  (recommended for MCP child processes)
+ *   STUDIO_AGENT_WORKER_TOKEN (required — fail closed)
  */
 import { createServer } from "node:http";
-import { spawn } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { createPiStudioTools } from "../../packages/studio-tools/src/piAdapter.js";
+import { authorizeTool } from "../../packages/studio-tools/src/policy.js";
+import { invokeStudioTool } from "../../packages/studio-tools/src/http.js";
 
 const PORT = Number(process.env.STUDIO_AGENT_PORT || process.env.PORT || 8796);
 const TOKEN = String(process.env.STUDIO_AGENT_WORKER_TOKEN || "").trim();
-const MCP_URL = String(process.env.STUDIO_MCP_HTTP_URL || "").trim();
-const API_TOKEN = String(process.env.STUDIO_API_TOKEN || "").trim();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export const AGENT_BLOCKED_TOOL_NAMES = new Set([
-  "studio_generate_element_sheet",
-  "studio_create_style_sheet",
-  "studio_build_style_sheet",
-  "studio_set_active_style_sheet",
-  "studio_ensure_brief",
-  "studio_edit_brief",
-  "studio_approve_brief",
-  "studio_reject_brief",
-  "studio_generate_script",
-]);
-
-/** Per-user Pi session cache (userId+threadId → last activity). */
+/** @type {Map<string, { updatedAt: number, abort?: AbortController }>} */
 const sessions = new Map();
 
-async function callStudioMcp(toolName, args, userToken) {
-  if (AGENT_BLOCKED_TOOL_NAMES.has(toolName)) {
-    return { ok: false, error: `Tool ${toolName} is retired from Agent Mode` };
-  }
-  if (!MCP_URL) {
-    return { ok: false, error: "STUDIO_MCP_HTTP_URL not configured" };
-  }
-  const res = await fetch(`${MCP_URL.replace(/\/$/, "")}/tools/${toolName}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(userToken || API_TOKEN
-        ? { authorization: `Bearer ${userToken || API_TOKEN}` }
-        : {}),
-    },
-    body: JSON.stringify(args ?? {}),
-  });
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { ok: res.ok, raw: text.slice(0, 2000) };
-  }
+function sessionKey(userId, threadId) {
+  return `${userId}:${threadId}`;
 }
 
 function authOk(req) {
-  if (!TOKEN) return true;
+  if (!TOKEN) return false;
   const header = String(req.headers.authorization || "");
   return header === `Bearer ${TOKEN}`;
 }
@@ -75,78 +43,306 @@ async function readJson(req) {
   return JSON.parse(raw);
 }
 
-function sessionKey(userId, threadId) {
-  return `${userId}:${threadId}`;
+async function callback(callbackBase, workerCallbackToken, route, body, method = "POST") {
+  if (!callbackBase || !workerCallbackToken) return null;
+  const url =
+    method === "GET"
+      ? `${callbackBase.replace(/\/$/, "")}/api/agent-worker/${route}?${new URLSearchParams(body).toString()}`
+      : `${callbackBase.replace(/\/$/, "")}/api/agent-worker/${route}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      authorization: `Bearer ${workerCallbackToken}`,
+      "content-type": "application/json",
+    },
+    body: method === "GET" ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { ok: res.ok, raw: text.slice(0, 2000) };
+  }
 }
 
-async function runPiTurn({ message, history, userId, threadId, userToken }) {
+async function runPiTurn(body, abortSignal) {
+  const {
+    message,
+    history,
+    memories,
+    userId,
+    threadId,
+    runId,
+    role = "user",
+    scopes,
+    capabilityToken,
+    studioApiBase,
+    callbackBase,
+    workerCallbackToken,
+    byokFallbackNote,
+  } = body;
+
+  if (!capabilityToken) {
+    throw new Error("capabilityToken required — no global STUDIO_API_TOKEN fallback");
+  }
+  if (!studioApiBase) {
+    throw new Error("studioApiBase required");
+  }
+
   const key = sessionKey(userId || "anon", threadId || "default");
   sessions.set(key, { updatedAt: Date.now() });
+
+  // Cancellation poll
+  const cancelPoll = setInterval(async () => {
+    try {
+      const status = await callback(
+        callbackBase,
+        workerCallbackToken,
+        "run-status",
+        { runId },
+        "GET",
+      );
+      if (status?.run?.status === "cancelled" || status?.run?.cancelRequestedAt) {
+        abortSignal?.abort?.();
+      }
+    } catch {
+      // ignore poll errors
+    }
+  }, 2500);
 
   try {
     const mod = await import("@earendil-works/pi-coding-agent");
     const { createAgentSession, SessionManager } = mod;
+
+    const studioTools = createPiStudioTools({
+      apiBase: studioApiBase,
+      role,
+      scopes:
+        scopes || [
+          "read",
+          "write",
+          "generate",
+          "messages",
+          "social",
+          "marketplace",
+        ],
+      getBearerToken: async () => capabilityToken,
+      onApprovalRequired: async ({ toolName, args, tool }) => {
+        const start = await callback(callbackBase, workerCallbackToken, "tool-start", {
+          ownerId: userId,
+          threadId,
+          runId,
+          toolName,
+          args,
+        });
+        const idempotencyKey = createHash("sha256")
+          .update(
+            `${runId || ""}:${toolName}:${JSON.stringify(args || {})}`,
+            "utf8",
+          )
+          .digest("hex")
+          .slice(0, 40);
+        const approval = await callback(
+          callbackBase,
+          workerCallbackToken,
+          "approval",
+          {
+            ownerId: userId,
+            threadId,
+            runId,
+            toolName,
+            title: tool?.name || toolName,
+            summary: `Approve ${toolName} (${tool?.risk || "risk"})`,
+            args,
+            idempotencyKey,
+            role,
+          },
+        );
+        if (start?.toolCallId) {
+          await callback(callbackBase, workerCallbackToken, "tool-result", {
+            toolCallId: start.toolCallId,
+            ownerId: userId,
+            threadId,
+            toolName,
+            ok: true,
+            result: approval,
+          });
+        }
+        return {
+          ok: true,
+          pendingApproval: true,
+          approvalId: approval?.approvalId,
+          message:
+            "Approval card created in Studio. Wait for the user to approve before claiming success.",
+        };
+      },
+      localHandlers: {
+        studio_list_text_presets: async () => ({
+          ok: true,
+          note: "Use Studio Edit UI text presets; list endpoint is local in MCP.",
+        }),
+        studio_validate_production_gates: async () => ({
+          ok: true,
+          canProceed: true,
+          warnings: ["Gate file optional for Agent Mode"],
+        }),
+        studio_agent_remember: async (args) =>
+          callback(callbackBase, workerCallbackToken, "remember", {
+            ownerId: userId,
+            threadId,
+            title: String(args.title || "Memory"),
+            body: String(args.body || ""),
+            kind: args.kind,
+            projectFolderId: args.projectFolderId,
+          }),
+      },
+    });
+
+    // Wrap invoke to emit tool events for direct (non-approval) calls
+    const tools = studioTools.map((tool) => {
+      if (tool.name !== "invoke") return tool;
+      return {
+        ...tool,
+        execute: async (input) => {
+          const toolName = String(input?.name || "");
+          const args = input?.args && typeof input.args === "object" ? input.args : {};
+          const auth = authorizeTool(toolName, {
+            surface: "agent",
+            role,
+            scopes:
+              scopes || [
+                "read",
+                "write",
+                "generate",
+                "messages",
+                "social",
+                "marketplace",
+              ],
+          });
+          const start = await callback(
+            callbackBase,
+            workerCallbackToken,
+            "tool-start",
+            {
+              ownerId: userId,
+              threadId,
+              runId,
+              toolName,
+              args,
+            },
+          );
+          try {
+            if (auth.ok && auth.requiresApproval) {
+              return tool.execute(input);
+            }
+            const result = await tool.execute(input);
+            if (start?.toolCallId) {
+              await callback(callbackBase, workerCallbackToken, "tool-result", {
+                toolCallId: start.toolCallId,
+                ownerId: userId,
+                threadId,
+                toolName,
+                ok: Boolean(result?.ok !== false),
+                result,
+                error: result?.error,
+              });
+            }
+            return result;
+          } catch (error) {
+            if (start?.toolCallId) {
+              await callback(callbackBase, workerCallbackToken, "tool-result", {
+                toolCallId: start.toolCallId,
+                ownerId: userId,
+                threadId,
+                toolName,
+                ok: false,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            throw error;
+          }
+        },
+      };
+    });
+
+    tools.push({
+      name: "remember",
+      description:
+        "Store an owner-scoped durable memory for future Agent turns (never cross-user).",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          body: { type: "string" },
+          kind: {
+            type: "string",
+            enum: ["note", "preference", "decision", "summary"],
+          },
+          projectFolderId: { type: "string" },
+        },
+        required: ["title", "body"],
+      },
+      execute: async (args) =>
+        callback(callbackBase, workerCallbackToken, "remember", {
+          ownerId: userId,
+          threadId,
+          title: String(args.title || "Memory"),
+          body: String(args.body || ""),
+          kind: args.kind,
+          projectFolderId: args.projectFolderId,
+        }),
+    });
+
+    const memoryBlock =
+      Array.isArray(memories) && memories.length
+        ? `Owner memories (do not mix users):\n${memories
+            .map((m) => `- [${m.kind}] ${m.title}: ${String(m.body).slice(0, 240)}`)
+            .join("\n")}`
+        : "";
+
+    const system = [
+      "You are Yatishara Studio Agent — full access to current non-retired Studio tools for this signed-in user.",
+      "Discover tools with catalog, inspect with describe, run with invoke.",
+      "Paid/destructive/outbound/admin tools create approval cards — never claim they already ran.",
+      "Admin tools only if this user is admin. Never access other users' data.",
+      "Use remember for durable preferences/decisions.",
+      byokFallbackNote || "",
+      memoryBlock,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
     const { session } = await createAgentSession({
       sessionManager: SessionManager.inMemory(),
-      customTools: [
-        {
-          name: "studio_mcp",
-          description:
-            "Call an allowed Studio MCP tool by name with a JSON args object. Blocked: element sheets, style sheets, Assist briefs/script generate.",
-          parameters: {
-            type: "object",
-            properties: {
-              toolName: { type: "string" },
-              args: { type: "object" },
-            },
-            required: ["toolName"],
-          },
-          execute: async ({ toolName, args }) =>
-            callStudioMcp(String(toolName), args ?? {}, userToken),
-        },
-      ],
+      customTools: tools,
+      // Some pi versions accept systemPrompt; ignore if unsupported.
+      systemPrompt: system,
     });
 
     const prior = Array.isArray(history)
       ? history
-          .slice(-12)
+          .slice(-16)
           .map((row) => `${row.role}: ${row.content}`)
           .join("\n")
       : "";
-    const prompt = prior
-      ? `Prior turns:\n${prior}\n\nUser:\n${message}`
-      : message;
+    const prompt = [
+      system,
+      prior ? `Prior turns:\n${prior}` : "",
+      `User:\n${message}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    if (abortSignal?.aborted) {
+      throw new Error("cancelled");
+    }
+
     const result = await session.prompt(prompt);
     return typeof result === "string"
       ? result
       : String(result?.text ?? result?.message ?? "Done.");
-  } catch (error) {
-    // Fallback: if `pi` binary exists, one-shot prompt (no tools).
-    const piBin = process.env.PI_BIN || "pi";
-    try {
-      const text = await new Promise((resolve, reject) => {
-        const child = spawn(piBin, ["-p", message], {
-          env: { ...process.env, STUDIO_MCP_AGENT_SURFACE: "1" },
-          stdio: ["ignore", "pipe", "pipe"],
-        });
-        let out = "";
-        let err = "";
-        child.stdout.on("data", (d) => {
-          out += d;
-        });
-        child.stderr.on("data", (d) => {
-          err += d;
-        });
-        child.on("error", reject);
-        child.on("close", (code) => {
-          if (code === 0) resolve(out.trim() || "Done.");
-          else reject(new Error(err.trim() || `pi exited ${code}`));
-        });
-      });
-      return text;
-    } catch {
-      return `Pi worker note: ${error instanceof Error ? error.message : String(error)}. Convex in-process Agent remains available when STUDIO_AGENT_URL is unset.`;
-    }
+  } finally {
+    clearInterval(cancelPoll);
   }
 }
 
@@ -159,7 +355,8 @@ const server = createServer(async (req, res) => {
           ok: true,
           harness: "pi",
           sessions: sessions.size,
-          blockedTools: [...AGENT_BLOCKED_TOOL_NAMES],
+          authRequired: true,
+          catalog: "studio-tools",
         }),
       );
       return;
@@ -170,6 +367,15 @@ const server = createServer(async (req, res) => {
         res.end(JSON.stringify({ error: "unauthorized" }));
         return;
       }
+      if (!TOKEN) {
+        res.writeHead(503, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "STUDIO_AGENT_WORKER_TOKEN required (fail-closed)",
+          }),
+        );
+        return;
+      }
       const body = await readJson(req);
       const message = String(body.message || "").trim();
       if (!message) {
@@ -177,21 +383,41 @@ const server = createServer(async (req, res) => {
         res.end(JSON.stringify({ error: "message required" }));
         return;
       }
-      const assistantText = await runPiTurn({
-        message,
-        history: body.history,
-        userId: body.userId,
-        threadId: body.threadId,
-        userToken: body.userToken,
-      });
+      const abort = new AbortController();
+      const key = sessionKey(body.userId || "anon", body.threadId || "default");
+      sessions.set(key, { updatedAt: Date.now(), abort });
+      try {
+        const assistantText = await runPiTurn(body, abort.signal);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            assistantText,
+            creditsSpent: 0,
+            usedByok: Boolean(body.usedByok),
+          }),
+        );
+      } catch (error) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      }
+      return;
+    }
+    if (req.method === "POST" && req.url === "/v1/cancel") {
+      if (!authOk(req)) {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "unauthorized" }));
+        return;
+      }
+      const body = await readJson(req);
+      const key = sessionKey(body.userId || "anon", body.threadId || "default");
+      const session = sessions.get(key);
+      session?.abort?.abort();
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(
-        JSON.stringify({
-          assistantText,
-          creditsSpent: 0,
-          usedByok: Boolean(body.usedByok),
-        }),
-      );
+      res.end(JSON.stringify({ ok: true }));
       return;
     }
     res.writeHead(404, { "content-type": "application/json" });
@@ -207,5 +433,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`[studio-agent] Pi worker on http://127.0.0.1:${PORT}`);
+  console.log(
+    `[studio-agent] Pi worker on http://127.0.0.1:${PORT} (auth ${TOKEN ? "required" : "MISSING"})`,
+  );
 });

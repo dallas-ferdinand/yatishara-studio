@@ -2,12 +2,22 @@
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
 
-function secretBytes(): Buffer {
-  const raw =
-    process.env.STUDIO_AGENT_KEY_SECRET?.trim() ||
-    process.env.CONVEX_DEPLOY_KEY?.trim() ||
-    "yatishara-studio-agent-dev-secret";
+/**
+ * BYOK encryption requires STUDIO_AGENT_KEY_SECRET.
+ * Never silently fall back to CONVEX_DEPLOY_KEY / hardcoded secrets.
+ */
+export function requireAgentKeySecret(): Buffer {
+  const raw = process.env.STUDIO_AGENT_KEY_SECRET?.trim();
+  if (!raw) {
+    throw new Error(
+      "STUDIO_AGENT_KEY_SECRET is required for Agent BYOK encryption/decryption",
+    );
+  }
   return scryptSync(raw, "studio-agent-byok", 32);
+}
+
+function secretBytes(): Buffer {
+  return requireAgentKeySecret();
 }
 
 export function encryptAgentApiKey(plain: string): { encryptedKey: string; iv: string } {

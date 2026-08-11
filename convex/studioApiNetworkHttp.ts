@@ -5,22 +5,20 @@
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id, TableNames } from "./_generated/dataModel";
-import { hashApiKey } from "./lib/studioApi/crypto";
+import {
+  authenticateStudioRequest,
+  type StudioHttpAuth,
+} from "./lib/studioApi/requestAuth";
 import {
   errorResponse,
   jsonResponse,
   optionsResponse,
-  parseBearerToken,
   parseOptionalId,
   readJsonBody,
   signedUrlExpiryUnix,
 } from "./lib/studioApi/httpHelpers";
 
-type AuthContext = {
-  userId: Id<"users">;
-  apiKeyId: Id<"apiKeys">;
-  scopes: Set<string>;
-};
+type AuthContext = Pick<StudioHttpAuth, "userId" | "apiKeyId" | "scopes" | "role">;
 
 type OfferPackage = {
   name: string;
@@ -39,28 +37,13 @@ async function authenticateRequest(
   request: Request,
   requiredScope?: string,
 ): Promise<AuthContext | Response> {
-  const token = parseBearerToken(request);
-  if (!token) {
-    return errorResponse("Missing or invalid Authorization header", 401);
-  }
-  const keyHash = await hashApiKey(token);
-  const auth = await ctx.runQuery(internal.studioApiInternal.authenticateApiKey, {
-    keyHash,
-  });
-  if (!auth) {
-    return errorResponse("Invalid or revoked API key", 401);
-  }
-  const scopes = new Set<string>(auth.scopes);
-  if (requiredScope && !scopes.has(requiredScope)) {
-    return errorResponse(`Missing required scope: ${requiredScope}`, 403);
-  }
-  await ctx.runMutation(internal.studioApiInternal.touchApiKeyLastUsed, {
-    apiKeyId: auth.apiKeyId,
-  });
+  const auth = await authenticateStudioRequest(ctx, request, requiredScope);
+  if (auth instanceof Response) return auth;
   return {
     userId: auth.userId,
     apiKeyId: auth.apiKeyId,
-    scopes,
+    scopes: auth.scopes,
+    role: auth.role,
   };
 }
 

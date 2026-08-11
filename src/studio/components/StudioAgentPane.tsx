@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { ArrowUp, Check, Loader2, Plus, Settings, X } from "lucide-react";
+import { ArrowUp, Check, Loader2, Plus, RotateCcw, Settings, Square, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { StudioEmptyLogoButton } from "./StudioEmptyLogoButton";
@@ -46,10 +46,13 @@ export function StudioAgentPane({
 }: StudioAgentPaneProps) {
   const createThread = useMutation(api.agentThreads.create);
   const decideApproval = useMutation(api.agentApprovals.decide);
+  const cancelRun = useMutation(api.agentRuns.requestCancel);
   const sendTurn = useAction(api.agentActions.sendTurn);
+  const retryRun = useAction(api.agentActions.retryRun);
 
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<Id<"agentRuns"> | null>(null);
   const streamRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -62,17 +65,30 @@ export function StudioAgentPane({
     api.agentApprovals.listForThread,
     activeThreadId ? { threadId: activeThreadId } : "skip",
   );
+  const toolCalls = useQuery(
+    api.agentRuns.listToolCallsForThread,
+    activeThreadId ? { threadId: activeThreadId, limit: 40 } : "skip",
+  );
+  const runs = useQuery(
+    api.agentRuns.listForThread,
+    activeThreadId ? { threadId: activeThreadId, limit: 8 } : "skip",
+  );
 
   const pendingApprovals = useMemo(
     () => (approvals ?? []).filter((row) => row.status === "pending"),
     [approvals],
   );
 
+  const latestFailedRun = useMemo(
+    () => (runs ?? []).find((row: { status: string }) => row.status === "failed" || row.status === "cancelled"),
+    [runs],
+  );
+
   useEffect(() => {
     const el = streamRef.current;
     if (!el || !stickToBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages?.length, busy]);
+  }, [messages?.length, toolCalls?.length, busy]);
 
   useEffect(() => {
     autosizeAgentComposer(inputRef.current);
@@ -107,13 +123,43 @@ export function StudioAgentPane({
       const threadId = await ensureThread();
       setDraft("");
       const result = await sendTurn({ threadId, message: text });
-      if (result.creditsSpent > 0) {
+      if (result.runId) {
+        setActiveRunId(result.runId as Id<"agentRuns">);
+      }
+      if (!result.ok && result.error) {
+        toast.error(result.error);
+      } else if (result.creditsSpent > 0) {
         toast.message(`Agent turn · ${result.creditsSpent} credits`);
       } else if (result.usedByok) {
         toast.message("Agent turn · your API key");
       }
     } catch (error) {
       toast.error(friendlyConvexError(error, "Agent turn failed"));
+    } finally {
+      setBusy(false);
+      setActiveRunId(null);
+    }
+  }
+
+  async function handleCancel() {
+    if (!activeRunId) return;
+    try {
+      await cancelRun({ runId: activeRunId });
+      toast.message("Cancel requested");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not cancel"));
+    }
+  }
+
+  async function handleRetry() {
+    if (!latestFailedRun || busy) return;
+    setBusy(true);
+    try {
+      const result = await retryRun({ runId: latestFailedRun._id });
+      if (!result.ok && result.error) toast.error(result.error);
+      else toast.message("Retried");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Retry failed"));
     } finally {
       setBusy(false);
     }
@@ -125,7 +171,7 @@ export function StudioAgentPane({
   ) {
     try {
       await decideApproval({ approvalId, decision });
-      toast.success(decision === "approve" ? "Approved" : "Denied");
+      toast.success(decision === "approve" ? "Approved — executing" : "Denied");
     } catch (error) {
       toast.error(friendlyConvexError(error, "Could not update approval"));
     }
@@ -133,6 +179,7 @@ export function StudioAgentPane({
 
   const hasMessages = Boolean(messages?.length);
   const canSend = Boolean(draft.trim()) && !busy;
+  const recentTools = (toolCalls ?? []).slice(-8);
 
   return (
     <div className="studio-agent-pane" data-studio-agent="">
@@ -155,8 +202,8 @@ export function StudioAgentPane({
                 <StudioEmptyLogoButton />
                 <h2>Studio Agent</h2>
                 <p>
-                  Set up projects, folders, and generation approvals — like a
-                  coding agent, inside Studio.
+                  Full Studio tool access for your account — discover, invoke,
+                  approve paid/destructive work, and keep project memory.
                 </p>
                 <div className="studio-agent-empty-actions">
                   <button
@@ -179,6 +226,18 @@ export function StudioAgentPane({
             ) : null}
 
             {(messages ?? []).map((msg) => {
+              if (msg.role === "tool") {
+                return (
+                  <div key={msg._id} className="studio-agent-tool-card">
+                    <Wrench size={14} aria-hidden="true" />
+                    <div>
+                      <strong>{msg.toolName ?? "tool"}</strong>
+                      <p>{msg.content}</p>
+                    </div>
+                  </div>
+                );
+              }
+
               if (msg.role === "approval" && msg.approvalId) {
                 const pending = pendingApprovals.find(
                   (row) => row._id === msg.approvalId,
@@ -240,6 +299,12 @@ export function StudioAgentPane({
               <article className="studio-chat-bubble is-thinking">
                 <Loader2 className="animate-spin" size={14} aria-hidden="true" />
                 Working…
+                {recentTools.length ? (
+                  <span className="studio-agent-meta">
+                    {" "}
+                    · {recentTools[recentTools.length - 1]?.toolName}
+                  </span>
+                ) : null}
               </article>
             ) : null}
           </div>
@@ -301,6 +366,30 @@ export function StudioAgentPane({
                 <Settings aria-hidden="true" />
                 <span className="studio-dm-extra-pill-label">Settings</span>
               </button>
+              {busy && activeRunId ? (
+                <button
+                  type="button"
+                  className="studio-settings-pill studio-dm-extra-pill"
+                  title="Cancel run"
+                  aria-label="Cancel run"
+                  onClick={() => void handleCancel()}
+                >
+                  <Square aria-hidden="true" />
+                  <span className="studio-dm-extra-pill-label">Cancel</span>
+                </button>
+              ) : null}
+              {!busy && latestFailedRun ? (
+                <button
+                  type="button"
+                  className="studio-settings-pill studio-dm-extra-pill"
+                  title="Retry last failed run"
+                  aria-label="Retry last failed run"
+                  onClick={() => void handleRetry()}
+                >
+                  <RotateCcw aria-hidden="true" />
+                  <span className="studio-dm-extra-pill-label">Retry</span>
+                </button>
+              ) : null}
               <span className="studio-dm-extras-spacer" aria-hidden="true" />
               <button
                 type="button"

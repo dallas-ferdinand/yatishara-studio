@@ -1,7 +1,6 @@
 import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { hashApiKey } from "./lib/studioApi/crypto";
 import {
   ELEMENT_PRODUCTION_GUIDE,
   ELEMENT_SHEET_REFERENCE_POLICY,
@@ -21,68 +20,34 @@ import { COMPOSER_SCRIPT_TYPES } from "./lib/composerScriptTypes";
 import { REFERENCE_INTENT_SLUGS } from "./lib/referenceIntent";
 import { STUDIO_API_OPENAPI, STUDIO_API_ROOT } from "./lib/studioApi/openapi";
 import {
+  authenticateStudioRequest,
+  resolveSandboxFolder,
+  type StudioHttpAuth,
+} from "./lib/studioApi/requestAuth";
+import {
   errorResponse,
   jsonResponse,
   optionsResponse,
-  parseBearerToken,
   parseOptionalId,
   readJsonBody,
   signedUrlExpiryUnix,
 } from "./lib/studioApi/httpHelpers";
 
-type AuthContext = {
-  userId: Id<"users">;
-  apiKeyId: Id<"apiKeys">;
-  scopes: Set<string>;
+type AuthContext = StudioHttpAuth & {
   sandboxFolderId: Id<"folders">;
 };
-
-async function authenticateRequest(
-  ctx: Parameters<Parameters<typeof httpAction>[0]>[0],
-  request: Request,
-  requiredScope?: string,
-  routeKind: "read" | "write" = "read",
-): Promise<Omit<AuthContext, "sandboxFolderId"> | Response> {
-  const token = parseBearerToken(request);
-  if (!token) {
-    return errorResponse("Missing or invalid Authorization header", 401);
-  }
-  const keyHash = await hashApiKey(token);
-  const auth = await ctx.runQuery(internal.studioApiInternal.authenticateApiKey, { keyHash });
-  if (!auth) {
-    return errorResponse("Invalid or revoked API key", 401);
-  }
-  const scopes = new Set<string>(auth.scopes);
-  if (requiredScope && !scopes.has(requiredScope)) {
-    return errorResponse(`Missing required scope: ${requiredScope}`, 403);
-  }
-  await ctx.runMutation(internal.studioApiInternal.touchApiKeyLastUsed, {
-    apiKeyId: auth.apiKeyId,
-  });
-  return {
-    userId: auth.userId,
-    apiKeyId: auth.apiKeyId,
-    scopes,
-  };
-}
 
 async function resolveAuth(
   ctx: Parameters<Parameters<typeof httpAction>[0]>[0],
   request: Request,
   requiredScope?: string,
-  routeKind: "read" | "write" = "read",
+  _routeKind: "read" | "write" = "read",
 ): Promise<AuthContext | Response> {
-  const auth = await authenticateRequest(ctx, request, requiredScope, routeKind);
+  const auth = await authenticateStudioRequest(ctx, request, requiredScope);
   if (auth instanceof Response) {
     return auth;
   }
-  const sandboxFolderId = await ctx.runMutation(
-    internal.studioApiInternal.resolveSandboxForApiKey,
-    {
-      apiKeyId: auth.apiKeyId,
-      userId: auth.userId,
-    },
-  );
+  const sandboxFolderId = await resolveSandboxFolder(ctx, auth);
   return { ...auth, sandboxFolderId };
 }
 

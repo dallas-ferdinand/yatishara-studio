@@ -1866,10 +1866,15 @@ export default defineSchema({
   agentApprovals: defineTable({
     ownerId: v.id("users"),
     threadId: v.id("agentThreads"),
+    runId: v.optional(v.id("agentRuns")),
     action: v.string(),
+    /** Catalog tool name when approval is for invoke(tool). */
+    toolName: v.optional(v.string()),
     title: v.string(),
     summary: v.string(),
     payloadJson: v.string(),
+    catalogVersion: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),
@@ -1881,13 +1886,16 @@ export default defineSchema({
     estimatedCredits: v.optional(v.number()),
     resultJson: v.optional(v.string()),
     error: v.optional(v.string()),
+    executionStartedAt: v.optional(v.number()),
     decidedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_thread_and_status", ["threadId", "status"])
     .index("by_owner", ["ownerId"])
-    .index("by_owner_and_status", ["ownerId", "status"]),
+    .index("by_owner_and_status", ["ownerId", "status"])
+    .index("by_idempotency", ["ownerId", "idempotencyKey"])
+    .index("by_run", ["runId"]),
 
   /** BYOK for Agent Mode reasoning models (not media generation). */
   userAgentKeys: defineTable({
@@ -1906,4 +1914,97 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_owner", ["ownerId"]),
+
+  /** Short-lived Agent Mode API capability (hashed bearer `ysa_cap_…`). */
+  agentCapabilitySessions: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("agentThreads"),
+    runId: v.optional(v.id("agentRuns")),
+    tokenHash: v.string(),
+    scopes: v.array(v.string()),
+    role: userRole,
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_owner", ["ownerId"])
+    .index("by_thread", ["threadId"])
+    .index("by_run", ["runId"])
+    .index("by_expires", ["expiresAt"]),
+
+  /** Durable Agent Mode run records (Pi worker turns). */
+  agentRuns: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("agentThreads"),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("awaiting_approval"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("cancelled"),
+    ),
+    userMessage: v.string(),
+    assistantText: v.optional(v.string()),
+    error: v.optional(v.string()),
+    model: v.optional(v.string()),
+    usedByok: v.optional(v.boolean()),
+    creditsSpent: v.optional(v.number()),
+    catalogVersion: v.optional(v.string()),
+    cancelRequestedAt: v.optional(v.number()),
+    startedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_thread_and_created", ["threadId", "createdAt"])
+    .index("by_owner_and_created", ["ownerId", "createdAt"])
+    .index("by_owner_and_status", ["ownerId", "status"]),
+
+  agentToolCalls: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("agentThreads"),
+    runId: v.id("agentRuns"),
+    toolName: v.string(),
+    argsJson: v.string(),
+    status: v.union(
+      v.literal("started"),
+      v.literal("pending_approval"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("cancelled"),
+    ),
+    resultJson: v.optional(v.string()),
+    error: v.optional(v.string()),
+    approvalId: v.optional(v.id("agentApprovals")),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  })
+    .index("by_run_and_started", ["runId", "startedAt"])
+    .index("by_thread_and_started", ["threadId", "startedAt"])
+    .index("by_owner", ["ownerId"]),
+
+  /** Owner/project-scoped durable Agent memories (never cross-user). */
+  agentMemories: defineTable({
+    ownerId: v.id("users"),
+    projectFolderId: v.optional(v.id("folders")),
+    kind: v.union(
+      v.literal("note"),
+      v.literal("preference"),
+      v.literal("decision"),
+      v.literal("summary"),
+    ),
+    title: v.string(),
+    body: v.string(),
+    pinned: v.optional(v.boolean()),
+    archivedAt: v.optional(v.number()),
+    sourceThreadId: v.optional(v.id("agentThreads")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_and_updated", ["ownerId", "updatedAt"])
+    .index("by_owner_and_project", ["ownerId", "projectFolderId"])
+    .index("by_owner_archived", ["ownerId", "archivedAt"]),
 });

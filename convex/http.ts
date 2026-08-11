@@ -15,6 +15,10 @@ import {
   studioApiAccountExtraOptions,
 } from "./studioApiAccountExtra";
 import { paywiseCallback, paywiseNotify } from "./paywiseHttp";
+import {
+  agentWorkerCallback,
+  agentWorkerCallbackOptions,
+} from "./agentWorkerHttp";
 
 const http = httpRouter();
 
@@ -265,5 +269,17 @@ http.route({
   method: "OPTIONS",
   handler: studioApiV1Options,
 });
+
+for (const path of [
+  "/api/agent-worker/tool-start",
+  "/api/agent-worker/tool-result",
+  "/api/agent-worker/approval",
+  "/api/agent-worker/remember",
+  "/api/agent-worker/run-status",
+] as const) {
+  http.route({ path, method: "POST", handler: agentWorkerCallback });
+  http.route({ path, method: "GET", handler: agentWorkerCallback });
+  http.route({ path, method: "OPTIONS", handler: agentWorkerCallbackOptions });
+}
 
 export default http;
