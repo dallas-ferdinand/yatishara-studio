@@ -1801,12 +1801,55 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         hasElementReference,
       });
 
-      const job = await ctx.runQuery(internal.studioApiInternal.getGenerationJob, {
-        userId: auth.userId,
-        sandboxFolderId: auth.sandboxFolderId,
-        jobId: result.jobId,
-        expiresUnix,
-      });
+      let job: {
+        status?: string;
+        stylePresetSlug?: string;
+        creditsSpent?: number;
+        error?: string;
+        assets?: Array<{
+          id: Id<"assets">;
+          folderId: Id<"folders">;
+          name: string;
+          kind: "image" | "video" | "audio" | "document";
+          mimeType: string;
+          byteSize?: number;
+          url?: string;
+          thumbnailUrl?: string;
+          createdAt: number;
+          updatedAt: number;
+        }>;
+      } | null = null;
+      try {
+        job = await ctx.runQuery(internal.studioApiInternal.getGenerationJob, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          jobId: result.jobId,
+          expiresUnix,
+        });
+      } catch {
+        job = null;
+      }
+
+      let assets = job?.assets ?? [];
+      if (!assets.length && result.assetIds?.length) {
+        const fallback = await Promise.all(
+          result.assetIds.map(async (assetId) => {
+            try {
+              return await ctx.runQuery(internal.studioApiInternal.getAsset, {
+                userId: auth.userId,
+                sandboxFolderId: auth.sandboxFolderId,
+                assetId,
+                expiresUnix,
+              });
+            } catch {
+              return null;
+            }
+          }),
+        );
+        assets = fallback.filter(
+          (row): row is NonNullable<(typeof fallback)[number]> => row != null,
+        );
+      }
 
       return finish(
         jsonResponse(
@@ -1818,8 +1861,9 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
             folderId,
             stylePresetSlug: job?.stylePresetSlug,
             creditsSpent: job?.creditsSpent,
-            assets: job?.assets ?? [],
+            assets,
             error: job?.error ?? null,
+            assetIds: result.assetIds ?? assets.map((a) => a.id),
           },
           201,
         ),

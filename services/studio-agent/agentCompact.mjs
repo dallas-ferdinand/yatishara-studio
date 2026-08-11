@@ -68,6 +68,11 @@ const FIELD_HINTS = {
     "name",
     "creditsSpent",
     "cost",
+    "assets",
+    "assetIds",
+    "thumbnailUrl",
+    "url",
+    "id",
   ],
   studio_generate_video: [
     "assetId",
@@ -76,6 +81,23 @@ const FIELD_HINTS = {
     "status",
     "name",
     "creditsSpent",
+    "assets",
+    "assetIds",
+    "thumbnailUrl",
+    "url",
+    "id",
+  ],
+  studio_generate_audio: [
+    "assetId",
+    "folderId",
+    "generationId",
+    "status",
+    "name",
+    "creditsSpent",
+    "assets",
+    "assetIds",
+    "url",
+    "id",
   ],
   studio_estimate_generation: ["credits", "cost", "estimate", "mode", "ok"],
   studio_bulk_move: ["moved", "errors", "count", "targetFolderId"],
@@ -134,13 +156,30 @@ export function compactObservation(toolName, result, extra = {}) {
     if (Object.keys(picked).length === 0 && result.data) {
       Object.assign(picked, pick(result.data, keys));
     }
-    // Arrays: keep short summaries
+    // Arrays: keep short summaries; generation assets keep media urls
     for (const [k, v] of Object.entries(picked)) {
       if (Array.isArray(v)) {
-        picked[k] =
-          v.length <= 5
-            ? slimValue(v)
-            : { count: v.length, sample: slimValue(v.slice(0, 3)) };
+        if (
+          k === "assets" &&
+          v.every((item) => item && typeof item === "object")
+        ) {
+          picked[k] = v.slice(0, 6).map((item) =>
+            pick(item, [
+              "id",
+              "_id",
+              "name",
+              "kind",
+              "url",
+              "thumbnailUrl",
+              "mimeType",
+            ]),
+          );
+        } else {
+          picked[k] =
+            v.length <= 5
+              ? slimValue(v)
+              : { count: v.length, sample: slimValue(v.slice(0, 3)) };
+        }
       } else if (typeof v === "string") {
         picked[k] = truncate(v);
       }

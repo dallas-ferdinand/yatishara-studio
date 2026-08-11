@@ -79,6 +79,34 @@ const assetShape = v.object({
   updatedAt: v.number(),
 });
 
+/** Must match formatGenerationJob — extra fields used to throw ReturnsValidationError. */
+const generationJobApiShape = v.object({
+  id: v.id("generationJobs"),
+  threadId: v.optional(v.id("generationThreads")),
+  status: v.string(),
+  mode: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
+  folderId: v.id("folders"),
+  prompt: v.string(),
+  enhancedPrompt: v.optional(v.string()),
+  negativePrompt: v.optional(v.string()),
+  skipPromptEnhancement: v.optional(v.boolean()),
+  styleSheetElementId: v.optional(v.id("elements")),
+  error: v.optional(v.string()),
+  source: v.optional(v.string()),
+  stylePresetSlug: v.optional(v.string()),
+  resolvedModel: v.optional(v.string()),
+  resolution: v.optional(v.string()),
+  aspectRatio: v.optional(v.string()),
+  quality: v.optional(v.string()),
+  durationSeconds: v.optional(v.number()),
+  audioEnabled: v.optional(v.boolean()),
+  audioType: v.optional(v.string()),
+  creditsSpent: v.optional(v.number()),
+  assets: v.array(assetShape),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+});
+
 export const authenticateApiKey = internalQuery({
   args: { keyHash: v.string() },
   returns: v.union(
@@ -1001,25 +1029,7 @@ export const getGenerationJob = internalQuery({
     jobId: v.id("generationJobs"),
     expiresUnix: v.number(),
   },
-  returns: v.union(
-    v.object({
-      id: v.id("generationJobs"),
-      threadId: v.optional(v.string()),
-      status: v.string(),
-      mode: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
-      folderId: v.id("folders"),
-      prompt: v.string(),
-      error: v.optional(v.string()),
-      source: v.optional(v.string()),
-      stylePresetSlug: v.optional(v.string()),
-      resolvedModel: v.optional(v.string()),
-      creditsSpent: v.optional(v.number()),
-      assets: v.array(assetShape),
-      createdAt: v.number(),
-      updatedAt: v.number(),
-    }),
-    v.null(),
-  ),
+  returns: v.union(generationJobApiShape, v.null()),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("generationJobs", args.jobId);
     if (!job || job.ownerId !== args.userId) {
@@ -1039,24 +1049,7 @@ export const listGenerationJobs = internalQuery({
     limit: v.optional(v.number()),
     expiresUnix: v.number(),
   },
-  returns: v.array(
-    v.object({
-      id: v.id("generationJobs"),
-      threadId: v.optional(v.string()),
-      status: v.string(),
-      mode: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
-      folderId: v.id("folders"),
-      prompt: v.string(),
-      error: v.optional(v.string()),
-      source: v.optional(v.string()),
-      stylePresetSlug: v.optional(v.string()),
-      resolvedModel: v.optional(v.string()),
-      creditsSpent: v.optional(v.number()),
-      assets: v.array(assetShape),
-      createdAt: v.number(),
-      updatedAt: v.number(),
-    }),
-  ),
+  returns: v.array(generationJobApiShape),
   handler: async (ctx, args) => {
     const limit = Math.min(Math.max(args.limit ?? 20, 1), 50);
     const jobs = await ctx.db
@@ -2349,21 +2342,25 @@ async function formatGenerationJob(
     mode: job.mode,
     folderId: job.saveFolderId,
     prompt: job.userPrompt,
-    enhancedPrompt: job.enhancedPrompt,
-    negativePrompt: job.negativePrompt,
-    skipPromptEnhancement: job.skipPromptEnhancement,
-    styleSheetElementId: job.styleSheetElementId,
-    error: job.error,
-    source: job.source,
-    stylePresetSlug: preset?.slug,
-    resolvedModel: job.resolvedModel,
-    resolution: job.resolution,
-    aspectRatio: job.aspectRatio,
-    quality: job.quality,
-    durationSeconds: job.durationSeconds,
-    audioEnabled: job.audioEnabled,
-    audioType: job.audioType,
-    creditsSpent,
+    ...(job.enhancedPrompt ? { enhancedPrompt: job.enhancedPrompt } : {}),
+    ...(job.negativePrompt ? { negativePrompt: job.negativePrompt } : {}),
+    ...(job.skipPromptEnhancement != null
+      ? { skipPromptEnhancement: job.skipPromptEnhancement }
+      : {}),
+    ...(job.styleSheetElementId
+      ? { styleSheetElementId: job.styleSheetElementId }
+      : {}),
+    ...(job.error ? { error: job.error } : {}),
+    ...(job.source ? { source: job.source } : {}),
+    ...(preset?.slug ? { stylePresetSlug: preset.slug } : {}),
+    ...(job.resolvedModel ? { resolvedModel: job.resolvedModel } : {}),
+    ...(job.resolution ? { resolution: job.resolution } : {}),
+    ...(job.aspectRatio ? { aspectRatio: job.aspectRatio } : {}),
+    ...(job.quality ? { quality: job.quality } : {}),
+    ...(job.durationSeconds != null ? { durationSeconds: job.durationSeconds } : {}),
+    ...(job.audioEnabled != null ? { audioEnabled: job.audioEnabled } : {}),
+    ...(job.audioType ? { audioType: job.audioType } : {}),
+    ...(creditsSpent != null ? { creditsSpent } : {}),
     assets,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,

@@ -131,7 +131,7 @@ function TurnBlock({
   approvalById: Map<string, AgentApprovalRow>;
   onDecideApproval: AgentTurnTimelineProps["onDecideApproval"];
   onOpenFolder?: (folderId: Id<"folders">) => void;
-  thumbById: Map<string, { url: string; kind: string }>;
+  thumbById: Map<string, { url: string; kind: string; readUrl?: string }>;
 }) {
   const inline = useMemo(
     () => splitUserTextWithAttachments(turn.userText, turn.attachments ?? []),
@@ -239,6 +239,73 @@ function TurnBlock({
         </div>
       ) : null}
 
+      {(() => {
+        const mediaItems = turn.steps.flatMap((step) => step.media ?? []);
+        if (!mediaItems.length) return null;
+        return (
+          <div className="studio-agent-turn-media" aria-label="Generated media">
+            {mediaItems.map((media, index) => {
+              const resolved = media.assetId
+                ? thumbById.get(media.assetId)
+                : undefined;
+              const kind = resolved?.kind || media.kind || "image";
+              const previewUrl =
+                media.thumbnailUrl ||
+                media.url ||
+                resolved?.url ||
+                undefined;
+              const fullUrl =
+                media.url || resolved?.readUrl || resolved?.url || previewUrl;
+              const key = media.assetId || `${kind}-${index}`;
+              if (kind === "audio" && fullUrl) {
+                return (
+                  <div key={key} className="studio-agent-media-card is-audio">
+                    <audio controls preload="metadata" src={fullUrl}>
+                      <track kind="captions" />
+                    </audio>
+                    {media.name ? (
+                      <span className="studio-agent-media-caption">{media.name}</span>
+                    ) : null}
+                  </div>
+                );
+              }
+              if (kind === "video" && (fullUrl || previewUrl)) {
+                return (
+                  <div key={key} className="studio-agent-media-card is-video">
+                    <video
+                      className="studio-agent-media-frame"
+                      src={fullUrl || previewUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                    />
+                    {media.name ? (
+                      <span className="studio-agent-media-caption">{media.name}</span>
+                    ) : null}
+                  </div>
+                );
+              }
+              if (previewUrl || fullUrl) {
+                return (
+                  <div key={key} className="studio-agent-media-card is-image">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      className="studio-agent-media-frame"
+                      src={previewUrl || fullUrl}
+                      alt={media.name || "Generated image"}
+                    />
+                    {media.name ? (
+                      <span className="studio-agent-media-caption">{media.name}</span>
+                    ) : null}
+                  </div>
+                );
+              }
+              return null;
+            })}
+          </div>
+        );
+      })()}
+
       {turn.isLive && !turn.assistantText && !hasActiveStep ? (
         <div className="studio-agent-live-progress" role="status">
           <span className="studio-agent-step-icon" aria-hidden="true">
@@ -305,6 +372,11 @@ function collectAssetIds(
     for (const item of turn.attachments ?? []) {
       if (item.studioKind === "asset" && item.studioId) ids.add(item.studioId);
     }
+    for (const step of turn.steps) {
+      for (const media of step.media ?? []) {
+        if (media.assetId) ids.add(media.assetId);
+      }
+    }
   }
   for (const item of pendingAttachments ?? []) {
     if (item.studioKind === "asset" && item.studioId) ids.add(item.studioId);
@@ -364,13 +436,25 @@ export function AgentTurnTimeline({
     assetIds.length ? { assetIds, quality: "thumb" as const } : "skip",
   );
   const thumbById = useMemo(() => {
-    const map = new Map<string, { url: string; kind: string }>();
+    const map = new Map<
+      string,
+      { url: string; kind: string; readUrl?: string }
+    >();
     for (const asset of assets ?? []) {
+      const readUrl = asset.signedReadUrl || undefined;
       const url =
         asset.signedThumbnailUrl ||
         asset.signedThumbnailLqipUrl ||
-        (asset.kind === "image" ? asset.signedReadUrl : undefined);
-      if (url) map.set(String(asset._id), { url, kind: asset.kind });
+        (asset.kind === "image" || asset.kind === "video" || asset.kind === "audio"
+          ? readUrl
+          : undefined);
+      if (url || readUrl) {
+        map.set(String(asset._id), {
+          url: url || readUrl!,
+          kind: asset.kind,
+          readUrl,
+        });
+      }
     }
     return map;
   }, [assets]);

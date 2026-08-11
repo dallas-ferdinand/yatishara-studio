@@ -28,6 +28,7 @@ import {
   verifyHintFor,
   autoVerifyTool,
   autoVerifyArgs,
+  salvageGenerationResult,
 } from "./agentVerify.mjs";
 import { createPlanStore } from "./agentPlan.mjs";
 import { createTrajectory } from "./agentTrajectory.mjs";
@@ -380,6 +381,7 @@ export function createStudioPiTools(opts) {
             validated.args,
           );
         }
+        result = salvageGenerationResult(toolName, result);
 
         const ok = Boolean(result?.ok !== false);
         let verified;

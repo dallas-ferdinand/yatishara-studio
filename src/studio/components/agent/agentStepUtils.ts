@@ -62,6 +62,14 @@ export type StepOutcome = {
   folderName?: string;
 };
 
+export type AgentMediaPreview = {
+  assetId?: string;
+  kind: "image" | "video" | "audio" | string;
+  name?: string;
+  url?: string;
+  thumbnailUrl?: string;
+};
+
 export type DisplayStep = {
   id: string;
   toolCallId?: Id<"agentToolCalls">;
@@ -76,6 +84,7 @@ export type DisplayStep = {
   resultJson?: string;
   error?: string;
   outcome?: StepOutcome;
+  media?: AgentMediaPreview[];
   collapsedGroupCount?: number;
   isGroupSummary?: boolean;
   isLive?: boolean;
@@ -190,6 +199,80 @@ export function extractOutcome(
   return undefined;
 }
 
+export function extractGeneratedMedia(
+  toolName: string,
+  resultJson?: string | null,
+): AgentMediaPreview[] {
+  if (!/generate_(image|video|audio)|generate_batch/i.test(toolName)) {
+    return [];
+  }
+  const data = parseJsonSafe(resultJson);
+  if (!data || typeof data !== "object") return [];
+  const root = data as Record<string, unknown>;
+  const payload =
+    root.data && typeof root.data === "object"
+      ? (root.data as Record<string, unknown>)
+      : root;
+
+  const out: AgentMediaPreview[] = [];
+  const pushAsset = (raw: Record<string, unknown>) => {
+    const assetId =
+      (typeof raw.id === "string" && raw.id) ||
+      (typeof raw._id === "string" && raw._id) ||
+      (typeof raw.assetId === "string" && raw.assetId) ||
+      undefined;
+    const kindRaw = typeof raw.kind === "string" ? raw.kind : undefined;
+    const kind =
+      kindRaw ||
+      (toolName.includes("video")
+        ? "video"
+        : toolName.includes("audio")
+          ? "audio"
+          : "image");
+    const url = typeof raw.url === "string" ? raw.url : undefined;
+    const thumbnailUrl =
+      typeof raw.thumbnailUrl === "string" ? raw.thumbnailUrl : undefined;
+    if (!assetId && !url && !thumbnailUrl) return;
+    out.push({
+      assetId,
+      kind,
+      name: typeof raw.name === "string" ? raw.name : undefined,
+      url,
+      thumbnailUrl,
+    });
+  };
+
+  if (Array.isArray(payload.assets)) {
+    for (const item of payload.assets) {
+      if (item && typeof item === "object") pushAsset(item as Record<string, unknown>);
+    }
+  }
+  if (!out.length) {
+    const assetId =
+      (typeof payload.assetId === "string" && payload.assetId) ||
+      (typeof payload.id === "string" && payload.id) ||
+      undefined;
+    if (assetId || payload.thumbnailUrl || payload.url) {
+      pushAsset(payload);
+    }
+  }
+  if (Array.isArray(payload.assetIds)) {
+    for (const id of payload.assetIds) {
+      if (typeof id !== "string" || !id) continue;
+      if (out.some((m) => m.assetId === id)) continue;
+      out.push({
+        assetId: id,
+        kind: toolName.includes("video")
+          ? "video"
+          : toolName.includes("audio")
+            ? "audio"
+            : "image",
+      });
+    }
+  }
+  return out.slice(0, 8);
+}
+
 function resolveToolName(row: AgentToolCallRow): string {
   const raw = String(row.toolName || "").trim();
   if (raw && raw !== "invoke") return raw;
@@ -206,15 +289,31 @@ function toolCallToStep(
   approval?: AgentApprovalRow,
 ): DisplayStep {
   const toolName = resolveToolName(row);
-  const kind = deriveStepKind(toolName, row.status, row.error);
   const outcome =
-    row.status === "completed" ? extractOutcome(toolName, row.resultJson) : undefined;
+    row.status === "completed" || row.status === "failed"
+      ? extractOutcome(toolName, row.resultJson)
+      : undefined;
+  const media =
+    row.status === "completed" || row.status === "failed"
+      ? extractGeneratedMedia(toolName, row.resultJson)
+      : [];
+  // False-failure salvage: Convex ReturnsValidationError after a real generate
+  const salvaged =
+    row.status === "failed" &&
+    media.length > 0 &&
+    /ReturnsValidationError/i.test(String(row.error || ""));
+  const effectiveStatus = salvaged ? "completed" : row.status;
+  const kind = deriveStepKind(
+    toolName,
+    effectiveStatus,
+    salvaged ? undefined : row.error,
+  );
   const title =
     row.status === "pending_approval" && approval?.title
       ? approval.title
-      : displayToolTitle(toolName, row.status);
+      : displayToolTitle(toolName, effectiveStatus);
   const subtitle =
-    row.status === "failed"
+    effectiveStatus === "failed"
       ? friendlyErrorLine(toolName, row.error)
       : outcome?.label && outcome.label !== title
         ? outcome.label
@@ -228,12 +327,13 @@ function toolCallToStep(
     kind: row.status === "pending_approval" ? "approval" : kind,
     title,
     subtitle,
-    status: row.status,
+    status: effectiveStatus,
     durationMs: formatStepDuration(row.startedAt, row.finishedAt),
     argsJson: row.argsJson,
     resultJson: row.resultJson,
-    error: row.error,
+    error: salvaged ? undefined : row.error,
     outcome,
+    media: media.length ? media : undefined,
   };
 }
 

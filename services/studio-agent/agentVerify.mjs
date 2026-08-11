@@ -76,3 +76,35 @@ export function autoVerifyArgs(verifyTool, args, result) {
   }
   return null;
 }
+
+/**
+ * Generation often finishes writing assets, then a Convex returns validator
+ * throws ReturnsValidationError — treat as success when assets/ids are present.
+ * @param {string} toolName
+ * @param {any} result
+ */
+export function salvageGenerationResult(toolName, result) {
+  if (!/^studio_generate_(image|video|audio|batch)$/.test(String(toolName || ""))) {
+    return result;
+  }
+  if (!result || result.ok !== false) return result;
+  const err = String(result.error || result.data?.error || "");
+  if (!/ReturnsValidationError/i.test(err)) return result;
+  const data =
+    result.data && typeof result.data === "object" ? result.data : result;
+  const hasAssets = Array.isArray(data.assets) && data.assets.length > 0;
+  const hasIds = Array.isArray(data.assetIds) && data.assetIds.length > 0;
+  const hasOne =
+    Boolean(data.assetId) ||
+    (typeof data.id === "string" && data.kind === "image") ||
+    (typeof data.id === "string" && data.kind === "video") ||
+    (typeof data.id === "string" && data.kind === "audio");
+  if (!hasAssets && !hasIds && !hasOne) return result;
+  return {
+    ...result,
+    ok: true,
+    salvagedFromValidationError: true,
+    warning: err.slice(0, 240),
+    error: undefined,
+  };
+}
