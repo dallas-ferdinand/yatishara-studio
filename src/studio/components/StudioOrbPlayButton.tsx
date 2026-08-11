@@ -212,7 +212,11 @@ function OrbShell({
   return (
     <span ref={setNode} className="studio-orb-frame" aria-hidden="true">
       <span className="studio-orb-well">
-        <span className="studio-orb-fallback" style={fallbackStyle} />
+        {/* Fallback only while WebGL is off — keep it under a live Orb and
+            transparent shader edges read as a soft gradient halo behind. */}
+        {!live ? (
+          <span className="studio-orb-fallback" style={fallbackStyle} />
+        ) : null}
         {live ? (
           <Suspense fallback={null}>
             <Orb
