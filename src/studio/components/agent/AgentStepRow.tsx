@@ -2,8 +2,6 @@
 
 import {
   AlertCircle,
-  ChevronDown,
-  ChevronRight,
   FolderPlus,
   Loader2,
   Search,
@@ -24,43 +22,21 @@ type AgentStepRowProps = {
 
 function StepIcon({ kind, status }: { kind: AgentStepKind; status: DisplayStep["status"] }) {
   if (status === "started") {
-    return <Loader2 size={14} className="animate-spin" aria-hidden="true" />;
+    return <Loader2 size={12} className="animate-spin" aria-hidden="true" />;
   }
   if (kind === "error") {
-    return <AlertCircle size={14} aria-hidden="true" />;
+    return <AlertCircle size={12} aria-hidden="true" />;
   }
   if (kind === "generate") {
-    return <Sparkles size={14} aria-hidden="true" />;
+    return <Sparkles size={12} aria-hidden="true" />;
   }
   if (kind === "read" || kind === "meta") {
-    return <Search size={14} aria-hidden="true" />;
+    return <Search size={12} aria-hidden="true" />;
   }
   if (kind === "write") {
-    return <FolderPlus size={14} aria-hidden="true" />;
+    return <FolderPlus size={12} aria-hidden="true" />;
   }
-  return <Wrench size={14} aria-hidden="true" />;
-}
-
-function formatDuration(ms?: number): string | null {
-  if (!ms || ms < 1) return null;
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function detailBlock(label: string, raw?: string) {
-  if (!raw?.trim()) return null;
-  let text = raw;
-  try {
-    text = JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    // keep raw
-  }
-  return (
-    <div>
-      <p className="studio-agent-meta">{label}</p>
-      <pre>{text}</pre>
-    </div>
-  );
+  return <Wrench size={12} aria-hidden="true" />;
 }
 
 export function AgentStepRow({
@@ -70,57 +46,42 @@ export function AgentStepRow({
   onOpenFolder,
   approvalSlot,
 }: AgentStepRowProps) {
-  const canExpand =
-    !step.isGroupSummary &&
-    Boolean(step.argsJson || step.resultJson || step.error);
-  const isQuiet = step.kind === "read" || step.kind === "meta";
-  const duration = formatDuration(step.durationMs);
+  const isError = step.kind === "error" || step.status === "failed";
+  const canExpand = isError && Boolean(step.error || step.resultJson);
+  const folderId = step.outcome?.folderId;
+  const label =
+    step.outcome?.folderName?.trim() ||
+    step.subtitle?.replace(/^Created\s+/i, "").trim() ||
+    step.title;
+
+  function handleClick() {
+    if (folderId && onOpenFolder) {
+      onOpenFolder(folderId);
+      return;
+    }
+    if (canExpand) onToggle();
+  }
+
+  const interactive = Boolean((folderId && onOpenFolder) || canExpand);
 
   return (
     <div
-      className={`studio-agent-step is-${step.kind}${step.isLive ? " is-live" : ""}${step.isGroupSummary ? " is-group-summary" : ""}`}
+      className={`studio-agent-step-pill is-${step.kind}${step.isLive ? " is-live" : ""}${step.isGroupSummary ? " is-group-summary" : ""}${isError ? " is-error" : ""}`}
       data-step-status={step.status}
+      role="listitem"
     >
       <button
         type="button"
-        className="studio-agent-step-head"
-        onClick={() => {
-          if (canExpand && !isQuiet) onToggle();
-        }}
+        className="studio-agent-step-pill-btn"
+        onClick={handleClick}
         aria-expanded={canExpand ? expanded : undefined}
-        disabled={!canExpand || isQuiet}
+        disabled={!interactive}
+        title={isError ? step.subtitle || step.error : label}
       >
-        <span className="studio-agent-step-icon">
-          <StepIcon kind={step.kind} status={step.status} />
+        <span className="studio-agent-step-pill-icon">
+          <StepIcon kind={isError ? "error" : step.kind} status={step.status} />
         </span>
-        <span className="studio-agent-step-body">
-          <span className="studio-agent-step-title-row">
-            <span className="studio-agent-step-title">{step.title}</span>
-            {duration ? <span className="studio-agent-step-meta">{duration}</span> : null}
-          </span>
-          {step.subtitle ? (
-            <p className="studio-agent-step-subtitle">{step.subtitle}</p>
-          ) : null}
-          {step.outcome?.folderId && onOpenFolder ? (
-            <span className="studio-agent-step-outcome">
-              <button
-                type="button"
-                className="studio-agent-step-outcome-btn"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpenFolder(step.outcome!.folderId!);
-                }}
-              >
-                Open {step.outcome.folderName ?? "folder"}
-              </button>
-            </span>
-          ) : null}
-        </span>
-        {canExpand && !isQuiet ? (
-          <span className="studio-agent-step-chevron" aria-hidden="true">
-            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </span>
-        ) : null}
+        <span className="studio-agent-step-pill-label">{label}</span>
       </button>
 
       {approvalSlot ? (
@@ -129,11 +90,7 @@ export function AgentStepRow({
 
       {expanded && canExpand ? (
         <div className="studio-agent-step-details">
-          {detailBlock("Arguments", step.argsJson)}
-          {step.error
-            ? detailBlock("Error", JSON.stringify({ error: step.error }, null, 2))
-            : null}
-          {detailBlock("Result", step.resultJson)}
+          <pre>{step.error || step.resultJson}</pre>
         </div>
       ) : null}
     </div>

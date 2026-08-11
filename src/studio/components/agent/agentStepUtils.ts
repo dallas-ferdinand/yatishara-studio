@@ -110,11 +110,15 @@ export function extractOutcome(
         ? (payload.folder as Record<string, unknown>)
         : payload;
     const name = typeof folder.name === "string" ? folder.name : undefined;
-    const id = typeof folder.id === "string" ? folder.id : undefined;
+    const idRaw =
+      (typeof folder.id === "string" && folder.id) ||
+      (typeof folder._id === "string" && folder._id) ||
+      (typeof folder.folderId === "string" && folder.folderId) ||
+      undefined;
     if (name) {
       return {
         label: `Created ${name}`,
-        folderId: id as Id<"folders"> | undefined,
+        folderId: idRaw as Id<"folders"> | undefined,
         folderName: name,
       };
     }

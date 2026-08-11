@@ -52,7 +52,9 @@ export function AgentApprovalStep({
     ...step,
     kind: "approval",
     title: approval.title || step.title,
-    subtitle: approval.summary || step.subtitle,
+    // Prefer short title on the pill; keep summary for hover via error path unused
+    subtitle: undefined,
+    outcome: undefined,
   };
 
   return (
