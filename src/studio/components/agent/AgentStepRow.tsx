@@ -2,10 +2,14 @@
 
 import {
   AlertCircle,
+  BookOpen,
+  Brain,
   Eye,
   FileText,
   FolderInput,
   FolderPlus,
+  HelpCircle,
+  ListTodo,
   Loader2,
   Search,
   Sparkles,
@@ -41,16 +45,32 @@ function StepIcon({
     return <AlertCircle size={13} aria-hidden="true" />;
   }
   const name = String(toolName || "");
+  if (name === "skills") {
+    return <BookOpen size={13} aria-hidden="true" />;
+  }
+  if (name === "remember") {
+    return <Brain size={13} aria-hidden="true" />;
+  }
+  if (name === "plan") {
+    return <ListTodo size={13} aria-hidden="true" />;
+  }
+  if (name === "ask") {
+    return <HelpCircle size={13} aria-hidden="true" />;
+  }
   if (name.includes("document") || name.includes("script")) {
     return <FileText size={13} aria-hidden="true" />;
   }
-  if (name.includes("search") || name.includes("catalog") || name.includes("describe")) {
+  if (
+    name.includes("search") ||
+    name.includes("catalog") ||
+    name.includes("describe")
+  ) {
     return <Search size={13} aria-hidden="true" />;
   }
   if (name.includes("bulk_move") || name.includes("move") || name.includes("ensure_path")) {
     return <FolderInput size={13} aria-hidden="true" />;
   }
-  if (name.includes("trash")) {
+  if (name.includes("trash") || name.includes("delete")) {
     return <Trash2 size={13} aria-hidden="true" />;
   }
   if (name.includes("folder") || name.includes("workspace") || name.includes("resolve")) {
@@ -89,6 +109,11 @@ export function AgentStepRow({
     : step.subtitle &&
         (/\d+\s+result/i.test(step.subtitle) ||
           step.toolName === "studio_list_video_models" ||
+          step.toolName === "skills" ||
+          step.toolName === "remember" ||
+          step.toolName === "plan" ||
+          step.toolName === "describe" ||
+          step.toolName === "catalog" ||
           /Seedance/i.test(step.subtitle))
       ? `${step.title} · ${step.subtitle}`
       : step.title;

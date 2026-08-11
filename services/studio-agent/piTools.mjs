@@ -282,6 +282,52 @@ export function createStudioPiTools(opts) {
     return textResult(attachTodo(payload));
   }
 
+  /**
+   * Record local Pi tools (skills/remember/plan/…) in chat like studio_* invokes.
+   * @param {string} toolName
+   * @param {Record<string, unknown>} args
+   * @param {() => Promise<Record<string, unknown>>} run
+   */
+  async function trackPiTool(toolName, args, run) {
+    const started = opts.onBeforeInvoke
+      ? await opts.onBeforeInvoke({ toolName, args: args || {} })
+      : null;
+    const trackId = started?.toolCallId;
+    try {
+      const payload = await run();
+      const ok = !(
+        payload &&
+        typeof payload === "object" &&
+        (payload.ok === false ||
+          (typeof payload.error === "string" && payload.error && payload.ok !== true))
+      );
+      trajectory.recordTool({
+        toolName,
+        ok,
+        error: typeof payload?.error === "string" ? payload.error : undefined,
+        bytes: observationByteBudget(payload),
+      });
+      await opts.onAfterInvoke?.({
+        toolCallId: trackId,
+        toolName,
+        ok,
+        result: payload,
+        error: typeof payload?.error === "string" ? payload.error : undefined,
+      });
+      return textResultWithTodo(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      trajectory.recordTool({ toolName, ok: false, error: message });
+      await opts.onAfterInvoke?.({
+        toolCallId: trackId,
+        toolName,
+        ok: false,
+        error: message,
+      });
+      return textResult({ ok: false, toolName, error: message });
+    }
+  }
+
   const catalog = defineTool({
     name: "catalog",
     label: "Catalog",
@@ -303,38 +349,41 @@ export function createStudioPiTools(opts) {
       limit: Type.Optional(Type.Number()),
     }),
     async execute(_toolCallId, params) {
-      const filtered = Boolean(params.category || params.q);
-      let tools = listToolsForSurface("agent", { role }).map((t) => ({
-        name: t.name,
-        category: t.category,
-        risk: t.risk,
-        scope: t.scope,
-        requiresApproval: t.requiresApproval,
-        description: agentDescription(t),
-      }));
-      if (params.category) {
-        tools = tools.filter((t) => t.category === params.category);
-      }
-      if (params.q) {
-        const needle = String(params.q).toLowerCase();
-        tools = tools.filter(
-          (t) =>
-            t.name.includes(needle) ||
-            t.description.toLowerCase().includes(needle),
-        );
-      } else if (!params.category) {
-        const starter = new Set(STARTER_TOOL_NAMES);
-        tools = tools.filter((t) => starter.has(t.name));
-      }
-      const max = Math.min(Math.max(Number(params.limit) || 24, 1), 60);
-      return textResult({
-        catalogVersion: catalogVersion(),
-        count: tools.length,
-        filtered,
-        hint: filtered
-          ? undefined
-          : "Starter set only. Re-call with q= or category= for more tools.",
-        tools: tools.slice(0, max),
+      return trackPiTool("catalog", params, async () => {
+        const filtered = Boolean(params.category || params.q);
+        let tools = listToolsForSurface("agent", { role }).map((t) => ({
+          name: t.name,
+          category: t.category,
+          risk: t.risk,
+          scope: t.scope,
+          requiresApproval: t.requiresApproval,
+          description: agentDescription(t),
+        }));
+        if (params.category) {
+          tools = tools.filter((t) => t.category === params.category);
+        }
+        if (params.q) {
+          const needle = String(params.q).toLowerCase();
+          tools = tools.filter(
+            (t) =>
+              t.name.includes(needle) ||
+              t.description.toLowerCase().includes(needle),
+          );
+        } else if (!params.category) {
+          const starter = new Set(STARTER_TOOL_NAMES);
+          tools = tools.filter((t) => starter.has(t.name));
+        }
+        const max = Math.min(Math.max(Number(params.limit) || 24, 1), 60);
+        return {
+          ok: true,
+          catalogVersion: catalogVersion(),
+          count: tools.length,
+          filtered,
+          hint: filtered
+            ? undefined
+            : "Starter set only. Re-call with q= or category= for more tools.",
+          tools: tools.slice(0, max),
+        };
       });
     },
   });
@@ -349,36 +398,38 @@ export function createStudioPiTools(opts) {
       name: Type.String({ description: "Studio tool name, e.g. studio_create_folder" }),
     }),
     async execute(_toolCallId, params) {
-      const info = describeTool(params.name);
-      if (!info) {
-        return textResult({
-          ok: false,
-          error: `Unknown Studio tool: ${params.name}. Call catalog with q= to find the right name.`,
-        });
-      }
-      const auth = authorizeTool(params.name, { surface: "agent", role, scopes });
-      const example = DESCRIBE_EXAMPLES[params.name];
-      const hot = HOT_SCHEMAS[params.name];
-      return textResult({
-        ok: auth.ok,
-        ...(auth.ok ? {} : { error: auth.error }),
-        tool: {
-          name: info.name,
-          description: agentDescription(info),
-          category: info.category,
-          risk: info.risk,
-          scope: info.scope,
-          requiresApproval: info.requiresApproval,
-          inputSchema: info.inputSchema,
-          ...(example ? { exampleArgs: example } : {}),
-          ...(hot
-            ? {
-                requiredArgs: hot.required,
-                ...(hot.enums ? { enums: hot.enums } : {}),
-                ...(hot.oneOfGroups ? { oneOfGroups: hot.oneOfGroups } : {}),
-              }
-            : {}),
-        },
+      return trackPiTool("describe", params, async () => {
+        const info = describeTool(params.name);
+        if (!info) {
+          return {
+            ok: false,
+            error: `Unknown Studio tool: ${params.name}. Call catalog with q= to find the right name.`,
+          };
+        }
+        const auth = authorizeTool(params.name, { surface: "agent", role, scopes });
+        const example = DESCRIBE_EXAMPLES[params.name];
+        const hot = HOT_SCHEMAS[params.name];
+        return {
+          ok: auth.ok,
+          ...(auth.ok ? {} : { error: auth.error }),
+          tool: {
+            name: info.name,
+            description: agentDescription(info),
+            category: info.category,
+            risk: info.risk,
+            scope: info.scope,
+            requiresApproval: info.requiresApproval,
+            inputSchema: info.inputSchema,
+            ...(example ? { exampleArgs: example } : {}),
+            ...(hot
+              ? {
+                  requiredArgs: hot.required,
+                  ...(hot.enums ? { enums: hot.enums } : {}),
+                  ...(hot.oneOfGroups ? { oneOfGroups: hot.oneOfGroups } : {}),
+                }
+              : {}),
+          },
+        };
       });
     },
   });
@@ -925,13 +976,17 @@ export function createStudioPiTools(opts) {
       projectFolderId: Type.Optional(Type.String()),
     }),
     async execute(_toolCallId, params) {
-      if (typeof localHandlers.studio_agent_remember === "function") {
-        const data = await localHandlers.studio_agent_remember(params);
-        return textResult(data);
-      }
-      return textResult({
-        ok: false,
-        error: "remember handler not configured",
+      return trackPiTool("remember", params, async () => {
+        if (typeof localHandlers.studio_agent_remember === "function") {
+          const data = await localHandlers.studio_agent_remember(params);
+          return data && typeof data === "object"
+            ? { ok: true, ...data, title: params.title }
+            : { ok: true, title: params.title };
+        }
+        return {
+          ok: false,
+          error: "remember handler not configured",
+        };
       });
     },
   });
@@ -955,29 +1010,31 @@ export function createStudioPiTools(opts) {
       ),
     }),
     async execute(_toolCallId, params) {
-      const id = textValue(params.id);
-      if (id) {
-        const skill = getSkill(id);
-        if (!skill) {
-          return textResult({
-            ok: false,
-            error: `Unknown skill: ${id}`,
-            available: listSkills().map((s) => s.id),
-          });
+      return trackPiTool("skills", params, async () => {
+        const id = textValue(params.id);
+        if (id) {
+          const skill = getSkill(id);
+          if (!skill) {
+            return {
+              ok: false,
+              error: `Unknown skill: ${id}`,
+              available: listSkills().map((s) => s.id),
+            };
+          }
+          return { ok: true, skillId: id, skill };
         }
-        return textResult({ ok: true, skill });
-      }
-      if (params.category) {
-        return textResult({
+        if (params.category) {
+          return {
+            ok: true,
+            skills: listSkills(String(params.category)),
+            hint: skillPromptBlock(),
+          };
+        }
+        return {
           ok: true,
-          skills: listSkills(String(params.category)),
+          skills: matchSkills(params.q),
           hint: skillPromptBlock(),
-        });
-      }
-      return textResult({
-        ok: true,
-        skills: matchSkills(params.q),
-        hint: skillPromptBlock(),
+        };
       });
     },
   });
@@ -1024,65 +1081,54 @@ export function createStudioPiTools(opts) {
       cancelActive: Type.Optional(Type.Boolean()),
     }),
     async execute(_toolCallId, params) {
-      const action = params.action;
-      if (action === "get") {
-        return textResultWithTodo({
-          ok: true,
-          board: planStore.snapshot(),
-          plan: planStore.get(),
-        });
-      }
-      if (action === "clear") {
-        return textResultWithTodo(planStore.clear());
-      }
-      if (action === "create" || action === "set") {
-        return textResultWithTodo(
-          planStore.create({
+      return trackPiTool("plan", params, async () => {
+        const action = params.action;
+        let result;
+        if (action === "get") {
+          result = {
+            ok: true,
+            board: planStore.snapshot(),
+            plan: planStore.get(),
+          };
+        } else if (action === "clear") {
+          result = planStore.clear();
+        } else if (action === "create" || action === "set") {
+          result = planStore.create({
             title: params.title || params.goal || "To-do",
             steps: params.steps || [],
             cancelActive: params.cancelActive !== false,
-          }),
-        );
-      }
-      if (action === "update" || action === "update_step") {
-        return textResultWithTodo(
-          planStore.updateStep(
+          });
+        } else if (action === "update" || action === "update_step") {
+          result = planStore.updateStep(
             params.listId || null,
             String(params.stepId || params.id || ""),
             String(params.status || ""),
-          ),
-        );
-      }
-      if (action === "add_step") {
-        return textResultWithTodo(
-          planStore.addStep(params.listId || null, params.text || ""),
-        );
-      }
-      if (action === "remove_step") {
-        return textResultWithTodo(
-          planStore.removeStep(
+          );
+        } else if (action === "add_step") {
+          result = planStore.addStep(params.listId || null, params.text || "");
+        } else if (action === "remove_step") {
+          result = planStore.removeStep(
             params.listId || null,
             String(params.stepId || params.id || ""),
-          ),
-        );
-      }
-      if (action === "set_list_status") {
-        return textResultWithTodo(
-          planStore.setListStatus(
+          );
+        } else if (action === "set_list_status") {
+          result = planStore.setListStatus(
             String(params.listId || params.id || ""),
             String(params.status || ""),
-          ),
-        );
-      }
-      if (action === "rename_list") {
-        return textResultWithTodo(
-          planStore.renameList(
+          );
+        } else if (action === "rename_list") {
+          result = planStore.renameList(
             String(params.listId || params.id || ""),
             params.title || params.goal || "",
-          ),
-        );
-      }
-      return textResultWithTodo({ ok: false, error: "unknown plan action" });
+          );
+        } else {
+          result = { ok: false, error: "unknown plan action" };
+        }
+        return {
+          ...(result && typeof result === "object" ? result : { ok: true, result }),
+          action,
+        };
+      });
     },
   });
 
@@ -1114,35 +1160,31 @@ export function createStudioPiTools(opts) {
       ),
     }),
     async execute(_toolCallId, params) {
-      if (typeof opts.onAskRequired !== "function") {
-        return textResultWithTodo({
-          ok: false,
-          error: "ask UI not configured",
+      return trackPiTool("ask", params, async () => {
+        if (typeof opts.onAskRequired !== "function") {
+          return {
+            ok: false,
+            error: "ask UI not configured",
+          };
+        }
+        const questions = Array.isArray(params.questions) ? params.questions : [];
+        if (!questions.length) {
+          return {
+            ok: false,
+            error: "ask requires questions[]",
+          };
+        }
+        const result = await opts.onAskRequired({
+          intro: params.intro,
+          questions,
         });
-      }
-      const questions = Array.isArray(params.questions) ? params.questions : [];
-      if (!questions.length) {
-        return textResultWithTodo({
-          ok: false,
-          error: "ask requires questions[]",
-        });
-      }
-      const result = await opts.onAskRequired({
-        intro: params.intro,
-        questions,
-      });
-      trajectory.recordTool({
-        toolName: "ask",
-        ok: true,
-        pendingApproval: false,
-        bytes: observationByteBudget(result),
-      });
-      return textResultWithTodo({
-        ok: true,
-        pendingAsk: true,
-        questionId: result?.questionId,
-        message: "Waiting for answers in chat — stop this turn.",
-        todo: planStore.formatBlock() || undefined,
+        return {
+          ok: true,
+          pendingAsk: true,
+          questionId: result?.questionId,
+          questionCount: questions.length,
+          message: "Waiting for answers in chat — stop this turn.",
+        };
       });
     },
   });

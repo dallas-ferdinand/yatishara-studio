@@ -3,6 +3,7 @@ import {
   deriveStepKind,
   displayToolTitle,
   friendlyErrorLine,
+  isAlwaysVisibleTool,
   type AgentStepKind,
 } from "./agentToolTitles";
 
@@ -259,6 +260,40 @@ export function extractOutcome(
     }
   }
 
+  if (toolName === "skills") {
+    const skillId =
+      (typeof payload.skillId === "string" && payload.skillId) ||
+      (payload.skill &&
+      typeof payload.skill === "object" &&
+      typeof (payload.skill as Record<string, unknown>).id === "string"
+        ? String((payload.skill as Record<string, unknown>).id)
+        : undefined);
+    if (skillId) return { label: skillId };
+    const skills = Array.isArray(payload.skills) ? payload.skills : [];
+    if (skills.length) {
+      return { label: `${skills.length} skill${skills.length === 1 ? "" : "s"}` };
+    }
+  }
+
+  if (toolName === "remember") {
+    const title =
+      (typeof payload.title === "string" && payload.title) ||
+      undefined;
+    if (title) return { label: title };
+  }
+
+  if (toolName === "plan") {
+    const action = typeof payload.action === "string" ? payload.action : undefined;
+    if (action) return { label: action.replace(/_/g, " ") };
+  }
+
+  if (toolName === "catalog") {
+    const count = typeof payload.count === "number" ? payload.count : undefined;
+    if (typeof count === "number") {
+      return { label: `${count} tool${count === 1 ? "" : "s"}` };
+    }
+  }
+
   // Never label successful tools as generic "Done" — UI uses displayToolTitle.
   return undefined;
 }
@@ -429,12 +464,27 @@ function toolCallToStep(
     row.status === "pending_approval" && approval?.title
       ? approval.title
       : displayToolTitle(toolName, effectiveStatus);
-  const subtitle =
+  let subtitle =
     effectiveStatus === "failed"
       ? friendlyErrorLine(toolName, row.error)
       : outcome?.label && outcome.label !== title
         ? outcome.label
         : undefined;
+  if (!subtitle && effectiveStatus !== "failed") {
+    const args = parseJsonSafe(row.argsJson);
+    if (args && typeof args === "object") {
+      const a = args as Record<string, unknown>;
+      if (toolName === "skills" && typeof a.id === "string" && a.id.trim()) {
+        subtitle = a.id.trim();
+      } else if (toolName === "remember" && typeof a.title === "string" && a.title.trim()) {
+        subtitle = a.title.trim();
+      } else if (toolName === "plan" && typeof a.action === "string" && a.action.trim()) {
+        subtitle = a.action.trim().replace(/_/g, " ");
+      } else if (toolName === "describe" && typeof a.name === "string" && a.name.trim()) {
+        subtitle = a.name.trim().replace(/^studio_/, "").replace(/_/g, " ");
+      }
+    }
+  }
   const pendingMedia =
     effectiveStatus === "started" || effectiveStatus === "pending_approval"
       ? extractPendingGenerateMedia(toolName, row.argsJson)
@@ -479,6 +529,7 @@ export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
       continue;
     }
     const isQuiet =
+      !isAlwaysVisibleTool(step.toolName) &&
       (step.kind === "read" || step.kind === "meta") &&
       (step.status === "completed" || step.status === "started");
     if (!isQuiet) {
@@ -490,6 +541,7 @@ export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
     while (j < steps.length) {
       const next = steps[j]!;
       const nextQuiet =
+        !isAlwaysVisibleTool(next.toolName) &&
         (next.kind === "read" || next.kind === "meta") &&
         (next.status === "completed" || next.status === "started");
       if (!nextQuiet) break;
