@@ -1,0 +1,31 @@
+{
+  "providers": {
+    "byteplus-ark": {
+      "baseUrl": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "api": "openai-completions",
+      "apiKey": "${ARK_API_KEY}",
+      "authHeader": true,
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false
+      },
+      "models": [
+        {
+          "id": "seed-2-0-pro-260328",
+          "name": "Seed 2.0 Pro",
+          "reasoning": false,
+          "input": ["text", "image"],
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "cost": {
+            "input": 0.5,
+            "output": 3,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        }
+      ]
+    }
+  }
+}

@@ -21,6 +21,19 @@ import { invokeStudioTool } from "../../packages/studio-tools/src/http.js";
 const PORT = Number(process.env.STUDIO_AGENT_PORT || process.env.PORT || 8796);
 const TOKEN = String(process.env.STUDIO_AGENT_WORKER_TOKEN || "").trim();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const AGENT_DIR = path.join(__dirname, ".pi-harness");
+const PLATFORM_PROVIDER = String(
+  process.env.STUDIO_AGENT_PROVIDER || "byteplus-ark",
+).trim();
+const PLATFORM_MODEL = String(
+  process.env.STUDIO_AGENT_MODEL_ID || "seed-2-0-pro-260328",
+).trim();
+
+if (!process.env.ARK_API_KEY?.trim()) {
+  console.warn(
+    "[studio-agent] ARK_API_KEY missing — platform Seed Pro turns will fail closed",
+  );
+}
 
 /** @type {Map<string, { updatedAt: number, abort?: AbortController }>} */
 const sessions = new Map();
@@ -293,6 +306,21 @@ async function runPiTurn(body, abortSignal) {
         }),
     });
 
+    const { session } = await createAgentSession({
+      cwd: AGENT_DIR,
+      agentDir: AGENT_DIR,
+      sessionManager: SessionManager.inMemory(),
+      customTools: tools,
+      // Studio tools only — no local bash/read/write on the VPS.
+      noTools: "builtin",
+    });
+
+    if (!session.model) {
+      throw new Error(
+        `No platform model loaded (${PLATFORM_PROVIDER}/${PLATFORM_MODEL}). Check ARK_API_KEY + .pi-harness/models.json.`,
+      );
+    }
+
     const memoryBlock =
       Array.isArray(memories) && memories.length
         ? `Owner memories (do not mix users):\n${memories
@@ -306,18 +334,12 @@ async function runPiTurn(body, abortSignal) {
       "Paid/destructive/outbound/admin tools create approval cards — never claim they already ran.",
       "Admin tools only if this user is admin. Never access other users' data.",
       "Use remember for durable preferences/decisions.",
+      "Never say Done unless a tool actually succeeded. If a tool fails, report the error.",
       byokFallbackNote || "",
       memoryBlock,
     ]
       .filter(Boolean)
       .join("\n");
-
-    const { session } = await createAgentSession({
-      sessionManager: SessionManager.inMemory(),
-      customTools: tools,
-      // Some pi versions accept systemPrompt; ignore if unsupported.
-      systemPrompt: system,
-    });
 
     const prior = Array.isArray(history)
       ? history
@@ -339,9 +361,21 @@ async function runPiTurn(body, abortSignal) {
 
     // prompt() resolves void — text + usage come from session after idle.
     await session.prompt(prompt);
-    const stats = typeof session.getSessionStats === "function"
-      ? session.getSessionStats()
-      : null;
+
+    const lastAssistant = [...(session.messages || [])]
+      .reverse()
+      .find((m) => m?.role === "assistant");
+    if (lastAssistant?.stopReason === "error") {
+      const err =
+        lastAssistant.errorMessage ||
+        "Platform model error (no assistant reply)";
+      throw new Error(err);
+    }
+
+    const stats =
+      typeof session.getSessionStats === "function"
+        ? session.getSessionStats()
+        : null;
     const tokens = stats?.tokens || {};
     const inputTokens = Math.max(
       0,
@@ -355,7 +389,12 @@ async function runPiTurn(body, abortSignal) {
     const assistantText =
       (typeof session.getLastAssistantText === "function"
         ? session.getLastAssistantText()
-        : null) || "Done.";
+        : null) || "";
+    if (!String(assistantText).trim()) {
+      throw new Error(
+        "Model returned no text (refusing fake Done). Check provider balance / ARK_API_KEY.",
+      );
+    }
     try {
       session.dispose?.();
     } catch {
@@ -364,6 +403,7 @@ async function runPiTurn(body, abortSignal) {
     return {
       assistantText: String(assistantText),
       usage: { inputTokens, outputTokens },
+      model: `${session.model?.provider || PLATFORM_PROVIDER}/${session.model?.id || PLATFORM_MODEL}`,
     };
   } finally {
     clearInterval(cancelPoll);
