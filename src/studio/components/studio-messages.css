@@ -378,7 +378,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   /* Horizontal inset lives on the Create-width column children. */
-  padding: 12px 0 10px;
+  padding: 12px 0 0;
   scrollbar-width: none;
 }
 
@@ -1351,7 +1351,7 @@
   align-items: stretch;
   gap: 0;
   width: 100%;
-  max-width: calc(var(--studio-chat-column-max, min(92%, 36rem)) + 12px);
+  max-width: calc(var(--studio-chat-column-max, min(92%, 36rem)) + 18px);
   margin-inline: auto;
   box-sizing: border-box;
   padding: 2px 12px max(10px, env(safe-area-inset-bottom, 0px));
