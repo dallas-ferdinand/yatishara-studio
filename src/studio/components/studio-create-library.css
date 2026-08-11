@@ -122,8 +122,6 @@
 
 .studio-gen-tile-media.is-square,
 .studio-gen-tile-media.is-audio,
-.studio-gen-tile.is-busy .studio-gen-tile-media,
-.studio-gen-tile.is-failed .studio-gen-tile-media,
 .studio-gen-tile.is-audio-ready .studio-gen-tile-media {
   aspect-ratio: 1 / 1;
   width: 100%;
@@ -132,6 +130,42 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.studio-gen-tile.is-busy .studio-gen-tile-media:not(.is-audio):not(.is-audio-player),
+.studio-gen-tile.is-failed .studio-gen-tile-media:not(.is-audio):not(.is-audio-player) {
+  width: 100%;
+  height: auto;
+  min-height: 96px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.studio-gen-tile-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  min-height: 96px;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.studio-gen-tile-progress-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color: color-mix(in srgb, var(--color-cursor-muted, #8b8b8b) 90%, transparent);
+}
+
+.studio-gen-tile-ghost-loader {
+  max-width: 72%;
 }
 
 .studio-gen-tile-media.is-audio-player {

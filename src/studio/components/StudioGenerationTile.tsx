@@ -20,6 +20,7 @@ import {
   StudioChatAudioPlayerLoading,
 } from "./StudioChatAudioPlayer";
 import { orbSeedForVoice } from "./StudioOrbPlayButton";
+import { MediaLoadWave } from "./media-load-frame";
 
 export type GenerationLibraryTile = {
   jobId: string;
@@ -33,6 +34,7 @@ export type GenerationLibraryTile = {
   playableUrl?: string;
   width?: number;
   height?: number;
+  aspectRatio?: string;
   durationSeconds?: number;
   threadId?: string;
   promptSnippet?: string;
@@ -41,6 +43,24 @@ export type GenerationLibraryTile = {
   folderId?: string;
   error?: string;
 };
+
+function tileAspectCss(tile: GenerationLibraryTile): string {
+  if (tile.kind === "audio") return "1 / 1";
+  if (
+    tile.width != null &&
+    tile.height != null &&
+    tile.width > 0 &&
+    tile.height > 0
+  ) {
+    return `${tile.width} / ${tile.height}`;
+  }
+  const match = String(tile.aspectRatio ?? "")
+    .trim()
+    .match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
+  if (match) return `${match[1]} / ${match[2]}`;
+  if (tile.kind === "video") return "16 / 9";
+  return "1 / 1";
+}
 
 type StudioGenerationTileProps = {
   tile: GenerationLibraryTile;
@@ -79,7 +99,9 @@ export function StudioGenerationTile({
   const failed = tile.stage === "failed";
   const cancelled = failed && wasCancelled(tile.error);
   const doneAudio = tile.kind === "audio" && tile.stage === "done" && Boolean(tile.playableUrl);
-  const squareFrame = busy || failed || tile.kind === "audio";
+  // Audio stays square; image/video use job/asset ratio (including while generating).
+  const squareFrame = tile.kind === "audio";
+  const aspectCss = tileAspectCss(tile);
   const posterUrl =
     tile.thumbnailUrl && !isVideoFileUrl(tile.thumbnailUrl) ? tile.thumbnailUrl : undefined;
   const videoSrc =
@@ -194,7 +216,14 @@ export function StudioGenerationTile({
     );
   } else if (busy) {
     mediaBody = (
-      <Loader2 className="studio-gen-tile-spinner h-6 w-6 animate-spin" aria-hidden="true" />
+      <div className="studio-gen-tile-progress">
+        <MediaLoadWave
+          className="studio-gen-tile-ghost-loader"
+          size={tile.kind === "audio" ? "md" : "lg"}
+          appearance="light"
+        />
+        <span className="studio-gen-tile-progress-label">{tile.stage}</span>
+      </div>
     );
   }
 
@@ -217,7 +246,10 @@ export function StudioGenerationTile({
       }}
       aria-label={tile.name}
     >
-      <div className={mediaClass}>
+      <div
+        className={mediaClass}
+        style={squareFrame ? undefined : { aspectRatio: aspectCss }}
+      >
         {mediaBody}
 
         <span className="studio-gen-tile-badge">{tile.kind}</span>

@@ -46,6 +46,7 @@ const tileReturn = v.object({
   playableUrl: v.optional(v.string()),
   width: v.optional(v.number()),
   height: v.optional(v.number()),
+  aspectRatio: v.optional(v.string()),
   durationSeconds: v.optional(v.number()),
   threadId: v.optional(v.id("generationThreads")),
   promptSnippet: v.optional(v.string()),
@@ -161,6 +162,7 @@ async function tileFromJob(
     ...(media.playableUrl ? { playableUrl: media.playableUrl } : {}),
     ...(asset?.width != null ? { width: asset.width } : {}),
     ...(asset?.height != null ? { height: asset.height } : {}),
+    ...(job.aspectRatio ? { aspectRatio: job.aspectRatio } : {}),
     ...(asset?.durationSeconds != null
       ? { durationSeconds: asset.durationSeconds }
       : job.durationSeconds != null
