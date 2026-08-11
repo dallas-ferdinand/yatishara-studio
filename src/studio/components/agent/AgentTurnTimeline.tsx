@@ -20,7 +20,6 @@ import { AgentStepRow } from "./AgentStepRow";
 import { AgentThinkingCard } from "./AgentThinkingCard";
 import {
   buildAgentTurns,
-  liveProgressLabel,
   type AgentAttachmentChip,
   type AgentApprovalRow,
   type AgentMessageRow,
@@ -236,7 +235,7 @@ function TurnBlock({
         </div>
       ) : null}
 
-      {visibleSteps.length > 0 ? (
+      {visibleSteps.length > 0 || showThinking ? (
         <div className="studio-agent-turn-steps" role="list">
           {visibleSteps.map((step) => {
             const approval =
@@ -268,6 +267,7 @@ function TurnBlock({
               />
             );
           })}
+          {showThinking ? <AgentThinkingCard key="thinking" label="Thinking" /> : null}
         </div>
       ) : null}
 
@@ -372,19 +372,6 @@ function TurnBlock({
           </div>
         );
       })()}
-
-      {/* Thinking wash for inspect / between-tool idle — MercuryOS-style gradient. */}
-      {showThinking ? (
-        <AgentThinkingCard
-          label={
-            inspectThinking
-              ? "Thinking"
-              : liveProgressLabel(visibleSteps) === "Working…"
-                ? "Thinking"
-                : liveProgressLabel(visibleSteps)
-          }
-        />
-      ) : null}
 
       {turn.assistantText ? (
         <article className="studio-chat-bubble is-assistant">

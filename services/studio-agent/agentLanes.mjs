@@ -12,7 +12,11 @@ export const INTENT_BLURBS = {
   studio_generate_video:
     "Create video (paid+approval). Default folderId=CWD. People scenes: storyboard still via studio_generate_image first, then video. Quote cost as $ / TTD only.",
   studio_create_document:
-    "Create a Script (.md) in a folder. Args:{folderId,title,contentMarkdown}. REQUIRED for prompts/scripts — never put script bodies in remember. Include References: asset lines so paste/Run hydrates chips. Default folderId=CWD.",
+    "Create a Script (.md) in a folder. Args:{folderId,title,contentMarkdown}. contentMarkdown REQUIRED and non-empty for prompts/scripts. Never remember script bodies. Include References: asset lines. Default folderId=CWD.",
+  studio_update_document:
+    "Patch a Script: rename, replace contentMarkdown, or move folderId. Use to fill/fix an empty or wrong script — pass full markdown body.",
+  studio_get_document:
+    "Read a Script by id (includes contentMarkdown).",
   studio_bulk_move:
     "Move items into a folder. Args:{targetFolderId,items:[{kind,id}]}. kind=asset|document|element|folder.",
   studio_trash:

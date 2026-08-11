@@ -36,6 +36,9 @@ const TITLE_MAP: Record<string, string> = {
   studio_send_message: "Send message",
   studio_trash: "Move to trash",
   studio_restore: "Restore item",
+  studio_create_document: "Create script",
+  studio_update_document: "Update script",
+  studio_get_document: "Open script",
 };
 
 /** Live / in-progress — progressive -ing. */
@@ -65,6 +68,9 @@ const LIVE_TITLE_MAP: Record<string, string> = {
   "Send message": "Sending message",
   "Move to trash": "Moving to trash",
   "Restore item": "Restoring item",
+  "Create script": "Creating script",
+  "Update script": "Updating script",
+  "Open script": "Opening script",
 };
 
 /** Completed — past -ed / irregular. */
@@ -95,6 +101,9 @@ const PAST_TITLE_MAP: Record<string, string> = {
   "Move to trash": "Moved to trash",
   "Restore item": "Restored item",
   "Checked workspace": "Checked workspace",
+  "Create script": "Created script",
+  "Update script": "Updated script",
+  "Open script": "Opened script",
 };
 
 const WRITE_TOOLS = new Set([
