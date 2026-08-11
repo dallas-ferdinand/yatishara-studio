@@ -2,10 +2,13 @@
 
 import {
   AlertCircle,
+  Eye,
+  FolderInput,
   FolderPlus,
   Loader2,
   Search,
   Sparkles,
+  Trash2,
   Wrench,
 } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -20,23 +23,47 @@ type AgentStepRowProps = {
   approvalSlot?: React.ReactNode;
 };
 
-function StepIcon({ kind, status }: { kind: AgentStepKind; status: DisplayStep["status"] }) {
-  if (status === "started") {
-    return <Loader2 size={12} className="animate-spin" aria-hidden="true" />;
+function StepIcon({
+  toolName,
+  kind,
+  status,
+}: {
+  toolName?: string;
+  kind: AgentStepKind;
+  status: DisplayStep["status"];
+}) {
+  if (status === "started" || status === "queued") {
+    return <Loader2 size={13} className="animate-spin" aria-hidden="true" />;
   }
   if (kind === "error") {
-    return <AlertCircle size={12} aria-hidden="true" />;
+    return <AlertCircle size={13} aria-hidden="true" />;
   }
-  if (kind === "generate") {
-    return <Sparkles size={12} aria-hidden="true" />;
+  const name = String(toolName || "");
+  if (name.includes("search") || name.includes("catalog") || name.includes("describe")) {
+    return <Search size={13} aria-hidden="true" />;
+  }
+  if (name.includes("bulk_move") || name.includes("move") || name.includes("ensure_path")) {
+    return <FolderInput size={13} aria-hidden="true" />;
+  }
+  if (name.includes("trash")) {
+    return <Trash2 size={13} aria-hidden="true" />;
+  }
+  if (name.includes("folder") || name.includes("workspace") || name.includes("resolve")) {
+    return <FolderPlus size={13} aria-hidden="true" />;
+  }
+  if (name.includes("inspect") || name.includes("view_media")) {
+    return <Eye size={13} aria-hidden="true" />;
+  }
+  if (kind === "generate" || name.includes("generate")) {
+    return <Sparkles size={13} aria-hidden="true" />;
   }
   if (kind === "read" || kind === "meta") {
-    return <Search size={12} aria-hidden="true" />;
+    return <Search size={13} aria-hidden="true" />;
   }
   if (kind === "write") {
-    return <FolderPlus size={12} aria-hidden="true" />;
+    return <FolderInput size={13} aria-hidden="true" />;
   }
-  return <Wrench size={12} aria-hidden="true" />;
+  return <Wrench size={13} aria-hidden="true" />;
 }
 
 export function AgentStepRow({
@@ -49,10 +76,12 @@ export function AgentStepRow({
   const isError = step.kind === "error" || step.status === "failed";
   const canExpand = isError && Boolean(step.error || step.resultJson);
   const folderId = step.outcome?.folderId;
-  const label =
-    step.outcome?.folderName?.trim() ||
-    step.subtitle?.replace(/^Created\s+/i, "").trim() ||
-    step.title;
+  // Always prefer the friendly action title — never replace with "Done".
+  const label = isError
+    ? step.subtitle || step.title
+    : step.subtitle && /\d+\s+result/i.test(step.subtitle)
+      ? `${step.title} · ${step.subtitle}`
+      : step.title;
 
   function handleClick() {
     if (folderId && onOpenFolder) {
@@ -66,22 +95,26 @@ export function AgentStepRow({
 
   return (
     <div
-      className={`studio-agent-step-pill is-${step.kind}${step.isLive ? " is-live" : ""}${step.isGroupSummary ? " is-group-summary" : ""}${isError ? " is-error" : ""}`}
+      className={`studio-agent-step is-${step.kind}${step.isLive ? " is-live" : ""}${step.isGroupSummary ? " is-group-summary" : ""}${isError ? " is-error" : ""}`}
       data-step-status={step.status}
       role="listitem"
     >
       <button
         type="button"
-        className="studio-agent-step-pill-btn"
+        className="studio-agent-step-btn"
         onClick={handleClick}
         aria-expanded={canExpand ? expanded : undefined}
         disabled={!interactive}
         title={isError ? step.subtitle || step.error : label}
       >
-        <span className="studio-agent-step-pill-icon">
-          <StepIcon kind={isError ? "error" : step.kind} status={step.status} />
+        <span className="studio-agent-step-icon">
+          <StepIcon
+            toolName={step.toolName}
+            kind={isError ? "error" : step.kind}
+            status={step.status}
+          />
         </span>
-        <span className="studio-agent-step-pill-label">{label}</span>
+        <span className="studio-agent-step-label">{label}</span>
       </button>
 
       {approvalSlot ? (

@@ -5,7 +5,7 @@
  */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -518,6 +518,7 @@ export function StudioAgentPane({
   const editorRef = useRef<HTMLDivElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const stickToBottomRef = useRef(true);
+  const scrolledThreadRef = useRef<string | null>(null);
   const micBusyRef = useRef(false);
   const micStartedRef = useRef(0);
   /** Suppress studio-agent-attach when HTML5 drop already inserted the same id. */
@@ -558,11 +559,54 @@ export function StudioAgentPane({
     [activeRunId, runs],
   );
 
-  useEffect(() => {
-    const el = streamRef.current;
-    if (!el || !stickToBottomRef.current) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messages?.length, toolCalls?.length, busy]);
+  // Stick to latest like DMs — layout settle, rAF, ResizeObserver, short retries.
+  useLayoutEffect(() => {
+    const root = streamRef.current;
+    if (!root) return undefined;
+
+    const NEAR_BOTTOM_PX = 96;
+    const distanceFromBottom = () =>
+      root.scrollHeight - root.scrollTop - root.clientHeight;
+    const updateStick = () => {
+      stickToBottomRef.current = distanceFromBottom() <= NEAR_BOTTOM_PX;
+    };
+    const pinIfStuck = () => {
+      if (!stickToBottomRef.current) return;
+      root.scrollTop = root.scrollHeight;
+    };
+
+    const onScroll = () => updateStick();
+    root.addEventListener("scroll", onScroll, { passive: true });
+
+    const threadKey = activeThreadId ? String(activeThreadId) : null;
+    if (scrolledThreadRef.current !== threadKey) {
+      scrolledThreadRef.current = threadKey;
+      stickToBottomRef.current = true;
+    }
+
+    if (busy || pendingUserText) stickToBottomRef.current = true;
+
+    pinIfStuck();
+    const raf = window.requestAnimationFrame(() => {
+      pinIfStuck();
+      window.requestAnimationFrame(pinIfStuck);
+    });
+    const timers = [48, 160, 360, 720].map((ms) => window.setTimeout(pinIfStuck, ms));
+
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current) pinIfStuck();
+      else updateStick();
+    });
+    const inner = root.querySelector(".studio-chat-stream-inner");
+    if (inner) observer.observe(inner);
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      for (const id of timers) window.clearTimeout(id);
+      root.removeEventListener("scroll", onScroll);
+      observer.disconnect();
+    };
+  }, [activeThreadId, messages, toolCalls, busy, pendingUserText]);
 
   useEffect(() => {
     function onAttach(event: Event) {
@@ -866,12 +910,6 @@ export function StudioAgentPane({
         <div
           className="studio-chat-stream"
           ref={streamRef}
-          onScroll={() => {
-            const el = streamRef.current;
-            if (!el) return;
-            stickToBottomRef.current =
-              el.scrollHeight - el.scrollTop - el.clientHeight <= 80;
-          }}
         >
           <div
             className={`studio-chat-stream-inner${hasMessages || busy ? "" : " is-empty"}`}

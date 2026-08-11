@@ -11,7 +11,7 @@ export type AgentStepKind =
 const TITLE_MAP: Record<string, string> = {
   catalog: "Look up tools",
   describe: "Inspect tool",
-  invoke: "Run Studio action",
+  invoke: "Run action",
   inspect: "Inspect media",
   remember: "Save memory",
   studio_bootstrap: "Load workspace",
@@ -23,6 +23,10 @@ const TITLE_MAP: Record<string, string> = {
   studio_create_folder: "Create folder",
   studio_ensure_path: "Create folder path",
   studio_update_folder: "Update folder",
+  studio_bulk_move: "Move files",
+  studio_resolve_path: "Resolve path",
+  studio_project_context: "Load project",
+  studio_view_media: "View media",
   studio_generate_image: "Generate image",
   studio_generate_video: "Generate video",
   studio_generate_audio: "Generate audio",
@@ -30,6 +34,34 @@ const TITLE_MAP: Record<string, string> = {
   studio_send_message: "Send message",
   studio_trash: "Move to trash",
   studio_restore: "Restore item",
+};
+
+const PAST_TITLE_MAP: Record<string, string> = {
+  "Look up tools": "Looked up tools",
+  "Inspect tool": "Inspected tool",
+  "Run action": "Ran action",
+  "Inspect media": "Inspected media",
+  "Save memory": "Saved memory",
+  "Load workspace": "Loaded workspace",
+  Search: "Searched",
+  "Browse workspace": "Browsed workspace",
+  "List folders": "Listed folders",
+  "Open folder": "Opened folder",
+  "Create folder": "Created folder",
+  "Create folder path": "Created folder path",
+  "Update folder": "Updated folder",
+  "Move files": "Moved files",
+  "Resolve path": "Resolved path",
+  "Load project": "Loaded project",
+  "View media": "Viewed media",
+  "Generate image": "Generated image",
+  "Generate video": "Generated video",
+  "Generate audio": "Generated audio",
+  "Generate batch": "Generated batch",
+  "Send message": "Sent message",
+  "Move to trash": "Moved to trash",
+  "Restore item": "Restored item",
+  "Checked workspace": "Checked workspace",
 };
 
 const WRITE_TOOLS = new Set([
@@ -71,6 +103,16 @@ export function humanToolTitle(toolName: string): string {
     return tail.charAt(0).toUpperCase() + tail.slice(1);
   }
   return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+/** Present for live/queued; past for completed. Never "Done". */
+export function displayToolTitle(toolName: string, status: string): string {
+  const base = humanToolTitle(toolName);
+  if (status === "started" || status === "queued" || status === "pending_approval") {
+    return base;
+  }
+  if (status === "failed") return base;
+  return PAST_TITLE_MAP[base] || base;
 }
 
 export function deriveStepKind(

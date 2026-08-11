@@ -18,6 +18,14 @@
 .studio-agent-pane .studio-chat-render-area {
   flex: 1;
   min-height: 0;
+  /* Composer sits in the dock below — not overlaid like Create. */
+  padding-bottom: 0;
+}
+
+.studio-agent-pane .studio-chat-stream {
+  /* Small end pad only; docked composer already clears the viewport. */
+  padding-bottom: 12px;
+  scroll-padding-bottom: 12px;
 }
 
 /* Same width band as Agent composer (and Create/DM shell). */

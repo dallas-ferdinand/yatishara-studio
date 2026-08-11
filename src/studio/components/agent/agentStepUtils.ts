@@ -1,8 +1,8 @@
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   deriveStepKind,
+  displayToolTitle,
   friendlyErrorLine,
-  humanToolTitle,
   type AgentStepKind,
 } from "./agentToolTitles";
 
@@ -23,8 +23,18 @@ export type AgentMessageRow = {
   _id: Id<"agentMessages">;
   role: string;
   content: string;
+  attachmentsJson?: string;
   approvalId?: Id<"agentApprovals">;
   createdAt: number;
+};
+
+export type AgentAttachmentChip = {
+  id?: string;
+  label?: string;
+  kind?: string;
+  studioKind?: string;
+  studioId?: string;
+  path?: string;
 };
 
 export type AgentRunRow = {
@@ -53,6 +63,7 @@ export type DisplayStep = {
   id: string;
   toolCallId?: Id<"agentToolCalls">;
   approvalId?: Id<"agentApprovals">;
+  toolName?: string;
   kind: AgentStepKind;
   title: string;
   subtitle?: string;
@@ -71,6 +82,7 @@ export type AgentTurn = {
   id: string;
   runId?: Id<"agentRuns">;
   userText: string;
+  attachments?: AgentAttachmentChip[];
   userMessageId?: Id<"agentMessages">;
   assistantText?: string;
   assistantMessageId?: Id<"agentMessages">;
@@ -84,6 +96,31 @@ export function parseJsonSafe(raw?: string | null): unknown {
     return JSON.parse(raw);
   } catch {
     return raw;
+  }
+}
+
+export function parseAgentAttachments(raw?: string | null): AgentAttachmentChip[] {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const out: AgentAttachmentChip[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const row = item as Record<string, unknown>;
+      const chip: AgentAttachmentChip = {
+        id: typeof row.id === "string" ? row.id : undefined,
+        label: typeof row.label === "string" ? row.label : undefined,
+        kind: typeof row.kind === "string" ? row.kind : undefined,
+        studioKind: typeof row.studioKind === "string" ? row.studioKind : undefined,
+        studioId: typeof row.studioId === "string" ? row.studioId : undefined,
+        path: typeof row.path === "string" ? row.path : undefined,
+      };
+      if (chip.studioId || chip.label) out.push(chip);
+    }
+    return out;
+  } catch {
+    return [];
   }
 }
 
@@ -131,34 +168,59 @@ export function extractOutcome(
     }
   }
 
-  if (root.ok === true && typeof payload === "object") {
-    return { label: "Done" };
+  if (toolName === "studio_bulk_move") {
+    const moved = Array.isArray(payload.moved) ? payload.moved.length : 0;
+    const errors = Array.isArray(payload.errors) ? payload.errors.length : 0;
+    if (moved || errors) {
+      return {
+        label: errors
+          ? `Moved ${moved}, ${errors} failed`
+          : `Moved ${moved} item${moved === 1 ? "" : "s"}`,
+      };
+    }
   }
 
+  // Never label successful tools as generic "Done" — UI uses displayToolTitle.
   return undefined;
+}
+
+function resolveToolName(row: AgentToolCallRow): string {
+  const raw = String(row.toolName || "").trim();
+  if (raw && raw !== "invoke") return raw;
+  const args = parseJsonSafe(row.argsJson);
+  if (args && typeof args === "object") {
+    const name = (args as Record<string, unknown>).name;
+    if (typeof name === "string" && name.trim()) return name.trim();
+  }
+  return raw || "invoke";
 }
 
 function toolCallToStep(
   row: AgentToolCallRow,
   approval?: AgentApprovalRow,
 ): DisplayStep {
-  const kind = deriveStepKind(row.toolName, row.status, row.error);
+  const toolName = resolveToolName(row);
+  const kind = deriveStepKind(toolName, row.status, row.error);
   const outcome =
-    row.status === "completed" ? extractOutcome(row.toolName, row.resultJson) : undefined;
+    row.status === "completed" ? extractOutcome(toolName, row.resultJson) : undefined;
+  const title =
+    row.status === "pending_approval" && approval?.title
+      ? approval.title
+      : displayToolTitle(toolName, row.status);
   const subtitle =
     row.status === "failed"
-      ? friendlyErrorLine(row.toolName, row.error)
-      : outcome?.label;
+      ? friendlyErrorLine(toolName, row.error)
+      : outcome?.label && outcome.label !== title
+        ? outcome.label
+        : undefined;
 
   return {
     id: String(row._id),
     toolCallId: row._id,
     approvalId: row.approvalId ?? approval?._id,
+    toolName,
     kind: row.status === "pending_approval" ? "approval" : kind,
-    title:
-      row.status === "pending_approval" && approval?.title
-        ? approval.title
-        : humanToolTitle(row.toolName),
+    title,
     subtitle,
     status: row.status,
     durationMs: formatStepDuration(row.startedAt, row.finishedAt),
@@ -169,9 +231,10 @@ function toolCallToStep(
   };
 }
 
-/** Collapse 3+ consecutive successful read/meta steps into one summary row. */
+/** Collapse older quiet read/meta steps, but keep the newest 3 visible. */
 export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
   const out: DisplayStep[] = [];
+  const visibleTail = 3;
   let i = 0;
   while (i < steps.length) {
     const step = steps[i]!;
@@ -193,16 +256,18 @@ export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
       j += 1;
     }
     const count = j - i;
-    if (count >= 3) {
+    if (count > visibleTail) {
+      const hiddenCount = count - visibleTail;
       out.push({
         id: `summary-${steps[i]!.id}`,
         kind: "read",
         title: "Checked workspace",
-        subtitle: `${count} lookups`,
+        subtitle: `${hiddenCount} earlier lookup${hiddenCount === 1 ? "" : "s"}`,
         status: "summary",
-        collapsedGroupCount: count,
+        collapsedGroupCount: hiddenCount,
         isGroupSummary: true,
       });
+      out.push(...steps.slice(j - visibleTail, j));
       i = j;
     } else {
       out.push(step);
@@ -220,8 +285,18 @@ export function buildAgentTurns(args: {
   busy?: boolean;
   activeRunId?: Id<"agentRuns"> | null;
   pendingUserText?: string | null;
+  pendingAttachments?: AgentAttachmentChip[] | null;
 }): AgentTurn[] {
-  const { messages, toolCalls, runs, approvals, busy, activeRunId, pendingUserText } =
+  const {
+    messages,
+    toolCalls,
+    runs,
+    approvals,
+    busy,
+    activeRunId,
+    pendingUserText,
+    pendingAttachments,
+  } =
     args;
   const approvalById = new Map(approvals.map((a) => [a._id, a]));
   const toolsByRun = new Map<string, AgentToolCallRow[]>();
@@ -272,6 +347,7 @@ export function buildAgentTurns(args: {
       id: String(userMsg._id),
       runId,
       userText: userMsg.content,
+      attachments: parseAgentAttachments(userMsg.attachmentsJson),
       userMessageId: userMsg._id,
       assistantText: assistant?.content,
       assistantMessageId: assistant?._id,
@@ -300,20 +376,24 @@ export function buildAgentTurns(args: {
         )
       : [];
     const pendingText = pendingUserText?.trim();
+    const hasPendingAttachments = Boolean(pendingAttachments?.length);
     const liveTurn =
       (pendingText
         ? [...turns].reverse().find((turn) => turn.userText === pendingText)
-        : undefined) ?? turns[turns.length - 1];
+        : undefined) ??
+      (!pendingText && hasPendingAttachments ? undefined : turns[turns.length - 1]);
 
     if (liveTurn) {
       liveTurn.isLive = true;
       if (liveSteps.length) liveTurn.steps = liveSteps;
       if (liveRunId) liveTurn.runId = liveRunId;
+      if (pendingAttachments?.length) liveTurn.attachments = pendingAttachments;
       liveTurn.assistantText = undefined;
-    } else if (pendingText) {
+    } else if (pendingText || hasPendingAttachments) {
       turns.push({
         id: "pending-user",
-        userText: pendingText,
+        userText: pendingText ?? "",
+        attachments: pendingAttachments ?? [],
         steps: liveSteps,
         isLive: true,
         runId: liveRunId,
