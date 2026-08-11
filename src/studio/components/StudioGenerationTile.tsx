@@ -7,10 +7,9 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import {
   Ban,
   Expand,
+  Eye,
   Film,
   Loader2,
-  PanelRight,
-  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
@@ -112,10 +111,15 @@ export function StudioGenerationTile({
     tile.kind === "image"
       ? posterUrl || tile.playableUrl || tile.thumbnailUrl
       : posterUrl;
-  const canPlay =
+  const canPreview =
     tile.stage === "done" &&
-    tile.kind === "video" &&
-    Boolean(videoSrc || posterUrl);
+    Boolean(
+      tile.kind === "audio"
+        ? tile.playableUrl
+        : tile.kind === "video"
+          ? videoSrc || posterUrl
+          : imageSrc,
+    );
   const canUpscale = tile.kind === "image" && tile.stage === "done" && Boolean(tile.assetId);
   const canVideo = tile.kind === "image" && tile.stage === "done" && Boolean(tile.assetId);
 
@@ -283,15 +287,18 @@ export function StudioGenerationTile({
 
         {!doneAudio ? (
           <div className="studio-gen-tile-overlay" onClick={(event) => event.stopPropagation()}>
-            {canPlay ? (
+            {canPreview ? (
               <button
                 type="button"
                 className="studio-gen-tile-action"
-                title="Play"
-                aria-label="Play"
-                onClick={() => onPlay(tile)}
+                title="Preview"
+                aria-label="Preview"
+                onClick={() => {
+                  onPlay(tile);
+                  setOverlayOpen(false);
+                }}
               >
-                <Play className="h-4 w-4" aria-hidden="true" />
+                <Eye className="h-4 w-4" aria-hidden="true" />
               </button>
             ) : null}
             {canUpscale && onUpscale ? (
@@ -316,31 +323,19 @@ export function StudioGenerationTile({
                 <Film className="h-4 w-4" aria-hidden="true" />
               </button>
             ) : null}
-            <button
-              type="button"
-              className="studio-gen-tile-action"
-              title="Details"
-              aria-label="Open details"
-              onClick={() => {
-                onOpenDetails(tile);
-                setOverlayOpen(false);
-              }}
-            >
-              <PanelRight className="h-4 w-4" aria-hidden="true" />
-            </button>
           </div>
         ) : (
           <button
             type="button"
             className="studio-gen-tile-audio-details"
-            title="Details"
-            aria-label="Open details"
+            title="Preview"
+            aria-label="Preview"
             onClick={(event) => {
               event.stopPropagation();
-              onOpenDetails(tile);
+              onPlay(tile);
             }}
           >
-            <PanelRight className="h-3.5 w-3.5" aria-hidden="true" />
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}
       </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { useConvex, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -10,11 +9,13 @@ import {
   StudioGenerationTile,
   type GenerationLibraryTile,
 } from "./StudioGenerationTile";
+import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import "./studio-create-library.css";
 
 const PAGE_SIZE = 24;
 
 type LightboxState = {
+  jobId: string;
   url: string;
   kind: "image" | "video" | "audio";
   name: string;
@@ -26,9 +27,18 @@ type StudioCreateLibraryProps = {
   selectedJobId?: string | null;
   onSelectTile: (tile: GenerationLibraryTile) => void;
   onOpenDetails: (tile: GenerationLibraryTile) => void;
+  onCloseDetails?: () => void;
   onUpscale?: (tile: GenerationLibraryTile) => void;
   onGenerateVideo?: (tile: GenerationLibraryTile) => void;
 };
+
+function previewUrl(tile: GenerationLibraryTile): string | undefined {
+  if (tile.kind === "video") {
+    return tile.playableUrl || tile.thumbnailUrl;
+  }
+  if (tile.kind === "audio") return tile.playableUrl;
+  return tile.playableUrl || tile.thumbnailUrl;
+}
 
 export function StudioCreateLibrary({
   expiresUnix,
@@ -36,6 +46,7 @@ export function StudioCreateLibrary({
   selectedJobId,
   onSelectTile,
   onOpenDetails,
+  onCloseDetails,
   onUpscale,
   onGenerateVideo,
 }: StudioCreateLibraryProps) {
@@ -69,7 +80,6 @@ export function StudioCreateLibrary({
       seen.add(tile.jobId);
       out.push(tile as GenerationLibraryTile);
     }
-    // Always newest first (createdAt desc) regardless of page merge order.
     out.sort((a, b) => b.createdAt - a.createdAt || b.updatedAt - a.updatedAt);
     return out;
   }, [firstPage, moreTiles]);
@@ -92,25 +102,48 @@ export function StudioCreateLibrary({
     }
   }, [convex, expiresUnix, loadingMore, nextCursor]);
 
-  const openLightbox = useCallback((tile: GenerationLibraryTile) => {
-    const url = tile.playableUrl ?? tile.thumbnailUrl;
-    if (!url) return;
-    setLightbox({ url, kind: tile.kind, name: tile.name });
-  }, []);
+  const closePreview = useCallback(() => {
+    setLightbox(null);
+    onCloseDetails?.();
+  }, [onCloseDetails]);
+
+  const openPreview = useCallback(
+    (tile: GenerationLibraryTile) => {
+      onOpenDetails(tile);
+      onSelectTile(tile);
+      const url = previewUrl(tile);
+      if (tile.stage === "done" && url) {
+        setLightbox({
+          jobId: tile.jobId,
+          url,
+          kind: tile.kind,
+          name: tile.name,
+        });
+      } else {
+        setLightbox(null);
+      }
+    },
+    [onOpenDetails, onSelectTile],
+  );
+
+  // Sidebar closed from outside → clear lightbox too.
+  useEffect(() => {
+    if (!selectedJobId) setLightbox(null);
+  }, [selectedJobId]);
 
   useEffect(() => {
     if (!lightbox) return;
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setLightbox(null);
+      if (event.key === "Escape") closePreview();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [lightbox]);
+  }, [lightbox, closePreview]);
 
   const loading = firstPage === undefined;
 
   return (
-    <div className="studio-create-library">
+    <div className={`studio-create-library${lightbox ? " is-previewing" : ""}`}>
       <div className="studio-create-library-scroll">
         {loading ? (
           <div className="studio-create-library-empty">
@@ -131,9 +164,9 @@ export function StudioCreateLibrary({
                     tile={tile}
                     selected={selectedJobId === tile.jobId}
                     isMobile={isMobile}
-                    onSelect={onSelectTile}
-                    onPlay={openLightbox}
-                    onOpenDetails={onOpenDetails}
+                    onSelect={openPreview}
+                    onPlay={openPreview}
+                    onOpenDetails={openPreview}
                     onUpscale={onUpscale}
                     onGenerateVideo={onGenerateVideo}
                   />
@@ -151,40 +184,43 @@ export function StudioCreateLibrary({
         )}
       </div>
 
-      {lightbox && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="studio-gen-lightbox"
-              role="dialog"
-              aria-modal="true"
-              aria-label={lightbox.name}
-              onClick={() => setLightbox(null)}
+      {lightbox ? (
+        <div
+          className="studio-gen-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={lightbox.name}
+          onClick={closePreview}
+        >
+          <div
+            className="studio-gen-lightbox-inner"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="studio-gen-lightbox-close"
+              aria-label="Close preview"
+              onClick={closePreview}
             >
-              <div
-                className="studio-gen-lightbox-inner"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  className="studio-gen-lightbox-close"
-                  aria-label="Close"
-                  onClick={() => setLightbox(null)}
-                >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </button>
-                {lightbox.kind === "video" ? (
-                  <video src={lightbox.url} controls autoPlay playsInline />
-                ) : lightbox.kind === "audio" ? (
-                  <audio src={lightbox.url} controls autoPlay />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={lightbox.url} alt={lightbox.name} />
-                )}
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+            {lightbox.kind === "video" ? (
+              <video src={lightbox.url} controls autoPlay playsInline />
+            ) : lightbox.kind === "audio" ? (
+              <div className="studio-gen-lightbox-audio">
+                <StudioChatAudioPlayer
+                  variant="pane"
+                  src={lightbox.url}
+                  title={lightbox.name}
+                />
               </div>
-            </div>,
-            document.body,
-          )
-        : null}
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={lightbox.url} alt={lightbox.name} />
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

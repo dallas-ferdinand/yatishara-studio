@@ -25237,6 +25237,7 @@ export function StudioShell({
                 assetId: tile.assetId,
               });
             }}
+            onCloseGenerationDetails={() => setGenerationDetail(null)}
             onLibraryUpscale={(tile) => {
               const entry = libraryTileToEntry(tile);
               if (entry) void handleUpscaleImage(entry);
@@ -31421,6 +31422,7 @@ function ActivePane({
   generationDetailJobId = null,
   onSelectGenerationTile,
   onOpenGenerationDetails,
+  onCloseGenerationDetails,
   onLibraryUpscale,
   onLibraryGenerateVideo,
   isMobileLayout = false,
@@ -31778,6 +31780,7 @@ function ActivePane({
         selectedJobId={generationDetailJobId}
         onSelectTile={onSelectGenerationTile}
         onOpenDetails={onOpenGenerationDetails}
+        onCloseDetails={onCloseGenerationDetails}
         onUpscale={onLibraryUpscale}
         onGenerateVideo={onLibraryGenerateVideo}
       />,

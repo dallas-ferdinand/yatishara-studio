@@ -1,6 +1,7 @@
 /* Create generation library — masonry grid, tile overlays, detail rail, lightbox */
 
 .studio-create-library {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -51,8 +52,6 @@
 .studio-create-masonry {
   column-count: 2;
   column-gap: 10px;
-  /* Fill top→bottom then next column so newest (first DOM) stays top-left */
-  column-fill: auto;
 }
 
 @media (min-width: 720px) {
@@ -75,7 +74,10 @@
 
 .studio-create-masonry-item {
   break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
   margin-bottom: 10px;
+  width: 100%;
 }
 
 .studio-gen-tile {
@@ -741,23 +743,28 @@
   padding: 0;
 }
 
-/* Lightbox */
+/* Lightbox — fills the Create grid pane (sidebar stays beside it) */
 .studio-gen-lightbox {
-  position: fixed;
+  position: absolute;
   inset: 0;
-  z-index: 80;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, #000 78%, transparent);
-  padding: 24px;
+  background: color-mix(in srgb, #000 82%, transparent);
+  padding: 20px;
+}
+
+[data-appearance="light"] .studio-gen-lightbox {
+  background: color-mix(in srgb, #0a0a0c 72%, transparent);
 }
 
 .studio-gen-lightbox-inner {
   position: relative;
-  max-width: min(96vw, 1200px);
-  max-height: 92vh;
+  max-width: min(100%, 1100px);
+  max-height: 100%;
   width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -766,20 +773,23 @@
 .studio-gen-lightbox-inner img,
 .studio-gen-lightbox-inner video {
   max-width: 100%;
-  max-height: 92vh;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   border-radius: 8px;
   background: #000;
 }
 
-.studio-gen-lightbox-inner audio {
-  width: min(520px, 90vw);
+.studio-gen-lightbox-inner audio,
+.studio-gen-lightbox-inner .studio-gen-lightbox-audio {
+  width: min(520px, 92%);
 }
 
 .studio-gen-lightbox-close {
   position: absolute;
-  top: -8px;
-  right: -8px;
+  top: 12px;
+  right: 12px;
   z-index: 2;
   display: inline-flex;
   align-items: center;
@@ -787,7 +797,7 @@
   width: 36px;
   height: 36px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, #fff 20%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 22%, transparent);
   background: color-mix(in srgb, #000 55%, transparent);
   color: #fff;
   cursor: pointer;
