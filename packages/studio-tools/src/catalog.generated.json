@@ -4409,7 +4409,7 @@
   },
   {
     "name": "studio_update_document",
-    "description": "Rename a document (title), edit markdown content, or move it to another folder. Requires write scope.",
+    "description": "Rename a document (title), replace full markdown content, or move it to another folder. For small inline edits prefer studio_patch_document (search/replace) to save tokens. Requires write scope.",
     "category": "documents",
     "scope": "write",
     "risk": "safe_write",
@@ -4422,6 +4422,28 @@
     "http": {
       "method": "PATCH",
       "pathTemplate": "/documents/{documentId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "documents.ts"
+  },
+  {
+    "name": "studio_patch_document",
+    "description": "Apply exact search/replace edit(s) to a document's markdown (coding-agent style). Prefer this over studio_update_document for small changes. Pass oldString+newString, or edits[{oldString,newString,replaceAll?}]. Fails if oldString missing or ambiguous (unless replaceAll). Requires write scope.",
+    "category": "documents",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/documents/{documentId}/patch"
     },
     "inputSchema": {
       "type": "object",

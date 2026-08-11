@@ -401,7 +401,7 @@ async function runPiTurn(body, abortSignal) {
       skillPromptBlock(),
       "Before writing image/video prompts or choosing hypermotion vs cinematic, skills {id} for the matching prompt-* pack. Do not invent third-party brand names in prompts.",
       "Prompt craft: never ship lame short vibe lines. Load prompt-cinematic / prompt-hypermotion / prompt-image and write sealed, production-grade prompts (subject, action, camera start→end, light, materials, audio, keep-outs).",
-      "Prompt save: when they ask for a prompt or script (write/craft/improve/create a script) — skills first, then ALWAYS studio_create_document into CWD with NON-EMPTY contentMarkdown (title + sealed prompt body + References). Never create an empty Script. If a Script already exists empty/wrong, studio_update_document with the full markdown. Never stash the prompt/script body in remember/memory. Title like \"Prompt — <short>\" or \"Script — <short>\". Chat: only paste the prompt if they asked to see/copy it; otherwise point at the file.",
+      "Prompt save: when they ask for a prompt or script (write/craft/improve/create a script) — skills first, then ALWAYS studio_create_document into CWD with NON-EMPTY contentMarkdown (title + sealed prompt body + References). Never create an empty Script. If a Script already exists empty/wrong, studio_update_document with the full markdown; for small inline fixes use studio_patch_document (oldString/newString) instead of rewriting the whole file. Never stash the prompt/script body in remember/memory. Title like \"Prompt — <short>\" or \"Script — <short>\". Chat: only paste the prompt if they asked to see/copy it; otherwise point at the file.",
       "Prompt run: if they ask to generate from a saved prompt doc — studio_get_document, read References, pass referenceAssetIds / startFrameAssetId on generate. Default folderId=CWD.",
       "Elements are retired — use assets as references. Do not create or attach elements.",
       "Video models: only from studio_list_video_models (or known slugs seedance-2.5 / seedance-2.0). Talk about motion/light/res/length. Never invent caps, features, or legacy/pipeline marketing.",
@@ -496,15 +496,17 @@ async function runPiTurn(body, abortSignal) {
         ? session.getSessionStats()
         : null;
     const tokens = stats?.tokens || {};
-    const inputTokens = Math.max(
-      0,
-      Math.floor(
-        Number(tokens.input || 0) +
-          Number(tokens.cacheRead || 0) +
-          Number(tokens.cacheWrite || 0),
-      ),
-    );
+    // Keep cache hits separate — Seed Pro cache-read COGS is ~⅕ of input.
+    const inputTokens = Math.max(0, Math.floor(Number(tokens.input || 0)));
+    const cacheReadTokens = Math.max(0, Math.floor(Number(tokens.cacheRead || 0)));
+    const cacheWriteTokens = Math.max(0, Math.floor(Number(tokens.cacheWrite || 0)));
     const outputTokens = Math.max(0, Math.floor(Number(tokens.output || 0)));
+    const usage = {
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+    };
     const assistantText =
       (typeof session.getLastAssistantText === "function"
         ? session.getLastAssistantText()
@@ -520,7 +522,7 @@ async function runPiTurn(body, abortSignal) {
       return {
         pendingApproval: approvalCreated || undefined,
         pendingAsk: askCreated || undefined,
-        usage: { inputTokens, outputTokens },
+        usage,
         model: `${session.model?.provider || PLATFORM_PROVIDER}/${session.model?.id || PLATFORM_MODEL}`,
         trajectory: traj,
       };
@@ -539,7 +541,7 @@ async function runPiTurn(body, abortSignal) {
     console.log("[studio-agent] trajectory", JSON.stringify(traj));
     return {
       assistantText: String(assistantText),
-      usage: { inputTokens, outputTokens },
+      usage,
       model: `${session.model?.provider || PLATFORM_PROVIDER}/${session.model?.id || PLATFORM_MODEL}`,
       trajectory: traj,
     };

@@ -684,6 +684,68 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       return finish(jsonResponse({ document }, 201));
     }
 
+    const documentPatchMatch = route.match(/^documents\/([^/]+)\/patch$/);
+    if (documentPatchMatch && request.method === "POST") {
+      const documentId = documentPatchMatch[1] as Id<"documents">;
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const body = await readJsonBody<{
+        oldString?: string;
+        newString?: string;
+        replaceAll?: boolean;
+        edits?: Array<{
+          oldString?: string;
+          newString?: string;
+          replaceAll?: boolean;
+        }>;
+      }>(request);
+      const edits =
+        Array.isArray(body.edits) && body.edits.length
+          ? body.edits
+          : body.oldString !== undefined
+            ? [
+                {
+                  oldString: body.oldString,
+                  newString: body.newString ?? "",
+                  replaceAll: body.replaceAll,
+                },
+              ]
+            : [];
+      if (!edits.length) {
+        return finish(
+          errorResponse("Provide oldString/newString or edits[{oldString,newString}]"),
+        );
+      }
+      try {
+        const result = await ctx.runMutation(
+          internal.studioApiInternal.patchDocumentForApi,
+          {
+            userId: auth.userId,
+            sandboxFolderId: auth.sandboxFolderId,
+            documentId,
+            edits: edits.map((e) => ({
+              oldString: String(e.oldString ?? ""),
+              newString: String(e.newString ?? ""),
+              replaceAll: e.replaceAll,
+            })),
+          },
+        );
+        const document = await ctx.runQuery(internal.studioApiInternal.getDocument, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          documentId,
+          expiresUnix,
+        });
+        return finish(jsonResponse({ document, ...result }));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Patch failed";
+        const status = msg.includes("not found") || msg.includes("Document not found")
+          ? 404
+          : 400;
+        return finish(errorResponse(msg, status));
+      }
+    }
+
     const documentMatch = route.match(/^documents\/([^/]+)$/);
     if (documentMatch) {
       const documentId = documentMatch[1] as Id<"documents">;

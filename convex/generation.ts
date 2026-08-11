@@ -2598,6 +2598,8 @@ export const chargeTextGeneration = authedMutation({
     folderId: v.id("folders"),
     inputTokens: v.number(),
     outputTokens: v.number(),
+    cacheReadTokens: v.optional(v.number()),
+    cacheWriteTokens: v.optional(v.number()),
     imageReferenceCount: v.optional(v.number()),
     videoReferenceCount: v.optional(v.number()),
     audioReferenceCount: v.optional(v.number()),
@@ -2620,6 +2622,8 @@ export const chargeTextGeneration = authedMutation({
     const cost = textCreditCost({
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
+      cacheReadTokens: args.cacheReadTokens,
+      cacheWriteTokens: args.cacheWriteTokens,
       textModel: args.textModel ?? "pro",
     });
     const now = Date.now();

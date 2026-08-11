@@ -169,14 +169,18 @@ export type TextPricingModel = "pro" | "lite" | "mini";
 /** Seed 2.0 Pro list (≤128k) — default text/assistance COGS. */
 export const TEXT_USD_PER_M_INPUT = 0.5;
 export const TEXT_USD_PER_M_OUTPUT = 3.0;
+/** BytePlus ModelArk context-cache hit input (Seed 2.0 Pro ≤128k). */
+export const TEXT_USD_PER_M_CACHE_READ = 0.1;
 export const TEXT_USD_PER_M_AUDIO_INPUT = TEXT_USD_PER_M_INPUT;
 
 export const TEXT_LITE_USD_PER_M_INPUT = 0.25;
 export const TEXT_LITE_USD_PER_M_OUTPUT = 2.0;
+export const TEXT_LITE_USD_PER_M_CACHE_READ = 0.05;
 export const TEXT_LITE_USD_PER_M_AUDIO_INPUT = TEXT_LITE_USD_PER_M_INPUT;
 
 export const TEXT_MINI_USD_PER_M_INPUT = 0.1;
 export const TEXT_MINI_USD_PER_M_OUTPUT = 0.4;
+export const TEXT_MINI_USD_PER_M_CACHE_READ = 0.02;
 export const TEXT_MINI_USD_PER_M_AUDIO_INPUT = TEXT_MINI_USD_PER_M_INPUT;
 
 /**
@@ -234,12 +238,14 @@ export function roundUpToHalfTtd(ttd: number): number {
 function textRates(model: TextPricingModel = "pro"): {
   input: number;
   output: number;
+  cacheRead: number;
   audioInput: number;
 } {
   if (model === "mini") {
     return {
       input: TEXT_MINI_USD_PER_M_INPUT,
       output: TEXT_MINI_USD_PER_M_OUTPUT,
+      cacheRead: TEXT_MINI_USD_PER_M_CACHE_READ,
       audioInput: TEXT_MINI_USD_PER_M_AUDIO_INPUT,
     };
   }
@@ -247,12 +253,14 @@ function textRates(model: TextPricingModel = "pro"): {
     return {
       input: TEXT_LITE_USD_PER_M_INPUT,
       output: TEXT_LITE_USD_PER_M_OUTPUT,
+      cacheRead: TEXT_LITE_USD_PER_M_CACHE_READ,
       audioInput: TEXT_LITE_USD_PER_M_AUDIO_INPUT,
     };
   }
   return {
     input: TEXT_USD_PER_M_INPUT,
     output: TEXT_USD_PER_M_OUTPUT,
+    cacheRead: TEXT_USD_PER_M_CACHE_READ,
     audioInput: TEXT_USD_PER_M_AUDIO_INPUT,
   };
 }
@@ -499,11 +507,16 @@ function roundUpToCentTtd(ttd: number): number {
 }
 
 export type MeasuredTextUsage = {
+  /** Non-cached prompt tokens. */
   inputTokens?: number;
   outputTokens?: number;
+  /** BytePlus / provider cache-hit input tokens (cheaper). */
+  cacheReadTokens?: number;
+  /** Tokens written into a new cache (billed at input rate). */
+  cacheWriteTokens?: number;
 };
 
-/** Provider USD for Seed Pro / Lite / Mini text tokens. */
+/** Provider USD for Seed Pro / Lite / Mini text tokens (incl. cache hits). */
 export function textProviderCostUsd(
   usage: MeasuredTextUsage,
   textModel: TextPricingModel = "pro",
@@ -511,8 +524,12 @@ export function textProviderCostUsd(
   const rates = textRates(textModel);
   const inputTokens = Math.max(0, Math.floor(usage.inputTokens ?? 0));
   const outputTokens = Math.max(0, Math.floor(usage.outputTokens ?? 0));
+  const cacheReadTokens = Math.max(0, Math.floor(usage.cacheReadTokens ?? 0));
+  const cacheWriteTokens = Math.max(0, Math.floor(usage.cacheWriteTokens ?? 0));
   return (
     (inputTokens * rates.input) / 1_000_000 +
+    (cacheReadTokens * rates.cacheRead) / 1_000_000 +
+    (cacheWriteTokens * rates.input) / 1_000_000 +
     (outputTokens * rates.output) / 1_000_000
   );
 }
@@ -541,16 +558,22 @@ export function addMeasuredTextUsage(
   return {
     inputTokens: (left.inputTokens ?? 0) + (right.inputTokens ?? 0),
     outputTokens: (left.outputTokens ?? 0) + (right.outputTokens ?? 0),
+    cacheReadTokens: (left.cacheReadTokens ?? 0) + (right.cacheReadTokens ?? 0),
+    cacheWriteTokens: (left.cacheWriteTokens ?? 0) + (right.cacheWriteTokens ?? 0),
   };
 }
 
 export function measuredTextUsageFromGateway(usage: {
   inputTokens?: number | undefined;
   outputTokens?: number | undefined;
+  cacheReadTokens?: number | undefined;
+  cacheWriteTokens?: number | undefined;
 }): MeasuredTextUsage {
   return {
     inputTokens: usage.inputTokens ?? 0,
     outputTokens: usage.outputTokens ?? 0,
+    cacheReadTokens: usage.cacheReadTokens ?? 0,
+    cacheWriteTokens: usage.cacheWriteTokens ?? 0,
   };
 }
 
@@ -571,13 +594,22 @@ export function textCreditCost(args: {
   audioReferenceCount?: number;
   inputTokens?: number;
   outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   textModel?: TextPricingModel;
 }): number {
-  if (args.inputTokens != null || args.outputTokens != null) {
+  if (
+    args.inputTokens != null ||
+    args.outputTokens != null ||
+    args.cacheReadTokens != null ||
+    args.cacheWriteTokens != null
+  ) {
     return textCreditsFromMeasuredUsage(
       {
         inputTokens: args.inputTokens,
         outputTokens: args.outputTokens,
+        cacheReadTokens: args.cacheReadTokens,
+        cacheWriteTokens: args.cacheWriteTokens,
       },
       args.textModel ?? "pro",
     );

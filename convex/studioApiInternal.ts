@@ -1166,6 +1166,69 @@ export const updateDocumentForApi = internalMutation({
   },
 });
 
+/** Apply exact search/replace edits (coding-agent style). Prefer over full markdown rewrite. */
+export const patchDocumentForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    documentId: v.id("documents"),
+    edits: v.array(
+      v.object({
+        oldString: v.string(),
+        newString: v.string(),
+        replaceAll: v.optional(v.boolean()),
+      }),
+    ),
+  },
+  returns: v.object({
+    applied: v.number(),
+    replacements: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get("documents", args.documentId);
+    if (!doc || doc.ownerId !== args.userId || doc.deletedAt) {
+      throw new Error("Document not found");
+    }
+    if (!(await isFolderInSandbox(ctx, doc.folderId, args.sandboxFolderId))) {
+      throw new Error("Document not found");
+    }
+    if (!args.edits.length) {
+      throw new Error("edits required (at least one oldString/newString)");
+    }
+    let next = doc.contentMarkdown ?? "";
+    let replacements = 0;
+    for (const edit of args.edits) {
+      const oldString = edit.oldString;
+      if (!oldString) {
+        throw new Error("oldString must be non-empty");
+      }
+      const count = next.split(oldString).length - 1;
+      if (count === 0) {
+        throw new Error(
+          `oldString not found: ${oldString.slice(0, 120)}${oldString.length > 120 ? "…" : ""}`,
+        );
+      }
+      if (!edit.replaceAll && count > 1) {
+        throw new Error(
+          `oldString matched ${count} times; pass replaceAll:true or make the snippet unique`,
+        );
+      }
+      if (edit.replaceAll) {
+        next = next.split(oldString).join(edit.newString);
+        replacements += count;
+      } else {
+        next = next.replace(oldString, edit.newString);
+        replacements += 1;
+      }
+    }
+    await ctx.db.patch(doc._id, {
+      contentMarkdown: next,
+      updatedAt: Date.now(),
+    });
+    return { applied: args.edits.length, replacements };
+  },
+});
+
 export const updateAssetForApi = internalMutation({
   args: {
     userId: v.id("users"),
@@ -1601,6 +1664,8 @@ export const chargeTextGenerationForApi = internalMutation({
     folderId: v.id("folders"),
     inputTokens: v.number(),
     outputTokens: v.number(),
+    cacheReadTokens: v.optional(v.number()),
+    cacheWriteTokens: v.optional(v.number()),
     imageReferenceCount: v.optional(v.number()),
     videoReferenceCount: v.optional(v.number()),
     audioReferenceCount: v.optional(v.number()),
@@ -1621,6 +1686,8 @@ export const chargeTextGenerationForApi = internalMutation({
     const cost = textCreditCost({
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
+      cacheReadTokens: args.cacheReadTokens,
+      cacheWriteTokens: args.cacheWriteTokens,
     });
     const now = Date.now();
     if (!account || account.creditBalance < cost) {

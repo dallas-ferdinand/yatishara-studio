@@ -13,8 +13,10 @@ export const INTENT_BLURBS = {
     "Create video (paid+approval). Default folderId=CWD. People scenes: storyboard still via studio_generate_image first, then video. Quote cost as $ / TTD only.",
   studio_create_document:
     "Create a Script (.md) in a folder. Args:{folderId,title,contentMarkdown}. contentMarkdown REQUIRED and non-empty for prompts/scripts. Never remember script bodies. Include References: asset lines. Default folderId=CWD.",
+  studio_patch_document:
+    "Preferred for small Script edits. Args:{documentId,oldString,newString} or edits[{oldString,newString,replaceAll?}]. Exact search/replace — cheap vs full rewrite. Fail if oldString missing/ambiguous.",
   studio_update_document:
-    "Patch a Script: rename, replace contentMarkdown, or move folderId. Use to fill/fix an empty or wrong script — pass full markdown body.",
+    "Full Script rewrite/rename/move. Args:{documentId,title?,contentMarkdown?,folderId?}. Prefer studio_patch_document for small changes; use this to fill empty scripts or replace most of the body.",
   studio_get_document:
     "Read a Script by id (includes contentMarkdown).",
   studio_bulk_move:
@@ -92,7 +94,7 @@ export function detectActionLane(message, workingSet) {
     || /\b(prompt|script)\b.{0,40}\b(image|product|hero|still|video|ad)\b/.test(text)
     || /\bcreate a script\b/.test(text)
     || /\bshot script\b/.test(text)) {
-    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt/script. ALWAYS studio_create_document {folderId:CWD, title:\"Prompt — …\" or \"Script — …\", contentMarkdown NON-EMPTY with ```text fence + References: asset lines}. If file exists empty: studio_update_document. NEVER remember the script body. Do not dump the full prompt in chat unless they asked to see/copy it.";
+    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt/script. ALWAYS studio_create_document {folderId:CWD, title:\"Prompt — …\" or \"Script — …\", contentMarkdown NON-EMPTY with ```text fence + References: asset lines}. If file exists empty/wrong: studio_update_document (full) or studio_patch_document (small edits). NEVER remember the script body. Do not dump the full prompt in chat unless they asked to see/copy it.";
   }
   if (/\b(generat(e|ing)|creat(e|ing)|make|draw|render)\b.{0,40}\b(image|picture|photo|still|art)\b/.test(text)
     || /\b(image|picture|photo)\b.{0,40}\b(generat|creat|make|draw|render)/.test(text)) {

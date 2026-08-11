@@ -2,7 +2,7 @@
 id: project-plan
 title: Studio project plan docs
 when: Multi-step creative job, campaign folder, or user asks to plan then continue later
-tools: studio_ensure_path, studio_create_document, studio_update_document, studio_search, studio_folder_contents, plan
+tools: studio_ensure_path, studio_create_document, studio_patch_document, studio_update_document, studio_search, studio_folder_contents, plan
 category: workflow
 ---
 
@@ -47,7 +47,7 @@ Done when:
 ## Later turns
 
 - `studio_search` / `studio_folder_contents` → open the Plan doc  
-- `studio_update_document` to check off steps and paste locked prompts  
+- `studio_patch_document` to check off steps / small prompt edits; `studio_update_document` for full rewrites or rename/move  
 - `remember` only for durable prefs, not the whole shot list  
 
 ## Empty files

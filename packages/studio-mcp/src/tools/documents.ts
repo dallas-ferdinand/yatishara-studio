@@ -30,7 +30,7 @@ export function registerDocumentTools(server: McpServer) {
 
   server.tool(
     "studio_update_document",
-    "Rename a document (title), edit markdown content, or move it to another folder. Requires write scope.",
+    "Rename a document (title), replace full markdown content, or move it to another folder. For small inline edits prefer studio_patch_document (search/replace) to save tokens. Requires write scope.",
     {
       documentId: z.string(),
       title: z.string().optional(),
@@ -43,6 +43,36 @@ export function registerDocumentTools(server: McpServer) {
           method: "PATCH",
           body: JSON.stringify({ title, contentMarkdown, folderId }),
         }),
+      ),
+  );
+
+  server.tool(
+    "studio_patch_document",
+    "Apply exact search/replace edit(s) to a document's markdown (coding-agent style). Prefer this over studio_update_document for small changes. Pass oldString+newString, or edits[{oldString,newString,replaceAll?}]. Fails if oldString missing or ambiguous (unless replaceAll). Requires write scope.",
+    {
+      documentId: z.string(),
+      oldString: z.string().optional(),
+      newString: z.string().optional(),
+      replaceAll: z.boolean().optional(),
+      edits: z
+        .array(
+          z.object({
+            oldString: z.string(),
+            newString: z.string(),
+            replaceAll: z.boolean().optional(),
+          }),
+        )
+        .optional(),
+    },
+    async ({ documentId, oldString, newString, replaceAll, edits }) =>
+      jsonResult(
+        await studioFetch(
+          `/documents/${encodeURIComponent(documentId)}/patch`,
+          {
+            method: "POST",
+            body: JSON.stringify({ oldString, newString, replaceAll, edits }),
+          },
+        ),
       ),
   );
 }

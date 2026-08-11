@@ -48,8 +48,14 @@ export const STUDIO_API_OPENAPI = {
     },
     "/documents/{id}": {
       get: { summary: "Get document" },
-      patch: { summary: "Update document" },
+      patch: { summary: "Update document (full replace / rename / move)" },
       delete: { summary: "Move document to trash" },
+    },
+    "/documents/{id}/patch": {
+      post: {
+        summary:
+          "Search/replace patch document markdown (prefer for small edits)",
+      },
     },
     "/documents/{id}/restore": { post: { summary: "Restore document from trash" } },
     "/elements": {
@@ -305,6 +311,7 @@ export const STUDIO_API_ROOT = {
     "POST /assets/upload-inline",
     "POST /documents",
     "GET|PATCH|DELETE /documents/:id",
+    "POST /documents/:id/patch",
     "POST /documents/:id/restore",
     "GET|POST /elements",
     "GET /elements/production-guide",

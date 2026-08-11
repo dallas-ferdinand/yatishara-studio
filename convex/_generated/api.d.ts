@@ -11,6 +11,7 @@
 import type * as ResendOTP from "../ResendOTP.js";
 import type * as academy from "../academy.js";
 import type * as academyActions from "../academyActions.js";
+import type * as academyAdSideHustleLessons from "../academyAdSideHustleLessons.js";
 import type * as academyLiveCatalog from "../academyLiveCatalog.js";
 import type * as agentActions from "../agentActions.js";
 import type * as agentApprovals from "../agentApprovals.js";
@@ -185,6 +186,7 @@ declare const fullApi: ApiFromModules<{
   ResendOTP: typeof ResendOTP;
   academy: typeof academy;
   academyActions: typeof academyActions;
+  academyAdSideHustleLessons: typeof academyAdSideHustleLessons;
   academyLiveCatalog: typeof academyLiveCatalog;
   agentActions: typeof agentActions;
   agentApprovals: typeof agentApprovals;

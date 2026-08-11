@@ -38,6 +38,7 @@ const TITLE_MAP: Record<string, string> = {
   studio_restore: "Restore item",
   studio_create_document: "Create script",
   studio_update_document: "Update script",
+  studio_patch_document: "Patch script",
   studio_get_document: "Open script",
 };
 
@@ -70,6 +71,7 @@ const LIVE_TITLE_MAP: Record<string, string> = {
   "Restore item": "Restoring item",
   "Create script": "Creating script",
   "Update script": "Updating script",
+  "Patch script": "Patching script",
   "Open script": "Opening script",
 };
 
@@ -103,6 +105,7 @@ const PAST_TITLE_MAP: Record<string, string> = {
   "Checked workspace": "Checked workspace",
   "Create script": "Created script",
   "Update script": "Updated script",
+  "Patch script": "Patched script",
   "Open script": "Opened script",
 };
 
@@ -113,6 +116,7 @@ const WRITE_TOOLS = new Set([
   "studio_bulk_move",
   "studio_create_document",
   "studio_update_document",
+  "studio_patch_document",
   "studio_upload_asset",
 ]);
 

@@ -314,7 +314,7 @@ const MEDIA = guide(
 
 ## Documents
 
-\`studio_get_document\`, \`studio_create_document\`, \`studio_update_document\`
+\`studio_get_document\`, \`studio_create_document\`, \`studio_patch_document\` (prefer for small edits), \`studio_update_document\`
 
 ## Trash
 

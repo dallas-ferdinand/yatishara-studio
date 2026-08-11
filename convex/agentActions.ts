@@ -20,6 +20,8 @@ const chargeTextGenerationRef = makeFunctionReference<
     folderId: Id<"folders">;
     inputTokens: number;
     outputTokens: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
     textModel?: "pro" | "lite" | "mini";
   },
   Id<"creditTransactions">
@@ -359,7 +361,7 @@ export const sendTurn = action({
       ownerId,
       threadId: args.threadId,
       userMessage: message,
-      catalogVersion: "2026-08-11.1",
+      catalogVersion: "2026-08-11.3",
       usedByok,
       model: usedByok && byokProvider ? `byok:${byokProvider}` : "platform",
     });
@@ -426,7 +428,7 @@ export const sendTurn = action({
           byokKey:
             process.env.STUDIO_AGENT_FORWARD_BYOK === "1" ? byokPlain : undefined,
           byokFallbackNote,
-          catalogVersion: "2026-08-11.1",
+          catalogVersion: "2026-08-11.3",
           seedPlanJson: args.seedPlanJson,
           seedTodosJson,
           currentFolderId: args.currentFolderId
@@ -447,7 +449,12 @@ export const sendTurn = action({
         pendingApproval?: boolean;
         pendingAsk?: boolean;
         model?: string;
-        usage?: { inputTokens?: number; outputTokens?: number };
+        usage?: {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
+        };
       } = {};
       try {
         body = bodyText ? JSON.parse(bodyText) : {};
@@ -491,9 +498,19 @@ export const sendTurn = action({
             0,
             Math.floor(Number(body.usage?.outputTokens ?? 0)),
           );
+          const cacheReadTokens = Math.max(
+            0,
+            Math.floor(Number(body.usage?.cacheReadTokens ?? 0)),
+          );
+          const cacheWriteTokens = Math.max(
+            0,
+            Math.floor(Number(body.usage?.cacheWriteTokens ?? 0)),
+          );
           creditsSpent = textCreditCost({
             inputTokens,
             outputTokens,
+            cacheReadTokens,
+            cacheWriteTokens,
             textModel: "pro",
           });
           const folderId = await ctx.runMutation(
@@ -504,6 +521,8 @@ export const sendTurn = action({
             folderId,
             inputTokens,
             outputTokens,
+            cacheReadTokens,
+            cacheWriteTokens,
             textModel: "pro",
           });
         }
@@ -558,9 +577,19 @@ export const sendTurn = action({
           0,
           Math.floor(Number(body.usage?.outputTokens ?? 0)),
         );
+        const cacheReadTokens = Math.max(
+          0,
+          Math.floor(Number(body.usage?.cacheReadTokens ?? 0)),
+        );
+        const cacheWriteTokens = Math.max(
+          0,
+          Math.floor(Number(body.usage?.cacheWriteTokens ?? 0)),
+        );
         creditsSpent = textCreditCost({
           inputTokens,
           outputTokens,
+          cacheReadTokens,
+          cacheWriteTokens,
           textModel: "pro",
         });
         const folderId = await ctx.runMutation(
@@ -571,6 +600,8 @@ export const sendTurn = action({
           folderId,
           inputTokens,
           outputTokens,
+          cacheReadTokens,
+          cacheWriteTokens,
           textModel: "pro",
         });
       }

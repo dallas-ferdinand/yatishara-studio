@@ -146,6 +146,8 @@ const FIELD_HINTS = {
     "ok",
   ],
   studio_create_document: ["id", "_id", "documentId", "folderId", "title", "name"],
+  studio_patch_document: ["id", "_id", "documentId", "applied", "replacements", "title"],
+  studio_update_document: ["id", "_id", "documentId", "folderId", "title", "name"],
   studio_bulk_move: ["moved", "errors", "count", "targetFolderId"],
   studio_trash: ["trashed", "kind", "id", "ok"],
   studio_create_folder: ["folderId", "id", "name", "path", "parentId"],

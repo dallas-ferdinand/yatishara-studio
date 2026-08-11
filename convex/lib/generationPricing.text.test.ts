@@ -37,6 +37,33 @@ describe("measured text usage pricing", () => {
     ).toBe(0.44);
   });
 
+  it("bills BytePlus cache-hit tokens at cache-read COGS (not full input)", () => {
+    // 10k cache-read @ $0.10/M + 2k output @ $3.00/M = $0.007 USD
+    // ×10 FX ×2 markup ≈ TT$0.14 → ceil to TT$0.15 on float noise
+    expect(
+      textSellPriceFromUsageTtd({
+        cacheReadTokens: 10_000,
+        outputTokens: 2_000,
+      }),
+    ).toBe(0.15);
+    // Same tokens all billed as input would be TT$0.22 — cache must be cheaper
+    expect(
+      textSellPriceFromUsageTtd({
+        inputTokens: 10_000,
+        outputTokens: 2_000,
+      }),
+    ).toBe(0.22);
+  });
+
+  it("bills cache-write tokens at input rate", () => {
+    // 10k cache-write @ $0.50/M = $0.005 → ×20 = TT$0.10
+    expect(
+      textSellPriceFromUsageTtd({
+        cacheWriteTokens: 10_000,
+      }),
+    ).toBe(0.1);
+  });
+
   it("bills DM Improve at Seed Mini list rates", () => {
     // 10k @ $0.10/M + 2k @ $0.40/M = $0.0018 → ×20 = TT$0.036 → ceil 0.04
     expect(
