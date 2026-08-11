@@ -158,14 +158,24 @@ export const agentWorkerCallback = httpAction(async (ctx, request) => {
 
     if (request.method === "POST" && path.endsWith("/agent-worker/plan-sync")) {
       const body = await readJsonBody<{
-        runId: string;
-        planJson: string;
+        runId?: string;
+        threadId?: string;
+        planJson?: string;
+        todosJson?: string;
       }>(request);
-      if (!body.runId) return errorResponse("runId required", 400);
-      await ctx.runMutation(internal.agentRuns.setPlanJson, {
-        runId: body.runId as Id<"agentRuns">,
-        planJson: String(body.planJson || "{}"),
-      });
+      const boardJson = String(body.todosJson || body.planJson || "{}");
+      if (body.runId) {
+        await ctx.runMutation(internal.agentRuns.setPlanJson, {
+          runId: body.runId as Id<"agentRuns">,
+          planJson: boardJson,
+        });
+      }
+      if (body.threadId) {
+        await ctx.runMutation(internal.agentThreads.setTodosInternal, {
+          threadId: body.threadId as Id<"agentThreads">,
+          todosJson: boardJson,
+        });
+      }
       return jsonResponse({ ok: true });
     }
 

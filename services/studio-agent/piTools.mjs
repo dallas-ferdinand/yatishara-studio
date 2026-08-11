@@ -113,6 +113,7 @@ async function fetchImageBlock(url, fallbackMimeType = "") {
  *   onAfterInvoke?: (info: { toolCallId?: string, toolName: string, ok: boolean, result?: any, error?: string }) => Promise<void>,
  *   trajectory?: ReturnType<typeof createTrajectory>,
  *   seedPlan?: { goal?: string, steps?: unknown[] }|null,
+ *   seedBoard?: object|string|null,
  *   onPlanChange?: (snap: object) => void,
  *   onAskRequired?: (info: object) => Promise<any>,
  * }} opts
@@ -129,10 +130,7 @@ export function createStudioPiTools(opts) {
       "marketplace",
     ];
   const localHandlers = opts.localHandlers ?? {};
-  const planStore = createPlanStore();
-  if (opts.seedPlan?.steps?.length) {
-    planStore.set(opts.seedPlan.goal || "", opts.seedPlan.steps);
-  }
+  const planStore = createPlanStore(opts.seedBoard || opts.seedPlan || null);
   if (typeof opts.onPlanChange === "function") {
     planStore.setOnChange(opts.onPlanChange);
   }
@@ -719,16 +717,23 @@ export function createStudioPiTools(opts) {
     name: "plan",
     label: "Plan",
     description:
-      "Required checklist when a job needs 2+ tool steps. Actions: get | set | update | clear. set at start; update to doing/done as you go. Latest TODO reinjects into later tool results.",
-    promptSnippet: "Maintain a short todo plan for multi-step work",
+      "Multi todo-list board for 2+ step jobs. Actions: get | create | set (legacy create) | update_step | add_step | remove_step | set_list_status | rename_list | clear. Keep the active list updated (doing/done). Create a new list + cancelActive when direction fully changes.",
+    promptSnippet: "Maintain todo lists for multi-step work",
     parameters: Type.Object({
       action: Type.Union([
         Type.Literal("get"),
+        Type.Literal("create"),
         Type.Literal("set"),
         Type.Literal("update"),
+        Type.Literal("update_step"),
+        Type.Literal("add_step"),
+        Type.Literal("remove_step"),
+        Type.Literal("set_list_status"),
+        Type.Literal("rename_list"),
         Type.Literal("clear"),
       ]),
       goal: Type.Optional(Type.String()),
+      title: Type.Optional(Type.String()),
       steps: Type.Optional(
         Type.Array(
           Type.Union([
@@ -743,32 +748,69 @@ export function createStudioPiTools(opts) {
         ),
       ),
       id: Type.Optional(Type.String()),
+      listId: Type.Optional(Type.String()),
+      stepId: Type.Optional(Type.String()),
+      text: Type.Optional(Type.String()),
       status: Type.Optional(Type.String()),
+      cancelActive: Type.Optional(Type.Boolean()),
     }),
     async execute(_toolCallId, params) {
       const action = params.action;
       if (action === "get") {
-        return textResultWithTodo({ ok: true, plan: planStore.get() });
+        return textResultWithTodo({
+          ok: true,
+          board: planStore.snapshot(),
+          plan: planStore.get(),
+        });
       }
       if (action === "clear") {
         return textResultWithTodo(planStore.clear());
       }
-      if (action === "set") {
-        const steps = params.steps || [];
-        if (steps.length < 2) {
-          return textResultWithTodo({
-            ok: false,
-            error: "plan set needs 2+ steps (skip plan for one-shot actions)",
-          });
-        }
-        return textResultWithTodo({
-          ok: true,
-          plan: planStore.set(params.goal || "", steps),
-        });
-      }
-      if (action === "update") {
+      if (action === "create" || action === "set") {
         return textResultWithTodo(
-          planStore.update(String(params.id || ""), String(params.status || "")),
+          planStore.create({
+            title: params.title || params.goal || "To-do",
+            steps: params.steps || [],
+            cancelActive: params.cancelActive !== false,
+          }),
+        );
+      }
+      if (action === "update" || action === "update_step") {
+        return textResultWithTodo(
+          planStore.updateStep(
+            params.listId || null,
+            String(params.stepId || params.id || ""),
+            String(params.status || ""),
+          ),
+        );
+      }
+      if (action === "add_step") {
+        return textResultWithTodo(
+          planStore.addStep(params.listId || null, params.text || ""),
+        );
+      }
+      if (action === "remove_step") {
+        return textResultWithTodo(
+          planStore.removeStep(
+            params.listId || null,
+            String(params.stepId || params.id || ""),
+          ),
+        );
+      }
+      if (action === "set_list_status") {
+        return textResultWithTodo(
+          planStore.setListStatus(
+            String(params.listId || params.id || ""),
+            String(params.status || ""),
+          ),
+        );
+      }
+      if (action === "rename_list") {
+        return textResultWithTodo(
+          planStore.renameList(
+            String(params.listId || params.id || ""),
+            params.title || params.goal || "",
+          ),
         );
       }
       return textResultWithTodo({ ok: false, error: "unknown plan action" });

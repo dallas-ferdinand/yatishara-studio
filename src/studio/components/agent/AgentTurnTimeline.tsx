@@ -469,23 +469,6 @@ export function AgentTurnTimeline({
     ],
   );
 
-  const livePlan = useMemo(() => {
-    const withPlan = [...runs]
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .find((r) => r.planJson);
-    if (!withPlan?.planJson) return null;
-    try {
-      const parsed = JSON.parse(withPlan.planJson) as {
-        goal?: string;
-        steps?: Array<{ id: string; text: string; status: string }>;
-      };
-      if (!parsed?.steps?.length) return null;
-      return parsed;
-    } catch {
-      return null;
-    }
-  }, [runs]);
-
   const assetIds = useMemo(
     () => collectAssetIds(turns, pendingAttachments),
     [turns, pendingAttachments],
@@ -539,34 +522,6 @@ export function AgentTurnTimeline({
           thumbById={thumbById}
         />
       ))}
-      {livePlan ? (
-        <div className="studio-agent-todo-card" aria-label="Agent todo list">
-          <p className="studio-agent-todo-kicker">To-do</p>
-          {livePlan.goal ? (
-            <p className="studio-agent-todo-goal">{livePlan.goal}</p>
-          ) : null}
-          <ul className="studio-agent-todo-list">
-            {livePlan.steps.map((step) => (
-              <li
-                key={step.id}
-                className={`is-${step.status || "pending"}`}
-                data-status={step.status || "pending"}
-              >
-                <span className="studio-agent-todo-mark" aria-hidden="true">
-                  {step.status === "done"
-                    ? "✓"
-                    : step.status === "doing"
-                      ? "→"
-                      : step.status === "blocked"
-                        ? "!"
-                        : "○"}
-                </span>
-                <span>{step.text}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
       {(pendingQuestions.length ? pendingQuestions : recentQuestions.slice(-1)).map(
         (q) => (
           <AgentQuestionStep

@@ -11,6 +11,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { ArrowUp, Loader2, Mic, Paperclip, RotateCcw, Settings, Square } from "lucide-react";
 import { toast } from "sonner";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdFromCredits } from "@/studio/lib/money";
 import {
@@ -19,10 +20,13 @@ import {
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { StudioEmptyLogoButton } from "./StudioEmptyLogoButton";
 import { AgentTurnTimeline } from "./agent/AgentTurnTimeline";
+import { AgentChatHeader } from "./agent/AgentChatHeader";
+import { AgentChatSidebar } from "./agent/AgentChatSidebar";
 import "./studio-messages.css";
 import "./studio-agent.css";
 
 const AGENT_ATTACH_EVENT = "studio-agent-attach";
+const AGENT_INFO_OPEN_KEY = "studio-agent-info-sidebar-open";
 
 type AgentAttachment = {
   id: string;
@@ -495,6 +499,7 @@ export function StudioAgentPane({
   isMobile = false,
 }: StudioAgentPaneProps) {
   const createThread = useMutation(api.agentThreads.create);
+  const renameThread = useMutation(api.agentThreads.rename);
   const decideApproval = useMutation(api.agentApprovals.decide);
   const answerQuestions = useMutation(api.agentQuestions.answer);
   const cancelRun = useMutation(api.agentRuns.requestCancel);
@@ -517,6 +522,14 @@ export function StudioAgentPane({
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [activeRunId, setActiveRunId] = useState<Id<"agentRuns"> | null>(null);
+  const [infoOpen, setInfoOpen] = useState(() => {
+    if (typeof window === "undefined" || isMobile) return false;
+    try {
+      return window.localStorage.getItem(AGENT_INFO_OPEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const streamRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -529,6 +542,10 @@ export function StudioAgentPane({
 
   const messages = useQuery(
     api.agentThreads.listMessages,
+    activeThreadId ? { threadId: activeThreadId } : "skip",
+  );
+  const threadMeta = useQuery(
+    api.agentThreads.get,
     activeThreadId ? { threadId: activeThreadId } : "skip",
   );
   const approvals = useQuery(
@@ -937,8 +954,36 @@ export function StudioAgentPane({
   const composerLocked = busy || awaitingApproval;
   const canSend = (Boolean(draft.trim()) || attachments.length > 0) && !composerLocked;
 
-  return (
-    <div className="studio-agent-pane" data-studio-agent="">
+  useEffect(() => {
+    if (isMobile) return;
+    try {
+      window.localStorage.setItem(AGENT_INFO_OPEN_KEY, infoOpen ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [infoOpen, isMobile]);
+
+  useEffect(() => {
+    if (isMobile) setInfoOpen(false);
+  }, [activeThreadId, isMobile]);
+
+  const chatColumn = (
+    <div className="studio-agent-chat-column">
+      {activeThreadId ? (
+        <AgentChatHeader
+          title={threadMeta?.title || "Agent chat"}
+          busy={busy}
+          sidebarOpen={infoOpen}
+          onRename={async (title) => {
+            try {
+              await renameThread({ threadId: activeThreadId, title });
+            } catch (error) {
+              toast.error(friendlyConvexError(error, "Could not rename chat"));
+            }
+          }}
+          onToggleSidebar={() => setInfoOpen((open) => !open)}
+        />
+      ) : null}
       <div className="studio-chat-render-area">
         <div
           className="studio-chat-stream"
@@ -1126,6 +1171,58 @@ export function StudioAgentPane({
           </div>
         </footer>
       </div>
+    </div>
+  );
+
+  const infoSidebar =
+    activeThreadId && infoOpen ? (
+      <AgentChatSidebar
+        threadId={activeThreadId}
+        open={infoOpen}
+        onClose={() => setInfoOpen(false)}
+        creditPriceCents={pricing?.creditPriceCents}
+        agentBusy={busy}
+        variant={isMobile ? "sheet" : "docked"}
+      />
+    ) : null;
+
+  if (isMobile || !infoOpen || !activeThreadId) {
+    return (
+      <div className="studio-agent-pane" data-studio-agent="">
+        {chatColumn}
+        {infoSidebar}
+      </div>
+    );
+  }
+
+  return (
+    <div className="studio-agent-pane is-split" data-studio-agent="">
+      <PanelGroup
+        direction="horizontal"
+        autoSaveId="studio-agent-info-h"
+        className="studio-agent-info-panels h-full min-h-0 min-w-0 overflow-hidden"
+      >
+        <Panel
+          id="studio-agent-chat"
+          order={1}
+          defaultSize={72}
+          minSize={45}
+          className="min-h-0 min-w-0"
+        >
+          {chatColumn}
+        </Panel>
+        <PanelResizeHandle className="cursor-resize" />
+        <Panel
+          id="studio-agent-info"
+          order={2}
+          defaultSize={28}
+          minSize={20}
+          maxSize={40}
+          className="min-h-0 min-w-0"
+        >
+          {infoSidebar}
+        </Panel>
+      </PanelGroup>
     </div>
   );
 }

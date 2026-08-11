@@ -1828,6 +1828,8 @@ export default defineSchema({
   agentThreads: defineTable({
     ownerId: v.id("users"),
     title: v.string(),
+    /** Multi todo-list board JSON — see agentPlan board shape */
+    todosJson: v.optional(v.string()),
     archivedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

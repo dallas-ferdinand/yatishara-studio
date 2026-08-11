@@ -362,6 +362,12 @@ export const sendTurn = action({
       model: usedByok && byokProvider ? `byok:${byokProvider}` : "platform",
     });
 
+    const threadRow = await ctx.runQuery(api.agentThreads.get, {
+      threadId: args.threadId,
+    });
+    const seedTodosJson =
+      args.seedPlanJson || threadRow?.todosJson || undefined;
+
     const capabilityToken = mintCapabilityToken();
     const tokenHash = await hashApiKey(capabilityToken);
     const scopes = [
@@ -420,6 +426,7 @@ export const sendTurn = action({
           byokFallbackNote,
           catalogVersion: "2026-08-11.1",
           seedPlanJson: args.seedPlanJson,
+          seedTodosJson,
         }),
       });
 

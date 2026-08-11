@@ -158,6 +158,7 @@ async function runPiTurn(body, abortSignal) {
     workerCallbackToken,
     byokFallbackNote,
     seedPlanJson,
+    seedTodosJson,
   } = body;
 
   if (!capabilityToken) {
@@ -203,12 +204,13 @@ async function runPiTurn(body, abortSignal) {
       message: String(message || ""),
     });
 
-    let seedPlan = null;
-    if (seedPlanJson) {
+    let seedBoard = null;
+    const boardRaw = seedTodosJson || seedPlanJson;
+    if (boardRaw) {
       try {
-        seedPlan = typeof seedPlanJson === "string" ? JSON.parse(seedPlanJson) : seedPlanJson;
+        seedBoard = typeof boardRaw === "string" ? JSON.parse(boardRaw) : boardRaw;
       } catch {
-        seedPlan = null;
+        seedBoard = boardRaw;
       }
     }
 
@@ -225,12 +227,14 @@ async function runPiTurn(body, abortSignal) {
           "marketplace",
         ],
       trajectory,
-      seedPlan,
+      seedBoard,
       getBearerToken: async () => capabilityToken,
       onPlanChange: (snap) => {
-        if (!runId || !callbackBase) return;
+        if (!callbackBase) return;
         void callback(callbackBase, workerCallbackToken, "plan-sync", {
           runId,
+          threadId,
+          todosJson: JSON.stringify(snap),
           planJson: JSON.stringify(snap),
         });
       },
@@ -389,7 +393,8 @@ async function runPiTurn(body, abortSignal) {
       "Video models: only from studio_list_video_models (or known slugs seedance-2.5 / seedance-2.0). Talk about motion/light/res/length. Never invent caps, features, or legacy/pipeline marketing.",
       "Bias to action: for vague creative asks, assume strong defaults and DO the next useful tool step (usually estimate, then generate → approval). Do not offer a menu of options.",
       "Assumptions: pick model seedance-2.5, duration ~8s (clamp to model max), aspect from attached still or 16:9, cinematic unless they said hypermotion/chaos. Disclose assumptions in one short line after tools run.",
-      "TODO: if the job needs 2+ tool steps, call plan {action:\"set\", goal, steps:[...]} first. Mark steps doing/done with plan update as you go. The latest TODO is reinjected on every tool result — follow it.",
+      "TODO: if the job needs 2+ tool steps, call plan {action:\"create\", title, steps:[...]} first (cancelActive true if replacing direction). Mark steps doing/done with update_step as you go. add_step/remove_step/set_list_status when needed. Latest board reinjects on every tool result.",
+      "Before your final reply this turn: update the active todo list to match real progress (doing/done). If the user cancelled the direction, set_list_status cancelled and create a new list if still working.",
       "ask: only for material unknowns (aspect/subject/direction that would change the gen). 1–4 multi-choice questions, then stop. Never ask readiness menus.",
       "Clarify only for material unknowns. Prefer estimate first, then ask if needed — never a laundry list before acting.",
       "Never end with 'Would you like me to A, B, or C?' — pick the best next step and invoke it.",
@@ -404,8 +409,8 @@ async function runPiTurn(body, abortSignal) {
       "inspect: only for pixels beyond attached vision; max 8; videos → pull frames first.",
       "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets. No ids/JSON/debug talk.",
       "remember for durable prefs. Admin only if admin. Never touch other users' data.",
-      seedPlan?.steps?.length
-        ? `Existing TODO to continue:\n${JSON.stringify(seedPlan)}`
+      seedBoard
+        ? `Existing TODO board (continue/update):\n${typeof seedBoard === "string" ? seedBoard : JSON.stringify(seedBoard).slice(0, 2500)}`
         : "",
       lane,
       byokFallbackNote || "",

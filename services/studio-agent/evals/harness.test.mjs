@@ -183,8 +183,19 @@ test("plan store formats and updates", () => {
   assert.match(store.formatBlock(), /\[~\] s1: share/);
   store.update("s1", "done");
   assert.equal(store.get().open, 1);
+  const created = store.create({
+    title: "New direction",
+    steps: ["estimate", "generate", "review"],
+    cancelActive: true,
+  });
+  assert.equal(created.ok, true);
+  assert.equal(store.snapshot().lists.length, 2);
+  assert.equal(
+    store.snapshot().lists.find((l) => l.title === "Ship post")?.status,
+    "cancelled",
+  );
   store.clear();
-  assert.equal(store.get().steps.length, 0);
+  assert.equal(store.snapshot().lists.length, 0);
   assert.equal(store.formatBlock(), "");
 });
 
