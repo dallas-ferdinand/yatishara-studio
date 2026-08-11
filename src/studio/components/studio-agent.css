@@ -152,11 +152,14 @@
 .studio-agent-pane .studio-chat-bubble.is-assistant,
 .studio-agent-pane .studio-chat-bubble.is-system {
   margin-right: 0;
-  background: var(--mos-plate, var(--mos-panel, #ececf0));
+  /* Clean reply surface — no heavy plate fighting light-mode text. */
+  background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border-color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 12%, transparent);
-  color: var(--mos-ink, var(--color-cursor-text));
+  border: 0;
+  box-shadow: none;
+  padding: 2px 4px;
+  color: var(--mos-ink, var(--color-cursor-text, #1a1a1e));
 }
 
 .studio-agent-pane .studio-chat-bubble.is-assistant .studio-chat-text,
@@ -164,13 +167,92 @@
 .studio-agent-pane .studio-chat-bubble.is-assistant .studio-chat-markdown-bit,
 .studio-agent-pane .studio-chat-bubble.is-assistant .mos-md,
 .studio-agent-pane .studio-chat-bubble.is-assistant .md-prose {
-  color: var(--mos-ink, var(--color-cursor-text));
+  /* Override mos-markdown dark-chat defaults so light mode stays readable. */
+  --mos-text: var(--mos-ink, var(--color-cursor-text, #1a1a1e));
+  --mos-muted: color-mix(in srgb, var(--mos-ink, #1a1a1e) 58%, transparent);
+  --mos-accent: var(--cursor-accent, var(--mos-accent, #3b82f6));
+  color: var(--mos-text);
+  font-size: 14px;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md strong,
+.studio-agent-pane .studio-chat-bubble.is-assistant .md-prose strong {
+  color: inherit;
+  font-weight: 650;
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md em,
+.studio-agent-pane .studio-chat-bubble.is-assistant .md-prose em {
+  color: inherit;
+  opacity: 0.88;
+  font-style: italic;
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md a,
+.studio-agent-pane .studio-chat-bubble.is-assistant .md-prose a {
+  color: var(--cursor-accent, var(--mos-accent, #2563eb));
+  border-bottom-color: color-mix(in srgb, var(--cursor-accent, #2563eb) 35%, transparent);
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md :where(p, ul, ol, pre, blockquote) {
+  margin: 0 0 0.55em;
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md :where(p:last-child, ul:last-child, ol:last-child, pre:last-child, blockquote:last-child) {
+  margin-bottom: 0;
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md :where(ul, ol) {
+  padding-left: 1.15em;
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md li + li {
+  margin-top: 0.2em;
+}
+
+/* Filename / path backticks → neat readable chips, not harsh mono blocks. */
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md code,
+.studio-agent-pane .studio-chat-bubble.is-assistant .md-prose code {
+  font-family: inherit;
+  font-size: 0.92em;
+  font-weight: 550;
+  color: var(--mos-text);
+  background: color-mix(in srgb, var(--mos-ink, #111) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 11%, transparent);
+  border-radius: 999px;
+  padding: 0.12em 0.55em;
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-md pre code,
+.studio-agent-pane .studio-chat-bubble.is-assistant .md-prose pre code,
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-code-body code {
+  font-family: var(--mos-mono, ui-monospace, monospace);
+  font-weight: 450;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  color: inherit;
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant code,
+.studio-agent-pane .studio-chat-bubble.is-assistant pre {
+  color: inherit;
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant .mos-code,
+.studio-agent-pane .studio-chat-bubble.is-assistant .code-shell,
+.studio-agent-pane .studio-chat-bubble.is-assistant pre {
+  background: color-mix(in srgb, var(--mos-ink, #111) 5%, transparent);
+  border-color: color-mix(in srgb, var(--mos-ink, #111) 10%, transparent);
 }
 
 [data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-assistant,
 [data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-system {
-  background: var(--mos-plate, #fff);
-  border-color: color-mix(in srgb, #000 10%, transparent);
+  background: transparent;
+  border: 0;
   color: #1a1a1e;
 }
 
@@ -179,21 +261,23 @@
 [data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-assistant .studio-chat-markdown-bit,
 [data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-assistant .mos-md,
 [data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-assistant .md-prose {
+  --mos-text: #1a1a1e;
+  --mos-muted: color-mix(in srgb, #1a1a1e 55%, transparent);
   color: #1a1a1e;
-}
-
-.studio-agent-pane .studio-chat-bubble.is-assistant code,
-.studio-agent-pane .studio-chat-bubble.is-assistant pre {
-  color: inherit;
-  background: color-mix(in srgb, var(--mos-ink, #111) 8%, transparent);
-  border-color: color-mix(in srgb, var(--mos-ink, #111) 12%, transparent);
 }
 
 [data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-assistant code,
 [data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-assistant pre {
   color: #1a1a1e;
+  background: color-mix(in srgb, #000 5%, #fff);
+  border-color: color-mix(in srgb, #000 10%, transparent);
+}
+
+[data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-assistant .mos-md code,
+[data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-assistant .md-prose code {
   background: color-mix(in srgb, #000 6%, #fff);
-  border-color: color-mix(in srgb, #000 12%, transparent);
+  border-color: color-mix(in srgb, #000 10%, transparent);
+  color: #1a1a1e;
 }
 
 /* Empty Agent: true vertical center in the chat area (above composer). */

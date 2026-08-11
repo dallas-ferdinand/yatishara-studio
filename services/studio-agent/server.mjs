@@ -350,6 +350,7 @@ async function runPiTurn(body, abortSignal) {
       "Admin tools only if this user is admin. Never access other users' data.",
       "Use remember for durable preferences/decisions.",
       "Never say Done unless a tool actually succeeded. If a tool fails, report the error.",
+      "Reply in clean readable markdown: short paragraphs, bold for key names, light lists when useful. Prefer plain file/folder names in prose (or one bold name) — avoid stacking every filename in backticks.",
       byokFallbackNote || "",
       memoryBlock,
     ]
