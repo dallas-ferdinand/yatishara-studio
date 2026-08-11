@@ -14,9 +14,9 @@ export const INTENT_BLURBS = {
   studio_create_document:
     "Create a Script (.md) in a folder. Args:{folderId,title,contentMarkdown}. contentMarkdown REQUIRED and non-empty for prompts/scripts. Never remember script bodies. Include References: asset lines. Default folderId=CWD.",
   studio_patch_document:
-    "Preferred for small Script edits. Args:{documentId,oldString,newString} or edits[{oldString,newString,replaceAll?}]. Exact search/replace — cheap vs full rewrite. Fail if oldString missing/ambiguous.",
+    "DEFAULT for creator edits (add/fix/longer/tweak). Args:{documentId,oldString,newString} or edits[]. Exact search/replace — never rewrite whole Script for a small ask.",
   studio_update_document:
-    "Full Script rewrite/rename/move. Args:{documentId,title?,contentMarkdown?,folderId?}. Prefer studio_patch_document for small changes; use this to fill empty scripts or replace most of the body.",
+    "Full rewrite/rename/move ONLY. Args:{documentId,title?,contentMarkdown?,folderId?}. Use for empty body or explicit rewrite/from scratch — otherwise studio_patch_document.",
   studio_get_document:
     "Read a Script by id (includes contentMarkdown).",
   studio_bulk_move:
@@ -80,6 +80,21 @@ export function detectActionLane(message, workingSet) {
   if (/\b(post|publish|share\s+(this|it|to\s+(feed|profile|public)))\b/.test(text) && hasAsset) {
     return "LANE: invoke studio_share_asset_post with attached asset id (+ optional caption). Do not advise; do not claim unavailable unless invoke fails.";
   }
+
+  // Surgical edits MUST win over create-prompt (e.g. "make it a longer prompt").
+  const editAsk =
+    /\b(make\s+it\s+(longer|shorter|better)|longer\s+(prompt|script)|shorten|add\s+(a\s+|more\s+|the\s+)?|fix\s+(it|this|that|the)\b|edit\s+(it|this|that|the)\b|change\s+(it|this|that|the|only)\b|update\s+(it|this|that|the)\b|tweak|revise|insert\s+|remove\s+|delete\s+the\b|expand\s+(it|this|that|the)\b|trim\s+)\b/.test(
+      text,
+    ) ||
+    /\b(it'?s\s+empty|fill\s+(it|this)|that\s+(prompt|script)|the\s+(prompt|script)|existing\s+(prompt|script)|this\s+(prompt|script))\b/.test(
+      text,
+    ) ||
+    (/\b(improve|optimize)\b/.test(text) &&
+      /\b(it|this|that|the\s+(prompt|script))\b/.test(text));
+  if (editAsk) {
+    return "LANE: EDIT existing Script — get real documentId (CWD index / folder_contents), studio_get_document, then studio_patch_document with exact oldString→newString for ONLY the asked change. Preserve ``` fence, headings, References, and everything they did not mention. Never studio_update_document full rewrite unless the body is empty or they explicitly asked rewrite/from scratch. Never create a second Script with the same title.";
+  }
+
   // Prompt craft before generate — progressive skill load + save as editable doc
   if (/\b(hyper[\s-]?motion|whip|smash|fpv)\b/.test(text)) {
     return "LANE: skills {id:\"prompt-hypermotion\"} then craft a sealed production prompt. Save via studio_create_document to CWD. Paste in chat only if they asked to see/copy it. Prefer videoModel seedance-2.5. Studio branding only.";
@@ -88,13 +103,19 @@ export function detectActionLane(message, workingSet) {
     && /\b(prompt|video|clip|ad|shot)\b/.test(text)) {
     return "LANE: skills {id:\"prompt-cinematic\"} then craft sealed prompt → studio_create_document in CWD. Chat paste only if asked. Prefer videoModel seedance-2.5.";
   }
-  if (/\b(write|craft|improve|optimize|make|give|create)\b.{0,40}\b(prompt|script)\b/.test(text)
-    || /\b(prompt|script)\b.{0,40}\b(for|for\s+me|please)\b/.test(text)
-    || /\b(image|product|hero|still|video|ad)\b.{0,40}\b(prompt|script)\b/.test(text)
-    || /\b(prompt|script)\b.{0,40}\b(image|product|hero|still|video|ad)\b/.test(text)
-    || /\bcreate a script\b/.test(text)
-    || /\bshot script\b/.test(text)) {
-    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt/script. ALWAYS studio_create_document {folderId:CWD, title:\"Prompt — …\" or \"Script — …\", contentMarkdown NON-EMPTY with ```text fence + References: asset lines}. If file exists empty/wrong: studio_update_document (full) or studio_patch_document (small edits). NEVER remember the script body. Do not dump the full prompt in chat unless they asked to see/copy it.";
+  if (
+    !editAsk &&
+    (/\b(write|craft|create|give)\b.{0,40}\b(prompt|script)\b/.test(text) ||
+      /\b(prompt|script)\b.{0,40}\b(for|for\s+me|please)\b/.test(text) ||
+      /\b(image|product|hero|still|video|ad)\b.{0,40}\b(prompt|script)\b/.test(text) ||
+      /\b(prompt|script)\b.{0,40}\b(image|product|hero|still|video|ad)\b/.test(text) ||
+      /\bcreate a script\b/.test(text) ||
+      /\bshot script\b/.test(text) ||
+      // "make a prompt" (new) but not "make it longer"
+      (/\bmake\b.{0,40}\b(prompt|script)\b/.test(text) &&
+        !/\bmake\s+it\b/.test(text)))
+  ) {
+    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt/script. If CWD already has a Prompt/Script → EDIT with studio_patch_document (or update only if empty). Else studio_create_document {folderId:CWD, title:\"Prompt — …\" or \"Script — …\", contentMarkdown NON-EMPTY with ```text fence + References: asset lines}. NEVER remember the script body. Do not dump the full prompt in chat unless they asked to see/copy it.";
   }
   if (/\b(generat(e|ing)|creat(e|ing)|make|draw|render)\b.{0,40}\b(image|picture|photo|still|art)\b/.test(text)
     || /\b(image|picture|photo)\b.{0,40}\b(generat|creat|make|draw|render)/.test(text)) {

@@ -57,6 +57,24 @@ export const GOLDEN_TASKS = [
     expectSkill: "prompt-image",
   },
   {
+    id: "edit-make-longer",
+    message: "make it a longer prompt",
+    workingSet: [],
+    expectLaneIncludes: "studio_patch_document",
+  },
+  {
+    id: "edit-add-section",
+    message: "add a camera move to that script",
+    workingSet: [],
+    expectLaneIncludes: "studio_patch_document",
+  },
+  {
+    id: "edit-fix-line",
+    message: "fix the audio line in the prompt",
+    workingSet: [],
+    expectLaneIncludes: "studio_patch_document",
+  },
+  {
     id: "move-items",
     message: "move this into that folder",
     workingSet: [
