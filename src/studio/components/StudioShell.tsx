@@ -759,6 +759,7 @@ function snapshotComposerContextFields({
 const PERSISTABLE_TAB_PREFIXES = [
   "composer:",
   "thread:",
+  "agent:",
   "feed:",
   "messages:",
   "files:",
@@ -1642,6 +1643,7 @@ export function StudioShell({
   const restoreMobileFilesAfterKeyboardRef = useRef(null);
   const composerKeyRef = useRef(initialComposerKey);
   const composerTabIndexRef = useRef(0);
+  const agentTabIndexRef = useRef(0);
   const createTabIndexRef = useRef(0);
   const lastChatTabRef = useRef(
     (() => {
@@ -3886,6 +3888,7 @@ export function StudioShell({
       tabDescriptor({
         key,
         threads,
+        agentThreads,
         assets: assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? assets),
         documents,
         videoEdits,
@@ -3904,6 +3907,7 @@ export function StudioShell({
   }, [
     openTabs,
     threads,
+    agentThreads,
     assetLookupPool,
     assetsWithPreviewUrls,
     assets,
@@ -4354,6 +4358,19 @@ export function StudioShell({
     openPublicProfile(username);
   }
 
+  useEffect(() => {
+    if (typeof activeTab !== "string" || !activeTab.startsWith("agent:")) return;
+    const id = activeTab.slice("agent:".length);
+    if (!id || id === "main" || id.startsWith("new:")) {
+      // Blank agent tab — keep current thread null until first send.
+      if (id === "main" || id.startsWith("new:")) {
+        setActiveAgentThreadId(null);
+      }
+      return;
+    }
+    setActiveAgentThreadId((current) => (current === id ? current : id));
+  }, [activeTab]);
+
   function openAgent() {
     void import("./StudioAgentPane");
     setSettingsOpen(false);
@@ -4366,7 +4383,9 @@ export function StudioShell({
       mobileBackStack.release("files-dock");
       setFilesDockExpanded(false);
     }
-    openTab(AGENT_TAB);
+    // Prefer an existing agent tab; otherwise open the main Agent tab.
+    const existingAgentTab = openTabs.find((tab) => tab.startsWith("agent:"));
+    openTab(existingAgentTab || AGENT_TAB);
     prefetchStudioSurface("agent");
   }
 
@@ -4456,11 +4475,42 @@ export function StudioShell({
     if (isMobile) setMobileSection("composer");
   }
 
+  /** Agent control: open Agent, or another Agent tab if already there. */
+  function activateAgentControl() {
+    setHistoryOpen(false);
+    setSettingsOpen(false);
+    setMobileAppMenuOpen(false);
+    if (typeof activeTab === "string" && activeTab.startsWith("agent:")) {
+      openNewAgentTab();
+      return;
+    }
+    openAgent();
+  }
+
+  function openNewAgentTab() {
+    agentTabIndexRef.current += 1;
+    setActiveAgentThreadId(null);
+    openTab(`agent:new:${agentTabIndexRef.current}`);
+  }
+
+  function bindAgentThreadTab(threadId) {
+    if (!threadId) return;
+    const to = `agent:${threadId}`;
+    const from = activeTab;
+    setActiveAgentThreadId(threadId);
+    if (typeof from === "string" && from.startsWith("agent:")) {
+      replaceTabKey(from, to);
+      setActiveTab(to);
+      return;
+    }
+    openTab(to);
+  }
+
   function openAgentHistoryThread(thread) {
     const id = thread?._id ?? thread;
     if (!id) return;
     setActiveAgentThreadId(id);
-    openTab(AGENT_TAB);
+    openTab(`agent:${id}`);
     setHistoryOpen(false);
     if (isMobile) setMobileSection("composer");
   }
@@ -24050,9 +24100,11 @@ export function StudioShell({
                       className={`studio-settings-pill studio-settings-trigger${
                         isAgentRail ? " is-active" : ""
                       }`}
-                      onClick={openAgent}
-                      aria-label="Open Agent Mode"
-                      title="Agent"
+                      onClick={activateAgentControl}
+                      aria-label={
+                        isAgentRail ? "New agent tab" : "Open Agent Mode"
+                      }
+                      title={isAgentRail ? "New agent tab" : "Agent"}
                       aria-pressed={isAgentRail}
                     >
                       <Bot className="h-3.5 w-3.5" aria-hidden="true" />
@@ -24890,9 +24942,11 @@ export function StudioShell({
                       className={`studio-settings-pill studio-settings-trigger${
                         isAgentRail ? " is-active" : ""
                       }`}
-                      onClick={openAgent}
-                      aria-label="Open Agent Mode"
-                      title="Agent"
+                      onClick={activateAgentControl}
+                      aria-label={
+                        isAgentRail ? "New agent tab" : "Open Agent Mode"
+                      }
+                      title={isAgentRail ? "New agent tab" : "Agent"}
                       aria-pressed={isAgentRail}
                     >
                       <Bot className="h-3.5 w-3.5" aria-hidden="true" />
@@ -25397,6 +25451,8 @@ export function StudioShell({
             onOpenAgentSettings={() => openSettingsTab("agent")}
             activeAgentThreadId={activeAgentThreadId}
             onActiveAgentThreadChange={setActiveAgentThreadId}
+            onBindAgentThreadTab={bindAgentThreadTab}
+            onOpenNewAgentTab={openNewAgentTab}
           />
         </section>
         {typeof activeTab === "string" &&
@@ -31560,6 +31616,8 @@ function ActivePane({
   onOpenAgentSettings,
   activeAgentThreadId = null,
   onActiveAgentThreadChange,
+  onBindAgentThreadTab,
+  onOpenNewAgentTab,
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
   const feedPostId = activeTab.startsWith("feed:")
@@ -31744,6 +31802,8 @@ function ActivePane({
         onActiveThreadChange={onActiveAgentThreadChange}
         onOpenCreate={onOpenCreate}
         onOpenAgentSettings={onOpenAgentSettings}
+        onBindThreadTab={onBindAgentThreadTab}
+        onOpenNewAgentTab={onOpenNewAgentTab}
       />
     </div>
   );
@@ -36613,6 +36673,7 @@ function virtualFileName(name, ext) {
 function tabDescriptor({
   key,
   threads,
+  agentThreads,
   assets,
   documents,
   videoEdits,
@@ -36625,6 +36686,19 @@ function tabDescriptor({
 }) {
   if (key.startsWith("composer:")) {
     return { key, kind: "chat", title: key === COMPOSER_TAB ? "Generate" : "New request", status: "ready" };
+  }
+  if (key.startsWith("agent:")) {
+    const agentId = key.slice("agent:".length);
+    if (!agentId || agentId === "main" || agentId.startsWith("new:")) {
+      return { key, kind: "chat", title: "Agent", status: "ready" };
+    }
+    const thread = (agentThreads ?? []).find((row) => row._id === agentId);
+    const title =
+      String(thread?.title ?? "").trim() &&
+      String(thread?.title ?? "").trim() !== "New agent chat"
+        ? String(thread.title).trim().slice(0, 48)
+        : "Agent chat";
+    return { key, kind: "chat", title, status: "ready" };
   }
   if (key.startsWith("post:compose:")) {
     const assetId = key.slice("post:compose:".length).trim();

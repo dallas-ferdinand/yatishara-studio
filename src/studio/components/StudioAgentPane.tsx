@@ -17,6 +17,9 @@ type StudioAgentPaneProps = {
   onActiveThreadChange: (id: Id<"agentThreads"> | null) => void;
   onOpenCreate?: () => void;
   onOpenAgentSettings?: () => void;
+  /** After minting a thread, promote agent:main → agent:<id> like Create→thread. */
+  onBindThreadTab?: (threadId: Id<"agentThreads">) => void;
+  onOpenNewAgentTab?: () => void;
 };
 
 export function StudioAgentPane({
@@ -24,6 +27,8 @@ export function StudioAgentPane({
   onActiveThreadChange,
   onOpenCreate,
   onOpenAgentSettings,
+  onBindThreadTab,
+  onOpenNewAgentTab,
 }: StudioAgentPaneProps) {
   const createThread = useMutation(api.agentThreads.create);
   const decideApproval = useMutation(api.agentApprovals.decide);
@@ -58,12 +63,19 @@ export function StudioAgentPane({
     if (activeThreadId) return activeThreadId;
     const id = await createThread({});
     onActiveThreadChange(id);
+    onBindThreadTab?.(id);
     return id;
-  }, [activeThreadId, createThread, onActiveThreadChange]);
+  }, [activeThreadId, createThread, onActiveThreadChange, onBindThreadTab]);
 
   async function handleNewChat() {
+    if (onOpenNewAgentTab) {
+      onOpenNewAgentTab();
+      setDraft("");
+      return;
+    }
     const id = await createThread({});
     onActiveThreadChange(id);
+    onBindThreadTab?.(id);
     setDraft("");
   }
 
