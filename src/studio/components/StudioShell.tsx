@@ -31539,6 +31539,10 @@ function ActivePane({
         onOpenAgentSettings={onOpenAgentSettings}
         onBindThreadTab={onBindAgentThreadTab}
         onOpenNewAgentTab={onOpenNewAgentTab}
+        onOpenFolder={(folderId) => {
+          setActiveFolderId(folderId);
+          openFiles();
+        }}
         isMobile={isMobileLayout}
       />
     </div>

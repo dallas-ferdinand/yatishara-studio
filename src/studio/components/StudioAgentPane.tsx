@@ -9,10 +9,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { ArrowUp, Check, Loader2, Plus, RotateCcw, Settings, Square, Wrench, X } from "lucide-react";
+import { ArrowUp, Loader2, Plus, RotateCcw, Settings, Square } from "lucide-react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { StudioEmptyLogoButton } from "./StudioEmptyLogoButton";
+import { AgentTurnTimeline } from "./agent/AgentTurnTimeline";
 import "./studio-messages.css";
 import "./studio-agent.css";
 
@@ -23,6 +24,7 @@ type StudioAgentPaneProps = {
   /** After minting a thread, promote agent:main → agent:<id> like Create→thread. */
   onBindThreadTab?: (threadId: Id<"agentThreads">) => void;
   onOpenNewAgentTab?: () => void;
+  onOpenFolder?: (folderId: Id<"folders">) => void;
   isMobile?: boolean;
 };
 
@@ -40,6 +42,7 @@ export function StudioAgentPane({
   onOpenAgentSettings,
   onBindThreadTab,
   onOpenNewAgentTab,
+  onOpenFolder,
   isMobile = false,
 }: StudioAgentPaneProps) {
   const createThread = useMutation(api.agentThreads.create);
@@ -49,6 +52,7 @@ export function StudioAgentPane({
   const retryRun = useAction(api.agentActions.retryRun);
 
   const [draft, setDraft] = useState("");
+  const [pendingUserText, setPendingUserText] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [activeRunId, setActiveRunId] = useState<Id<"agentRuns"> | null>(null);
   const streamRef = useRef<HTMLDivElement | null>(null);
@@ -72,10 +76,10 @@ export function StudioAgentPane({
     activeThreadId ? { threadId: activeThreadId, limit: 8 } : "skip",
   );
 
-  const pendingApprovals = useMemo(
-    () => (approvals ?? []).filter((row) => row.status === "pending"),
-    [approvals],
-  );
+  const hasTurns = useMemo(() => {
+    const userCount = (messages ?? []).filter((m) => m.role === "user").length;
+    return userCount > 0 || busy;
+  }, [messages, busy]);
 
   const latestFailedRun = useMemo(
     () => (runs ?? []).find((row: { status: string }) => row.status === "failed" || row.status === "cancelled"),
@@ -119,6 +123,7 @@ export function StudioAgentPane({
     stickToBottomRef.current = true;
     try {
       const threadId = await ensureThread();
+      setPendingUserText(text);
       setDraft("");
       const result = await sendTurn({ threadId, message: text });
       if (result.runId) {
@@ -136,6 +141,7 @@ export function StudioAgentPane({
     } finally {
       setBusy(false);
       setActiveRunId(null);
+      setPendingUserText(null);
     }
   }
 
@@ -175,9 +181,8 @@ export function StudioAgentPane({
     }
   }
 
-  const hasMessages = Boolean(messages?.length);
+  const hasMessages = hasTurns;
   const canSend = Boolean(draft.trim()) && !busy;
-  const recentTools = (toolCalls ?? []).slice(-8);
 
   return (
     <div className="studio-agent-pane" data-studio-agent="">
@@ -195,94 +200,23 @@ export function StudioAgentPane({
           <div
             className={`studio-chat-stream-inner${hasMessages || busy ? "" : " is-empty"}`}
           >
-            {!hasMessages && !busy ? (
+            {!hasTurns ? (
               <div className="studio-agent-empty-hero">
                 <StudioEmptyLogoButton />
               </div>
-            ) : null}
-
-            {(messages ?? []).map((msg) => {
-              if (msg.role === "tool") {
-                return (
-                  <div key={msg._id} className="studio-agent-tool-card">
-                    <Wrench size={14} aria-hidden="true" />
-                    <div>
-                      <strong>{msg.toolName ?? "tool"}</strong>
-                      <p>{msg.content}</p>
-                    </div>
-                  </div>
-                );
-              }
-
-              if (msg.role === "approval" && msg.approvalId) {
-                const pending = pendingApprovals.find(
-                  (row) => row._id === msg.approvalId,
-                );
-                const statusRow = (approvals ?? []).find(
-                  (row) => row._id === msg.approvalId,
-                );
-                return (
-                  <div key={msg._id} className="studio-agent-approval-card">
-                    <strong>{statusRow?.title ?? "Approval"}</strong>
-                    <p>{msg.content}</p>
-                    {statusRow?.estimatedCredits != null ? (
-                      <p className="studio-agent-meta">
-                        Est. {statusRow.estimatedCredits} credits
-                      </p>
-                    ) : null}
-                    {pending ? (
-                      <div className="studio-agent-approval-actions">
-                        <button
-                          type="button"
-                          className="studio-agent-primary-btn"
-                          onClick={() =>
-                            void handleDecide(msg.approvalId!, "approve")
-                          }
-                        >
-                          <Check size={14} aria-hidden="true" /> Approve
-                        </button>
-                        <button
-                          type="button"
-                          className="studio-agent-secondary-btn"
-                          onClick={() =>
-                            void handleDecide(msg.approvalId!, "deny")
-                          }
-                        >
-                          <X size={14} aria-hidden="true" /> Deny
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="studio-agent-meta">
-                        {statusRow?.status ?? "done"}
-                      </p>
-                    )}
-                  </div>
-                );
-              }
-
-              const isUser = msg.role === "user";
-              return (
-                <article
-                  key={msg._id}
-                  className={`studio-chat-bubble${isUser ? " is-user" : ""}`}
-                >
-                  {msg.content}
-                </article>
-              );
-            })}
-
-            {busy ? (
-              <article className="studio-chat-bubble is-thinking">
-                <Loader2 className="animate-spin" size={14} aria-hidden="true" />
-                Working…
-                {recentTools.length ? (
-                  <span className="studio-agent-meta">
-                    {" "}
-                    · {recentTools[recentTools.length - 1]?.toolName}
-                  </span>
-                ) : null}
-              </article>
-            ) : null}
+            ) : (
+              <AgentTurnTimeline
+                messages={messages ?? []}
+                toolCalls={toolCalls ?? []}
+                runs={runs ?? []}
+                approvals={approvals ?? []}
+                busy={busy}
+                activeRunId={activeRunId}
+                pendingUserText={pendingUserText}
+                onDecideApproval={handleDecide}
+                onOpenFolder={onOpenFolder}
+              />
+            )}
           </div>
           <div className="studio-chat-composer-gutter" aria-hidden="true" />
         </div>

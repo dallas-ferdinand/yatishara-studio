@@ -1,0 +1,203 @@
+/* Agent turn timeline — Cursor-like step rows (Studio chrome). */
+
+.studio-agent-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-agent-turn-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 2px 0 4px;
+  padding-inline: 2px;
+  min-width: 0;
+}
+
+.studio-agent-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mos-plate) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mos-ink) 8%, transparent);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.studio-agent-step.is-read,
+.studio-agent-step.is-meta {
+  background: transparent;
+  border-color: transparent;
+  opacity: 0.88;
+}
+
+.studio-agent-step.is-error {
+  border-color: color-mix(in srgb, #c44 28%, transparent);
+  background: color-mix(in srgb, #c44 6%, var(--mos-plate));
+}
+
+.studio-agent-step.is-approval {
+  border-left: 3px solid color-mix(in srgb, var(--mos-accent, #3b82f6) 65%, transparent);
+  background: color-mix(in srgb, var(--mos-plate) 92%, transparent);
+}
+
+.studio-agent-step.is-generate {
+  background: color-mix(in srgb, var(--mos-plate) 88%, transparent);
+}
+
+.studio-agent-step.is-live {
+  border-color: color-mix(in srgb, var(--mos-ink) 14%, transparent);
+}
+
+.studio-agent-step-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.studio-agent-step.is-read .studio-agent-step-head,
+.studio-agent-step.is-meta .studio-agent-step-head {
+  padding-block: 4px;
+  cursor: default;
+}
+
+.studio-agent-step.is-group-summary .studio-agent-step-head {
+  cursor: default;
+}
+
+.studio-agent-step-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  opacity: 0.72;
+}
+
+.studio-agent-step.is-error .studio-agent-step-icon {
+  opacity: 1;
+  color: #b44;
+}
+
+.studio-agent-step-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.studio-agent-step-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.studio-agent-step-title {
+  font-weight: 500;
+  min-width: 0;
+}
+
+.studio-agent-step-subtitle {
+  margin: 0;
+  opacity: 0.78;
+  font-size: 0.82rem;
+  word-break: break-word;
+}
+
+.studio-agent-step-meta {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.studio-agent-step-chevron {
+  flex: 0 0 auto;
+  opacity: 0.45;
+  margin-top: 2px;
+}
+
+.studio-agent-step-details {
+  padding: 0 10px 10px 34px;
+  min-width: 0;
+}
+
+.studio-agent-step-details pre {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--mos-ink) 6%, transparent);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+}
+
+.studio-agent-step-outcome {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.studio-agent-step-outcome-btn {
+  appearance: none;
+  border: none;
+  background: color-mix(in srgb, var(--mos-accent, #3b82f6) 14%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.studio-agent-step-outcome-btn:hover {
+  background: color-mix(in srgb, var(--mos-accent, #3b82f6) 22%, transparent);
+}
+
+.studio-agent-step-approval-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 10px 10px 34px;
+}
+
+.studio-agent-live-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-top: 2px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mos-plate) 65%, transparent);
+  font-size: 0.84rem;
+  opacity: 0.92;
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.studio-agent-live-progress .studio-agent-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
