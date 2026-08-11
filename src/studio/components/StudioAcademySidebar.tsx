@@ -11,10 +11,8 @@ import {
   type AcademyOwnershipFilter,
   type AcademySortKey,
 } from "./StudioAcademyContext";
-import { MediaLoadFrame } from "./media-load-frame";
 import "./public-offers.css";
 import "./studio-creative-network.css";
-import "./media-load-frame.css";
 
 const SORT_OPTIONS: Array<{ value: AcademySortKey; label: string }> = [
   { value: "newest", label: "Newest" },
@@ -211,7 +209,6 @@ function LessonRail({
   if (!academy) return null;
 
   const lessons = academy.filterLessons(detail?.lessons ?? []);
-  const courseBanner = detail?.coverUrl;
   const introActive = academy.lessonId === null;
   const q = academy.lessonSearch.trim().toLowerCase();
   const showIntro =
@@ -243,33 +240,10 @@ function LessonRail({
                   onClick={() => academy.setLessonId(null)}
                 >
                   <span
-                    className="studio-academy-lesson-thumb"
+                    className="studio-academy-lesson-num"
                     aria-hidden="true"
                   >
-                    {courseBanner ? (
-                      <MediaLoadFrame
-                        kind="image"
-                        src={courseBanner}
-                        cacheKey={`academy-lesson-intro:${courseId}`}
-                        ratio="fill"
-                        className="studio-academy-lesson-thumb-frame"
-                        loaderSize="sm"
-                        loaderRing
-                      >
-                        {({ onLoad, onError }) => (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={courseBanner}
-                            alt=""
-                            decoding="async"
-                            onLoad={onLoad}
-                            onError={onError}
-                          />
-                        )}
-                      </MediaLoadFrame>
-                    ) : (
-                      <span className="studio-academy-lesson-num">0</span>
-                    )}
+                    0
                   </span>
                   <span className="studio-academy-lesson-meta">
                     <strong>{detail.title}</strong>
@@ -288,35 +262,10 @@ function LessonRail({
                     onClick={() => academy.setLessonId(lesson._id)}
                   >
                     <span
-                      className="studio-academy-lesson-thumb"
+                      className="studio-academy-lesson-num"
                       aria-hidden="true"
                     >
-                      {lesson.coverUrl ? (
-                        <MediaLoadFrame
-                          kind="image"
-                          src={lesson.coverUrl}
-                          cacheKey={`academy-lesson:${lesson._id}`}
-                          ratio="fill"
-                          className="studio-academy-lesson-thumb-frame"
-                          loaderSize="sm"
-                          loaderRing
-                        >
-                          {({ onLoad, onError }) => (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={lesson.coverUrl}
-                              alt=""
-                              decoding="async"
-                              onLoad={onLoad}
-                              onError={onError}
-                            />
-                          )}
-                        </MediaLoadFrame>
-                      ) : (
-                        <span className="studio-academy-lesson-num">
-                          {index + 1}
-                        </span>
-                      )}
+                      {index + 1}
                     </span>
                     <span className="studio-academy-lesson-meta">
                       <strong>{lesson.title}</strong>

@@ -14,6 +14,7 @@ import {
   CN_CARD_TRANSFORM,
   PEEK_TRANSFORM,
   PREVIEW_TRANSFORM,
+  ACADEMY_COVER_TRANSFORM,
   signBunnyCdnUrls,
   signBunnyFullUrl,
   signBunnyThumbUrl,
@@ -175,6 +176,7 @@ const lessonSummaryReturn = v.object({
   blurb: v.string(),
   descriptionMarkdown: v.string(),
   coverUrl: v.optional(v.string()),
+  coverThumbUrl: v.optional(v.string()),
   hasVideo: v.boolean(),
   sortOrder: v.number(),
   status: v.union(v.literal("draft"), v.literal("published")),
@@ -301,7 +303,13 @@ export const getCourse = authedQuery({
         slug: lesson.slug,
         blurb: blurbFromMarkdown(lesson.descriptionMarkdown),
         descriptionMarkdown: lesson.descriptionMarkdown,
-        coverUrl: await coverUrlFor(lesson.coverBunnyPath, THUMB_TRANSFORM),
+        /** Player / hero — sharp Academy cover, not list thumb. */
+        coverUrl: await coverUrlFor(
+          lesson.coverBunnyPath,
+          ACADEMY_COVER_TRANSFORM,
+        ),
+        /** Lesson rail circle — small Optimizer thumb. */
+        coverThumbUrl: await coverUrlFor(lesson.coverBunnyPath, THUMB_TRANSFORM),
         hasVideo: Boolean(lesson.bunnyStreamVideoId) && owned,
         sortOrder: lesson.sortOrder,
         status: lesson.status,
@@ -315,7 +323,7 @@ export const getCourse = authedQuery({
       slug: course.slug,
       descriptionMarkdown: course.descriptionMarkdown,
       ...pricingFieldsForCourse(course),
-      coverUrl: await coverUrlFor(course.coverBunnyPath, PREVIEW_TRANSFORM),
+      coverUrl: await coverUrlFor(course.coverBunnyPath, ACADEMY_COVER_TRANSFORM),
       owned,
       hasIntroVideo: Boolean(courseIntroVideoId(course)),
       lessonCount: lessonDocs.filter((l) => l.status === "published").length,
@@ -1113,6 +1121,7 @@ export {
 export {
   internalSeedAdSideHustleLessons,
   internalSetLessonCover,
+  internalSetCourseCover,
 } from "./academyAdSideHustleLessons";
 
 const COMMENT_URL_TTL_SEC = 60 * 60;

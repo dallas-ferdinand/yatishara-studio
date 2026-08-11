@@ -312,3 +312,23 @@ export const internalSetLessonCover = internalMutation({
     return null;
   },
 });
+
+/** Deploy-key / ops path to attach a course cover after upload. */
+export const internalSetCourseCover = internalMutation({
+  args: {
+    courseId: v.id("academyCourses"),
+    coverBunnyPath: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const course = await ctx.db.get("academyCourses", args.courseId);
+    if (!course) throw new Error("Course not found");
+    const path = args.coverBunnyPath.trim();
+    if (!path) throw new Error("coverBunnyPath required");
+    await ctx.db.patch(args.courseId, {
+      coverBunnyPath: path,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
