@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "convex/react";
 import {
+  ArrowDown,
   Check,
   CircleHelp,
   Images,
@@ -25,24 +26,34 @@ type AgentChatSidebarProps = {
   creditPriceCents?: number | null;
   agentBusy?: boolean;
   variant?: "docked" | "sheet";
+  /** Bunny signed URL expiry — required for Media thumbnails. */
+  expiresUnix?: number;
 };
 
 type TabId = "info" | "media";
 
-function Section({
+function AccordionSection({
   title,
   icon,
-  extras,
+  meta,
+  defaultOpen = true,
   children,
 }: {
   title: string;
   icon?: ReactNode;
-  extras?: ReactNode;
+  meta?: ReactNode;
+  defaultOpen?: boolean;
   children: ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="cursor-settings-section studio-agent-sidebar-card">
-      <header className="studio-agent-sidebar-card-head">
+    <section className="cursor-settings-section studio-agent-sidebar-card is-accordion">
+      <button
+        type="button"
+        className="studio-agent-sidebar-acc-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
         <div className="studio-settings-card-title">
           {icon ? (
             <span className="studio-dm-peer-section-icon" aria-hidden="true">
@@ -51,11 +62,15 @@ function Section({
           ) : null}
           {title}
         </div>
-        {extras ? (
-          <div className="studio-agent-sidebar-card-extras">{extras}</div>
-        ) : null}
-      </header>
-      <div className="studio-agent-sidebar-card-body">{children}</div>
+        <span className="studio-agent-sidebar-acc-meta">
+          {meta}
+          <ArrowDown
+            className={`studio-agent-sidebar-acc-chevron h-3.5 w-3.5${open ? " is-open" : ""}`}
+            aria-hidden="true"
+          />
+        </span>
+      </button>
+      {open ? <div className="studio-agent-sidebar-card-body">{children}</div> : null}
     </section>
   );
 }
@@ -67,6 +82,7 @@ export function AgentChatSidebar({
   creditPriceCents,
   agentBusy,
   variant = "docked",
+  expiresUnix,
 }: AgentChatSidebarProps) {
   const [tab, setTab] = useState<TabId>("info");
   const [search, setSearch] = useState("");
@@ -96,8 +112,12 @@ export function AgentChatSidebar({
   }, [insight?.media]);
   const mediaAssets = useQuery(
     api.assets.listByIds,
-    open && !searching && tab === "media" && mediaIds.length
-      ? { assetIds: mediaIds, quality: "thumb" as const }
+    open &&
+      !searching &&
+      tab === "media" &&
+      mediaIds.length &&
+      typeof expiresUnix === "number"
+      ? { assetIds: mediaIds, quality: "thumb" as const, expiresUnix }
       : "skip",
   );
   const thumbById = useMemo(() => {
@@ -120,6 +140,9 @@ export function AgentChatSidebar({
     { id: "info", label: "Info" },
     { id: "media", label: "Media" },
   ];
+  const mediaCount = insight?.media?.length ?? 0;
+  const turnCount = insight?.turnCount ?? 0;
+  const todoCount = board.lists.reduce((n, list) => n + list.steps.length, 0);
 
   return (
     <aside
@@ -185,50 +208,64 @@ export function AgentChatSidebar({
 
       <div className="studio-agent-chat-sidebar-body">
         {searching ? (
-          <Section title="Search" icon={<Search className="h-3 w-3" />}>
+          <AccordionSection title="Search" icon={<Search className="h-3 w-3" />}>
             {!insight?.searchHits?.length ? (
               <p className="studio-settings-empty">No matches.</p>
             ) : (
-              <ul className="studio-agent-search-hits">
+              <ul className="studio-agent-turn-cost-list">
                 {insight.searchHits.map((hit) => (
-                  <li key={String(hit._id)}>
+                  <li key={String(hit._id)} className="is-search-hit">
                     <span className="studio-agent-search-role">{hit.role}</span>
                     <p>{hit.content}</p>
                   </li>
                 ))}
               </ul>
             )}
-          </Section>
+          </AccordionSection>
         ) : null}
 
         {!searching && tab === "info" ? (
           <div className="studio-agent-sidebar-stack">
             <section
-              className="cursor-settings-section studio-agent-sidebar-card"
+              className="cursor-settings-section studio-agent-sidebar-card studio-agent-sidebar-summary"
               aria-label="Chat summary"
             >
-              <div className="studio-agent-sidebar-stat-grid">
-                <div className="studio-agent-sidebar-stat">
-                  <Wallet aria-hidden="true" />
-                  <strong>
-                    {formatTtdFromCredits(insight?.creditsSpent ?? 0, price)}
-                  </strong>
-                  <span>Spent</span>
-                </div>
-                <div className="studio-agent-sidebar-stat">
-                  <MessageSquare aria-hidden="true" />
-                  <strong>{insight?.turnCount ?? 0}</strong>
-                  <span>Turns</span>
-                </div>
-                <div className="studio-agent-sidebar-stat">
-                  <Images aria-hidden="true" />
-                  <strong>{insight?.media?.length ?? 0}</strong>
-                  <span>Media</span>
+              <div className="studio-agent-sidebar-summary-hero">
+                <Wallet
+                  className="studio-agent-sidebar-summary-watermark"
+                  aria-hidden="true"
+                />
+                <div className="studio-agent-sidebar-stat-grid">
+                  <div className="studio-agent-sidebar-stat">
+                    <Wallet aria-hidden="true" />
+                    <strong>
+                      {formatTtdFromCredits(insight?.creditsSpent ?? 0, price)}
+                    </strong>
+                    <span>Spent</span>
+                  </div>
+                  <div className="studio-agent-sidebar-stat">
+                    <MessageSquare aria-hidden="true" />
+                    <strong>{turnCount}</strong>
+                    <span>Turns</span>
+                  </div>
+                  <div className="studio-agent-sidebar-stat">
+                    <Images aria-hidden="true" />
+                    <strong>{mediaCount}</strong>
+                    <span>Media</span>
+                  </div>
                 </div>
               </div>
             </section>
 
-            <Section title="To-do" icon={<ListTodo className="h-3 w-3" />}>
+            <AccordionSection
+              title="To-do"
+              icon={<ListTodo className="h-3 w-3" />}
+              meta={
+                todoCount ? (
+                  <span className="studio-agent-sidebar-acc-count">{todoCount}</span>
+                ) : null
+              }
+            >
               {!board.lists.length ? (
                 <p className="studio-settings-empty">
                   No to-do lists yet. Multi-step work shows up here.
@@ -310,9 +347,17 @@ export function AgentChatSidebar({
                   })}
                 </div>
               )}
-            </Section>
+            </AccordionSection>
 
-            <Section title="Recent turns" icon={<MessageSquare className="h-3 w-3" />}>
+            <AccordionSection
+              title="Recent turns"
+              icon={<MessageSquare className="h-3 w-3" />}
+              meta={
+                turnCount ? (
+                  <span className="studio-agent-sidebar-acc-count">{turnCount}</span>
+                ) : null
+              }
+            >
               {!insight?.runs?.length ? (
                 <p className="studio-settings-empty">No turns yet.</p>
               ) : (
@@ -331,12 +376,20 @@ export function AgentChatSidebar({
                   ))}
                 </ul>
               )}
-            </Section>
+            </AccordionSection>
           </div>
         ) : null}
 
         {!searching && tab === "media" ? (
-          <Section title="Media" icon={<Images className="h-3 w-3" />}>
+          <AccordionSection
+            title="Media"
+            icon={<Images className="h-3 w-3" />}
+            meta={
+              mediaCount ? (
+                <span className="studio-agent-sidebar-acc-count">{mediaCount}</span>
+              ) : null
+            }
+          >
             {!insight?.media?.length ? (
               <p className="studio-settings-empty">
                 No generated media in this chat yet.
@@ -365,7 +418,7 @@ export function AgentChatSidebar({
                 })}
               </ul>
             )}
-          </Section>
+          </AccordionSection>
         ) : null}
       </div>
     </aside>

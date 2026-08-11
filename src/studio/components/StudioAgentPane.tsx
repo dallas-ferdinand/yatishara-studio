@@ -54,6 +54,8 @@ type StudioAgentPaneProps = {
   onOpenNewAgentTab?: () => void;
   onOpenFolder?: (folderId: Id<"folders">) => void;
   isMobile?: boolean;
+  /** Bunny signed URL expiry — required for Action Media thumbnails. */
+  expiresUnix?: number;
 };
 
 function autosizeAgentComposer(el: HTMLTextAreaElement | null) {
@@ -501,6 +503,7 @@ export function StudioAgentPane({
   onBindThreadTab,
   onOpenFolder,
   isMobile = false,
+  expiresUnix,
 }: StudioAgentPaneProps) {
   const createThread = useMutation(api.agentThreads.create);
   const renameThread = useMutation(api.agentThreads.rename);
@@ -1211,6 +1214,7 @@ export function StudioAgentPane({
         creditPriceCents={pricing?.creditPriceCents}
         agentBusy={busy}
         variant={isMobile ? "sheet" : "docked"}
+        expiresUnix={expiresUnix}
       />
     ) : (
       <aside

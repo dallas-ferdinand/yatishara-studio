@@ -31598,6 +31598,7 @@ function ActivePane({
         onOpenNewAgentTab={onOpenNewAgentTab}
         onOpenFolder={onOpenFolder}
         isMobile={isMobileLayout}
+        expiresUnix={expiresUnix}
       />
     </div>
   );
