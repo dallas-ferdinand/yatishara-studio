@@ -590,22 +590,6 @@
   color: var(--mos-page);
 }
 
-.studio-document-prompt-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px 0;
-  margin-bottom: 4px;
-}
-
-.studio-document-prompt-actions .studio-agent-primary-btn,
-.studio-document-prompt-actions .studio-agent-secondary-btn {
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
 .studio-agent-auto-toggle {
   display: inline-flex;
   align-items: center;
