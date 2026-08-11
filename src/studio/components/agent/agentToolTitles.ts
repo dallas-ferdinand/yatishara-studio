@@ -180,6 +180,12 @@ export function deriveStepKind(
   return "write";
 }
 
+/** Media inspect / view — UI shows Thinking wash instead of a tool row. */
+export function isMediaInspectTool(toolName?: string | null): boolean {
+  const name = String(toolName || "");
+  return name === "inspect" || name.includes("view_media");
+}
+
 export function friendlyErrorLine(toolName: string, error?: string | null): string {
   const action = humanToolTitle(toolName).toLowerCase();
   const raw = String(error || "").trim();

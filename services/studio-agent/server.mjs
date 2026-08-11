@@ -159,6 +159,10 @@ async function runPiTurn(body, abortSignal) {
     byokFallbackNote,
     seedPlanJson,
     seedTodosJson,
+    currentFolderId,
+    currentFolderPath,
+    cwdFolderId,
+    cwdFolderPath,
   } = body;
 
   if (!capabilityToken) {
@@ -383,6 +387,12 @@ async function runPiTurn(body, abortSignal) {
       expandAttachmentTokens(message, workingSet).trim() || "(attachments only)";
     const lane = laneEarly || detectActionLane(userMessage, workingSet);
 
+    const cwdId = textValue(currentFolderId || cwdFolderId);
+    const cwdPath = textValue(currentFolderPath || cwdFolderPath);
+    const cwdBlock = cwdId
+      ? `Current folder (CWD): id=${cwdId}${cwdPath ? ` path=${cwdPath}` : ""}. Default folderId for studio_create_document, studio_generate_*, studio_create_folder (as parent), uploads, and other saves — unless the user names another folder or attaches a different target.`
+      : "Current folder (CWD): none open — if saving, ask once or use an attached folder id.";
+
     const system = [
       "Yatishara Studio Agent. Act with tools — don't advise how unless asked.",
       "Pi tools: catalog, describe, invoke, inspect, remember, skills, plan, ask.",
@@ -390,6 +400,8 @@ async function runPiTurn(body, abortSignal) {
       "catalog: starter set by default; q= or category= to search. describe if args unclear.",
       skillPromptBlock(),
       "Before writing image/video prompts or choosing hypermotion vs cinematic, skills {id} for the matching prompt-* pack. Do not invent third-party brand names in prompts.",
+      "Prompt craft: never ship lame short vibe lines. Load prompt-cinematic / prompt-hypermotion / prompt-image and write sealed, production-grade prompts (subject, action, camera start→end, light, materials, audio, keep-outs).",
+      "Prompt save: when they ask for a prompt (write/craft/improve) — skills first, then studio_create_document into CWD with title like \"Prompt — <short>\" and the full prompt in a markdown fenced ```text block so they can edit later. Chat: only paste the prompt in a copyable fence if they asked to see it in chat / copy it; otherwise tell them the file name and that Files has it.",
       "Video models: only from studio_list_video_models (or known slugs seedance-2.5 / seedance-2.0). Talk about motion/light/res/length. Never invent caps, features, or legacy/pipeline marketing.",
       "Bias to action: for vague creative asks, assume strong defaults and DO the next useful tool step (usually estimate, then generate → approval). Do not offer a menu of options.",
       "Assumptions: pick model seedance-2.5, duration ~8s (clamp to model max), aspect from attached still or 16:9, cinematic unless they said hypermotion/chaos. Disclose assumptions in one short line after tools run.",
@@ -400,9 +412,11 @@ async function runPiTurn(body, abortSignal) {
       "Never end with 'Would you like me to A, B, or C?' — pick the best next step and invoke it.",
       "plan: skip only for true one-shots (post/move/send one item).",
       "Attached chips are primary scope — use their ids. Tokens like [asset:Name id=…] are chips.",
+      cwdBlock,
       "Orient: studio_workspace_tree {} or studio_search. folder_contents needs a real folderId.",
       "Ambiguity: if attached ids cover the action, invoke now. Ask only when a required arg is missing.",
-      "Cost: for paid generate, estimate first when the user did not clearly confirm spend, then proceed to generate (approval card handles spend).",
+      "Money: speak only dollars / TTD (e.g. $2.50 TTD). Never say \"credits\" to the user. Tool observations already use cost labels.",
+      "Cost: for paid generate, estimate first when the user did not clearly confirm spend, then proceed to generate (approval card handles spend). Quote estimates as $ / TTD only.",
       "Paid/destructive/outbound/admin → approval card (stop; chat UI handles it).",
       "Done criteria: never claim success unless invoke ok (or pendingApproval / pendingAsk). Follow verifyHint / verified.",
       "Failures: on error → fix args or catalog/describe → retry once → then tell the user the error. Never invent 'tool unavailable'.",

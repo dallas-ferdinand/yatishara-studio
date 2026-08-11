@@ -34,7 +34,16 @@ A [who/what] [doing what] in [place]. [Time of day / light]. Shot as [medium / c
 ## Invoke
 
 ```json
-{ "name": "studio_generate_image", "args": { "prompt": "<final text>", "folderId": "<optional>", "aspectRatio": "16:9" } }
+{ "name": "studio_generate_image", "args": { "prompt": "<final text>", "folderId": "<CWD unless told otherwise>", "aspectRatio": "16:9" } }
 ```
+
+## Save prompt as a script (when they asked for a prompt, not a generate)
+
+1. Load this skill, write a **full** sealed prompt (subject + action + setting + light + lens + materials + keep-outs) — never a one-line vibe dump.
+2. `studio_create_document` into **CWD** (`folderId` from Current folder):
+   - `title`: `Prompt — <short subject>`
+   - `contentMarkdown`: short note + a ```text fence with the full prompt
+3. Chat: point them at the file. Paste the fence in chat **only** if they asked to see / copy it in chat.
+4. Generate only if they also asked to generate.
 
 Estimate first if spend is unclear. After ok, optionally `studio_view_media`.

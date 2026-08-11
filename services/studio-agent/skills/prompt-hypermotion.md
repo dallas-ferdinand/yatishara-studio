@@ -52,3 +52,10 @@ Same as cinematic: storyboard still → video with `startFrameAssetId` + refs.
 ## Density
 
 For short ads: pack concrete action verbs and spatial landmarks. Soft “beautiful cinematic” language fails HM — write what body and camera *do*.
+
+## Save prompt as a script (when they asked for a prompt)
+
+1. Write a dense sealed HM prompt (beats + camera start→end) — not a short vibe dump.
+2. `studio_create_document` into **CWD** (`Prompt — <short>` + ```text fence).
+3. Chat paste only if they asked to see/copy it.
+4. Generate path: estimate → still → video into CWD. Speak $ / TTD only.

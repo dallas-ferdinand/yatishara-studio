@@ -91,6 +91,8 @@ export const sendTurn = action({
     message: v.string(),
     autoApprove: v.optional(v.boolean()),
     seedPlanJson: v.optional(v.string()),
+    /** Files pane folder open while chatting — agent defaults saves here. */
+    currentFolderId: v.optional(v.id("folders")),
     attachments: v.optional(
       v.array(
         v.object({
@@ -211,7 +213,7 @@ export const sendTurn = action({
       );
       if (!affordability.ok) {
         throw new Error(
-          "You need a small credit balance to use Agent Mode. Top up to continue.",
+          "You need a small Studio balance to use Agent Mode. Top up to continue.",
         );
       }
     }
@@ -427,6 +429,12 @@ export const sendTurn = action({
           catalogVersion: "2026-08-11.1",
           seedPlanJson: args.seedPlanJson,
           seedTodosJson,
+          currentFolderId: args.currentFolderId
+            ? String(args.currentFolderId)
+            : undefined,
+          currentFolderPath: args.currentFolderId
+            ? folderPathFor(String(args.currentFolderId))
+            : undefined,
         }),
       });
 

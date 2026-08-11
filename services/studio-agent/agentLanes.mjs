@@ -8,9 +8,11 @@ export const INTENT_BLURBS = {
   studio_share_asset_post:
     "Post owned image/video to public profile. Args:{assetId,caption?}. For post/share/publish — invoke, don't advise.",
   studio_generate_image:
-    "Create image from prompt into a folder. Args:{prompt,folderId?}. Paid+approval. Estimate first if cost matters.",
+    "Create image from prompt into a folder. Args:{prompt,folderId?}. Default folderId=CWD. Paid+approval. Estimate first if cost matters. Quote cost as $ / TTD only.",
   studio_generate_video:
-    "Create video (paid+approval). People scenes: storyboard still via studio_generate_image first, then video.",
+    "Create video (paid+approval). Default folderId=CWD. People scenes: storyboard still via studio_generate_image first, then video. Quote cost as $ / TTD only.",
+  studio_create_document:
+    "Create a markdown doc in a folder. Args:{folderId,title,contentMarkdown}. Use for prompt scripts — default folderId=CWD.",
   studio_bulk_move:
     "Move items into a folder. Args:{targetFolderId,items:[{kind,id}]}. kind=asset|document|element|folder.",
   studio_trash:
@@ -32,7 +34,7 @@ export const INTENT_BLURBS = {
   studio_view_media:
     "Get media URLs for an asset. Args:{assetId}.",
   studio_estimate_generation:
-    "Price a generation before paid generate. Args:{mode,prompt,...}. Prefer this before generate when spend isn't confirmed.",
+    "Price a generation before paid generate. Args:{mode,prompt,...}. Prefer this before generate when spend isn't confirmed. Report $ / TTD only — never say credits.",
   studio_list_video_models:
     "List real Studio video models + descriptions/caps. Call before inventing model details. Never invent legacy/pipeline marketing.",
 };
@@ -72,18 +74,19 @@ export function detectActionLane(message, workingSet) {
   if (/\b(post|publish|share\s+(this|it|to\s+(feed|profile|public)))\b/.test(text) && hasAsset) {
     return "LANE: invoke studio_share_asset_post with attached asset id (+ optional caption). Do not advise; do not claim unavailable unless invoke fails.";
   }
-  // Prompt craft before generate — progressive skill load
+  // Prompt craft before generate — progressive skill load + save as editable doc
   if (/\b(hyper[\s-]?motion|whip|smash|fpv)\b/.test(text)) {
-    return "LANE: skills {id:\"prompt-hypermotion\"} then craft/generate. Prefer videoModel seedance-2.5. Studio branding only.";
+    return "LANE: skills {id:\"prompt-hypermotion\"} then craft a sealed production prompt. Save via studio_create_document to CWD. Paste in chat only if they asked to see/copy it. Prefer videoModel seedance-2.5. Studio branding only.";
   }
   if (/\b(cinematic|filmed|continuous[\s-]?take|lifestyle\s+ad)\b/.test(text)
     && /\b(prompt|video|clip|ad|shot)\b/.test(text)) {
-    return "LANE: skills {id:\"prompt-cinematic\"} then craft/generate. Prefer videoModel seedance-2.5.";
+    return "LANE: skills {id:\"prompt-cinematic\"} then craft sealed prompt → studio_create_document in CWD. Chat paste only if asked. Prefer videoModel seedance-2.5.";
   }
-  if (/\b(image|product|hero|still)\b.{0,40}\bprompt\b/.test(text)
-    || /\bprompt\b.{0,40}\b(image|product|hero|still)\b/.test(text)
-    || /\b(craft|write|improve|optimize)\b.{0,40}\b(image\s+)?prompt\b/.test(text)) {
-    return "LANE: skills {id:\"prompt-image\"} then write/improve the prompt; generate only if asked.";
+  if (/\b(write|craft|improve|optimize|make|give)\b.{0,40}\bprompt\b/.test(text)
+    || /\bprompt\b.{0,40}\b(for|for\s+me|please)\b/.test(text)
+    || /\b(image|product|hero|still|video)\b.{0,40}\bprompt\b/.test(text)
+    || /\bprompt\b.{0,40}\b(image|product|hero|still|video)\b/.test(text)) {
+    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt (not a short vibe line). studio_create_document {folderId:CWD, title:\"Prompt — …\", contentMarkdown with ```text fence}. Do not dump the full prompt in chat unless they asked to see/copy it; point them to the file.";
   }
   if (/\b(generat(e|ing)|creat(e|ing)|make|draw|render)\b.{0,40}\b(image|picture|photo|still|art)\b/.test(text)
     || /\b(image|picture|photo)\b.{0,40}\b(generat|creat|make|draw|render)/.test(text)) {

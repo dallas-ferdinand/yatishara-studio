@@ -5,7 +5,6 @@ import {
   FileText,
   Folder,
   Image as ImageIcon,
-  Loader2,
   Music,
   Shapes,
   Video,
@@ -18,6 +17,7 @@ import { LogoLoader } from "../logo-loader";
 import { AgentApprovalStep } from "./AgentApprovalStep";
 import { AgentQuestionStep, type AgentQuestionRow } from "./AgentQuestionStep";
 import { AgentStepRow } from "./AgentStepRow";
+import { AgentThinkingCard } from "./AgentThinkingCard";
 import {
   buildAgentTurns,
   liveProgressLabel,
@@ -29,6 +29,7 @@ import {
   type AgentToolCallRow,
   type AgentTurn,
 } from "./agentStepUtils";
+import { isMediaInspectTool } from "./agentToolTitles";
 import "./agent-steps.css";
 
 type AgentTurnTimelineProps = {
@@ -166,13 +167,26 @@ function TurnBlock({
     return undefined;
   };
 
-  const hasActiveStep = turn.steps.some(
+  const hasPendingQuestion = questions.some((q) => q.status === "pending");
+  const visibleSteps = turn.steps.filter(
+    (step) => !isMediaInspectTool(step.toolName),
+  );
+  const inspectThinking = turn.steps.some(
+    (step) =>
+      isMediaInspectTool(step.toolName) &&
+      (step.status === "started" || step.status === "queued"),
+  );
+  const hasVisibleActiveStep = visibleSteps.some(
     (step) =>
       step.status === "started" ||
       step.status === "queued" ||
       step.status === "pending_approval",
   );
-  const hasPendingQuestion = questions.some((q) => q.status === "pending");
+  const showThinking =
+    turn.isLive &&
+    !turn.assistantText &&
+    !hasPendingQuestion &&
+    (inspectThinking || !hasVisibleActiveStep);
   const primaryPreview = (turn.attachments ?? [])
     .map((attachment) => {
       const preview = previewFor(attachment);
@@ -222,9 +236,9 @@ function TurnBlock({
         </div>
       ) : null}
 
-      {turn.steps.length > 0 ? (
+      {visibleSteps.length > 0 ? (
         <div className="studio-agent-turn-steps" role="list">
-          {turn.steps.map((step) => {
+          {visibleSteps.map((step) => {
             const approval =
               step.approvalId != null
                 ? approvalById.get(String(step.approvalId))
@@ -359,17 +373,17 @@ function TurnBlock({
         );
       })()}
 
-      {/* Never show Working… while a question card is waiting — the ask IS the next beat. */}
-      {turn.isLive &&
-      !turn.assistantText &&
-      !hasActiveStep &&
-      !hasPendingQuestion ? (
-        <div className="studio-agent-live-progress" role="status">
-          <span className="studio-agent-step-icon" aria-hidden="true">
-            <Loader2 size={13} className="animate-spin" />
-          </span>
-          <span className="studio-agent-meta">{liveProgressLabel(turn.steps)}</span>
-        </div>
+      {/* Thinking wash for inspect / between-tool idle — MercuryOS-style gradient. */}
+      {showThinking ? (
+        <AgentThinkingCard
+          label={
+            inspectThinking
+              ? "Thinking"
+              : liveProgressLabel(visibleSteps) === "Working…"
+                ? "Thinking"
+                : liveProgressLabel(visibleSteps)
+          }
+        />
       ) : null}
 
       {turn.assistantText ? (

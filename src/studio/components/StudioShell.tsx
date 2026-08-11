@@ -31597,6 +31597,7 @@ function ActivePane({
         onBindThreadTab={onBindAgentThreadTab}
         onOpenNewAgentTab={onOpenNewAgentTab}
         onOpenFolder={onOpenFolder}
+        activeFolderId={activeFolderId}
         isMobile={isMobileLayout}
         expiresUnix={expiresUnix}
       />

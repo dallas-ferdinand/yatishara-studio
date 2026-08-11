@@ -68,6 +68,50 @@
   opacity: 0.9;
 }
 
+/* MercuryOS-like thinking wash (inspect / idle live progress) */
+.studio-agent-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin: 4px 0 2px 4px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  background:
+    linear-gradient(
+      125deg,
+      rgba(167, 139, 250, 0.16) 0%,
+      rgba(99, 102, 241, 0.07) 42%,
+      rgba(167, 139, 250, 0.05) 100%
+    );
+  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 78%, #a78bfa);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.studio-agent-thinking-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: #a78bfa;
+  opacity: 0.95;
+}
+
+.studio-agent-thinking-icon svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+.studio-agent-thinking-label {
+  letter-spacing: 0.01em;
+}
+
 .studio-agent-step.is-error .studio-agent-step-btn {
   color: color-mix(in srgb, #a33 72%, var(--mos-ink));
 }

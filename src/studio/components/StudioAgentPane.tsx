@@ -55,6 +55,8 @@ type StudioAgentPaneProps = {
   onBindThreadTab?: (threadId: Id<"agentThreads">) => void;
   onOpenNewAgentTab?: () => void;
   onOpenFolder?: (folderId: Id<"folders">) => void;
+  /** Files pane folder currently open — agent saves prompts/media here by default. */
+  activeFolderId?: Id<"folders"> | null;
   isMobile?: boolean;
   /** Bunny signed URL expiry — required for Action Media thumbnails. */
   expiresUnix?: number;
@@ -504,6 +506,7 @@ export function StudioAgentPane({
   onOpenAgentSettings,
   onBindThreadTab,
   onOpenFolder,
+  activeFolderId = null,
   isMobile = false,
   expiresUnix,
 }: StudioAgentPaneProps) {
@@ -863,6 +866,7 @@ export function StudioAgentPane({
         threadId,
         message: text,
         autoApprove,
+        ...(activeFolderId ? { currentFolderId: activeFolderId } : {}),
         attachments: attachments.map((item) => ({
           studioKind: item.studioKind,
           studioId: item.studioId,
@@ -948,6 +952,7 @@ export function StudioAgentPane({
         message: result.continueMessage,
         autoApprove,
         seedPlanJson: result.planJson,
+        ...(activeFolderId ? { currentFolderId: activeFolderId } : {}),
       });
       if (turn?.runId) setActiveRunId(turn.runId as Id<"agentRuns">);
       if (!turn?.ok && turn?.error) toast.error(turn.error);

@@ -1,10 +1,46 @@
 /**
  * High-signal tool observations — keep invoke results small for the model.
+ * Agent-facing money is always $ / TTD — never "credits".
  */
 
 const MAX_STR = 240;
 const MAX_ARR = 12;
 const MAX_KEYS = 16;
+/** Ledger: TT$0.50 per credit — same as convex/lib/generationPricing CREDIT_PRICE_TTD */
+const CREDIT_PRICE_TTD = 0.5;
+
+function moneyLabelFromCredits(credits) {
+  const n = Number(credits);
+  if (!Number.isFinite(n)) return undefined;
+  const ttd = Math.round(n * CREDIT_PRICE_TTD * 100) / 100;
+  const pretty = ttd.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(ttd) ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+  return `$${pretty} TTD`;
+}
+
+/** Rewrite ledger credit fields → money labels for the model. */
+function rewriteMoneyFields(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+  const out = { ...obj };
+  if (out.creditsSpent != null) {
+    const label = moneyLabelFromCredits(out.creditsSpent);
+    if (label) out.cost = label;
+    delete out.creditsSpent;
+  }
+  if (out.estimatedCredits != null) {
+    const label = moneyLabelFromCredits(out.estimatedCredits);
+    if (label) out.estimatedCost = label;
+    delete out.estimatedCredits;
+  }
+  if (out.credits != null && typeof out.credits === "number") {
+    const label = moneyLabelFromCredits(out.credits);
+    if (label) out.cost = label;
+    delete out.credits;
+  }
+  return out;
+}
 
 function textValue(value) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
@@ -67,6 +103,7 @@ const FIELD_HINTS = {
     "status",
     "name",
     "creditsSpent",
+    "estimatedCredits",
     "cost",
     "assets",
     "assetIds",
@@ -99,7 +136,16 @@ const FIELD_HINTS = {
     "url",
     "id",
   ],
-  studio_estimate_generation: ["credits", "cost", "estimate", "mode", "ok"],
+  studio_estimate_generation: [
+    "credits",
+    "creditsSpent",
+    "estimatedCredits",
+    "cost",
+    "estimate",
+    "mode",
+    "ok",
+  ],
+  studio_create_document: ["id", "_id", "documentId", "folderId", "title", "name"],
   studio_bulk_move: ["moved", "errors", "count", "targetFolderId"],
   studio_trash: ["trashed", "kind", "id", "ok"],
   studio_create_folder: ["folderId", "id", "name", "path", "parentId"],
@@ -145,7 +191,7 @@ export function compactObservation(toolName, result, extra = {}) {
   };
 
   if (extra.verbose) {
-    return { ...base, data: slimValue(result.data ?? result) };
+    return { ...base, data: rewriteMoneyFields(slimValue(result.data ?? result)) };
   }
 
   const data = result.data && typeof result.data === "object" ? result.data : result;
@@ -185,7 +231,7 @@ export function compactObservation(toolName, result, extra = {}) {
       }
     }
     if (Object.keys(picked).length) {
-      return { ...base, data: picked };
+      return { ...base, data: rewriteMoneyFields(picked) };
     }
   }
 
@@ -209,11 +255,14 @@ export function compactObservation(toolName, result, extra = {}) {
       "conversationId",
       "messageId",
       "creditsSpent",
+      "estimatedCredits",
       "message",
     ]),
   );
-  if (Object.keys(slim).length) return { ...base, data: slim };
-  return { ...base, data: slimValue(data) };
+  if (Object.keys(slim).length) {
+    return { ...base, data: rewriteMoneyFields(slim) };
+  }
+  return { ...base, data: rewriteMoneyFields(slimValue(data)) };
 }
 
 /**
