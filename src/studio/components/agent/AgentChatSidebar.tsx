@@ -74,17 +74,21 @@ export function AgentChatSidebar({
       className={`studio-agent-chat-sidebar${variant === "sheet" ? " is-sheet" : ""}`}
       aria-label="Agent chat info"
     >
-      <div className="cursor-panel-head">
-        <strong>Chat</strong>
-        <button
-          type="button"
-          className="studio-composer-circle-btn"
-          aria-label="Close"
-          onClick={onClose}
-        >
-          <X size={13} strokeWidth={2.25} aria-hidden="true" />
-        </button>
-      </div>
+      {variant === "sheet" ? (
+        <div className="cursor-panel-head cursor-sidebar-head studio-agent-chat-sidebar-head shrink-0">
+          <strong>Chat</strong>
+          <div className="cursor-panel-head-tools">
+            <button
+              type="button"
+              className="studio-composer-circle-btn studio-agent-sidebar-close"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              <X size={13} strokeWidth={2.25} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <nav className="studio-admin-head-tabs" aria-label="Chat panels">
         {tabs.map((t) => (

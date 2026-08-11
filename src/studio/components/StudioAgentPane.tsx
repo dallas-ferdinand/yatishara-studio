@@ -9,7 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { ArrowUp, Loader2, Mic, Paperclip, RotateCcw, Settings, Square } from "lucide-react";
+import { ArrowUp, Loader2, Mic, Paperclip, RotateCcw, Settings, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
@@ -1193,17 +1193,25 @@ export function StudioAgentPane({
         className={`studio-agent-chat-sidebar${isMobile ? " is-sheet" : ""}`}
         aria-label="Agent chat info"
       >
-        <div className="cursor-panel-head">
-          <strong>Chat</strong>
-          <button
-            type="button"
-            className="studio-composer-circle-btn"
-            aria-label="Close"
-            onClick={() => setInfoOpen(false)}
-          >
-            ×
-          </button>
-        </div>
+        {isMobile ? (
+          <div className="cursor-panel-head cursor-sidebar-head studio-agent-chat-sidebar-head shrink-0">
+            <strong>Chat</strong>
+            <div className="cursor-panel-head-tools">
+              <button
+                type="button"
+                className="studio-composer-circle-btn studio-agent-sidebar-close"
+                aria-label="Close"
+                onClick={() => setInfoOpen(false)}
+              >
+                <X size={13} strokeWidth={2.25} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <nav className="studio-admin-head-tabs" aria-label="Chat panels">
+            <span className="studio-admin-head-tab is-active">Info</span>
+          </nav>
+        )}
         <div className="studio-agent-chat-sidebar-body">
           <p className="studio-agent-sidebar-empty">
             Send a message to start this chat — cost, media, and to-dos will show here.

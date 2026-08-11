@@ -695,6 +695,7 @@
 .studio-agent-chat-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   flex: 0 0 auto;
   z-index: 2;
@@ -728,6 +729,11 @@
   gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.studio-agent-chat-head-tools {
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .studio-agent-chat-title {
@@ -810,8 +816,34 @@
   box-shadow: 0 -8px 28px color-mix(in srgb, #000 28%, transparent);
 }
 
-.studio-agent-chat-sidebar .cursor-panel-head {
+.studio-agent-chat-sidebar .cursor-panel-head,
+.studio-agent-chat-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   flex: 0 0 auto;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  padding: 0 8px 0 12px;
+}
+
+.studio-agent-chat-sidebar-head .cursor-panel-head-tools {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.studio-agent-sidebar-close {
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+  flex: 0 0 auto;
+  box-sizing: border-box !important;
+  border-radius: 999px !important;
+  padding: 0 !important;
 }
 
 .studio-agent-chat-sidebar .studio-admin-head-tabs {
