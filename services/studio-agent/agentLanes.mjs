@@ -22,7 +22,7 @@ export const INTENT_BLURBS = {
   studio_bulk_move:
     "Move items into a folder. Args:{targetFolderId,items:[{kind,id}]}. kind=asset|document|element|folder.",
   studio_trash:
-    "Soft-delete one item. Args:{kind,id}. Destructive+approval.",
+    "Soft-delete one item. Args:{kind:folder|asset|document|element,id}. Never invent studio_delete_document — use this. Destructive+approval.",
   studio_send_message:
     "Send text DM. Args:{conversationId,body}. Outbound+approval.",
   studio_send_media_message:
