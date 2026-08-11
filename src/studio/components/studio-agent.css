@@ -54,9 +54,28 @@
   box-shadow: none;
 }
 
-.studio-agent-pane .studio-chat-bubble.is-user {
+.studio-agent-pane .studio-chat-bubble.is-user,
+[data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-user,
+[data-appearance="dark"] .studio-agent-pane .studio-chat-bubble.is-user {
   margin-left: 0;
   color: #fff;
+  /* Kill Create's large accent drop shadow on sent bubbles. */
+  box-shadow: none !important;
+}
+
+.studio-agent-pane .studio-chat-bubble.is-assistant,
+.studio-agent-pane .studio-chat-bubble.is-system {
+  margin-right: 0;
+  /* Soft plate + close, readable shadow (not the huge Create glow). */
+  background: var(--mos-plate, var(--mos-panel, #fff));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 10%, transparent);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 10%, transparent),
+    0 2px 6px color-mix(in srgb, #000 8%, transparent);
+  padding: 7px 10px;
+  color: var(--mos-ink, var(--color-cursor-text, #1a1a1e));
 }
 
 /* Inline attachment chips inside the green user bubble (same chips as composer). */
@@ -147,19 +166,6 @@
   height: 100%;
   object-fit: cover;
   border-radius: 999px;
-}
-
-.studio-agent-pane .studio-chat-bubble.is-assistant,
-.studio-agent-pane .studio-chat-bubble.is-system {
-  margin-right: 0;
-  /* Clean reply surface — keep Create-like padding, no heavy plate. */
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border: 0;
-  box-shadow: none;
-  padding: 7px 10px;
-  color: var(--mos-ink, var(--color-cursor-text, #1a1a1e));
 }
 
 .studio-agent-pane .studio-chat-bubble.is-assistant .studio-chat-text,
@@ -258,8 +264,11 @@
 
 [data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-assistant,
 [data-appearance="light"] .studio-agent-pane .studio-chat-bubble.is-system {
-  background: transparent;
-  border: 0;
+  background: var(--mos-plate, #fff);
+  border: 1px solid color-mix(in srgb, #000 10%, transparent);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 10%, transparent),
+    0 2px 6px color-mix(in srgb, #000 8%, transparent);
   color: #1a1a1e;
 }
 
