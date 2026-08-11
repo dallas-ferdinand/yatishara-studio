@@ -5,6 +5,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "convex/react";
 import {
+  Bot,
   Clock3,
   FileText,
   MessageSquare,
@@ -278,6 +279,82 @@ function useHistoryRange(range, enabled, expiresUnix) {
     hasMore,
     loadMore,
   };
+}
+
+function AgentHistoryThreadCard({ thread, active, onSelect }) {
+  const title = String(thread?.title ?? "").trim() || "New agent chat";
+  const when = thread?.updatedAt ?? thread?.createdAt ?? thread?._creationTime;
+  return (
+    <button
+      type="button"
+      className={`studio-history-item${active ? " is-active" : ""}`}
+      onClick={() => onSelect?.(thread)}
+    >
+      <span className="studio-history-item-main">
+        <span className="studio-history-item-title">{title}</span>
+        {when ? (
+          <span className="studio-history-item-date">
+            <Clock3 className="studio-history-item-date-icon" aria-hidden="true" />
+            {formatHistoryWhen(when)}
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
+function AgentHistoryPanelBody({
+  indexThreads = [],
+  activeThreadId,
+  onSelectThread,
+  query,
+  setQuery,
+}) {
+  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+  const threads = useMemo(() => {
+    const rows = [...(indexThreads ?? [])].sort(
+      (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
+    );
+    if (!deferredQuery) return rows;
+    return rows.filter((thread) =>
+      String(thread.title ?? "")
+        .toLowerCase()
+        .includes(deferredQuery),
+    );
+  }, [indexThreads, deferredQuery]);
+
+  return (
+    <>
+      <div className="studio-history-chrome">
+        <PanelSearchBar
+          value={query}
+          onChange={setQuery}
+          placeholder="Search agent chats"
+          aria-label="Search agent history"
+        />
+      </div>
+      <div className="studio-history-list">
+        {!threads.length ? (
+          <div className="studio-history-empty">
+            <Bot className="studio-history-empty-icon" aria-hidden="true" />
+            <p className="studio-history-empty-title">No agent chats yet</p>
+            <p className="studio-history-empty-copy">
+              Your Agent Mode conversations will show up here.
+            </p>
+          </div>
+        ) : (
+          threads.map((thread) => (
+            <AgentHistoryThreadCard
+              key={thread._id}
+              thread={thread}
+              active={thread._id === activeThreadId}
+              onSelect={onSelectThread}
+            />
+          ))
+        )}
+      </div>
+    </>
+  );
 }
 
 function HistoryPanelBody({
@@ -669,6 +746,7 @@ function HistoryMobileSheet({ onClose, children }) {
 }
 
 export function StudioHistoryPanel({
+  mode = "create",
   indexThreads = [],
   openThreadIds: _openThreadIds = [],
   activeThreadId,
@@ -681,6 +759,7 @@ export function StudioHistoryPanel({
   const [kindFilter, setKindFilter] = useState("all");
   const [portalRoot, setPortalRoot] = useState(null);
   const searchRef = useRef(null);
+  const isAgent = mode === "agent";
 
   useEffect(() => {
     setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
@@ -704,16 +783,26 @@ export function StudioHistoryPanel({
 
   const body = (
     <div ref={searchRef} className="studio-history-panel-body">
-      <HistoryPanelBody
-        indexThreads={indexThreads}
-        activeThreadId={activeThreadId}
-        onSelectThread={onSelectThread}
-        expiresUnix={expiresUnix}
-        query={query}
-        setQuery={setQuery}
-        kindFilter={kindFilter}
-        setKindFilter={setKindFilter}
-      />
+      {isAgent ? (
+        <AgentHistoryPanelBody
+          indexThreads={indexThreads}
+          activeThreadId={activeThreadId}
+          onSelectThread={onSelectThread}
+          query={query}
+          setQuery={setQuery}
+        />
+      ) : (
+        <HistoryPanelBody
+          indexThreads={indexThreads}
+          activeThreadId={activeThreadId}
+          onSelectThread={onSelectThread}
+          expiresUnix={expiresUnix}
+          query={query}
+          setQuery={setQuery}
+          kindFilter={kindFilter}
+          setKindFilter={setKindFilter}
+        />
+      )}
     </div>
   );
 

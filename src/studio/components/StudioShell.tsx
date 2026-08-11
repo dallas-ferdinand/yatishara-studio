@@ -348,6 +348,10 @@ const StudioApiKeysSettings = dynamic(
   () => import("./StudioApiKeysSettings").then((m) => m.StudioApiKeysSettings),
   { ssr: false },
 );
+const StudioAgentSettings = dynamic(
+  () => import("./StudioAgentSettings").then((m) => m.StudioAgentSettings),
+  { ssr: false },
+);
 const StudioHistoryPanel = dynamic(
   () => import("./StudioHistoryPanel").then((m) => m.StudioHistoryPanel),
   { ssr: false },
@@ -1454,6 +1458,7 @@ export function StudioShell({
   const [inlineRenameStudioId, setInlineRenameStudioId] = useState(null);
   const [inlineRenamePinToTop, setInlineRenamePinToTop] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [activeAgentThreadId, setActiveAgentThreadId] = useState(null);
   const [mobileAppMenuOpen, setMobileAppMenuOpen] = useState(false);
   const [feedModeMenuOpen, setFeedModeMenuOpen] = useState(false);
   const [feedModeMenuKey, setFeedModeMenuKey] = useState(null);
@@ -2464,6 +2469,14 @@ export function StudioShell({
     api.generation.listThreads,
     hasCurrentUser && needsThreadsList ? {} : "skip",
   );
+  const agentThreads = useQuery(
+    api.agentThreads.listMine,
+    hasCurrentUser &&
+      (historyOpen ||
+        (typeof activeTab === "string" && activeTab.startsWith("agent:")))
+      ? {}
+      : "skip",
+  );
   const activeThreadId = activeTab.startsWith("thread:")
     ? activeTab.slice("thread:".length)
     : null;
@@ -3279,12 +3292,15 @@ export function StudioShell({
     }
   }, [activeTab]);
 
-  // Generation history only belongs to Generate-type tabs.
-  const showHistory =
+  // Generation history on Create tabs; Agent history on Agent Mode.
+  const showCreateHistory =
     typeof activeTab === "string" &&
     (activeTab.startsWith("composer:") ||
       activeTab.startsWith("thread:") ||
       activeTab.startsWith("create:"));
+  const showAgentHistory =
+    typeof activeTab === "string" && activeTab.startsWith("agent:");
+  const showHistory = showCreateHistory || showAgentHistory;
 
   useEffect(() => {
     if (!showHistory && historyOpen) setHistoryOpen(false);
@@ -4440,6 +4456,15 @@ export function StudioShell({
     if (isMobile) setMobileSection("composer");
   }
 
+  function openAgentHistoryThread(thread) {
+    const id = thread?._id ?? thread;
+    if (!id) return;
+    setActiveAgentThreadId(id);
+    openTab(AGENT_TAB);
+    setHistoryOpen(false);
+    if (isMobile) setMobileSection("composer");
+  }
+
   function resolveAttachTargetTab() {
     if (
       typeof activeTab === "string" &&
@@ -4831,12 +4856,15 @@ export function StudioShell({
   const rootFolderId = navTrail[0]?.id ?? null;
 
   const historyPanelProps = {
-    indexThreads: threads ?? [],
+    mode: showAgentHistory ? "agent" : "create",
+    indexThreads: showAgentHistory ? agentThreads ?? [] : threads ?? [],
     openThreadIds: openTabs
       .filter((tab) => tab.startsWith("thread:"))
       .map((tab) => tab.slice("thread:".length)),
-    activeThreadId,
-    onSelectThread: openHistoryThread,
+    activeThreadId: showAgentHistory ? activeAgentThreadId : activeThreadId,
+    onSelectThread: showAgentHistory
+      ? openAgentHistoryThread
+      : openHistoryThread,
     onClose: () => setHistoryOpen(false),
     expiresUnix: assetUrlExpiresUnix,
   };
@@ -23987,16 +24015,18 @@ export function StudioShell({
                 >
                   <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${isAgentRail ? " is-active" : ""}`}
-                  onClick={openAgent}
-                  aria-label="Open Agent Mode"
-                  title="Agent"
-                  aria-pressed={isAgentRail}
-                >
-                  <Bot className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
+                {!showAgentHistory ? (
+                  <button
+                    type="button"
+                    className={`studio-settings-pill studio-settings-trigger${isAgentRail ? " is-active" : ""}`}
+                    onClick={openAgent}
+                    aria-label="Open Agent Mode"
+                    title="Agent"
+                    aria-pressed={isAgentRail}
+                  >
+                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
@@ -24007,7 +24037,49 @@ export function StudioShell({
                 >
                   <Folder className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
-                {showHistory ? (
+                {showAgentHistory ? (
+                  <div
+                    className={`studio-header-create-cluster${
+                      isAgentRail || historyOpen ? " is-linked" : ""
+                    }`}
+                    role="group"
+                    aria-label="Agent and History"
+                  >
+                    <button
+                      type="button"
+                      className={`studio-settings-pill studio-settings-trigger${
+                        isAgentRail ? " is-active" : ""
+                      }`}
+                      onClick={openAgent}
+                      aria-label="Open Agent Mode"
+                      title="Agent"
+                      aria-pressed={isAgentRail}
+                    >
+                      <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
+                      onClick={() => {
+                        setMobileAppMenuOpen(false);
+                        setSettingsOpen(false);
+                        if (!historyOpen && !isAgentRail) {
+                          openAgent();
+                        }
+                        setHistoryOpen((open) => !open);
+                      }}
+                      aria-label={historyOpen ? "Close history" : "Open history"}
+                      title={historyOpen ? "Close history" : "History"}
+                      aria-pressed={historyOpen}
+                    >
+                      {historyOpen ? (
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <History className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
+                ) : showCreateHistory ? (
                   <div
                     className={`studio-header-create-cluster${
                       isComposerContextTabKey(activeTab) ||
@@ -24783,16 +24855,18 @@ export function StudioShell({
                 >
                   <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${isAgentRail ? " is-active" : ""}`}
-                  onClick={openAgent}
-                  aria-label="Open Agent Mode"
-                  title="Agent"
-                  aria-pressed={isAgentRail}
-                >
-                  <Bot className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
+                {!showAgentHistory ? (
+                  <button
+                    type="button"
+                    className={`studio-settings-pill studio-settings-trigger${isAgentRail ? " is-active" : ""}`}
+                    onClick={openAgent}
+                    aria-label="Open Agent Mode"
+                    title="Agent"
+                    aria-pressed={isAgentRail}
+                  >
+                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
@@ -24803,7 +24877,49 @@ export function StudioShell({
                 >
                   <Folder className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
-                {showHistory ? (
+                {showAgentHistory ? (
+                  <div
+                    className={`studio-header-create-cluster${
+                      isAgentRail || historyOpen ? " is-linked" : ""
+                    }`}
+                    role="group"
+                    aria-label="Agent and History"
+                  >
+                    <button
+                      type="button"
+                      className={`studio-settings-pill studio-settings-trigger${
+                        isAgentRail ? " is-active" : ""
+                      }`}
+                      onClick={openAgent}
+                      aria-label="Open Agent Mode"
+                      title="Agent"
+                      aria-pressed={isAgentRail}
+                    >
+                      <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
+                      onClick={() => {
+                        setMobileAppMenuOpen(false);
+                        setSettingsOpen(false);
+                        if (!historyOpen && !isAgentRail) {
+                          openAgent();
+                        }
+                        setHistoryOpen((open) => !open);
+                      }}
+                      aria-label={historyOpen ? "Close history" : "Open history"}
+                      title={historyOpen ? "Close history" : "History"}
+                      aria-pressed={historyOpen}
+                    >
+                      {historyOpen ? (
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <History className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
+                ) : showCreateHistory ? (
                   <div
                     className={`studio-header-create-cluster${
                       isComposerContextTabKey(activeTab) ||
@@ -25278,6 +25394,9 @@ export function StudioShell({
               openTab(COMPOSER_TAB);
               if (isMobile) setMobileSection("composer");
             }}
+            onOpenAgentSettings={() => openSettingsTab("agent")}
+            activeAgentThreadId={activeAgentThreadId}
+            onActiveAgentThreadChange={setActiveAgentThreadId}
           />
         </section>
         {typeof activeTab === "string" &&
@@ -31438,6 +31557,9 @@ function ActivePane({
   onRequestPickAsset,
   onOpenStudioShareItem,
   onOpenCreate,
+  onOpenAgentSettings,
+  activeAgentThreadId = null,
+  onActiveAgentThreadChange,
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
   const feedPostId = activeTab.startsWith("feed:")
@@ -31617,7 +31739,12 @@ function ActivePane({
       inert={!isAgentActive}
       aria-hidden={!isAgentActive}
     >
-      <StudioAgentPane onOpenCreate={onOpenCreate} />
+      <StudioAgentPane
+        activeThreadId={activeAgentThreadId}
+        onActiveThreadChange={onActiveAgentThreadChange}
+        onOpenCreate={onOpenCreate}
+        onOpenAgentSettings={onOpenAgentSettings}
+      />
     </div>
   );
 
@@ -34907,6 +35034,7 @@ function SettingsWorkspacePane({
     // Sellers only — buyers have nothing to be paid out.
     ...(sellerPayout ? [{ id: "payouts", label: "Payouts" }] : []),
     { id: "activity", label: "Activity" },
+    { id: "agent", label: "Agent" },
     { id: "api-keys", label: "API keys" },
   ];
   const settingsSectionId = section === "top-up" ? "billing" : section;
@@ -34946,6 +35074,7 @@ function SettingsWorkspacePane({
         {settingsSectionId === "payouts" ? <SellerPayoutSettingsCard /> : null}
 
         {settingsSectionId === "api-keys" ? <StudioApiKeysSettings /> : null}
+        {settingsSectionId === "agent" ? <StudioAgentSettings /> : null}
 
         {settingsSectionId === "billing" ? (
           <div className="studio-settings-stack">
