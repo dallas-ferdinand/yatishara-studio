@@ -2604,9 +2604,14 @@ export const chargeTextGeneration = authedMutation({
     imageReferenceCount: v.optional(v.number()),
     videoReferenceCount: v.optional(v.number()),
     audioReferenceCount: v.optional(v.number()),
-    /** BytePlus text tier: pro (default Assistance), lite, or mini (DM Improve). */
+    /** BytePlus text tier: turbo (default), pro, lite, or mini. */
     textModel: v.optional(
-      v.union(v.literal("pro"), v.literal("lite"), v.literal("mini")),
+      v.union(
+        v.literal("turbo"),
+        v.literal("pro"),
+        v.literal("lite"),
+        v.literal("mini"),
+      ),
     ),
   },
   returns: v.id("creditTransactions"),
@@ -2625,7 +2630,7 @@ export const chargeTextGeneration = authedMutation({
       outputTokens: args.outputTokens,
       cacheReadTokens: args.cacheReadTokens,
       cacheWriteTokens: args.cacheWriteTokens,
-      textModel: args.textModel ?? "pro",
+      textModel: args.textModel ?? "turbo",
     });
     const now = Date.now();
     if (!account || account.creditBalance < cost) {
@@ -2636,7 +2641,7 @@ export const chargeTextGeneration = authedMutation({
       creditBalance: balanceAfter,
       updatedAt: now,
     });
-    const textModel = args.textModel ?? "pro";
+    const textModel = args.textModel ?? "turbo";
     return await ctx.db.insert("creditTransactions", {
       userId: ctx.user._id,
       billingAccountId: account._id,

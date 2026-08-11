@@ -56,10 +56,10 @@ Generation:
 
 - `ARK_API_KEY` — BytePlus ModelArk API key (Convex secrets only)
 - `ARK_BASE_URL` — optional; default `https://ark.ap-southeast.bytepluses.com/api/v3`
-- `GATEWAY_TEXT_MODEL_ID` — prompt enhancement and scripts (default: `seed-2-0-pro-260328`)
-- `GATEWAY_ASSISTANT_MODEL_ID` — Studio Assistance multimodal co-pilot (default: `seed-2-0-pro-260328`)
-- `GATEWAY_ASSISTANT_FALLBACK_MODEL_ID` — Assistance fallback (default: `seed-2-0-mini-260428`)
-- `GATEWAY_DM_IMPROVE_MODEL_ID` — Messages DM Improve wand (default: `seed-2-0-mini-260428`)
+- `GATEWAY_TEXT_MODEL_ID` — prompt enhancement and scripts (default: `dola-seed-2-1-turbo-260628`)
+- `GATEWAY_ASSISTANT_MODEL_ID` — Studio Assistance multimodal co-pilot (default: `dola-seed-2-1-turbo-260628`)
+- `GATEWAY_ASSISTANT_FALLBACK_MODEL_ID` — Assistance fallback (default: `seed-2-0-pro-260328`)
+- `GATEWAY_DM_IMPROVE_MODEL_ID` — Messages DM Improve wand (default: `dola-seed-2-1-turbo-260628`)
 - `GATEWAY_IMAGE_MODEL_ID` — image generation (default: `dola-seedream-5-0-pro-260628`)
 - `GATEWAY_VIDEO_MODEL_ID` — video generation (default: `dreamina-seedance-2-5-260628`)
 - `ELEVENLABS_API_KEY` — audio generation (voiceover `eleven_v3`, sound effects, music `music_v2`); Convex secrets only

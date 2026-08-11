@@ -25,7 +25,7 @@ function enhanceModelId(): string {
   return (
     process.env.GATEWAY_COMPOSER_ENHANCE_MODEL_ID?.trim() ||
     process.env.GATEWAY_DM_IMPROVE_MODEL_ID?.trim() ||
-    ARK_MODEL_IDS.textMini
+    ARK_MODEL_IDS.text
   );
 }
 

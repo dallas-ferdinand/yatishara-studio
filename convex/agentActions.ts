@@ -22,7 +22,7 @@ const chargeTextGenerationRef = makeFunctionReference<
     outputTokens: number;
     cacheReadTokens?: number;
     cacheWriteTokens?: number;
-    textModel?: "pro" | "lite" | "mini";
+    textModel?: "turbo" | "pro" | "lite" | "mini";
   },
   Id<"creditTransactions">
 >("generation:chargeTextGeneration");
@@ -495,9 +495,9 @@ export const sendTurn = action({
           const usage = measuredTextUsageFromGateway(body.usage ?? {});
           creditsSpent = textCreditCost({
             ...usage,
-            textModel: "pro",
+            textModel: "turbo",
           });
-          usageJson = JSON.stringify({ ...usage, textModel: "pro", credits: creditsSpent });
+          usageJson = JSON.stringify({ ...usage, textModel: "turbo", credits: creditsSpent });
           const folderId = await ctx.runMutation(
             api.folders.ensureMessagesFolderForMe,
             {},
@@ -508,7 +508,7 @@ export const sendTurn = action({
             outputTokens: usage.outputTokens ?? 0,
             cacheReadTokens: usage.cacheReadTokens,
             cacheWriteTokens: usage.cacheWriteTokens,
-            textModel: "pro",
+            textModel: "turbo",
           });
         }
         await ctx.runMutation(internal.agentRuns.setRunCredits, {
@@ -559,9 +559,9 @@ export const sendTurn = action({
         const usage = measuredTextUsageFromGateway(body.usage ?? {});
         creditsSpent = textCreditCost({
           ...usage,
-          textModel: "pro",
+          textModel: "turbo",
         });
-        usageJson = JSON.stringify({ ...usage, textModel: "pro", credits: creditsSpent });
+        usageJson = JSON.stringify({ ...usage, textModel: "turbo", credits: creditsSpent });
         const folderId = await ctx.runMutation(
           api.folders.ensureMessagesFolderForMe,
           {},
@@ -572,7 +572,7 @@ export const sendTurn = action({
           outputTokens: usage.outputTokens ?? 0,
           cacheReadTokens: usage.cacheReadTokens,
           cacheWriteTokens: usage.cacheWriteTokens,
-          textModel: "pro",
+          textModel: "turbo",
         });
       }
 

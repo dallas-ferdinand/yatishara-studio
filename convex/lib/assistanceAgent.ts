@@ -51,7 +51,7 @@ function assistantModelId(): string {
 
 function assistantFallbackModelId(): string | undefined {
   const raw = process.env.GATEWAY_ASSISTANT_FALLBACK_MODEL_ID?.trim();
-  return raw ? resolveArkModelId(raw) : ARK_MODEL_IDS.textMini;
+  return raw ? resolveArkModelId(raw) : ARK_MODEL_IDS.textPro;
 }
 
 function assistanceErrorDetails(error: unknown): {

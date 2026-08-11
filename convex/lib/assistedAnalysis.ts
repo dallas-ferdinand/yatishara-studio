@@ -1,5 +1,5 @@
 /**
- * Multimodal Assistance agent via Seed 2.0 Pro (GATEWAY_ASSISTANT_MODEL_ID).
+ * Multimodal Assistance agent via Seed 2.1 Turbo (GATEWAY_ASSISTANT_MODEL_ID).
  * Multi-turn plan → one chat reply. Never starts generation.
  */
 import { generateObject, jsonSchema } from "ai";

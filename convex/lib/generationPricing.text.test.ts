@@ -43,40 +43,40 @@ describe("measured text usage pricing", () => {
   });
 
   it("applies BytePlus COGS ×2 then nickel round-up", () => {
-    // 10k input @ $0.50/M + 2k output @ $3.00/M = $0.011 → TT$0.22 → $0.25
+    // Turbo: 10k input @ $0.45/M + 2k output @ $2.25/M = $0.009 → TT$0.18 → $0.20
     expect(
       textSellPriceFromUsageTtd({
         inputTokens: 10_000,
         outputTokens: 2_000,
       }),
-    ).toBe(0.25);
+    ).toBe(0.2);
     expect(
       textCreditsFromMeasuredUsage({
         inputTokens: 10_000,
         outputTokens: 2_000,
       }),
-    ).toBe(0.5);
+    ).toBe(0.4);
   });
 
   it("bills BytePlus cache-hit tokens at cache-read COGS (not full input)", () => {
-    // 10k cache-read @ $0.10/M + 2k out @ $3 = $0.007 → TT$0.14 → $0.15
+    // Turbo: 10k cache-read @ $0.09/M + 2k out @ $2.25 = $0.0054 → TT$0.108 → $0.15
     expect(
       textSellPriceFromUsageTtd({
         cacheReadTokens: 10_000,
         outputTokens: 2_000,
       }),
     ).toBe(0.15);
-    // Same tokens as full input = TT$0.22 → $0.25
+    // Same tokens as full input = TT$0.18 → $0.20
     expect(
       textSellPriceFromUsageTtd({
         inputTokens: 10_000,
         outputTokens: 2_000,
       }),
-    ).toBe(0.25);
-    // 100k cache-hit @ $0.10/M = $0.01 → TT$0.20
-    // vs 100k input @ $0.50/M = $0.05 → TT$1.00
+    ).toBe(0.2);
+    // 100k cache-hit @ $0.09/M = $0.009 → TT$0.18 → $0.20
+    // vs 100k input @ $0.45/M = $0.045 → TT$0.90
     expect(textSellPriceFromUsageTtd({ cacheReadTokens: 100_000 })).toBe(0.2);
-    expect(textSellPriceFromUsageTtd({ inputTokens: 100_000 })).toBe(1);
+    expect(textSellPriceFromUsageTtd({ inputTokens: 100_000 })).toBe(0.9);
   });
 
   it("bills cache-write tokens as BytePlus storage (1h), not input rate", () => {
@@ -90,22 +90,22 @@ describe("measured text usage pricing", () => {
       textSellPriceFromUsageTtd({
         inputTokens: 1_000_000,
       }),
-    ).toBe(10);
+    ).toBe(9);
   });
 
   it("derives non-cached input from promptTokens to prevent double-billing", () => {
     // prompt=500k, cache=400k → input=100k
-    // 100k@$0.50 + 400k@$0.10 = $0.09 → TT$1.80 exact
+    // Turbo: 100k@$0.45 + 400k@$0.09 = $0.081 → TT$1.62 → $1.65
     expect(
       textSellPriceFromUsageTtd({
         promptTokens: 500_000,
         inputTokens: 500_000,
         cacheReadTokens: 400_000,
       }),
-    ).toBe(1.8);
+    ).toBe(1.65);
   });
 
-  it("bills DM Improve at Seed Mini list rates with nickel round-up", () => {
+  it("bills optional Seed Mini list rates with nickel round-up", () => {
     // 10k @ $0.10/M + 2k @ $0.40/M = $0.0018 → TT$0.036 → $0.05
     expect(
       textSellPriceFromUsageTtd(
@@ -128,7 +128,7 @@ describe("measured text usage pricing", () => {
       inputTokens: 10_000,
       outputTokens: 2_000,
     });
-    expect(measured).toBe(0.5);
+    expect(measured).toBe(0.4);
     expect(
       textCreditCost({
         imageReferenceCount: 99,

@@ -17,7 +17,7 @@ const chargeTextGenerationRef = makeFunctionReference<
     folderId: Id<"folders">;
     inputTokens: number;
     outputTokens: number;
-    textModel?: "pro" | "lite" | "mini";
+    textModel?: "turbo" | "pro" | "lite" | "mini";
   },
   Id<"creditTransactions">
 >("generation:chargeTextGeneration");
@@ -97,13 +97,13 @@ export const improveDraft = action({
     const creditsSpent = textCreditCost({
       inputTokens: improved.usage.inputTokens ?? 0,
       outputTokens: improved.usage.outputTokens ?? 0,
-      textModel: "mini",
+      textModel: "turbo",
     });
     await ctx.runMutation(chargeTextGenerationRef, {
       folderId,
       inputTokens: improved.usage.inputTokens ?? 0,
       outputTokens: improved.usage.outputTokens ?? 0,
-      textModel: "mini",
+      textModel: "turbo",
     });
     return { text: improved.text, creditsSpent };
   },

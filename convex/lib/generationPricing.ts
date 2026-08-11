@@ -163,12 +163,18 @@ export const PLATFORM_OVERHEAD_CREDITS_MEDIA = 0;
 export const PLATFORM_OVERHEAD_CREDITS_TEXT = 0;
 
 /**
- * Seed 2.0 Pro (≤128k) — Assistance / enhance / scripts (default).
- * Seed 2.0 Lite / Mini — optional cheaper tiers (DM Improve uses mini).
+ * Seed 2.1 Turbo — Agent / Assistance / DM Improve / enhance (default).
+ * Seed 2.0 Pro / Lite / Mini — optional tiers.
  */
-export type TextPricingModel = "pro" | "lite" | "mini";
+export type TextPricingModel = "turbo" | "pro" | "lite" | "mini";
 
-/** Seed 2.0 Pro list (≤128k) — default text/assistance COGS. */
+/** Seed 2.1 Turbo list (≈ Volcano CNY→USD; ≤256k). */
+export const TEXT_TURBO_USD_PER_M_INPUT = 0.45;
+export const TEXT_TURBO_USD_PER_M_OUTPUT = 2.25;
+export const TEXT_TURBO_USD_PER_M_CACHE_READ = 0.09;
+export const TEXT_TURBO_USD_PER_M_AUDIO_INPUT = TEXT_TURBO_USD_PER_M_INPUT;
+
+/** Seed 2.0 Pro list (≤128k) — optional Pro tier. */
 export const TEXT_USD_PER_M_INPUT = 0.5;
 export const TEXT_USD_PER_M_OUTPUT = 3.0;
 /** BytePlus ModelArk cache-hit input (Seed 2.0 Pro ≤128k). */
@@ -259,7 +265,7 @@ export function roundTextSellTtd(ttd: number): number {
   return nickels / 100;
 }
 
-function textRates(model: TextPricingModel = "pro"): {
+function textRates(model: TextPricingModel = "turbo"): {
   input: number;
   output: number;
   cacheRead: number;
@@ -284,12 +290,21 @@ function textRates(model: TextPricingModel = "pro"): {
       audioInput: TEXT_LITE_USD_PER_M_AUDIO_INPUT,
     };
   }
+  if (model === "pro") {
+    return {
+      input: TEXT_USD_PER_M_INPUT,
+      output: TEXT_USD_PER_M_OUTPUT,
+      cacheRead: TEXT_USD_PER_M_CACHE_READ,
+      cacheStorage: TEXT_USD_PER_M_CACHE_STORAGE,
+      audioInput: TEXT_USD_PER_M_AUDIO_INPUT,
+    };
+  }
   return {
-    input: TEXT_USD_PER_M_INPUT,
-    output: TEXT_USD_PER_M_OUTPUT,
-    cacheRead: TEXT_USD_PER_M_CACHE_READ,
+    input: TEXT_TURBO_USD_PER_M_INPUT,
+    output: TEXT_TURBO_USD_PER_M_OUTPUT,
+    cacheRead: TEXT_TURBO_USD_PER_M_CACHE_READ,
     cacheStorage: TEXT_USD_PER_M_CACHE_STORAGE,
-    audioInput: TEXT_USD_PER_M_AUDIO_INPUT,
+    audioInput: TEXT_TURBO_USD_PER_M_AUDIO_INPUT,
   };
 }
 
@@ -512,7 +527,7 @@ export function estimateTextModelUsd(args: {
   audioReferenceCount?: number;
   textModel?: TextPricingModel;
 }): number {
-  const rates = textRates(args.textModel ?? "pro");
+  const rates = textRates(args.textModel ?? "turbo");
   const imageRefs = Math.max(0, Math.ceil(args.imageReferenceCount ?? 0));
   const videoRefs = Math.max(0, Math.ceil(args.videoReferenceCount ?? 0));
   const audioRefs = Math.max(0, Math.ceil(args.audioReferenceCount ?? 0));
@@ -579,7 +594,7 @@ export function normalizeMeasuredTextUsage(
 /** Provider USD for Seed Pro / Lite / Mini text tokens (exact BytePlus list items). */
 export function textProviderCostUsd(
   usage: MeasuredTextUsage,
-  textModel: TextPricingModel = "pro",
+  textModel: TextPricingModel = "turbo",
 ): number {
   const rates = textRates(textModel);
   const n = normalizeMeasuredTextUsage(usage);
@@ -602,7 +617,7 @@ export function textProviderCostUsd(
  */
 export function textSellPriceFromUsageTtd(
   usage: MeasuredTextUsage,
-  textModel: TextPricingModel = "pro",
+  textModel: TextPricingModel = "turbo",
 ): number {
   const raw = textProviderCostUsd(usage, textModel) * USD_TO_TTD * 2;
   return roundTextSellTtd(raw);
@@ -610,7 +625,7 @@ export function textSellPriceFromUsageTtd(
 
 export function textCreditsFromMeasuredUsage(
   usage: MeasuredTextUsage,
-  textModel: TextPricingModel = "pro",
+  textModel: TextPricingModel = "turbo",
 ): number {
   const sellTtd = textSellPriceFromUsageTtd(usage, textModel);
   // Fractional credits OK (TT$0.05 = 0.1 credit at TT$0.50/credit).
@@ -619,7 +634,7 @@ export function textCreditsFromMeasuredUsage(
 
 export function formatTextUsageReason(
   usage: MeasuredTextUsage,
-  textModel: TextPricingModel = "pro",
+  textModel: TextPricingModel = "turbo",
 ): string {
   const n = normalizeMeasuredTextUsage(usage);
   const tier =
@@ -692,7 +707,7 @@ export function textCreditCost(args: {
         cacheReadTokens: args.cacheReadTokens,
         cacheWriteTokens: args.cacheWriteTokens,
       },
-      args.textModel ?? "pro",
+      args.textModel ?? "turbo",
     );
   }
   const sellTtd = textSellPriceTtd(args);

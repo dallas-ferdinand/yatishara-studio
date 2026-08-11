@@ -117,10 +117,10 @@ function textModelId(): string {
   );
 }
 
-/** Cheap mini model for DM Improve. */
+/** Default: Seed 2.1 Turbo (GATEWAY_DM_IMPROVE_MODEL_ID). */
 function dmImproveModelId(): string {
   return (
-    process.env.GATEWAY_DM_IMPROVE_MODEL_ID?.trim() || ARK_MODEL_IDS.textMini
+    process.env.GATEWAY_DM_IMPROVE_MODEL_ID?.trim() || ARK_MODEL_IDS.text
   );
 }
 

@@ -1734,7 +1734,7 @@ export const chargeTextGenerationForApi = internalMutation({
         outputTokens: args.outputTokens,
         cacheReadTokens: args.cacheReadTokens ?? 0,
         cacheWriteTokens: args.cacheWriteTokens ?? 0,
-        textModel: "pro",
+        textModel: "turbo",
         credits: cost,
       }),
       createdAt: now,
