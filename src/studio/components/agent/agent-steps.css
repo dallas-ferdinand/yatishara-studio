@@ -3,7 +3,8 @@
 .studio-agent-turn {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  /* Slightly more air between sent (user) and received (assistant/ask). */
+  gap: 14px;
   width: 100%;
   min-width: 0;
 }
@@ -467,12 +468,12 @@
   align-self: stretch;
   width: 100%;
   max-width: 100%;
-  /* Stream already gaps children 12px — no extra margin. */
+  /* Stream already gaps children — no extra margin. */
   margin: 0;
   padding: 0;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 12%, transparent);
-  /* Light chat canvas is already grey — bubble lifts with soft white, not darker plate. */
+  /* L1 light grey — not white, not darker L2 plate (#ececf0). */
   background: var(--mos-panel, #f5f5f7);
   box-shadow:
     0 1px 2px color-mix(in srgb, #000 12%, transparent),
@@ -482,7 +483,7 @@
 }
 
 [data-appearance="light"] .studio-agent-ask-card {
-  background: #fff;
+  background: var(--mos-panel, #f5f5f7);
   border: 1px solid color-mix(in srgb, #000 10%, transparent);
 }
 

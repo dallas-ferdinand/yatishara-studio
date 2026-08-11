@@ -45,6 +45,8 @@
   margin-inline: auto;
   padding-inline: 12px;
   box-sizing: border-box;
+  /* Slightly more space between turns (sent ↔ received groups). */
+  gap: 16px;
 }
 
 .studio-agent-pane .studio-chat-stream-inner > :first-child {
