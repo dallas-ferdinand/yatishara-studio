@@ -640,8 +640,8 @@ export function createStudioPiTools(opts) {
     name: "remember",
     label: "Remember",
     description:
-      "Store an owner-scoped durable memory for future Agent turns (never cross-user).",
-    promptSnippet: "Save a durable owner memory",
+      "Store a short owner-scoped pointer/pref for future turns (never cross-user). Use for WHERE a script lives (title + folder), prefs, decisions — NEVER full prompts, shot lists, or script bodies (those go in studio_create_document .md Scripts).",
+    promptSnippet: "Save a short location/pref pointer — not script bodies",
     parameters: Type.Object({
       title: Type.String(),
       body: Type.String(),

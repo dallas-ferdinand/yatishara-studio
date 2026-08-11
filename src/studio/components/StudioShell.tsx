@@ -572,7 +572,7 @@ const RECENTS_FOLDER_ENTRY = {
 const CREATE_MENU_ITEMS_BASE = [
   { action: "upload", label: "Upload media", icon: Upload },
   { action: "new-folder", label: "Folder", icon: Plus },
-  { action: "new-file", label: "Ad copy", icon: FileText },
+  { action: "new-file", label: "Script", icon: FileText },
   { action: "new-video-edit", label: "Video edit", icon: Clapperboard, previewOnly: true },
 ];
 
@@ -29257,11 +29257,11 @@ const AUDIO_TYPE_OPTIONS = [
 function CreateStudioTab({ target, onCancel, onCreate }) {
   const kind = target.kind === "script" ? "script" : "folder";
   const [name, setName] = useState("");
-  const title = kind === "folder" ? "New folder" : "New ad copy";
+  const title = kind === "folder" ? "New folder" : "New script";
   const helper =
     kind === "folder"
       ? "Create a folder in the current workspace folder."
-      : "Start a note or ad copy draft in a new editable tab.";
+      : "Start a script draft in a new editable tab.";
 
   return (
     <div className="h-full overflow-auto p-6">
@@ -29277,7 +29277,7 @@ function CreateStudioTab({ target, onCancel, onCreate }) {
         <p className="mt-2 text-sm text-cursor-muted">{helper}</p>
         <div className="mt-6 flex flex-wrap gap-2">
           <span className="inline-flex h-8 items-center rounded-lg border border-white/15 bg-white/[0.03] px-3 text-xs font-semibold text-cursor-text">
-            {kind === "folder" ? "Folder" : "Ad copy"}
+            {kind === "folder" ? "Folder" : "Script"}
           </span>
         </div>
         <label className="mt-6 block text-xs font-medium text-cursor-muted">
@@ -36371,7 +36371,7 @@ function sharedListItemToEntry(item) {
       studioKind: "document",
       studioId: itemId,
       folderId: item.folderId,
-      kindLabel: "Ad copy",
+      kindLabel: "Script",
       ...sharedMeta,
     };
   }
@@ -36446,7 +36446,7 @@ function documentToEntry(doc) {
     studioKind: "document",
     studioId: doc._id,
     folderId: doc.folderId,
-    kindLabel: "Ad copy",
+    kindLabel: "Script",
     description: doc.contentMarkdown,
     reactionEmoji: doc.reactionEmoji,
   };
@@ -37030,7 +37030,7 @@ function parseCreateTab(key) {
 
 function createTabTitle(target) {
   if (target.kind === "folder") return "New folder";
-  if (target.kind === "script") return "New ad copy";
+  if (target.kind === "script") return "New script";
   if (target.kind === "element") {
     return `New ${elementTypeLabel(target.elementType).toLowerCase()}`;
   }

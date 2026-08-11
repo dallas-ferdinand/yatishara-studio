@@ -119,7 +119,7 @@ function buildMenuItems(entry, {
         .filter((item) => !item.sep)
         .map((item) => ({ ...item, id: item.id ?? item.action }))
     : [
-        ...(canCreateFile ? [{ id: "new-file", label: "Ad copy" }] : []),
+        ...(canCreateFile ? [{ id: "new-file", label: "Script" }] : []),
         ...(canCreateFolder ? [{ id: "new-folder", label: "Folder" }] : []),
       ];
 

@@ -56,7 +56,7 @@ For short ads: pack concrete action verbs and spatial landmarks. Soft “beautif
 ## Save prompt as a script (when they asked for a prompt)
 
 1. Write a dense sealed HM prompt (beats + camera start→end) — not a short vibe dump.
-2. `studio_create_document` into **CWD** (`Prompt — <short>` + ```text fence + `References:` asset lines with `/Studio/assets/{id}`).
+2. **Always** `studio_create_document` into **CWD** (Script `.md`: `Prompt — <short>` + ```text fence + `References:` asset lines). Never stash the body in `remember`.
 3. Asset ids only — no elements. Studio paste/Run hydrates chips from References.
 4. Chat paste only if they asked to see/copy it.
 5. Generate path: get doc refs → estimate → still → video into CWD with `referenceAssetIds`. Speak $ / TTD only.

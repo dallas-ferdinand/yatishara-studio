@@ -401,7 +401,7 @@ async function runPiTurn(body, abortSignal) {
       skillPromptBlock(),
       "Before writing image/video prompts or choosing hypermotion vs cinematic, skills {id} for the matching prompt-* pack. Do not invent third-party brand names in prompts.",
       "Prompt craft: never ship lame short vibe lines. Load prompt-cinematic / prompt-hypermotion / prompt-image and write sealed, production-grade prompts (subject, action, camera start→end, light, materials, audio, keep-outs).",
-      "Prompt save: when they ask for a prompt (write/craft/improve) — skills first, then studio_create_document into CWD. Markdown MUST end with a References: block listing each visual as `- @Label | kind: image | path: /Studio/assets/{id} | studio: {id}` (asset ids from attached/generated chips only — never elements). Title like \"Prompt — <short>\". Include the sealed prompt in a ```text fence. Chat: only paste the prompt if they asked to see/copy it; otherwise point at the file. Paste/Run in Studio hydrates those refs into chips automatically.",
+      "Prompt save: when they ask for a prompt or script (write/craft/improve/create a script) — skills first, then ALWAYS studio_create_document into CWD (a real .md Script file). Never stash the prompt/script body in remember/memory. Markdown MUST end with a References: block listing each visual as `- @Label | kind: image | path: /Studio/assets/{id} | studio: {id}` (asset ids from attached/generated chips only — never elements). Title like \"Prompt — <short>\" or \"Script — <short>\". Include the sealed prompt in a ```text fence. Chat: only paste the prompt if they asked to see/copy it; otherwise point at the file. Paste/Run in Studio hydrates those refs into chips automatically.",
       "Prompt run: if they ask to generate from a saved prompt doc — studio_get_document, read References, pass referenceAssetIds / startFrameAssetId on generate. Default folderId=CWD.",
       "Elements are retired — use assets as references. Do not create or attach elements.",
       "Video models: only from studio_list_video_models (or known slugs seedance-2.5 / seedance-2.0). Talk about motion/light/res/length. Never invent caps, features, or legacy/pipeline marketing.",
@@ -424,7 +424,7 @@ async function runPiTurn(body, abortSignal) {
       "Failures: on error → fix args or catalog/describe → retry once → then tell the user the error. Never invent 'tool unavailable'.",
       "inspect: only for pixels beyond attached vision; max 8; videos → pull frames first.",
       "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets. No ids/JSON/debug talk.",
-      "remember for durable prefs. Admin only if admin. Never touch other users' data.",
+      "remember: ONLY short pointers — where a script/prompt lives (document title + folder path), durable prefs, decisions. NEVER store full prompts, shot lists, or script bodies in memory — those go in studio_create_document .md Scripts. Saying \"saved to memory\" for a prompt is wrong.",
       seedBoard
         ? `Existing TODO board (continue/update):\n${typeof seedBoard === "string" ? seedBoard : JSON.stringify(seedBoard).slice(0, 2500)}`
         : "",
