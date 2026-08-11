@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "convex/react";
 import {
   ArrowDown,
@@ -10,6 +10,7 @@ import {
   ListTodo,
   Loader2,
   MessageSquare,
+  MessagesSquare,
   Search,
   Wallet,
   X,
@@ -31,6 +32,81 @@ type AgentChatSidebarProps = {
 };
 
 type TabId = "info" | "media";
+
+/** Wrap query matches like DM search pills — grouped words, no extra spacing. */
+function highlightSearchMatches(text: string, query: string): ReactNode {
+  const raw = query.trim();
+  if (!text || !raw) return text;
+
+  const terms = raw
+    .split(/\s+/)
+    .map((term) => term.replace(/^[@#]+/, ""))
+    .filter((term) => term.length > 0);
+  if (terms.length === 0) return text;
+
+  const ranges: Array<{ start: number; end: number }> = [];
+  const pushMatches = (pattern: RegExp) => {
+    pattern.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      if (match[0].length === 0) {
+        pattern.lastIndex += 1;
+        continue;
+      }
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+    }
+  };
+
+  const phrase = terms
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  pushMatches(new RegExp(phrase, "gi"));
+  for (const term of terms) {
+    pushMatches(
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"),
+    );
+  }
+
+  if (ranges.length === 0) return text;
+
+  ranges.sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const range of ranges) {
+    const last = merged[merged.length - 1];
+    if (!last) {
+      merged.push({ ...range });
+      continue;
+    }
+    const between = text.slice(last.end, range.start);
+    if (range.start <= last.end || /^[\s]*$/.test(between)) {
+      last.end = Math.max(last.end, range.end);
+      continue;
+    }
+    merged.push({ ...range });
+  }
+
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  merged.forEach((range, index) => {
+    if (range.start > cursor) {
+      nodes.push(
+        <Fragment key={`t-${index}-${cursor}`}>
+          {text.slice(cursor, range.start)}
+        </Fragment>,
+      );
+    }
+    nodes.push(
+      <mark key={`h-${index}-${range.start}`} className="studio-dm-search-hit">
+        {text.slice(range.start, range.end)}
+      </mark>,
+    );
+    cursor = range.end;
+  });
+  if (cursor < text.length) {
+    nodes.push(<Fragment key={`t-end`}>{text.slice(cursor)}</Fragment>);
+  }
+  return nodes;
+}
 
 function AccordionSection({
   title,
@@ -102,21 +178,23 @@ export function AgentChatSidebar({
   const mediaIds = useMemo(() => {
     const ids: Id<"assets">[] = [];
     const seen = new Set<string>();
-    for (const item of insight?.media ?? []) {
+    const source = searching
+      ? insight?.search?.media ?? []
+      : insight?.media ?? [];
+    for (const item of source) {
       const id = String(item.assetId || "").trim();
       if (!id || seen.has(id)) continue;
       seen.add(id);
       ids.push(id as Id<"assets">);
     }
     return ids.slice(0, 40);
-  }, [insight?.media]);
+  }, [insight?.media, insight?.search?.media, searching]);
   const mediaAssets = useQuery(
     api.assets.listByIds,
     open &&
-      !searching &&
-      tab === "media" &&
       mediaIds.length &&
-      typeof expiresUnix === "number"
+      typeof expiresUnix === "number" &&
+      (searching || tab === "media")
       ? { assetIds: mediaIds, quality: "thumb" as const, expiresUnix }
       : "skip",
   );
@@ -143,6 +221,17 @@ export function AgentChatSidebar({
   const mediaCount = insight?.media?.length ?? 0;
   const turnCount = insight?.turnCount ?? 0;
   const todoCount = board.lists.reduce((n, list) => n + list.steps.length, 0);
+  const searchMessages = insight?.search?.messages ?? insight?.searchHits ?? [];
+  const searchTodos = insight?.search?.todos ?? [];
+  const searchMedia = insight?.search?.media ?? [];
+  const searchTurns = insight?.search?.turns ?? [];
+  const searchEmpty =
+    searching &&
+    insight !== undefined &&
+    searchMessages.length === 0 &&
+    searchTodos.length === 0 &&
+    searchMedia.length === 0 &&
+    searchTurns.length === 0;
 
   return (
     <aside
@@ -190,7 +279,7 @@ export function AgentChatSidebar({
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search"
+            placeholder="Search messages, to-dos, media…"
             aria-label="Search this chat"
           />
           {searching ? (
@@ -208,20 +297,144 @@ export function AgentChatSidebar({
 
       <div className="studio-agent-chat-sidebar-body">
         {searching ? (
-          <AccordionSection title="Search" icon={<Search className="h-3 w-3" />}>
-            {!insight?.searchHits?.length ? (
-              <p className="studio-settings-empty">No matches.</p>
+          <div className="studio-agent-sidebar-stack">
+            {insight === undefined ? (
+              <p className="studio-settings-empty">Searching…</p>
+            ) : searchEmpty ? (
+              <p className="studio-settings-empty">
+                No matches across messages, to-dos, media, or turns.
+              </p>
             ) : (
-              <ul className="studio-agent-turn-cost-list">
-                {insight.searchHits.map((hit) => (
-                  <li key={String(hit._id)} className="is-search-hit">
-                    <span className="studio-agent-search-role">{hit.role}</span>
-                    <p>{hit.content}</p>
-                  </li>
-                ))}
-              </ul>
+              <>
+                {searchMessages.length ? (
+                  <AccordionSection
+                    title="Messages"
+                    icon={<MessagesSquare className="h-3 w-3" />}
+                    meta={
+                      <span className="studio-agent-sidebar-acc-count">
+                        {searchMessages.length}
+                      </span>
+                    }
+                  >
+                    <ul className="studio-agent-turn-cost-list">
+                      {searchMessages.map((hit) => (
+                        <li key={String(hit._id)} className="is-search-hit">
+                          <span className="studio-agent-search-role">
+                            {hit.role}
+                          </span>
+                          <p>
+                            {highlightSearchMatches(hit.content, searchNeedle)}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </AccordionSection>
+                ) : null}
+
+                {searchTodos.length ? (
+                  <AccordionSection
+                    title="To-dos"
+                    icon={<ListTodo className="h-3 w-3" />}
+                    meta={
+                      <span className="studio-agent-sidebar-acc-count">
+                        {searchTodos.length}
+                      </span>
+                    }
+                  >
+                    <ul className="studio-agent-turn-cost-list">
+                      {searchTodos.map((todo) => (
+                        <li key={todo.id} className="is-search-hit">
+                          <span className="studio-agent-search-role">
+                            {todo.listTitle}
+                          </span>
+                          <p>
+                            {highlightSearchMatches(todo.text, searchNeedle)}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </AccordionSection>
+                ) : null}
+
+                {searchMedia.length ? (
+                  <AccordionSection
+                    title="Media"
+                    icon={<Images className="h-3 w-3" />}
+                    meta={
+                      <span className="studio-agent-sidebar-acc-count">
+                        {searchMedia.length}
+                      </span>
+                    }
+                  >
+                    <ul className="studio-agent-media-grid">
+                      {searchMedia.map((item) => {
+                        const thumb = thumbById.get(item.assetId);
+                        const sourceLabel = /attach|upload/i.test(
+                          item.toolName || "",
+                        )
+                          ? "Attachment"
+                          : "Generation";
+                        const label = item.name || item.kind;
+                        return (
+                          <li
+                            key={item.assetId}
+                            className="studio-agent-media-tile"
+                          >
+                            {thumb ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={thumb}
+                                alt=""
+                                className="studio-agent-media-tile-img"
+                              />
+                            ) : (
+                              <span className="studio-agent-media-tile-img is-empty" />
+                            )}
+                            <div className="studio-agent-media-tile-overlay">
+                              <strong>
+                                {highlightSearchMatches(label, searchNeedle)}
+                              </strong>
+                              <span>{sourceLabel}</span>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </AccordionSection>
+                ) : null}
+
+                {searchTurns.length ? (
+                  <AccordionSection
+                    title="Turns"
+                    icon={<MessageSquare className="h-3 w-3" />}
+                    meta={
+                      <span className="studio-agent-sidebar-acc-count">
+                        {searchTurns.length}
+                      </span>
+                    }
+                  >
+                    <ul className="studio-agent-turn-cost-list">
+                      {searchTurns.map((run) => (
+                        <li key={String(run._id)}>
+                          <span className="studio-agent-turn-cost-msg">
+                            {highlightSearchMatches(
+                              run.userMessage || "(attachments)",
+                              searchNeedle,
+                            )}
+                          </span>
+                          <span className="studio-agent-turn-cost-meta">
+                            {run.creditsSpent
+                              ? formatTtdFromCredits(run.creditsSpent, price)
+                              : run.status}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </AccordionSection>
+                ) : null}
+              </>
             )}
-          </AccordionSection>
+          </div>
         ) : null}
 
         {!searching && tab === "info" ? (
