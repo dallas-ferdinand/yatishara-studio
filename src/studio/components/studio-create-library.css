@@ -756,6 +756,11 @@
   opacity: 1;
 }
 
+.studio-gen-detail-ref:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 40%, transparent);
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 10%, transparent);
+}
+
 .studio-gen-detail-ref:disabled:hover {
   border-color: color-mix(in srgb, var(--color-cursor-border, #fff) 14%, transparent);
   background: color-mix(in srgb, var(--color-cursor-fg, #fff) 4%, transparent);
@@ -771,7 +776,7 @@
   background: #fff;
 }
 
-[data-appearance="light"] .studio-gen-detail-ref:hover {
+[data-appearance="light"] .studio-gen-detail-ref:hover:not(:disabled) {
   background: #f5f5f7;
 }
 
