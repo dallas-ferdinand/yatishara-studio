@@ -311,7 +311,8 @@ import {
   useAssetAsWallpaper as applyAssetAsWallpaper,
 } from "@/mos-app/theme.js";
 import { useStudioBackground } from "@/studio/hooks/useStudioBackground";
-import { useMercuryLogoAssets, useMercurySidebarLogo } from "@/lib/use-appearance-mode";
+import { useMercurySidebarLogo } from "@/lib/use-appearance-mode";
+import { StudioEmptyLogoButton } from "./StudioEmptyLogoButton";
 import { markPerfMilestone, markWorkspaceReady } from "@/lib/performance";
 import {
   audioCreditCost,
@@ -23939,28 +23940,6 @@ export function StudioShell({
                 >
                   <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
-                {!showAgentHistory ? (
-                  <button
-                    type="button"
-                    className={`studio-settings-pill studio-settings-trigger${isAgentRail ? " is-active" : ""}`}
-                    onClick={openAgent}
-                    aria-label="Open Agent Mode"
-                    title="Agent"
-                    aria-pressed={isAgentRail}
-                  >
-                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
-                  onClick={openFiles}
-                  aria-label="Open files"
-                  title="Files"
-                  aria-pressed={isFilesTab}
-                >
-                  <Folder className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
                 {showAgentHistory ? (
                   <div
                     className={`studio-header-create-cluster${
@@ -24008,31 +23987,51 @@ export function StudioShell({
                 ) : (
                   <button
                     type="button"
-                    className={`studio-settings-pill studio-settings-trigger${
-                      isComposerContextTabKey(activeTab) ||
-                      String(activeTab || "").startsWith("create:")
-                        ? " is-active"
-                        : ""
-                    }`}
-                    onClick={activateCreateControl}
-                    aria-label={
-                      isComposerContextTabKey(activeTab)
-                        ? "New create tab"
-                        : "Open create"
-                    }
-                    title={
-                      isComposerContextTabKey(activeTab)
-                        ? "New create tab"
-                        : "Create"
-                    }
-                    aria-pressed={
-                      isComposerContextTabKey(activeTab) ||
-                      String(activeTab || "").startsWith("create:")
-                    }
+                    className={`studio-settings-pill studio-settings-trigger${isAgentRail ? " is-active" : ""}`}
+                    onClick={openAgent}
+                    aria-label="Open Agent Mode"
+                    title="Agent"
+                    aria-pressed={isAgentRail}
                   >
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 )}
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
+                  onClick={openFiles}
+                  aria-label="Open files"
+                  title="Files"
+                  aria-pressed={isFilesTab}
+                >
+                  <Folder className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${
+                    isComposerContextTabKey(activeTab) ||
+                    String(activeTab || "").startsWith("create:")
+                      ? " is-active"
+                      : ""
+                  }`}
+                  onClick={activateCreateControl}
+                  aria-label={
+                    isComposerContextTabKey(activeTab)
+                      ? "New create tab"
+                      : "Open create"
+                  }
+                  title={
+                    isComposerContextTabKey(activeTab)
+                      ? "New create tab"
+                      : "Create"
+                  }
+                  aria-pressed={
+                    isComposerContextTabKey(activeTab) ||
+                    String(activeTab || "").startsWith("create:")
+                  }
+                >
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
                 {isAdminUser ? (
                   <AdminQuickLinks
                     onOpenAdminTab={openAdminTab}
@@ -24751,28 +24750,6 @@ export function StudioShell({
                 >
                   <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
-                {!showAgentHistory ? (
-                  <button
-                    type="button"
-                    className={`studio-settings-pill studio-settings-trigger${isAgentRail ? " is-active" : ""}`}
-                    onClick={openAgent}
-                    aria-label="Open Agent Mode"
-                    title="Agent"
-                    aria-pressed={isAgentRail}
-                  >
-                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
-                  onClick={openFiles}
-                  aria-label="Open files"
-                  title="Files"
-                  aria-pressed={isFilesTab}
-                >
-                  <Folder className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
                 {showAgentHistory ? (
                   <div
                     className={`studio-header-create-cluster${
@@ -24820,31 +24797,51 @@ export function StudioShell({
                 ) : (
                   <button
                     type="button"
-                    className={`studio-settings-pill studio-settings-trigger${
-                      isComposerContextTabKey(activeTab) ||
-                      String(activeTab || "").startsWith("create:")
-                        ? " is-active"
-                        : ""
-                    }`}
-                    onClick={activateCreateControl}
-                    aria-label={
-                      isComposerContextTabKey(activeTab)
-                        ? "New create tab"
-                        : "Open create"
-                    }
-                    title={
-                      isComposerContextTabKey(activeTab)
-                        ? "New create tab"
-                        : "Create"
-                    }
-                    aria-pressed={
-                      isComposerContextTabKey(activeTab) ||
-                      String(activeTab || "").startsWith("create:")
-                    }
+                    className={`studio-settings-pill studio-settings-trigger${isAgentRail ? " is-active" : ""}`}
+                    onClick={openAgent}
+                    aria-label="Open Agent Mode"
+                    title="Agent"
+                    aria-pressed={isAgentRail}
                   >
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 )}
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
+                  onClick={openFiles}
+                  aria-label="Open files"
+                  title="Files"
+                  aria-pressed={isFilesTab}
+                >
+                  <Folder className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${
+                    isComposerContextTabKey(activeTab) ||
+                    String(activeTab || "").startsWith("create:")
+                      ? " is-active"
+                      : ""
+                  }`}
+                  onClick={activateCreateControl}
+                  aria-label={
+                    isComposerContextTabKey(activeTab)
+                      ? "New create tab"
+                      : "Open create"
+                  }
+                  title={
+                    isComposerContextTabKey(activeTab)
+                      ? "New create tab"
+                      : "Create"
+                  }
+                  aria-pressed={
+                    isComposerContextTabKey(activeTab) ||
+                    String(activeTab || "").startsWith("create:")
+                  }
+                >
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
                 {isAdminUser ? (
                   <AdminQuickLinks
                     onOpenAdminTab={openAdminTab}
@@ -30348,91 +30345,6 @@ function compressThreadDisplayEvents(events = []) {
     }
     return true;
   });
-}
-
-function StudioEmptyLogoButton() {
-  const emptyLogo = useMercuryLogoAssets(96);
-  const [pressed, setPressed] = useState(false);
-  const pressStartedRef = useRef(0);
-  const releaseTimerRef = useRef(null);
-  const MIN_PRESS_MS = 120;
-
-  useEffect(() => {
-    return () => {
-      if (releaseTimerRef.current) window.clearTimeout(releaseTimerRef.current);
-    };
-  }, []);
-
-  function beginPress() {
-    if (releaseTimerRef.current) {
-      window.clearTimeout(releaseTimerRef.current);
-      releaseTimerRef.current = null;
-    }
-    pressStartedRef.current = performance.now();
-    setPressed(true);
-  }
-
-  function scheduleRelease() {
-    const elapsed = performance.now() - pressStartedRef.current;
-    const remain = Math.max(0, MIN_PRESS_MS - elapsed);
-    if (releaseTimerRef.current) window.clearTimeout(releaseTimerRef.current);
-    releaseTimerRef.current = window.setTimeout(() => {
-      releaseTimerRef.current = null;
-      setPressed(false);
-    }, remain);
-  }
-
-  function shuffleTheme() {
-    playUiSound("shuffle");
-    try {
-      navigator.vibrate?.(12);
-    } catch {
-      /* best-effort */
-    }
-    randomizeStudioAppearance();
-  }
-
-  return (
-    <div className="studio-empty-logo-wrap">
-    <button
-      type="button"
-      className={`studio-empty-logo-btn${pressed ? " is-pressed" : ""}`}
-      aria-label="Shuffle background style, theme, and appearance"
-      title="Shuffle style"
-      onPointerDown={(event) => {
-        if (event.button !== 0) return;
-        beginPress();
-      }}
-      onPointerUp={scheduleRelease}
-      onPointerLeave={scheduleRelease}
-      onPointerCancel={scheduleRelease}
-      onClick={shuffleTheme}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          beginPress();
-        }
-      }}
-      onKeyUp={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          scheduleRelease();
-        }
-      }}
-    >
-      <span className="studio-empty-logo" aria-hidden="true">
-        <span className="studio-empty-logo-blur" aria-hidden="true" />
-        <img
-          src={emptyLogo.src}
-          srcSet={emptyLogo.srcSet}
-          sizes={emptyLogo.sizes}
-          alt=""
-          width={104}
-          height={104}
-          draggable={false}
-        />
-      </span>
-    </button>
-    </div>
-  );
 }
 
 function StudioThreadChat({

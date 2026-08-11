@@ -88,10 +88,9 @@ function NavButton({
 }
 
 /**
- * Permanent sections: Feed | Network | Academy | Messages | Create.
- * Generate: Create expands as a dual/linked pill with History (+ Files).
- * Order: Create | History | Files — History sits next to Generate like the
- * credit pill sits next to Create in header tools.
+ * Permanent sections: Feed | Network | Academy | Messages | Agent | Create.
+ * Agent: Agent|History dual pill when History is openable.
+ * Create: standalone (Create History retired). Files/Extras may still link to Create.
  * Files dock open: Files + Extras (Places); History hidden.
  */
 export function StudioMobileBottomNav({
@@ -119,11 +118,11 @@ export function StudioMobileBottomNav({
   const showHistory = Boolean(historyAction) && !filesOpen;
   const networkLinked =
     section === "network" && (linkFilesToNetwork || showExtras);
-  // Always link Create when History is available on Generate — dual pill even
-  // if the Files action is briefly unset.
+  // Create History retired — never dual Create|History. Files/Extras only.
   const createLinked =
-    section === "composer" &&
-    (showHistory || linkFilesToCreate || showExtras);
+    section === "composer" && (linkFilesToCreate || showExtras);
+  // Agent|History dual when History is available on Agent.
+  const agentLinked = section === "agent" && showHistory;
 
   const filesBtn = (linked) =>
     filesAction ? (
@@ -239,29 +238,43 @@ export function StudioMobileBottomNav({
           <MessageCircle aria-hidden="true" />
         </NavButton>
 
-        <NavButton
-          className={`studio-mobile-nav-btn${section === "agent" ? " is-active" : ""} is-icon-only`}
-          ariaCurrent={section === "agent" ? "page" : undefined}
-          ariaLabel="Agent"
-          title="Agent"
-          onActivate={() => onSelect("agent")}
-          onIntent={() => onPrefetch?.("agent")}
-        >
-          <Bot aria-hidden="true" />
-        </NavButton>
+        {agentLinked ? (
+          <div
+            className={`studio-mobile-nav-cluster is-linked${historyAction?.active ? " is-action-active" : ""}`}
+            role="group"
+            aria-label="Agent and History"
+          >
+            <NavButton
+              className={`studio-mobile-nav-btn is-icon-only is-cluster-slot is-active`}
+              ariaCurrent="page"
+              ariaLabel="Agent"
+              title="Agent"
+              onActivate={() => onSelect("agent")}
+              onIntent={() => onPrefetch?.("agent")}
+            >
+              <Bot aria-hidden="true" />
+            </NavButton>
+            {historyBtn(true)}
+          </div>
+        ) : (
+          <NavButton
+            className={`studio-mobile-nav-btn${section === "agent" ? " is-active" : ""} is-icon-only`}
+            ariaCurrent={section === "agent" ? "page" : undefined}
+            ariaLabel="Agent"
+            title="Agent"
+            onActivate={() => onSelect("agent")}
+            onIntent={() => onPrefetch?.("agent")}
+          >
+            <Bot aria-hidden="true" />
+          </NavButton>
+        )}
 
         {createLinked ? (
           <div
-            className={`studio-mobile-nav-cluster is-linked${filesAction?.active || extras?.active || historyAction?.active ? " is-action-active" : ""}`}
+            className={`studio-mobile-nav-cluster is-linked${filesAction?.active || extras?.active ? " is-action-active" : ""}`}
             role="group"
             aria-label={
-              showExtras
-                ? "Create, Files, and Extras"
-                : showHistory && linkFilesToCreate
-                  ? "Create, History, and Files"
-                  : showHistory
-                    ? "Create and History"
-                    : "Create and Files"
+              showExtras ? "Create, Files, and Extras" : "Create and Files"
             }
           >
             <NavButton
@@ -274,7 +287,6 @@ export function StudioMobileBottomNav({
             >
               <Sparkles aria-hidden="true" />
             </NavButton>
-            {historyBtn(true)}
             {filesBtn(true)}
             {extrasBtn(true)}
           </div>

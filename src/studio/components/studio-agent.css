@@ -27,6 +27,15 @@
   padding: 24px 12px;
 }
 
+.studio-agent-empty-hero .studio-empty-logo-wrap {
+  margin-bottom: 4px;
+}
+
+.studio-agent-empty-hero .studio-empty-logo-btn {
+  /* Match Create / workspace empty logo scale. */
+  transform: scale(1);
+}
+
 .studio-agent-empty-hero h2 {
   margin: 0;
   font-size: 1.25rem;

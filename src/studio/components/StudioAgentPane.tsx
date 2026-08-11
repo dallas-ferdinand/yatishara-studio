@@ -9,9 +9,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { ArrowUp, Bot, Check, Loader2, Plus, Settings, X } from "lucide-react";
+import { ArrowUp, Check, Loader2, Plus, Settings, X } from "lucide-react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { StudioEmptyLogoButton } from "./StudioEmptyLogoButton";
 import "./studio-messages.css";
 import "./studio-agent.css";
 
@@ -151,7 +152,7 @@ export function StudioAgentPane({
           >
             {!hasMessages && !busy ? (
               <div className="studio-agent-empty-hero">
-                <Bot size={28} aria-hidden="true" />
+                <StudioEmptyLogoButton />
                 <h2>Studio Agent</h2>
                 <p>
                   Set up projects, folders, and generation approvals — like a
