@@ -1068,14 +1068,13 @@ export function StudioAgentPane({
                 type="button"
                 className={`studio-agent-auto-toggle${autoApprove ? " is-on" : ""}`}
                 aria-pressed={autoApprove}
-                title={autoApprove ? "Auto mode on" : "Auto mode off"}
+                title={autoApprove ? "YOLO mode on" : "YOLO mode off"}
                 onClick={() => void handleToggleAutoApprove()}
                 disabled={autoApproveBusy || busy}
               >
-                <span className="studio-agent-auto-toggle-dot" aria-hidden="true" />
-                <span className="studio-agent-auto-toggle-copy">
-                  <strong>Auto</strong>
-                  <span>{autoApprove ? "YOLO on" : "Ask before risky actions"}</span>
+                <span className="studio-agent-auto-toggle-label">YOLO</span>
+                <span className="studio-agent-auto-toggle-switch" aria-hidden="true">
+                  <span className="studio-agent-auto-toggle-thumb" />
                 </span>
               </button>
               <button
