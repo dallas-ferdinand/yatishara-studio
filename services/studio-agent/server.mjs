@@ -337,10 +337,34 @@ async function runPiTurn(body, abortSignal) {
       throw new Error("cancelled");
     }
 
-    const result = await session.prompt(prompt);
-    return typeof result === "string"
-      ? result
-      : String(result?.text ?? result?.message ?? "Done.");
+    // prompt() resolves void — text + usage come from session after idle.
+    await session.prompt(prompt);
+    const stats = typeof session.getSessionStats === "function"
+      ? session.getSessionStats()
+      : null;
+    const tokens = stats?.tokens || {};
+    const inputTokens = Math.max(
+      0,
+      Math.floor(
+        Number(tokens.input || 0) +
+          Number(tokens.cacheRead || 0) +
+          Number(tokens.cacheWrite || 0),
+      ),
+    );
+    const outputTokens = Math.max(0, Math.floor(Number(tokens.output || 0)));
+    const assistantText =
+      (typeof session.getLastAssistantText === "function"
+        ? session.getLastAssistantText()
+        : null) || "Done.";
+    try {
+      session.dispose?.();
+    } catch {
+      // ignore dispose errors
+    }
+    return {
+      assistantText: String(assistantText),
+      usage: { inputTokens, outputTokens },
+    };
   } finally {
     clearInterval(cancelPoll);
   }
@@ -387,12 +411,13 @@ const server = createServer(async (req, res) => {
       const key = sessionKey(body.userId || "anon", body.threadId || "default");
       sessions.set(key, { updatedAt: Date.now(), abort });
       try {
-        const assistantText = await runPiTurn(body, abort.signal);
+        const turn = await runPiTurn(body, abort.signal);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
-            assistantText,
-            creditsSpent: 0,
+            assistantText: turn.assistantText,
+            usage: turn.usage,
+            // Ledger charge is Convex-owned (measured usage → textCreditCost).
             usedByok: Boolean(body.usedByok),
           }),
         );

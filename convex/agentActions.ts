@@ -137,22 +137,6 @@ export const sendTurn = action({
       };
     }
 
-    await ctx.runMutation(api.agentMessages.appendMessage, {
-      threadId: args.threadId,
-      role: "user",
-      content: message,
-    });
-
-    const history: Array<{ role: string; content: string }> = await ctx.runQuery(
-      internal.agentMessages.listRecentMessagesInternal,
-      { threadId: args.threadId, ownerId, limit: 20 },
-    );
-
-    const memories = await ctx.runQuery(internal.agentMemory.retrieveForRun, {
-      ownerId,
-      limit: 12,
-    });
-
     let usedByok = false;
     let byokProvider: string | null = null;
     let byokPlain: string | null = null;
@@ -176,6 +160,36 @@ export const sendTurn = action({
         byokFallbackNote = `BYOK unavailable (${error instanceof Error ? error.message : String(error)}). Using platform model explicitly.`;
       }
     }
+
+    // Platform LLM turns require a credit floor before we spend provider tokens.
+    // BYOK skips this (user's key); Studio tool invokes still bill via /api/v1.
+    if (!usedByok) {
+      const affordability = await ctx.runQuery(
+        api.generation.assertTextGenerationAffordable,
+        {},
+      );
+      if (!affordability.ok) {
+        throw new Error(
+          "You need a small credit balance to use Agent Mode. Top up to continue.",
+        );
+      }
+    }
+
+    await ctx.runMutation(api.agentMessages.appendMessage, {
+      threadId: args.threadId,
+      role: "user",
+      content: message,
+    });
+
+    const history: Array<{ role: string; content: string }> = await ctx.runQuery(
+      internal.agentMessages.listRecentMessagesInternal,
+      { threadId: args.threadId, ownerId, limit: 20 },
+    );
+
+    const memories = await ctx.runQuery(internal.agentMemory.retrieveForRun, {
+      ownerId,
+      limit: 12,
+    });
 
     const runId = await ctx.runMutation(internal.agentRuns.createRun, {
       ownerId,
@@ -293,27 +307,33 @@ export const sendTurn = action({
         content: assistantText,
       });
 
-      let creditsSpent = body.creditsSpent ?? 0;
-      if (!usedByok && body.usage) {
-        const inputTokens = body.usage.inputTokens ?? 0;
-        const outputTokens = body.usage.outputTokens ?? 0;
+      // Always bill platform LLM usage (measured tokens; TT$0.01 floor).
+      // BYOK: no LLM ledger charge. Paid tools still charge via Studio API.
+      let creditsSpent = 0;
+      if (!usedByok) {
+        const inputTokens = Math.max(
+          0,
+          Math.floor(Number(body.usage?.inputTokens ?? 0)),
+        );
+        const outputTokens = Math.max(
+          0,
+          Math.floor(Number(body.usage?.outputTokens ?? 0)),
+        );
         creditsSpent = textCreditCost({
           inputTokens,
           outputTokens,
           textModel: "pro",
         });
-        if (creditsSpent > 0) {
-          const folderId = await ctx.runMutation(
-            api.folders.ensureMessagesFolderForMe,
-            {},
-          );
-          await ctx.runMutation(chargeTextGenerationRef, {
-            folderId,
-            inputTokens,
-            outputTokens,
-            textModel: "pro",
-          });
-        }
+        const folderId = await ctx.runMutation(
+          api.folders.ensureMessagesFolderForMe,
+          {},
+        );
+        await ctx.runMutation(chargeTextGenerationRef, {
+          folderId,
+          inputTokens,
+          outputTokens,
+          textModel: "pro",
+        });
       }
 
       await ctx.runMutation(internal.agentRuns.completeRun, {
