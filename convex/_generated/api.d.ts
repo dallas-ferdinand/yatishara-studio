@@ -42,6 +42,7 @@ import type * as exportJobs from "../exportJobs.js";
 import type * as folders from "../folders.js";
 import type * as generation from "../generation.js";
 import type * as generationActions from "../generationActions.js";
+import type * as generationLibrary from "../generationLibrary.js";
 import type * as guidedVideo from "../guidedVideo.js";
 import type * as guidedVideoActions from "../guidedVideoActions.js";
 import type * as guidedVideoLite from "../guidedVideoLite.js";
@@ -202,6 +203,7 @@ declare const fullApi: ApiFromModules<{
   folders: typeof folders;
   generation: typeof generation;
   generationActions: typeof generationActions;
+  generationLibrary: typeof generationLibrary;
   guidedVideo: typeof guidedVideo;
   guidedVideoActions: typeof guidedVideoActions;
   guidedVideoLite: typeof guidedVideoLite;

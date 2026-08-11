@@ -6,6 +6,8 @@ import { StudioMobileBottomNav } from "./StudioMobileBottomNav";
 import { StudioRatioGlyph } from "./StudioRatioGlyph";
 import { StudioPromptMessage } from "./StudioPromptMessage";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
+import { StudioCreateLibrary } from "./StudioCreateLibrary";
+import { StudioGenerationDetailSidebar } from "./StudioGenerationDetailSidebar";
 import { AssistanceToggle } from "./guided-video/AssistanceToggle";
 import {
   VideoTypePickerPanel,
@@ -668,6 +670,7 @@ function serializeComposerContextsForStorage(contexts) {
       sfxPromptInfluence: ctx.sfxPromptInfluence,
       musicDurationSeconds: ctx.musicDurationSeconds,
       musicInstrumental: ctx.musicInstrumental,
+      ...(ctx.boundThreadId ? { boundThreadId: ctx.boundThreadId } : {}),
     };
   }
   return out;
@@ -1405,6 +1408,8 @@ export function StudioShell({
   const [loadingEarlierChat, setLoadingEarlierChat] = useState(false);
   /** Optimistic prompt + loader bubbles keyed by threadId until Convex events catch up. */
   const [optimisticByThread, setOptimisticByThread] = useState({});
+  /** Create library right-rail detail (Settings/History-style). */
+  const [generationDetail, setGenerationDetail] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("general");
   const [billingTopUpPrefillCents, setBillingTopUpPrefillCents] = useState(null);
@@ -3294,19 +3299,30 @@ export function StudioShell({
     }
   }, [activeTab]);
 
-  // Generation history on Create tabs; Agent history on Agent Mode.
-  const showCreateHistory =
-    typeof activeTab === "string" &&
-    (activeTab.startsWith("composer:") ||
-      activeTab.startsWith("thread:") ||
-      activeTab.startsWith("create:"));
+  // Create History retired — Agent|History only.
   const showAgentHistory =
     typeof activeTab === "string" && activeTab.startsWith("agent:");
-  const showHistory = showCreateHistory || showAgentHistory;
+  const showHistory = showAgentHistory;
+  const generationDetailOpen = Boolean(generationDetail?.jobId);
 
   useEffect(() => {
     if (!showHistory && historyOpen) setHistoryOpen(false);
   }, [showHistory, historyOpen]);
+
+  useEffect(() => {
+    if ((settingsOpen || historyOpen) && generationDetailOpen) {
+      setGenerationDetail(null);
+    }
+  }, [settingsOpen, historyOpen, generationDetailOpen]);
+
+  useEffect(() => {
+    const onCreate =
+      typeof activeTab === "string" &&
+      (activeTab.startsWith("composer:") ||
+        activeTab.startsWith("thread:") ||
+        activeTab.startsWith("create:"));
+    if (!onCreate && generationDetailOpen) setGenerationDetail(null);
+  }, [activeTab, generationDetailOpen]);
 
   // Keep the active chat's composer snapshot hot while typing / attaching.
   // Composer unmounts when leaving chat tabs, so we cannot rely on reading the
@@ -4905,19 +4921,20 @@ export function StudioShell({
 
   const rootFolderId = navTrail[0]?.id ?? null;
 
-  const historyPanelProps = {
-    mode: showAgentHistory ? "agent" : "create",
-    indexThreads: showAgentHistory ? agentThreads ?? [] : threads ?? [],
-    openThreadIds: openTabs
-      .filter((tab) => tab.startsWith("thread:"))
-      .map((tab) => tab.slice("thread:".length)),
-    activeThreadId: showAgentHistory ? activeAgentThreadId : activeThreadId,
-    onSelectThread: showAgentHistory
-      ? openAgentHistoryThread
-      : openHistoryThread,
-    onClose: () => setHistoryOpen(false),
-    expiresUnix: assetUrlExpiresUnix,
-  };
+  const historyPanelProps = showAgentHistory
+    ? {
+        mode: "agent",
+        indexThreads: agentThreads ?? [],
+        openThreadIds: openTabs
+          .filter((tab) => tab.startsWith("agent:"))
+          .map((tab) => tab.slice("agent:".length))
+          .filter((id) => id && !id.startsWith("new:")),
+        activeThreadId: activeAgentThreadId,
+        onSelectThread: openAgentHistoryThread,
+        onClose: () => setHistoryOpen(false),
+        expiresUnix: assetUrlExpiresUnix,
+      }
+    : null;
 
   const settingsPanelProps = {
     settingsSection,
@@ -7554,6 +7571,46 @@ export function StudioShell({
     return activeFolder?._id;
   }
 
+  /**
+   * Mint/reuse a generation thread for Create without swapping the tab to `thread:`.
+   * Bound id lives on the composer context so follow-up gens stay on the same thread.
+   */
+  async function ensureCreateThread({ title, assistanceEnabled } = {}) {
+    const ctxKey = composerContextKeyForTab(activeTab);
+    const bound = composerContextsRef.current[ctxKey]?.boundThreadId;
+    if (bound && (!threads?.length || threads.some((thread) => thread._id === bound))) {
+      return bound;
+    }
+    if (activeThreadId && threads?.some((thread) => thread._id === activeThreadId)) {
+      return activeThreadId;
+    }
+    const threadId = await createThread({
+      folderId: activeFolder._id,
+      title: title || "New generation",
+      ...(assistanceEnabled != null ? { assistanceEnabled } : {}),
+    });
+    composerContextsRef.current[ctxKey] = {
+      ...(composerContextsRef.current[ctxKey] ?? {}),
+      boundThreadId: threadId,
+    };
+    writePersistedComposerContexts(composerContextsRef.current);
+    return threadId;
+  }
+
+  function libraryTileToEntry(tile) {
+    if (!tile?.assetId) return null;
+    return {
+      path: `asset:${tile.assetId}`,
+      studioKind: "asset",
+      studioId: tile.assetId,
+      kind: tile.kind,
+      name: tile.name,
+      width: tile.width,
+      height: tile.height,
+      folderId: tile.folderId,
+    };
+  }
+
   async function handleGenerateVideoFromImage(entry) {
     if (!activeFolder || !entry || assistBusy || flowPending) return;
     const fullEntry = pathToEntry.get(entry.path) ?? entry;
@@ -7636,36 +7693,17 @@ export function StudioShell({
           : null;
       let threadId = reuseThreadId;
       if (!threadId) {
-        threadId = await createThread({
-          folderId: activeFolder._id,
+        threadId = await ensureCreateThread({
           title: threadTitleFromPrompt(prompt, nextAttachments, "image"),
         });
-        const composerTab = activeTab;
-        if (composerTab.startsWith("composer:")) {
-          delete composerContextsRef.current[composerTab];
-          setOpenTabs((tabs) =>
-            tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)),
-          );
-          setActiveTab(`thread:${threadId}`);
-        } else {
-          openTab(`thread:${threadId}`);
-        }
       }
 
       const aspectForRun = nextAspect ?? aspectRatio;
-      const optimistic = createOptimisticGenerationEvents({
-        prompt: userPrompt,
-        mode: "image",
-        aspectRatio: aspectForRun,
-      });
-      setOptimisticByThread((prev) => ({
-        ...prev,
-        [threadId]: [...(prev[threadId] ?? []), ...optimistic.events],
-      }));
+      // Library tiles cover in-progress gens — skip chat optimistic events.
       setDraft("");
       setAttachments([]);
       if (editorRef.current) editorRef.current.replaceChildren();
-      const chatKey = `thread:${threadId}`;
+      const chatKey = composerContextKeyForTab(activeTab);
       composerContextsRef.current[chatKey] = {
         ...(composerContextsRef.current[chatKey] ?? {}),
         draft: "",
@@ -7675,6 +7713,7 @@ export function StudioShell({
         imageQuality: "high",
         imageResolution: "4K",
         aspectRatio: aspectForRun,
+        boundThreadId: threadId,
       };
       setFlowPending(false);
 
@@ -7695,15 +7734,6 @@ export function StudioShell({
         hasElementReference: false,
       };
       void runFlow(flowArgs).catch((error) => {
-        setOptimisticByThread((prev) => {
-          const current = prev[threadId] ?? [];
-          const next = current.filter((event) => event.clientId !== optimistic.clientId);
-          if (!next.length) {
-            const { [threadId]: _drop, ...rest } = prev;
-            return rest;
-          }
-          return { ...prev, [threadId]: next };
-        });
         console.error("Upscale image failed", error);
         toast.error(friendlyConvexError(error, "Could not start upscale."));
       });
@@ -7718,6 +7748,7 @@ export function StudioShell({
         imageQuality: "high",
         imageResolution: "4K",
         aspectRatio: aspectForRun,
+        boundThreadId: threadId,
       };
       appendAttachmentChipToComposerContext(composerContextsRef, chatKey, attachment);
       setAttachments(nextAttachments);
@@ -7849,8 +7880,7 @@ export function StudioShell({
         const editingEventId = editingPromptEventId;
         let threadId = reuseThreadId;
         if (!threadId) {
-          threadId = await createThread({
-            folderId: activeFolder._id,
+          threadId = await ensureCreateThread({
             title: threadTitleFromPrompt(
               userPrompt,
               capturedAttachments,
@@ -7858,14 +7888,6 @@ export function StudioShell({
             ),
             assistanceEnabled: true,
           });
-          const composerTab = activeTab;
-          if (composerTab.startsWith("composer:")) {
-            delete composerContextsRef.current[composerTab];
-            setOpenTabs((tabs) => tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)));
-            setActiveTab(`thread:${threadId}`);
-          } else {
-            openTab(`thread:${threadId}`);
-          }
         }
         if (editingEventId) {
           await truncateAssistanceEventsAfterPrompt({
@@ -7885,12 +7907,13 @@ export function StudioShell({
         setDraft("");
         setAttachments([]);
         if (editorRef.current) editorRef.current.replaceChildren();
-        const chatKey = `thread:${threadId}`;
+        const chatKey = composerContextKeyForTab(activeTab);
         composerContextsRef.current[chatKey] = {
           ...(composerContextsRef.current[chatKey] ?? {}),
           draft: "",
           attachments: [],
           editorHtml: "",
+          boundThreadId: threadId,
         };
         setFlowPending(false);
         setAssistBusy(true);
@@ -8013,39 +8036,21 @@ export function StudioShell({
             : null;
         let threadId = reuseThreadId;
         if (!threadId) {
-          threadId = await createThread({
-            folderId: activeFolder._id,
+          threadId = await ensureCreateThread({
             title: threadTitleFromPrompt(userPrompt, attachments, "audio"),
             assistanceEnabled: false,
           });
-          const composerTab = activeTab;
-          if (composerTab.startsWith("composer:")) {
-            delete composerContextsRef.current[composerTab];
-            setOpenTabs((tabs) =>
-              tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)),
-            );
-            setActiveTab(`thread:${threadId}`);
-          } else {
-            openTab(`thread:${threadId}`);
-          }
         }
-        const optimistic = createOptimisticGenerationEvents({
-          prompt: userPrompt,
-          mode: "audio",
-        });
-        setOptimisticByThread((prev) => ({
-          ...prev,
-          [threadId]: [...(prev[threadId] ?? []), ...optimistic.events],
-        }));
         setDraft("");
         setAttachments([]);
         if (editorRef.current) editorRef.current.replaceChildren();
-        const chatKey = `thread:${threadId}`;
+        const chatKey = composerContextKeyForTab(activeTab);
         composerContextsRef.current[chatKey] = {
           ...(composerContextsRef.current[chatKey] ?? {}),
           draft: "",
           attachments: [],
           editorHtml: "",
+          boundThreadId: threadId,
         };
         setFlowPending(false);
         void runAudioFlow({
@@ -8076,15 +8081,6 @@ export function StudioShell({
           if (/connection lost while action|connection lost/i.test(raw)) {
             return;
           }
-          setOptimisticByThread((prev) => {
-            const current = prev[threadId] ?? [];
-            const next = current.filter((event) => event.clientId !== optimistic.clientId);
-            if (!next.length) {
-              const { [threadId]: _drop, ...rest } = prev;
-              return rest;
-            }
-            return { ...prev, [threadId]: next };
-          });
           console.error("Studio audio action failed", error);
           toast.error(friendlyConvexError(error, "Audio generation failed."));
         });
@@ -8110,7 +8106,7 @@ export function StudioShell({
         openSettingsTab("billing");
         throw new Error(entitlement.reason ?? "Content generation is not available right now.");
       }
-      // Stay in the open chat when generating again; only mint a thread from a blank composer tab.
+      // Stay on Create; mint a thread under the hood without swapping to thread chat.
       const reuseThreadId =
         activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
           ? activeThreadId
@@ -8120,39 +8116,21 @@ export function StudioShell({
 
       let threadId = reuseThreadId;
       if (!threadId) {
-        threadId = await createThread({
-          folderId: activeFolder._id,
+        threadId = await ensureCreateThread({
           title: threadTitleFromPrompt(userPrompt, attachments, genMode),
         });
-        const composerTab = activeTab;
-        if (composerTab.startsWith("composer:")) {
-          delete composerContextsRef.current[composerTab];
-          setOpenTabs((tabs) => tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)));
-          setActiveTab(`thread:${threadId}`);
-        } else {
-          openTab(`thread:${threadId}`);
-        }
       }
 
-      // Show sent prompt + loader immediately; Convex events replace these when they land.
-      const optimistic = createOptimisticGenerationEvents({
-        prompt: userPrompt,
-        mode: genMode,
-        aspectRatio,
-      });
-      setOptimisticByThread((prev) => ({
-        ...prev,
-        [threadId]: [...(prev[threadId] ?? []), ...optimistic.events],
-      }));
       setDraft("");
       setAttachments([]);
       if (editorRef.current) editorRef.current.replaceChildren();
-      const chatKey = `thread:${threadId}`;
+      const chatKey = composerContextKeyForTab(activeTab);
       composerContextsRef.current[chatKey] = {
         ...(composerContextsRef.current[chatKey] ?? {}),
         draft: "",
         attachments: [],
         editorHtml: "",
+        boundThreadId: threadId,
       };
       setFlowPending(false);
 
@@ -8184,16 +8162,17 @@ export function StudioShell({
         hasElementReference: composerReferenceFlags.hasElementReference,
       };
       void runFlow(flowArgs).catch((error) => {
-        setOptimisticByThread((prev) => {
-          const current = prev[threadId] ?? [];
-          const next = current.filter((event) => event.clientId !== optimistic.clientId);
-          if (!next.length) {
-            const { [threadId]: _drop, ...rest } = prev;
-            return rest;
-          }
-          return { ...prev, [threadId]: next };
-        });
+        const raw =
+          error instanceof Error
+            ? error.message
+            : typeof error === "string"
+              ? error
+              : "";
+        if (/connection lost while action|connection lost/i.test(raw)) {
+          return;
+        }
         console.error("Studio action failed", error);
+        toast.error(friendlyConvexError(error, "Generation failed."));
       });
     } catch (error) {
       console.error("Studio action failed", error);
@@ -24131,70 +24110,6 @@ export function StudioShell({
                       )}
                     </button>
                   </div>
-                ) : showCreateHistory ? (
-                  <div
-                    className={`studio-header-create-cluster${
-                      isComposerContextTabKey(activeTab) ||
-                      String(activeTab || "").startsWith("create:") ||
-                      historyOpen
-                        ? " is-linked"
-                        : ""
-                    }`}
-                    role="group"
-                    aria-label="Create and History"
-                  >
-                    <button
-                      type="button"
-                      className={`studio-settings-pill studio-settings-trigger${
-                        isComposerContextTabKey(activeTab) ||
-                        String(activeTab || "").startsWith("create:")
-                          ? " is-active"
-                          : ""
-                      }`}
-                      onClick={activateCreateControl}
-                      aria-label={
-                        isComposerContextTabKey(activeTab)
-                          ? "New create tab"
-                          : "Open create"
-                      }
-                      title={
-                        isComposerContextTabKey(activeTab)
-                          ? "New create tab"
-                          : "Create"
-                      }
-                      aria-pressed={
-                        isComposerContextTabKey(activeTab) ||
-                        String(activeTab || "").startsWith("create:")
-                      }
-                    >
-                      <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
-                      onClick={() => {
-                        setMobileAppMenuOpen(false);
-                        setSettingsOpen(false);
-                        if (
-                          !historyOpen &&
-                          !isComposerContextTabKey(activeTab) &&
-                          !String(activeTab || "").startsWith("create:")
-                        ) {
-                          openTab(lastChatTabRef.current || COMPOSER_TAB);
-                        }
-                        setHistoryOpen((open) => !open);
-                      }}
-                      aria-label={historyOpen ? "Close history" : "Open history"}
-                      title={historyOpen ? "Close history" : "History"}
-                      aria-pressed={historyOpen}
-                    >
-                      {historyOpen ? (
-                        <X className="h-3.5 w-3.5" aria-hidden="true" />
-                      ) : (
-                        <History className="h-3.5 w-3.5" aria-hidden="true" />
-                      )}
-                    </button>
-                  </div>
                 ) : (
                   <button
                     type="button"
@@ -24806,9 +24721,43 @@ export function StudioShell({
       <StudioWorkspaceColumn
         settingsOpen={settingsOpen}
         historyOpen={historyOpen}
+        generationDetailOpen={generationDetailOpen}
         isMobile={isMobile}
         settingsPanelProps={settingsPanelProps}
         historyPanelProps={historyPanelProps}
+        generationDetailPanel={
+          generationDetailOpen ? (
+            <StudioGenerationDetailSidebar
+              jobId={generationDetail.jobId}
+              assetId={generationDetail.assetId}
+              expiresUnix={assetUrlExpiresUnix}
+              isMobile={isMobile}
+              onClose={() => setGenerationDetail(null)}
+              onUpscale={(tile) => {
+                const entry = libraryTileToEntry(tile);
+                if (entry) void handleUpscaleImage(entry);
+              }}
+              onGenerateVideo={(tile) => {
+                const entry = libraryTileToEntry(tile);
+                if (entry) void handleGenerateVideoFromImage(entry);
+              }}
+              onOpenInFiles={(assetId, folderId) => {
+                setGenerationDetail(null);
+                if (folderId) setActiveFolderId(folderId);
+                openFiles();
+                openTab(`asset:${assetId}`);
+              }}
+              onTrash={(assetId) => {
+                void trashAsset({ assetId }).then(() => {
+                  setGenerationDetail(null);
+                  toast.success("Moved to trash");
+                }).catch((error) => {
+                  toast.error(friendlyConvexError(error, "Could not trash."));
+                });
+              }}
+            />
+          ) : null
+        }
       >
       <main className={`${STYLE.main} studio-composer-bg`}>
         {isMobile ? (
@@ -24959,70 +24908,6 @@ export function StudioShell({
                         setSettingsOpen(false);
                         if (!historyOpen && !isAgentRail) {
                           openAgent();
-                        }
-                        setHistoryOpen((open) => !open);
-                      }}
-                      aria-label={historyOpen ? "Close history" : "Open history"}
-                      title={historyOpen ? "Close history" : "History"}
-                      aria-pressed={historyOpen}
-                    >
-                      {historyOpen ? (
-                        <X className="h-3.5 w-3.5" aria-hidden="true" />
-                      ) : (
-                        <History className="h-3.5 w-3.5" aria-hidden="true" />
-                      )}
-                    </button>
-                  </div>
-                ) : showCreateHistory ? (
-                  <div
-                    className={`studio-header-create-cluster${
-                      isComposerContextTabKey(activeTab) ||
-                      String(activeTab || "").startsWith("create:") ||
-                      historyOpen
-                        ? " is-linked"
-                        : ""
-                    }`}
-                    role="group"
-                    aria-label="Create and History"
-                  >
-                    <button
-                      type="button"
-                      className={`studio-settings-pill studio-settings-trigger${
-                        isComposerContextTabKey(activeTab) ||
-                        String(activeTab || "").startsWith("create:")
-                          ? " is-active"
-                          : ""
-                      }`}
-                      onClick={activateCreateControl}
-                      aria-label={
-                        isComposerContextTabKey(activeTab)
-                          ? "New create tab"
-                          : "Open create"
-                      }
-                      title={
-                        isComposerContextTabKey(activeTab)
-                          ? "New create tab"
-                          : "Create"
-                      }
-                      aria-pressed={
-                        isComposerContextTabKey(activeTab) ||
-                        String(activeTab || "").startsWith("create:")
-                      }
-                    >
-                      <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
-                      onClick={() => {
-                        setMobileAppMenuOpen(false);
-                        setSettingsOpen(false);
-                        if (
-                          !historyOpen &&
-                          !isComposerContextTabKey(activeTab) &&
-                          !String(activeTab || "").startsWith("create:")
-                        ) {
-                          openTab(lastChatTabRef.current || COMPOSER_TAB);
                         }
                         setHistoryOpen((open) => !open);
                       }}
@@ -25453,6 +25338,33 @@ export function StudioShell({
             onActiveAgentThreadChange={setActiveAgentThreadId}
             onBindAgentThreadTab={bindAgentThreadTab}
             onOpenNewAgentTab={openNewAgentTab}
+            expiresUnix={assetUrlExpiresUnix}
+            generationDetailJobId={generationDetail?.jobId ?? null}
+            isMobileLayout={isMobile}
+            onSelectGenerationTile={(tile) => {
+              setSettingsOpen(false);
+              setHistoryOpen(false);
+              setGenerationDetail({
+                jobId: tile.jobId,
+                assetId: tile.assetId,
+              });
+            }}
+            onOpenGenerationDetails={(tile) => {
+              setSettingsOpen(false);
+              setHistoryOpen(false);
+              setGenerationDetail({
+                jobId: tile.jobId,
+                assetId: tile.assetId,
+              });
+            }}
+            onLibraryUpscale={(tile) => {
+              const entry = libraryTileToEntry(tile);
+              if (entry) void handleUpscaleImage(entry);
+            }}
+            onLibraryGenerateVideo={(tile) => {
+              const entry = libraryTileToEntry(tile);
+              if (entry) void handleGenerateVideoFromImage(entry);
+            }}
           />
         </section>
         {typeof activeTab === "string" &&
@@ -31618,6 +31530,13 @@ function ActivePane({
   onActiveAgentThreadChange,
   onBindAgentThreadTab,
   onOpenNewAgentTab,
+  expiresUnix,
+  generationDetailJobId = null,
+  onSelectGenerationTile,
+  onOpenGenerationDetails,
+  onLibraryUpscale,
+  onLibraryGenerateVideo,
+  isMobileLayout = false,
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
   const feedPostId = activeTab.startsWith("feed:")
@@ -31964,14 +31883,16 @@ function ActivePane({
       />,
     );
   }
-  if (activeTab.startsWith("composer:")) {
+  if (activeTab.startsWith("composer:") || activeTab.startsWith("thread:")) {
     return wrapPane(
-      <StudioThreadChat
-        events={[]}
-        assets={assets}
-        elements={elements}
-        onOpenEntry={onOpenEntry}
-        currentUser={currentUser}
+      <StudioCreateLibrary
+        expiresUnix={expiresUnix}
+        isMobile={isMobileLayout}
+        selectedJobId={generationDetailJobId}
+        onSelectTile={onSelectGenerationTile}
+        onOpenDetails={onOpenGenerationDetails}
+        onUpscale={onLibraryUpscale}
+        onGenerateVideo={onLibraryGenerateVideo}
       />,
     );
   }
@@ -32000,35 +31921,6 @@ function ActivePane({
           onSave={() => {}}
         />
       </div>,
-    );
-  }
-  if (activeTab.startsWith("thread:")) {
-    return wrapPane(
-      <StudioThreadChat
-        events={events}
-        eventsLoading={eventsLoading}
-        hasMoreEarlier={hasMoreEarlier}
-        loadingEarlier={loadingEarlier}
-        onLoadEarlier={onLoadEarlier}
-        assistanceApprovals={assistanceApprovals}
-        onDecideAssistanceApproval={onDecideAssistanceApproval}
-        assets={assets}
-        elements={elements}
-        onOpenEntry={onOpenEntry}
-        onTrash={onTrash}
-        onGenerateVideoFromImage={onGenerateVideoFromImage}
-        onUpscaleImage={onUpscaleImage}
-        onChatMediaContextMenu={onChatMediaContextMenu}
-        guidedBrief={guidedBrief}
-        onApproveGuidedBrief={onApproveGuidedBrief}
-        onPatchGuidedProduction={onPatchGuidedProduction}
-        creditPriceCents={creditPriceCents}
-        assistBusy={assistBusy}
-        assistApproveBusy={assistApproveBusy}
-        latestEditablePromptId={latestEditablePromptId}
-        onEditLastPrompt={onEditLastPrompt}
-        currentUser={currentUser}
-      />,
     );
   }
   if (adminTab) {
@@ -34244,9 +34136,11 @@ function StudioNetworkLeftRail({
 function StudioWorkspaceColumn({
   settingsOpen,
   historyOpen = false,
+  generationDetailOpen = false,
   isMobile,
   settingsPanelProps,
   historyPanelProps = null,
+  generationDetailPanel = null,
   children,
 }) {
   if (settingsOpen && isMobile) {
@@ -34262,6 +34156,14 @@ function StudioWorkspaceColumn({
       <>
         {children}
         <StudioHistoryPanel {...historyPanelProps} isMobile />
+      </>
+    );
+  }
+  if (generationDetailOpen && isMobile && generationDetailPanel) {
+    return (
+      <>
+        {children}
+        {generationDetailPanel}
       </>
     );
   }
@@ -34298,6 +34200,30 @@ function StudioWorkspaceColumn({
           className="min-h-0 min-w-0"
         >
           <StudioHistoryPanel {...historyPanelProps} />
+        </Panel>
+      </PanelGroup>
+    );
+  }
+  if (generationDetailOpen && !isMobile && generationDetailPanel) {
+    return (
+      <PanelGroup
+        direction="horizontal"
+        autoSaveId="studio-gen-detail-h"
+        className="studio-workspace-panels h-full min-h-0 min-w-0 overflow-hidden"
+      >
+        <Panel id="studio-gen-detail-main" order={1} defaultSize={72} minSize={42} className="min-h-0 min-w-0">
+          {children}
+        </Panel>
+        <PanelResizeHandle className="cursor-resize" />
+        <Panel
+          id="studio-gen-detail-side"
+          order={2}
+          defaultSize={28}
+          minSize={18}
+          maxSize={42}
+          className="min-h-0 min-w-0"
+        >
+          {generationDetailPanel}
         </Panel>
       </PanelGroup>
     );
