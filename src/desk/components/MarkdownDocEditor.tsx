@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { Icon } from "./Icons";
 import { docHtmlToMarkdown, markdownToDocHtml } from "@/desk/lib/markdown-doc";
+import { enhanceCodeBlocks } from "@/desk/lib/markdown-desk.js";
 
 function ToolbarButton({ title, icon, onClick, active = false }) {
   return (
@@ -21,6 +22,26 @@ function ToolbarButton({ title, icon, onClick, active = false }) {
   );
 }
 
+function decorateDocShells(root) {
+  if (!root) return;
+  enhanceCodeBlocks(root);
+  root
+    .querySelectorAll(
+      ".mos-code, .code-shell, .mos-code-bar, .code-shell-head, .mos-code-copy",
+    )
+    .forEach((node) => {
+      node.setAttribute("contenteditable", "false");
+    });
+  root.querySelectorAll(".mos-code-copy").forEach((btn) => {
+    if (btn.dataset.docCopyBound === "1") return;
+    btn.dataset.docCopyBound = "1";
+    btn.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+  });
+}
+
 export function MarkdownDocEditor({ value, onChange, onSave, name }) {
   const editorRef = useRef(null);
   const lastMarkdownRef = useRef(value ?? "");
@@ -33,8 +54,15 @@ export function MarkdownDocEditor({ value, onChange, onSave, name }) {
     if (!el) return;
     lastMarkdownRef.current = md ?? "";
     el.innerHTML = markdownToDocHtml(md);
+    decorateDocShells(el);
     dirtyRef.current = false;
     userEditedRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    // First paint: render + wire Copy even when value matches the seed ref.
+    syncFromMarkdown(value ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
   }, []);
 
   useEffect(() => {
@@ -117,7 +145,9 @@ export function MarkdownDocEditor({ value, onChange, onSave, name }) {
           suppressContentEditableWarning
           spellCheck
           onInput={onInput}
-          onBlur={onInput}
+          onBlur={() => {
+            if (userEditedRef.current) emitChange();
+          }}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
               e.preventDefault();

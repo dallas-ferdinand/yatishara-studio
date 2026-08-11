@@ -2434,19 +2434,43 @@ select.cursor-select:focus {
   padding: 0.1em 0.35em;
   border-radius: 4px;
 }
+/* Prompt/script fences — wrap, Copy bar, same soft plate as other doc chrome. */
+.cursor-doc-page .mos-code,
+.cursor-doc-page .code-shell {
+  background: color-mix(in srgb, var(--mos-ink, #111) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 10%, transparent);
+  box-shadow: none;
+}
+.cursor-doc-page .mos-code-bar,
+.cursor-doc-page .code-shell-head {
+  background: transparent;
+  border-bottom: 1px solid color-mix(in srgb, var(--mos-ink, #111) 8%, transparent);
+}
 .cursor-doc-page pre {
-  background: color-mix(in srgb, var(--mos-accent) 6%, var(--color-cursor-sidebar));
+  background: transparent;
   color: var(--color-cursor-text);
   padding: 12px 14px;
   border-radius: 8px;
-  border: 1px solid var(--mos-border-soft, var(--border));
-  overflow-x: auto;
+  border: 0;
+  overflow-x: hidden;
   margin: 0 0 0.85rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
-.cursor-doc-page pre code {
+.cursor-doc-page .mos-code pre,
+.cursor-doc-page .code-shell pre {
+  margin: 0;
+  border-radius: 0;
+}
+.cursor-doc-page pre code,
+.cursor-doc-page .mos-code-body code {
   background: transparent;
   padding: 0;
   color: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .cursor-doc-page .md-table-wrap,

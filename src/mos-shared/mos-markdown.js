@@ -560,7 +560,14 @@ function wireCodeCopy(shell) {
   btn.type = "button";
   btn.className = "mos-code-copy";
   btn.textContent = "Copy";
-  btn.addEventListener("click", async () => {
+  btn.contentEditable = "false";
+  btn.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  btn.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     const text = codeEl.textContent ?? "";
     try {
       await navigator.clipboard.writeText(text);

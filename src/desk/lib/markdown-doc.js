@@ -42,6 +42,20 @@ function blockElementToMarkdown(el) {
   if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
   const tag = el.tagName.toLowerCase();
 
+  // Prompt fences render as .mos-code shells — keep ```lang body.
+  if (
+    tag === "div" &&
+    (el.classList.contains("mos-code") || el.classList.contains("code-shell"))
+  ) {
+    const code = el.querySelector("pre code, pre, code");
+    const text = (code?.textContent ?? "").replace(/\n$/, "");
+    const lang =
+      el.querySelector(".mos-code-lang, .code-lang")?.textContent?.trim() ||
+      String(code?.className ?? "").match(/language-([\w+-]+)/)?.[1] ||
+      "";
+    return `\`\`\`${lang}\n${text}\n\`\`\`\n\n`;
+  }
+
   if (tag === "h1") return `# ${inlineNodesToMarkdown(el).trim()}\n\n`;
   if (tag === "h2") return `## ${inlineNodesToMarkdown(el).trim()}\n\n`;
   if (tag === "h3") return `### ${inlineNodesToMarkdown(el).trim()}\n\n`;
