@@ -28,7 +28,7 @@ const PLATFORM_PROVIDER = String(
   process.env.STUDIO_AGENT_PROVIDER || "byteplus-ark",
 ).trim();
 const PLATFORM_MODEL = String(
-  process.env.STUDIO_AGENT_MODEL_ID || "seed-2-0-pro-260328",
+  process.env.STUDIO_AGENT_MODEL_ID || "dola-seed-2-1-turbo-260628",
 ).trim();
 
 if (!process.env.ARK_API_KEY?.trim()) {

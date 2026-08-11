@@ -12,6 +12,20 @@
       },
       "models": [
         {
+          "id": "dola-seed-2-1-turbo-260628",
+          "name": "Seed 2.1 Turbo",
+          "reasoning": false,
+          "input": ["text", "image"],
+          "contextWindow": 256000,
+          "maxTokens": 16384,
+          "cost": {
+            "input": 0.45,
+            "output": 2.25,
+            "cacheRead": 0.09,
+            "cacheWrite": 0.008333
+          }
+        },
+        {
           "id": "seed-2-0-pro-260328",
           "name": "Seed 2.0 Pro",
           "reasoning": false,

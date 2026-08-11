@@ -39,7 +39,7 @@ Env (same secrets file):
 
 - `ARK_API_KEY` — ModelArk key (same as Convex generation)
 - `ARK_BASE_URL` — optional; defaults in models.json
-- `STUDIO_AGENT_MODEL_ID` — default `seed-2-0-pro-260328`
+- `STUDIO_AGENT_MODEL_ID` — default `dola-seed-2-1-turbo-260628` (Seed 2.1 Turbo)
 
 Do **not** use `~/.pi/agent` for the worker (that can pick a personal ZAI key and return empty “Done.”). Empty/error model replies fail closed — never fake success.
 
