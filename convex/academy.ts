@@ -1110,6 +1110,10 @@ export {
   internalSeedLiveCourses,
   internalSeedLiveCourses as internalSeedDemoCourses,
 } from "./academyLiveCatalog";
+export {
+  internalSeedAdSideHustleLessons,
+  internalSetLessonCover,
+} from "./academyAdSideHustleLessons";
 
 const COMMENT_URL_TTL_SEC = 60 * 60;
 const MAX_COMMENT_LEN = 500;
