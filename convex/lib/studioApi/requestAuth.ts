@@ -6,7 +6,7 @@
 import { httpAction } from "../../_generated/server";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
-import { hashApiKey } from "./crypto";
+import { hashApiKeyCandidates } from "./crypto";
 import { errorResponse, parseBearerToken } from "./httpHelpers";
 
 export const AGENT_CAPABILITY_PREFIX = "ysa_cap_";
@@ -38,12 +38,29 @@ export async function authenticateStudioRequest(
     return errorResponse("Missing or invalid Authorization header", 401);
   }
 
-  const keyHash = await hashApiKey(token);
+  // Modern + legacy hash (padStart "0" vs broken "hex") so mint/auth agree.
+  const keyHashes = await hashApiKeyCandidates(token);
 
   if (isAgentCapabilityToken(token)) {
-    const cap = await ctx.runQuery(internal.agentCapabilities.authenticate, {
-      tokenHash: keyHash,
-    });
+    let cap: {
+      sessionId: Id<"agentCapabilitySessions">;
+      ownerId: Id<"users">;
+      threadId: Id<"agentThreads">;
+      runId?: Id<"agentRuns">;
+      scopes: string[];
+      role: "user" | "admin" | "super_admin";
+      expiresAt: number;
+    } | null = null;
+    let keyHash = keyHashes[0]!;
+    for (const candidate of keyHashes) {
+      cap = await ctx.runQuery(internal.agentCapabilities.authenticate, {
+        tokenHash: candidate,
+      });
+      if (cap) {
+        keyHash = candidate;
+        break;
+      }
+    }
     if (!cap) {
       return errorResponse("Invalid or expired agent capability", 401);
     }
@@ -74,9 +91,17 @@ export async function authenticateStudioRequest(
     };
   }
 
-  const auth = await ctx.runQuery(internal.studioApiInternal.authenticateApiKey, {
-    keyHash,
-  });
+  let auth: {
+    userId: Id<"users">;
+    apiKeyId: Id<"apiKeys">;
+    scopes: string[];
+  } | null = null;
+  for (const keyHash of keyHashes) {
+    auth = await ctx.runQuery(internal.studioApiInternal.authenticateApiKey, {
+      keyHash,
+    });
+    if (auth) break;
+  }
   if (!auth) {
     return errorResponse("Invalid or revoked API key", 401);
   }

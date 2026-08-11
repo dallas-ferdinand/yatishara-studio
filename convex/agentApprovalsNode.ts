@@ -3,11 +3,12 @@
 /**
  * Exactly-once approval execution against Studio /api/v1.
  */
-import { createHash, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authorizeTool, buildStudioRequest } from "./lib/agentTools";
+import { hashApiKey } from "./lib/studioApi/crypto";
 
 function studioApiBase(): string {
   return (
@@ -16,10 +17,6 @@ function studioApiBase(): string {
     process.env.SITE_URL?.trim() ||
     ""
   ).replace(/\/$/, "");
-}
-
-function hashToken(token: string): string {
-  return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
 export const execute = internalAction({
@@ -51,7 +48,7 @@ export const execute = internalAction({
       if (!apiBase) throw new Error("STUDIO_API_URL / CONVEX_SITE_URL missing");
 
       const capabilityToken = `ysa_cap_${randomBytes(24).toString("hex")}`;
-      const tokenHash = hashToken(capabilityToken);
+      const tokenHash = await hashApiKey(capabilityToken);
       await ctx.runMutation(internal.agentCapabilities.mint, {
         ownerId: claimed.ownerId,
         threadId: claimed.threadId,

@@ -4,13 +4,14 @@
  * Studio Agent Mode turn runner — Pi worker is canonical.
  * No silent AI-SDK fallback. Mint per-user capability; Pi invokes Studio /api/v1.
  */
-import { createHash, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { decryptAgentApiKey, requireAgentKeySecret } from "./lib/agentCrypto";
 import { textCreditCost } from "./lib/generationPricing";
+import { hashApiKey } from "./lib/studioApi/crypto";
 import { makeFunctionReference } from "convex/server";
 
 const chargeTextGenerationRef = makeFunctionReference<
@@ -26,10 +27,6 @@ const chargeTextGenerationRef = makeFunctionReference<
 
 const CAP_PREFIX = "ysa_cap_";
 const CAP_TTL_MS = 15 * 60 * 1000;
-
-function hashToken(token: string): string {
-  return createHash("sha256").update(token, "utf8").digest("hex");
-}
 
 function mintCapabilityToken(): string {
   return `${CAP_PREFIX}${randomBytes(24).toString("hex")}`;
@@ -201,7 +198,7 @@ export const sendTurn = action({
     });
 
     const capabilityToken = mintCapabilityToken();
-    const tokenHash = hashToken(capabilityToken);
+    const tokenHash = await hashApiKey(capabilityToken);
     const scopes = [
       "read",
       "write",
