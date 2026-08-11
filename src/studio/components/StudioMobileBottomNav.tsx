@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { Cloud, Folder, GraduationCap, History, MessageCircle, PanelLeft, Sparkles, Store, X } from "lucide-react";
+import { Bot, Cloud, Folder, GraduationCap, History, MessageCircle, PanelLeft, Sparkles, Store, X } from "lucide-react";
 import { useRef } from "react";
 
 /** Optional context action — Files linked to Create (Generate) or Network (My Assets). */
@@ -237,6 +237,17 @@ export function StudioMobileBottomNav({
           onIntent={() => onPrefetch?.("messages")}
         >
           <MessageCircle aria-hidden="true" />
+        </NavButton>
+
+        <NavButton
+          className={`studio-mobile-nav-btn${section === "agent" ? " is-active" : ""} is-icon-only`}
+          ariaCurrent={section === "agent" ? "page" : undefined}
+          ariaLabel="Agent"
+          title="Agent"
+          onActivate={() => onSelect("agent")}
+          onIntent={() => onPrefetch?.("agent")}
+        >
+          <Bot aria-hidden="true" />
         </NavButton>
 
         {createLinked ? (

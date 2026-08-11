@@ -289,7 +289,7 @@ export default defineSchema({
     assistanceDefaultEnabled: v.optional(v.boolean()),
     /**
      * First Studio workspace tab when no open-tabs session is restored.
-     * Missing → composer (Generate).
+     * Missing → agent (Agent Mode).
      */
     defaultStudioTab: v.optional(
       v.union(
@@ -297,6 +297,7 @@ export default defineSchema({
         v.literal("feed"),
         v.literal("network"),
         v.literal("messages"),
+        v.literal("agent"),
       ),
     ),
     /** Set when signup intent chooser (or silent backfill) completes. */
@@ -1822,4 +1823,87 @@ export default defineSchema({
   })
     .index("by_token_hash", ["tokenHash"])
     .index("by_user_and_status", ["userId", "status"]),
+
+  /** Agent Mode threads (Pi-style Studio operator chat). */
+  agentThreads: defineTable({
+    ownerId: v.id("users"),
+    title: v.string(),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_archived", ["ownerId", "archivedAt"])
+    .index("by_owner_archived_updated", ["ownerId", "archivedAt", "updatedAt"]),
+
+  agentMessages: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("agentThreads"),
+    role: v.union(
+      v.literal("user"),
+      v.literal("assistant"),
+      v.literal("tool"),
+      v.literal("system"),
+      v.literal("approval"),
+    ),
+    content: v.string(),
+    toolName: v.optional(v.string()),
+    toolCallId: v.optional(v.string()),
+    approvalId: v.optional(v.id("agentApprovals")),
+    status: v.optional(
+      v.union(
+        v.literal("streaming"),
+        v.literal("complete"),
+        v.literal("error"),
+      ),
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_thread_and_created", ["threadId", "createdAt"])
+    .index("by_owner", ["ownerId"])
+    .index("by_approval", ["approvalId"]),
+
+  agentApprovals: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("agentThreads"),
+    action: v.string(),
+    title: v.string(),
+    summary: v.string(),
+    payloadJson: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("denied"),
+      v.literal("executing"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    estimatedCredits: v.optional(v.number()),
+    resultJson: v.optional(v.string()),
+    error: v.optional(v.string()),
+    decidedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_thread_and_status", ["threadId", "status"])
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_status", ["ownerId", "status"]),
+
+  /** BYOK for Agent Mode reasoning models (not media generation). */
+  userAgentKeys: defineTable({
+    ownerId: v.id("users"),
+    provider: v.union(
+      v.literal("openai"),
+      v.literal("anthropic"),
+      v.literal("zai"),
+      v.literal("openrouter"),
+    ),
+    /** AES-GCM ciphertext (base64) — never log. */
+    encryptedKey: v.string(),
+    /** base64 IV */
+    iv: v.string(),
+    keyHint: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
 });

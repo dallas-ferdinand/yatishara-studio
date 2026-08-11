@@ -5,6 +5,7 @@ import { registerGuideResources } from "./resources/guides.js";
 import { registerAccountTools } from "./tools/account.js";
 import { registerAccountExtraTools } from "./tools/accountExtra.js";
 import { registerAssistanceTools } from "./tools/assistance.js";
+import { AGENT_BLOCKED_TOOL_NAMES } from "./lib/agentBlockedTools.js";
 import { registerAssetTools } from "./tools/assets.js";
 import { registerContextTools } from "./tools/context.js";
 import { registerDocumentTools } from "./tools/documents.js";
@@ -14,7 +15,6 @@ import { registerFolderTools } from "./tools/folders.js";
 import { registerGenerationTools } from "./tools/generations.js";
 import { registerProductionTools } from "./tools/production.js";
 import { registerMessageTools } from "./tools/messages.js";
-// Wave 2 social/feed — register after messages; keep both Wave agents' tool sets.
 import { registerSocialTools } from "./tools/social.js";
 import { registerNetworkTools } from "./tools/network.js";
 import { registerTrashTools } from "./tools/trash.js";
@@ -27,6 +27,9 @@ const server = new McpServer({
   version: "0.8.3",
 });
 
+/** When set, Assist/Elements/style write tools are not registered (Agent Mode surface). */
+const agentSurface = process.env.STUDIO_MCP_AGENT_SURFACE === "1";
+
 registerGuideResources(server);
 registerAccountTools(server);
 registerAccountExtraTools(server);
@@ -34,14 +37,23 @@ registerContextTools(server);
 registerFolderTools(server);
 registerAssetTools(server);
 registerDocumentTools(server);
-registerElementTools(server);
+if (!agentSurface) {
+  registerElementTools(server);
+}
 registerGenerationTools(server);
 registerVoiceTools(server);
-registerAssistanceTools(server);
+if (!agentSurface) {
+  // Assist brief/approve tools retired from Agent allowlist; ops MCP keeps them.
+  registerAssistanceTools(server);
+} else {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[studio-mcp] Agent surface: blocked ${AGENT_BLOCKED_TOOL_NAMES.length} Assist/Elements/style tools`,
+  );
+}
 registerEditTools(server);
 registerProductionTools(server);
 registerMessageTools(server);
-// Social feed/profiles (Wave 2 domain). HTTP routes wired by Wave HTTP agent.
 registerSocialTools(server);
 registerTrashTools(server);
 registerNetworkTools(server);

@@ -1,5 +1,6 @@
 /** Preference keys for “default tab when you open Studio”. */
 export const STUDIO_DEFAULT_TAB_VALUES = [
+  "agent",
   "composer",
   "feed",
   "network",
@@ -9,7 +10,8 @@ export const STUDIO_DEFAULT_TAB_VALUES = [
 export type StudioDefaultTab = (typeof STUDIO_DEFAULT_TAB_VALUES)[number];
 
 export const STUDIO_DEFAULT_TAB_LABELS: Record<StudioDefaultTab, string> = {
-  composer: "Generate",
+  agent: "Agent",
+  composer: "Create",
   feed: "Feed",
   network: "Creative Network",
   messages: "Messages",
@@ -30,8 +32,10 @@ export function studioTabKeyForDefault(pref: StudioDefaultTab | null | undefined
     case "messages":
       return "messages:main";
     case "composer":
-    default:
       return "composer:main";
+    case "agent":
+    default:
+      return "agent:main";
   }
 }
 

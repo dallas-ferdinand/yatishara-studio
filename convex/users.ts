@@ -87,7 +87,7 @@ export const current = authedQuery({
     accountComplete: v.boolean(),
     role: v.union(v.literal("user"), v.literal("admin"), v.literal("super_admin")),
     hasPassword: v.boolean(),
-    /** Missing → true (Assistance on by default). */
+    /** Missing → false (Assist retired; Agent Mode is default). */
     assistanceDefaultEnabled: v.boolean(),
     activeStyleSheetId: v.optional(v.id("elements")),
     defaultStudioTab: v.union(
@@ -95,6 +95,7 @@ export const current = authedQuery({
       v.literal("feed"),
       v.literal("network"),
       v.literal("messages"),
+      v.literal("agent"),
       v.null(),
     ),
     studioIntentChosen: v.boolean(),
@@ -114,7 +115,7 @@ export const current = authedQuery({
       accountComplete: accountHasRequiredContacts(ctx.user),
       role: ctx.user.role,
       hasPassword: await userHasPassword(ctx, ctx.user),
-      assistanceDefaultEnabled: ctx.user.assistanceDefaultEnabled !== false,
+      assistanceDefaultEnabled: ctx.user.assistanceDefaultEnabled === true,
       activeStyleSheetId: ctx.user.activeStyleSheetId,
       defaultStudioTab: ctx.user.defaultStudioTab ?? null,
       studioIntentChosen: ctx.user.studioIntentChosenAt != null,
@@ -139,6 +140,7 @@ export const setAssistanceDefault = authedMutation({
 });
 
 const defaultStudioTabValidator = v.union(
+  v.literal("agent"),
   v.literal("composer"),
   v.literal("feed"),
   v.literal("network"),

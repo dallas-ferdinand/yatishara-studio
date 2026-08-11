@@ -85,6 +85,7 @@ import {
   Video,
   Zap,
   Bell,
+  Bot,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
@@ -222,6 +223,8 @@ import {
 import { StudioFullscreenStatusBar } from "./StudioFullscreenStatusBar";
 import { StudioMessagesPane } from "./StudioMessagesPane";
 import { StudioMessagesSidebar } from "./StudioMessagesSidebar";
+import { StudioAgentPane } from "./StudioAgentPane";
+import "./studio-agent.css";
 import {
   StudioCreativeNetworkProvider,
   useCreativeNetwork,
@@ -459,6 +462,8 @@ function prefetchStudioSurface(surface: string) {
     } else if (surface === "messages") {
       void import("./StudioMessagesPane");
       void import("./StudioMessagesSidebar");
+    } else if (surface === "agent") {
+      void import("./StudioAgentPane");
     }
   };
   if (typeof window === "undefined") {
@@ -479,6 +484,8 @@ const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
 /** Single Messages tab — the chat window; the sidebar becomes the chat list. */
 const MESSAGES_TAB = "messages:main";
+/** Agent Mode — default product surface (Pi-style Studio operator). */
+const AGENT_TAB = "agent:main";
 /** Full-pane Files tab — file manager in the workspace (no custom sidebar). */
 const FILES_TAB = "files:main";
 /** Creative Network marketplace + seller manage (replaces offers:). */
@@ -572,6 +579,7 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
   if (tab.startsWith("network:") || tab.startsWith("offers:")) return "network";
   if (tab.startsWith("academy:")) return "academy";
   if (tab.startsWith("messages:")) return "messages";
+  if (tab.startsWith("agent:")) return "agent";
   if (tab.startsWith("profile:") || tab.startsWith("profilePost:")) return null;
   if (
     tab.startsWith("composer:") ||
@@ -584,6 +592,7 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
   if (mobileSection === "feed") return "feed";
   if (mobileSection === "academy") return "academy";
   if (mobileSection === "messages") return "messages";
+  if (mobileSection === "agent") return "agent";
   if (mobileSection === "composer" || mobileSection === "files") return "composer";
   return mobileSection || null;
 }
@@ -1230,13 +1239,20 @@ export function StudioShell({
   const [mode, setMode] = useState(() => initialComposerCtx.mode ?? "image");
   const pendingModeSwitchRef = useRef(null);
   const [videoType, setVideoType] = useState("hypermotion_ad");
-  const [assistanceEnabled, setAssistanceEnabled] = useState(true);
+  /** Assist mode retired — Agent Mode replaces it. Kept false for legacy thread fields. */
+  const [assistanceEnabled, setAssistanceEnabled] = useState(false);
   const [assistBusy, setAssistBusy] = useState(false);
   const [assistApproveBusy, setAssistApproveBusy] = useState(false);
   const activeAssistClientTurnIdRef = useRef(null);
   const cancelledAssistTurnIdsRef = useRef(new Set());
   const assistRestoreRef = useRef(null);
   const [editingPromptEventId, setEditingPromptEventId] = useState(null);
+
+  useEffect(() => {
+    if (mode === "script" || mode === "element") {
+      setMode(lastGenerationModeRef.current === "video" ? "video" : "image");
+    }
+  }, [mode]);
 
   useEffect(() => {
     if (mode === "image" || mode === "video" || mode === "script") {
@@ -1361,7 +1377,8 @@ export function StudioShell({
     () => initialComposerCtx.musicInstrumental ?? true,
   );
   /** Direct = verbatim handoff; Styled = backend enhancement sticks style + script + elements. */
-  const skipPromptEnhancement = composerStyleMode === "direct";
+  /** Style sheets retired from Create — always send prompt as written (Enhance is explicit). */
+  const skipPromptEnhancement = true;
   const [referenceIntent, setReferenceIntent] = useState(
     () => initialComposerCtx.referenceIntent ?? "auto",
   );
@@ -2620,23 +2637,8 @@ export function StudioShell({
   }
 
   useEffect(() => {
-    // Assistance stays on unless the thread/user explicitly opted out (stored false).
-    // Never fight the audio-mode force-off effect — that ping-pong can update-depth crash.
-    if (mode === "audio") return;
-    if (activeThreadId && threads) {
-      const thread = threads.find((item) => item._id === activeThreadId);
-      if (thread) {
-        const next = thread.assistanceEnabled !== false;
-        setAssistanceEnabled((current) => (current === next ? current : next));
-        return;
-      }
-    }
-    if (currentUser) {
-      const next = currentUser.assistanceDefaultEnabled !== false;
-      setAssistanceEnabled((current) => (current === next ? current : next));
-    } else {
-      setAssistanceEnabled((current) => (current === true ? current : true));
-    }
+    // Assist mode retired — keep false so legacy thread fields cannot re-enable Create Assist.
+    setAssistanceEnabled((current) => (current === false ? current : false));
   }, [activeThreadId, threads, currentUser, mode]);
 
   useEffect(() => {
@@ -4336,6 +4338,22 @@ export function StudioShell({
     openPublicProfile(username);
   }
 
+  function openAgent() {
+    void import("./StudioAgentPane");
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    setMobileAppMenuOpen(false);
+    if (isMobile) {
+      setMobileSection("composer");
+      filesDockOpenGenRef.current += 1;
+      paintMobileFilesDock(false);
+      mobileBackStack.release("files-dock");
+      setFilesDockExpanded(false);
+    }
+    openTab(AGENT_TAB);
+    prefetchStudioSurface("agent");
+  }
+
   function openMessages() {
     void import("./StudioMessagesPane");
     void import("./StudioMessagesSidebar");
@@ -5252,6 +5270,19 @@ export function StudioShell({
       setMobileAppMenuOpen(false);
       setHistoryOpen(false);
       setSettingsOpen(true);
+      return;
+    }
+    if (section === "agent") {
+      filesDockRestoreAfterKeyboardRef.current = false;
+      filesDockOpenGenRef.current += 1;
+      paintMobileFilesDock(false);
+      mobileBackStack.release("files-dock");
+      setFilesDockExpanded(false);
+      setMobileSection("composer");
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      openAgent();
       return;
     }
     if (section === "messages") {
@@ -7458,146 +7489,12 @@ export function StudioShell({
     }
 
     const prompt = "I want to generate a video with this.";
-    const nextAttachments = [attachment];
-    const userPrompt = buildPromptWithAttachments(prompt, nextAttachments);
-    const briefAttachments = [
-      {
-        assetId: attachment.studioId,
-        role: "reference",
-        label: attachment.label ?? attachment.filename,
-        sortOrder: 0,
-      },
-    ];
 
     setMode("video");
-    if (assistanceFeatureEnabled && !assistanceEnabled) {
-      setAssistanceEnabled(true);
-      try {
-        if (activeThreadId && threads?.some((thread) => thread._id === activeThreadId)) {
-          await setThreadAssistance({
-            threadId: activeThreadId,
-            enabled: true,
-            updateAccountDefault: true,
-          });
-        }
-      } catch {
-        /* best-effort — still send the turn */
-      }
-    }
+    // Assist retired — Create only attaches + drafts; Agent Mode handles co-pilot.
     if (isMobile) setMobileSection("composer");
-
-    const assistanceOn = Boolean(assistanceFeatureEnabled);
-    if (!assistanceOn) {
-      attachEntry(fullEntry);
-      setDraft(prompt);
-      return;
-    }
-
-    setFlowPending(true);
-    setAssistBusy(true);
-    try {
-      if (presets === undefined) {
-        throw new Error("Style options are still loading. Try again in a moment.");
-      }
-      const preset = directPreset;
-      if (!preset) {
-        throw new Error("Direct generation preset is not ready yet.");
-      }
-      const reuseThreadId =
-        activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
-          ? activeThreadId
-          : null;
-      const clientTurnId = newClientTurnId();
-      let threadId = reuseThreadId;
-      if (!threadId) {
-        threadId = await createThread({
-          folderId: activeFolder._id,
-          title: threadTitleFromPrompt(prompt, nextAttachments, "Video"),
-          assistanceEnabled: true,
-        });
-        const composerTab = activeTab;
-        if (composerTab.startsWith("composer:")) {
-          delete composerContextsRef.current[composerTab];
-          setOpenTabs((tabs) =>
-            tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)),
-          );
-          setActiveTab(`thread:${threadId}`);
-        } else {
-          openTab(`thread:${threadId}`);
-        }
-      }
-      const optimistic = createOptimisticAssistanceEvents({
-        prompt: userPrompt.trim() || prompt,
-      });
-      setOptimisticByThread((prev) => ({
-        ...prev,
-        [threadId]: [...(prev[threadId] ?? []), ...optimistic.events],
-      }));
-      setDraft("");
-      setAttachments([]);
-      if (editorRef.current) editorRef.current.replaceChildren();
-      const chatKey = `thread:${threadId}`;
-      composerContextsRef.current[chatKey] = {
-        ...(composerContextsRef.current[chatKey] ?? {}),
-        draft: "",
-        attachments: [],
-        editorHtml: "",
-      };
-      setFlowPending(false);
-      try {
-        await submitAssistedTurn({
-          clientTurnId,
-          threadId,
-          folderId: generationSaveFolderId(threadId),
-          mode: "video",
-          entryPoint: "image_to_video",
-          videoType,
-          userPrompt,
-          stylePresetId: preset._id,
-          styleSheetElementId:
-            composerStyleMode === "styled" ? activeStyleSheetId : undefined,
-          production: {
-            durationSeconds: Number(durationSeconds),
-            aspectRatio,
-            resolution,
-            referenceIntent,
-            skipPromptEnhancement,
-          },
-          attachments: briefAttachments,
-        });
-        setOptimisticByThread((prev) => {
-          const current = prev[threadId] ?? [];
-          const next = current.filter(
-            (event) => event.clientId !== optimistic.clientId,
-          );
-          if (!next.length) {
-            const { [threadId]: _drop, ...rest } = prev;
-            return rest;
-          }
-          return { ...prev, [threadId]: next };
-        });
-      } catch (error) {
-        setOptimisticByThread((prev) => {
-          const current = prev[threadId] ?? [];
-          const next = current.filter((event) => event.clientId !== optimistic.clientId);
-          if (!next.length) {
-            const { [threadId]: _drop, ...rest } = prev;
-            return rest;
-          }
-          return { ...prev, [threadId]: next };
-        });
-        setMode("video");
-        setAttachments(nextAttachments);
-        setDraft(prompt);
-        throw error;
-      }
-    } catch (error) {
-      console.error("Generate video from image failed", error);
-      toast.error(friendlyConvexError(error, "Could not start video chat."));
-    } finally {
-      setAssistBusy(false);
-      setFlowPending(false);
-    }
+    attachEntry(fullEntry);
+    setDraft(prompt);
   }
 
   async function handleUpscaleImage(entry) {
@@ -7848,8 +7745,7 @@ export function StudioShell({
     const liveDraft =
       (editorRef.current ? readComposerEditorText(editorRef.current) : null) ?? draft;
     if (liveDraft !== draft) setDraft(liveDraft);
-    const assistanceOn =
-      Boolean(assistanceFeatureEnabled) && assistanceEnabled && mode !== "audio";
+    const assistanceOn = false;
     if (!assistanceOn && !liveDraft.trim()) return;
     if (assistanceOn && !liveDraft.trim() && !attachments.length) return;
     setFlowPending(true);
@@ -8117,75 +8013,12 @@ export function StudioShell({
         return;
       }
 
-      if (mode === "element") {
-        const mediaAttachments = attachments.filter(
-          (attachment) =>
-            attachment.studioKind === "asset" &&
-            (attachment.kind === "image" ||
-              attachment.kind === "video" ||
-              attachment.kind === "audio") &&
-            Boolean(attachment.studioId),
+      if (mode === "element" || mode === "script") {
+        throw new Error(
+          mode === "element"
+            ? "Elements are retired. Use Agent Mode for project setup, or Create Image/Video/Audio."
+            : "Script generate is retired. Keep scripts as documents; use Agent Mode or Create Image/Video.",
         );
-        const uploadedAssets = mediaAttachments.map((attachment) => ({
-          assetId: attachment.studioId,
-          name: attachment.label ?? attachment.filename ?? "reference",
-          kind: attachment.kind,
-          previewUrl: attachment.mediaUrl ?? attachment.thumbnailUrl,
-        }));
-        const sheetCost = elementSheetCreditCost({
-          elementType,
-          imageReferenceCount: mediaAttachments.filter((attachment) => attachment.kind === "image").length,
-          videoReferenceCount: mediaAttachments.filter((attachment) => attachment.kind === "video").length,
-          audioReferenceCount: mediaAttachments.filter((attachment) => attachment.kind === "audio").length,
-        });
-        if (entitlement && entitlement.creditBalance < sheetCost) {
-          openSettingsTab("billing");
-          throw new Error(
-            entitlement.reason ?? `You need ${formatTtdFromCredits(sheetCost, pricing?.creditPriceCents)} to build this ${elementSheetLabel(elementType)}.`,
-          );
-        }
-        await createAndAttachElement({
-          elementType,
-          name: liveDraft.trim(),
-          sourceAssetIds: uploadedAssets.map((asset) => asset.assetId),
-          uploadedAssets,
-          generateSheet: true,
-          stylePresetSlug: selectedStylePreset?.slug ?? "unstyled",
-        });
-        setDraft("");
-        setAttachments([]);
-        setMode(lastGenerationModeRef.current ?? "image");
-        return;
-      }
-      if (mode === "script") {
-        if (!directPreset) {
-          throw new Error("Style options are still loading. Try again in a moment.");
-        }
-        if (composerStyleMode === "styled") {
-          if (!activeStyleSheetId || !activeStyleSheet) {
-            throw new Error("Select a style before styled script generation, or use No applied style.");
-          }
-          if (!activeStyleSheet.sheetAssetId && !activeStyleSheet.styleRules?.trim()) {
-            throw new Error("That style is not ready yet. Use No applied style or pick another style.");
-          }
-        }
-        const result = await generateScript({
-          folderId: generationSaveFolderId(activeThreadId) ?? activeFolder._id,
-          stylePresetId: directPreset._id,
-          styleSheetElementId: composerStyleMode === "styled" ? activeStyleSheetId : undefined,
-          userPrompt: buildPromptWithAttachments(liveDraft, attachments),
-          attachedScriptMarkdown: attachedScriptMarkdown.length ? attachedScriptMarkdown : undefined,
-          referenceInputs: generationReferences,
-          skipPromptEnhancement,
-          scriptType,
-          referenceIntent,
-          hasRawImageReference: composerReferenceFlags.hasRawImageReference,
-          hasElementReference: composerReferenceFlags.hasElementReference,
-        });
-        openTab(`document:${result.documentId}`);
-        setDraft("");
-        setAttachments([]);
-        return;
       }
 
       if (presets === undefined) {
@@ -8194,14 +8027,6 @@ export function StudioShell({
       const preset = directPreset;
       if (!preset) {
         throw new Error("Direct generation preset is not ready yet.");
-      }
-      if (composerStyleMode === "styled") {
-        if (!activeStyleSheetId || !activeStyleSheet) {
-          throw new Error("Select a style before styled generation, or use No applied style.");
-        }
-        if (!activeStyleSheet.sheetAssetId && !activeStyleSheet.styleRules?.trim()) {
-          throw new Error("That style is not ready yet. Use No applied style or pick another style.");
-        }
       }
       if (entitlement && !entitlement.canGenerate) {
         openSettingsTab("billing");
@@ -8258,7 +8083,7 @@ export function StudioShell({
         mode: genMode,
         tier: genMode === "video" ? "pro_video" : "image",
         stylePresetId: preset._id,
-        styleSheetElementId: composerStyleMode === "styled" ? activeStyleSheetId : undefined,
+        styleSheetElementId: undefined,
         userPrompt,
         attachedScriptMarkdown: attachedCreativeMarkdown.length ? attachedCreativeMarkdown : undefined,
         referenceSummaries: elementReferenceSummaries.length ? elementReferenceSummaries : undefined,
@@ -8270,22 +8095,11 @@ export function StudioShell({
         videoModel: genMode === "video" ? videoModel : undefined,
         folderId: generationSaveFolderId(threadId),
         referenceUrls: genMode === "image"
-          ? [
-              ...(activeStyleSheetReference ? [activeStyleSheetReference.url] : []),
-              ...generationReferences
-                .filter((reference) => reference.kind === "image")
-                .map((reference) => reference.url)
-                .filter((url) => url !== activeStyleSheetReference?.url),
-            ]
+          ? generationReferences
+              .filter((reference) => reference.kind === "image")
+              .map((reference) => reference.url)
           : undefined,
-        referenceInputs: genMode === "video"
-          ? [
-              ...(activeStyleSheetReference ? [activeStyleSheetReference] : []),
-              ...generationReferences.filter(
-                (reference) => reference.url !== activeStyleSheetReference?.url,
-              ),
-            ]
-          : undefined,
+        referenceInputs: genMode === "video" ? generationReferences : undefined,
         skipPromptEnhancement,
         referenceIntent,
         hasRawImageReference: composerReferenceFlags.hasRawImageReference,
@@ -8328,6 +8142,9 @@ export function StudioShell({
 
   const isAcademyRail =
     typeof activeTab === "string" && activeTab.startsWith("academy:");
+
+  const isAgentRail =
+    typeof activeTab === "string" && activeTab.startsWith("agent:");
 
   // Desktop pick-from-Files temporarily restores the owner file explorer in the
   // left rail even while Messages/Feed is the active pane.
@@ -24172,6 +23989,16 @@ export function StudioShell({
                 </button>
                 <button
                   type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isAgentRail ? " is-active" : ""}`}
+                  onClick={openAgent}
+                  aria-label="Open Agent Mode"
+                  title="Agent"
+                  aria-pressed={isAgentRail}
+                >
+                  <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
                   className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
                   onClick={openFiles}
                   aria-label="Open files"
@@ -24958,6 +24785,16 @@ export function StudioShell({
                 </button>
                 <button
                   type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isAgentRail ? " is-active" : ""}`}
+                  onClick={openAgent}
+                  aria-label="Open Agent Mode"
+                  title="Agent"
+                  aria-pressed={isAgentRail}
+                >
+                  <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
                   className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
                   onClick={openFiles}
                   aria-label="Open files"
@@ -25437,6 +25274,10 @@ export function StudioShell({
               openTab(key);
               if (isMobile) setMobileSection("composer");
             }}
+            onOpenCreate={() => {
+              openTab(COMPOSER_TAB);
+              if (isMobile) setMobileSection("composer");
+            }}
           />
         </section>
         {typeof activeTab === "string" &&
@@ -25508,20 +25349,15 @@ export function StudioShell({
             onUploadFiles={(files) => uploadComposerFiles(files)}
             uploadInputRef={composerUploadInputRef}
             onOpenEntry={handleEntryOpen}
-            assistanceFeatureEnabled={Boolean(assistanceFeatureEnabled)}
-            assistanceEnabled={assistanceEnabled}
-            onAssistanceChange={(enabled) => void handleAssistanceChange(enabled)}
+            assistanceFeatureEnabled={false}
+            assistanceEnabled={false}
+            onAssistanceChange={undefined}
             videoType={videoType}
             setVideoType={setVideoType}
-            guidedVideoTypes={guidedVideoTypes ?? []}
-            assistBusy={assistBusy}
-            canCancelAssist={
-              Boolean(assistanceFeatureEnabled) &&
-              assistanceEnabled &&
-              assistBusy &&
-              !hasActiveGenerationJob
-            }
-            onCancelAssist={() => void handleCancelAssistanceTurn()}
+            guidedVideoTypes={[]}
+            assistBusy={false}
+            canCancelAssist={false}
+            onCancelAssist={undefined}
           />
         ) : null}
       </main>
@@ -26538,6 +26374,8 @@ function StudioComposer({
   onCancelAssist,
 }) {
   const transcribeVoice = useAction(api.voiceActions.transcribe);
+  const enhanceComposerDraft = useAction(api.composerEnhanceActions.enhanceComposerDraft);
+  const [enhanceBusy, setEnhanceBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const micBusyRef = useRef(false);
@@ -27169,7 +27007,7 @@ function StudioComposer({
         />
       ) : null}
       <div className="cursor-composer">
-        {presetGridOpen ? (
+        {false && presetGridOpen ? (
           <div
             className="studio-composer-options-panel is-overlay is-style"
             role="region"
@@ -27216,7 +27054,7 @@ function StudioComposer({
             />
           </div>
         ) : null}
-        {videoTypeGridOpen ? (
+        {false && videoTypeGridOpen ? (
           <div
             className="studio-composer-options-panel is-overlay is-style is-video-type"
             role="region"
@@ -27528,13 +27366,6 @@ function StudioComposer({
       </div>
       <div className="studio-composer-toolbar">
         <div className="studio-composer-toolbar-left">
-          {assistanceFeatureEnabled && !isAudioMode ? (
-            <AssistanceToggle
-              enabled={assistanceEnabled}
-              onChange={(enabled) => onAssistanceChange?.(enabled)}
-              disabled={disabled || assistBusy}
-            />
-          ) : null}
           {!isAudioMode ? <StudioUploadButton inputRef={uploadInputRef} /> : null}
           <button
             type="button"
@@ -27584,35 +27415,65 @@ function StudioComposer({
               <span>{shortVoiceChipLabel(selectedVoice?.name)}</span>
             </button>
           ) : null}
-          {!isElementMode && !isAudioMode ? (
-            <StudioStyleSheetTriggerButton
-              selectedMode={composerStyleMode}
-              activeSheet={activeStyleSheet}
-              activeSheetAsset={activeStyleSheetAsset}
-              open={presetGridOpen}
-              onClick={() => {
-                setComposerOptionsOpen(false);
-                setVideoTypeGridOpen(false);
-                setVoicePickerOpen(false);
-                setPresetGridOpen((open) => !open);
-              }}
-            />
-          ) : null}
-          {assistanceOn && mode === "video" && guidedVideoTypes.length ? (
-            <VideoTypeTriggerButton
-              value={videoType}
-              options={guidedVideoTypes}
-              open={videoTypeGridOpen}
-              disabled={disabled || assistBusy}
-              onClick={() => {
-                setComposerOptionsOpen(false);
-                setPresetGridOpen(false);
-                setVideoTypeGridOpen((open) => !open);
-              }}
-            />
-          ) : null}
         </div>
         <div className="studio-composer-actions">
+          <button
+            type="button"
+            className={`studio-composer-circle-btn${enhanceBusy ? " is-busy" : ""}`}
+            title="Enhance prompt (charged)"
+            aria-label="Enhance prompt"
+            disabled={
+              enhanceBusy ||
+              disabled ||
+              assistBusy ||
+              !String(liveDraft ?? "").trim()
+            }
+            onClick={() => {
+              void (async () => {
+                const text =
+                  (editorRef.current
+                    ? readComposerEditorText(editorRef.current)
+                    : null) ?? liveDraft;
+                if (!text.trim()) {
+                  toast.error("Type a prompt first");
+                  return;
+                }
+                const kind =
+                  mode === "video"
+                    ? "video"
+                    : mode === "image"
+                      ? "image"
+                      : audioType === "sfx"
+                        ? "sfx"
+                        : audioType === "music"
+                          ? "music"
+                          : "voiceover";
+                setEnhanceBusy(true);
+                try {
+                  const result = await enhanceComposerDraft({ kind, text });
+                  pushDraftToParent(result.text, { immediate: true });
+                  if (editorRef.current) {
+                    editorRef.current.textContent = result.text;
+                  }
+                  toast.success(
+                    result.creditsSpent > 0
+                      ? `Enhanced · ${result.creditsSpent} credits`
+                      : "Enhanced",
+                  );
+                } catch (error) {
+                  toast.error(friendlyConvexError(error, "Enhance failed."));
+                } finally {
+                  setEnhanceBusy(false);
+                }
+              })();
+            }}
+          >
+            {enhanceBusy ? (
+              <Loader2 size={14} strokeWidth={2.25} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Wand2 size={14} strokeWidth={2.25} aria-hidden="true" />
+            )}
+          </button>
           <button
             type="button"
             className={`studio-composer-circle-btn cursor-composer-mic${recording ? " is-recording" : ""}${transcribing ? " is-transcribing" : ""}`}
@@ -27727,7 +27588,7 @@ function StudioComposerControlStrip({
   return (
     <div className={layout === "panel" ? "studio-composer-options-body" : "studio-composer-controls"}>
       <div className="studio-composer-options-stack">
-        {isElementMode ? (
+        {false && isElementMode ? (
           <StudioInlineSettingChipGroup
             label="Type"
             value={elementType}
@@ -27831,7 +27692,7 @@ function StudioComposerControlStrip({
           </>
         ) : (
           <>
-            {mode === "script" && scriptTypeItems.length ? (
+            {false && mode === "script" && scriptTypeItems.length ? (
               <StudioInlineSettingChipGroup
                 label="Script type"
                 value={scriptType}
@@ -27958,8 +27819,6 @@ function StudioModeSwitcher({ mode, setMode }) {
     { value: "image", label: "Image", icon: ImageIcon },
     { value: "video", label: "Video", icon: Video },
     { value: "audio", label: "Audio", icon: AudioLines },
-    { value: "script", label: "Script", icon: FileText },
-    { value: "element", label: "Element", icon: Sparkles },
   ];
 
   return (
@@ -31578,6 +31437,7 @@ function ActivePane({
   showDmChatListWhenEmpty = false,
   onRequestPickAsset,
   onOpenStudioShareItem,
+  onOpenCreate,
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
   const feedPostId = activeTab.startsWith("feed:")
@@ -31606,10 +31466,13 @@ function ActivePane({
   const isSocialActive = Boolean(feedPostId || profilePostMatch || profileUsername);
   const isMessagesActive =
     typeof activeTab === "string" && activeTab.startsWith("messages:");
+  const isAgentActive =
+    typeof activeTab === "string" && activeTab.startsWith("agent:");
   const isNetworkActive =
     typeof activeTab === "string" &&
     (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
-  const isKeepaliveCovering = isSocialActive || isMessagesActive || isNetworkActive;
+  const isKeepaliveCovering =
+    isSocialActive || isMessagesActive || isNetworkActive || isAgentActive;
   const needsSocialKeepalive =
     isSocialActive || keptFeedTabs.length > 0 || keptProfileTabs.length > 0;
   // Defer feed/profile keepalive until after first paint so authenticated boot
@@ -31617,6 +31480,7 @@ function ActivePane({
   // Only mount when a social tab actually exists — avoid unconditional rAF mount.
   const [socialMounted, setSocialMounted] = useState(false);
   const [messagesMounted, setMessagesMounted] = useState(false);
+  const [agentMounted, setAgentMounted] = useState(false);
   const [networkMounted, setNetworkMounted] = useState(false);
   useEffect(() => {
     if (!needsSocialKeepalive) {
@@ -31636,9 +31500,13 @@ function ActivePane({
     if (isMessagesActive) setMessagesMounted(true);
   }, [isMessagesActive]);
   useLayoutEffect(() => {
+    if (isAgentActive) setAgentMounted(true);
+  }, [isAgentActive]);
+  useLayoutEffect(() => {
     if (isNetworkActive) setNetworkMounted(true);
   }, [isNetworkActive]);
   const showMessagesKeepalive = messagesMounted || isMessagesActive;
+  const showAgentKeepalive = agentMounted || isAgentActive;
   const showNetworkKeepalive = networkMounted || isNetworkActive;
 
   const socialKeepalive = !socialMounted ? null : (
@@ -31742,6 +31610,17 @@ function ActivePane({
     </div>
   );
 
+  const agentKeepalive = !showAgentKeepalive ? null : (
+    <div
+      className={`studio-pane-keepalive-slot${isAgentActive ? " is-active" : ""}`}
+      data-tab="agent"
+      inert={!isAgentActive}
+      aria-hidden={!isAgentActive}
+    >
+      <StudioAgentPane onOpenCreate={onOpenCreate} />
+    </div>
+  );
+
   const networkKeepalive = !showNetworkKeepalive ? null : (
     <div
       className={`studio-pane-keepalive-slot${isNetworkActive ? " is-active" : ""}`}
@@ -31762,6 +31641,7 @@ function ActivePane({
       <div className="studio-active-pane">
         {socialKeepalive}
         {messagesKeepalive}
+        {agentKeepalive}
         {networkKeepalive}
         {content ? (
           <div
@@ -31910,6 +31790,9 @@ function ActivePane({
   }
   if (activeTab.startsWith("messages:")) {
     // Stay mounted in messagesKeepalive — no remount / resubscribe on tab switch.
+    return wrapPane(null);
+  }
+  if (activeTab.startsWith("agent:")) {
     return wrapPane(null);
   }
   if (activeTab.startsWith("files:")) {
@@ -35246,7 +35129,7 @@ function SettingsWorkspacePane({
             <ThemeSettings />
             <CustomCursorSettings enabled={customCursorEnabled} onChange={onCustomCursorChange} />
             <DefaultStudioTabSettings
-              value={currentUser?.defaultStudioTab ?? readStoredStudioDefaultTab() ?? "composer"}
+              value={currentUser?.defaultStudioTab ?? readStoredStudioDefaultTab() ?? "agent"}
             />
           </div>
         ) : null}
@@ -35501,7 +35384,7 @@ function DefaultStudioTabSettings({ value }) {
   const setDefaultStudioTab = useMutation(api.users.setDefaultStudioTab);
   const [busy, setBusy] = useState(false);
   const current =
-    STUDIO_DEFAULT_TAB_VALUES.includes(value) ? value : "composer";
+    STUDIO_DEFAULT_TAB_VALUES.includes(value) ? value : "agent";
   return (
     <div className="studio-settings-cursor-row studio-settings-default-tab">
       <div className="studio-settings-cursor-copy">
