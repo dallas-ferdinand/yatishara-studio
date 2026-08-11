@@ -377,8 +377,8 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* Match composer dock inset so bubbles + box share one column edge. */
-  padding: 12px 12px 10px;
+  /* Horizontal inset lives on the Create-width column children. */
+  padding: 12px 0 10px;
   scrollbar-width: none;
 }
 
@@ -442,16 +442,17 @@
   opacity: 0.92;
 }
 
-/* Full-width message column (WhatsApp main pane).
+/* Same reading column as Create (.studio-chat-composer-align).
    minmax(0,1fr) so long reply/text min-content cannot widen the track. */
 .studio-dm-messages {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 3px;
   width: 100%;
-  max-width: 100%;
+  max-width: var(--studio-chat-column-max, min(92%, 36rem));
   min-width: 0;
-  margin: 0;
+  margin: 0 auto;
+  padding-inline: 12px;
   overflow-x: clip;
   box-sizing: border-box;
 }
@@ -539,8 +540,8 @@
   gap: 2px;
   box-sizing: border-box;
   min-width: 0;
-  /* Wider in the pane, but never past the row. */
-  max-width: min(88%, 36rem);
+  /* Match Create --studio-chat-bubble-max (88% of reading column). */
+  max-width: var(--studio-chat-bubble-max, 88%);
   width: fit-content;
   padding: 7px 10px;
   border-radius: 14px;
@@ -558,7 +559,7 @@
   gap: 4px;
   /* Cap to row width so quotes cannot expand the grid track. */
   width: auto;
-  max-width: min(88%, 32rem);
+  max-width: var(--studio-chat-bubble-max, 88%);
 }
 
 .studio-dm-bubble-body {
@@ -1086,8 +1087,12 @@
   align-items: center;
   gap: 10px;
   flex: 0 0 auto;
-  margin: 0 12px 6px;
+  /* Align with Create attach dock / glass box (composer pad 12px). */
+  width: calc(100% - 24px);
+  max-width: var(--studio-composer-shell-max, min(600px, 94vw));
+  margin: 0 auto 6px;
   padding: 8px 10px;
+  box-sizing: border-box;
   border: 1px solid
     color-mix(
       in srgb,
@@ -1317,8 +1322,11 @@
 }
 
 .studio-dm-error {
-  margin: 0;
+  margin: 0 auto 4px;
   padding: 4px 12px;
+  width: 100%;
+  max-width: var(--studio-composer-shell-max, min(600px, 94vw));
+  box-sizing: border-box;
   color: #ff8f8f;
   font-size: var(--desk-text-sm, 12px);
 }
@@ -1334,8 +1342,8 @@
 }
 
 /*
-  Create-like dock: inset from chat edges, one rounded glass box.
-  Recording row internals stay the existing DM controls.
+  Create-like dock: same shell max as .studio-composer .cursor-composer,
+  one rounded glass box, no internal divider. Recording UX unchanged.
 */
 .studio-dm-composer.is-split {
   display: flex;
@@ -1343,9 +1351,16 @@
   align-items: stretch;
   gap: 0;
   width: 100%;
-  max-width: 100%;
+  max-width: var(--studio-composer-shell-max, min(600px, 94vw));
+  margin-inline: auto;
   box-sizing: border-box;
-  padding: 8px 12px max(10px, env(safe-area-inset-bottom, 0px));
+  padding: 2px 12px max(10px, env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 900px) {
+  .studio-dm-composer.is-split {
+    padding-inline: 10px;
+  }
 }
 
 .studio-dm-composer-box {
@@ -1356,13 +1371,8 @@
   width: 100%;
   min-width: 0;
   overflow: hidden;
+  border: 0;
   border-radius: 16px;
-  border: 1px solid
-    color-mix(
-      in srgb,
-      var(--studio-composer-glass-border, var(--color-cursor-border, var(--mos-border))) 42%,
-      transparent
-    );
   background: var(
     --studio-composer-glass,
     color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent)
@@ -1388,7 +1398,6 @@
 }
 
 .studio-dm-composer-box:focus-within {
-  border-color: transparent;
   box-shadow:
     var(
       --studio-composer-glass-shadow,
@@ -1410,12 +1419,7 @@
   /* Slimmer than chat-head (32px) — text can read larger without a tall band. */
   min-height: 28px;
   padding: 0;
-  border-bottom: 1px solid
-    color-mix(
-      in srgb,
-      var(--studio-composer-glass-border, var(--color-cursor-border-soft)) 38%,
-      transparent
-    );
+  border-bottom: none;
 }
 
 .studio-dm-composer.is-split .studio-dm-composer-row.is-extras {
@@ -2092,8 +2096,11 @@
   align-items: center;
   gap: 10px;
   flex: 0 0 auto;
-  margin: 0 12px 6px;
+  width: calc(100% - 24px);
+  max-width: var(--studio-composer-shell-max, min(600px, 94vw));
+  margin: 0 auto 6px;
   padding: 8px 10px;
+  box-sizing: border-box;
   border: 1px solid
     color-mix(
       in srgb,
@@ -3151,8 +3158,12 @@
   align-content: center;
   gap: 6px;
   flex: 1 1 auto;
+  width: 100%;
+  max-width: var(--studio-chat-column-max, min(92%, 36rem));
   min-height: 0;
+  margin-inline: auto;
   padding: 42px 24px;
+  box-sizing: border-box;
   text-align: center;
   color: var(--color-cursor-muted, var(--mos-muted));
 }
