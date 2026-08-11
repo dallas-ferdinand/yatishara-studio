@@ -39,9 +39,10 @@ function useMasonryColumnCount() {
 
 type LightboxState = {
   jobId: string;
-  url: string;
+  url?: string;
   kind: "image" | "video" | "audio";
   name: string;
+  loading?: boolean;
 };
 
 type StudioCreateLibraryProps = {
@@ -76,7 +77,6 @@ export function StudioCreateLibrary({
   const [nextCursor, setNextCursor] = useState<number | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
   // One masonry of all kinds — no type filter yet.
   const firstPage = useQuery(api.generationLibrary.listMyGenerations, {
@@ -85,12 +85,13 @@ export function StudioCreateLibrary({
     expiresUnix,
   });
 
-  // Detail media URL — upgrades lightbox when list only had a thumb.
+  // Derive media from selected job so preview survives PanelGroup remount
+  // when the detail sidebar first opens (local lightbox state was wiped).
   const lightboxDetail = useQuery(
     api.generationLibrary.getGenerationDetail,
-    lightbox?.jobId
+    selectedJobId
       ? {
-          jobId: lightbox.jobId as Id<"generationJobs">,
+          jobId: selectedJobId as Id<"generationJobs">,
           expiresUnix,
         }
       : "skip",
@@ -135,7 +136,6 @@ export function StudioCreateLibrary({
   }, [convex, expiresUnix, loadingMore, nextCursor]);
 
   const closePreview = useCallback(() => {
-    setLightbox(null);
     onCloseDetails?.();
   }, [onCloseDetails]);
 
@@ -143,48 +143,41 @@ export function StudioCreateLibrary({
     (tile: GenerationLibraryTile) => {
       onOpenDetails(tile);
       onSelectTile(tile);
-      const url = previewUrl(tile);
-      if (tile.stage === "done" && url) {
-        setLightbox({
-          jobId: tile.jobId,
-          url,
-          kind: tile.kind,
-          name: tile.name,
-        });
-      } else {
-        setLightbox(null);
-      }
     },
     [onOpenDetails, onSelectTile],
   );
 
-  // Sidebar closed from outside → clear lightbox too.
-  useEffect(() => {
-    if (!selectedJobId) setLightbox(null);
-  }, [selectedJobId]);
-
-  // When a better playable URL arrives for the open tile, upgrade the lightbox.
-  useEffect(() => {
-    if (!lightbox) return;
-    const fromDetail =
-      lightboxDetail && lightboxDetail.jobId === lightbox.jobId
-        ? lightboxDetail.playableUrl || lightboxDetail.thumbnailUrl
+  const lightbox = useMemo((): LightboxState | null => {
+    if (!selectedJobId) return null;
+    const tile = tiles.find((t) => t.jobId === selectedJobId);
+    const detailReady =
+      lightboxDetail &&
+      lightboxDetail !== null &&
+      lightboxDetail.jobId === selectedJobId
+        ? lightboxDetail
         : undefined;
-    const tile = tiles.find((t) => t.jobId === lightbox.jobId);
-    const fromTile = tile && tile.stage === "done" ? previewUrl(tile) : undefined;
-    const url = fromDetail || fromTile;
-    if (!url || url === lightbox.url) return;
-    setLightbox((prev) =>
-      prev
-        ? {
-            ...prev,
-            url,
-            kind: (lightboxDetail?.kind as LightboxState["kind"]) || tile?.kind || prev.kind,
-            name: lightboxDetail?.name || tile?.name || prev.name,
-          }
-        : prev,
-    );
-  }, [tiles, lightbox, lightboxDetail]);
+    const kind = (detailReady?.kind || tile?.kind) as
+      | "image"
+      | "video"
+      | "audio"
+      | undefined;
+    const name = detailReady?.name || tile?.name || "Generation";
+    const stage = detailReady?.stage || tile?.stage;
+    if (stage && stage !== "done") return null;
+
+    const url =
+      detailReady?.playableUrl ||
+      detailReady?.thumbnailUrl ||
+      (tile ? previewUrl(tile) : undefined);
+
+    if (!kind) {
+      return { jobId: selectedJobId, name, kind: "image", loading: true };
+    }
+    if (!url) {
+      return { jobId: selectedJobId, kind, name, loading: true };
+    }
+    return { jobId: selectedJobId, url, kind, name };
+  }, [selectedJobId, tiles, lightboxDetail]);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -262,7 +255,11 @@ export function StudioCreateLibrary({
           aria-label={lightbox.name}
         >
           <div className="studio-gen-lightbox-stage">
-            {lightbox.kind === "video" ? (
+            {lightbox.loading || !lightbox.url ? (
+              <div className="studio-gen-lightbox-loading">
+                <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
+              </div>
+            ) : lightbox.kind === "video" ? (
               <video src={lightbox.url} controls autoPlay playsInline />
             ) : lightbox.kind === "audio" ? (
               <div className="studio-gen-lightbox-audio">

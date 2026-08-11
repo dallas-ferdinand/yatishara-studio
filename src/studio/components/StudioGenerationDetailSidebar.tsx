@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -9,11 +9,15 @@ import {
   Expand,
   Film,
   FolderOpen,
+  ImageIcon,
   Loader2,
+  Music2,
   Trash2,
+  Video,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { parseStudioPrompt } from "../lib/studio-prompt-display";
 import type { GenerationLibraryTile } from "./StudioGenerationTile";
 
 type StudioGenerationDetailSidebarProps = {
@@ -69,6 +73,12 @@ function toTile(detail: {
   };
 }
 
+function RefKindIcon({ kind }: { kind: string }) {
+  if (kind === "video") return <Video className="h-4 w-4" aria-hidden="true" />;
+  if (kind === "audio") return <Music2 className="h-4 w-4" aria-hidden="true" />;
+  return <ImageIcon className="h-4 w-4" aria-hidden="true" />;
+}
+
 export function StudioGenerationDetailSidebar({
   jobId,
   assetId,
@@ -99,8 +109,35 @@ export function StudioGenerationDetailSidebar({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const promptParsed = useMemo(() => {
+    if (!detail?.prompt) return { body: "", refs: [] as ReturnType<typeof parseStudioPrompt>["refs"] };
+    const parsed = parseStudioPrompt(detail.prompt);
+    const body = parsed.segments
+      .map((seg) => (seg.type === "mention" ? `@${seg.label}` : seg.value))
+      .join("")
+      .trim();
+    return { body, refs: parsed.refs };
+  }, [detail?.prompt]);
+
+  const references = useMemo(() => {
+    if (detail?.references?.length) return detail.references;
+    // Fallback chips from prompt text when assets couldn't be resolved.
+    return promptParsed.refs.map((ref, index) => ({
+      assetId: `prompt-ref-${index}` as Id<"assets">,
+      name: String(ref.label || ref.filename || "Reference").replace(/^@/, ""),
+      kind:
+        ref.kind === "image" || ref.kind === "video" || ref.kind === "audio"
+          ? ref.kind
+          : "file",
+      thumbnailUrl: /^https?:\/\//i.test(String(ref.thumb || ""))
+        ? String(ref.thumb)
+        : undefined,
+      openable: false as boolean,
+    }));
+  }, [detail?.references, promptParsed.refs]);
+
   async function copyPrompt() {
-    const text = detail?.prompt?.trim();
+    const text = promptParsed.body || detail?.prompt?.trim();
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -112,6 +149,21 @@ export function StudioGenerationDetailSidebar({
 
   const loading = detail === undefined;
   const missing = detail === null;
+
+  const infoItems = !detail
+    ? []
+    : [
+        { label: "Model", value: detail.modelLabel ?? detail.resolvedModel ?? "—" },
+        detail.resolution ? { label: "Resolution", value: detail.resolution } : null,
+        detail.quality ? { label: "Quality", value: detail.quality } : null,
+        detail.durationSeconds != null
+          ? { label: "Duration", value: `${detail.durationSeconds}s` }
+          : null,
+        detail.creditsSpent != null
+          ? { label: "Credits", value: String(detail.creditsSpent) }
+          : null,
+        { label: "Created", value: formatWhen(detail.createdAt) },
+      ].filter(Boolean) as Array<{ label: string; value: string }>;
 
   return (
     <aside
@@ -160,64 +212,75 @@ export function StudioGenerationDetailSidebar({
             <section className="studio-gen-detail-section">
               <div className="studio-gen-detail-label">
                 <span>Prompt</span>
-                {detail.prompt?.trim() ? (
+                {promptParsed.body ? (
                   <button
                     type="button"
                     className="studio-gen-detail-copy"
                     onClick={() => void copyPrompt()}
                   >
-                    <Copy className="h-3 w-3" aria-hidden="true" />
-                    Copy
+                    <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>Copy</span>
                   </button>
                 ) : null}
               </div>
-              <p className="studio-gen-detail-prompt">{detail.prompt?.trim() || "—"}</p>
+              <p className="studio-gen-detail-prompt">{promptParsed.body || "—"}</p>
             </section>
+
+            {references.length > 0 ? (
+              <section className="studio-gen-detail-section">
+                <div className="studio-gen-detail-label">
+                  <span>References</span>
+                </div>
+                <div className="studio-gen-detail-refs">
+                  {references.map((ref) => {
+                    const openable =
+                      "openable" in ref ? ref.openable !== false : Boolean(ref.assetId);
+                    return (
+                      <button
+                        key={String(ref.assetId)}
+                        type="button"
+                        className="studio-gen-detail-ref"
+                        title={ref.name}
+                        disabled={!openable || !onOpenInFiles}
+                        onClick={() => {
+                          if (!openable || !onOpenInFiles) return;
+                          onOpenInFiles(ref.assetId);
+                        }}
+                      >
+                        <span className="studio-gen-detail-ref-thumb">
+                          {ref.thumbnailUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={ref.thumbnailUrl} alt="" />
+                          ) : (
+                            <RefKindIcon kind={ref.kind} />
+                          )}
+                        </span>
+                        <span className="studio-gen-detail-ref-meta">
+                          <span className="studio-gen-detail-ref-name">{ref.name}</span>
+                          <span className="studio-gen-detail-ref-kind">{ref.kind}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
 
             <section className="studio-gen-detail-section">
               <div className="studio-gen-detail-label">
                 <span>Info</span>
               </div>
-              <dl className="studio-gen-detail-meta">
-                <div className="studio-gen-detail-meta-row">
-                  <dt>Model</dt>
-                  <dd>{detail.modelLabel ?? detail.resolvedModel ?? "—"}</dd>
-                </div>
-                {detail.resolution ? (
-                  <div className="studio-gen-detail-meta-row">
-                    <dt>Resolution</dt>
-                    <dd>{detail.resolution}</dd>
+              <div className="studio-gen-detail-info-grid">
+                {infoItems.map((item) => (
+                  <div key={item.label} className="studio-gen-detail-info-card">
+                    <span className="studio-gen-detail-info-label">{item.label}</span>
+                    <span className="studio-gen-detail-info-value">{item.value}</span>
                   </div>
-                ) : null}
-                {detail.quality ? (
-                  <div className="studio-gen-detail-meta-row">
-                    <dt>Quality</dt>
-                    <dd>{detail.quality}</dd>
-                  </div>
-                ) : null}
-                {detail.durationSeconds != null ? (
-                  <div className="studio-gen-detail-meta-row">
-                    <dt>Duration</dt>
-                    <dd>{detail.durationSeconds}s</dd>
-                  </div>
-                ) : null}
-                {detail.creditsSpent != null ? (
-                  <div className="studio-gen-detail-meta-row">
-                    <dt>Credits</dt>
-                    <dd>{detail.creditsSpent}</dd>
-                  </div>
-                ) : null}
-                <div className="studio-gen-detail-meta-row">
-                  <dt>Created</dt>
-                  <dd>{formatWhen(detail.createdAt)}</dd>
-                </div>
-                {detail.error ? (
-                  <div className="studio-gen-detail-meta-row is-error">
-                    <dt>Error</dt>
-                    <dd>{detail.error}</dd>
-                  </div>
-                ) : null}
-              </dl>
+                ))}
+              </div>
+              {detail.error ? (
+                <p className="studio-gen-detail-error">{detail.error}</p>
+              ) : null}
             </section>
 
             <section className="studio-gen-detail-actions">

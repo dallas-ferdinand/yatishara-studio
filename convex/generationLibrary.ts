@@ -67,6 +67,33 @@ function promptSnippet(prompt: string | undefined, max = 120): string | undefine
   return `${trimmed.slice(0, max - 1).trimEnd()}…`;
 }
 
+/** Pull asset ids from the appended "References:" block (legacy path: asset:{id}). */
+function assetIdsFromPromptReferences(prompt: string | undefined): string[] {
+  const raw = String(prompt ?? "");
+  const marker = "\n\nReferences:\n";
+  const idx = raw.indexOf(marker);
+  if (idx < 0) return [];
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const line of raw.slice(idx + marker.length).split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("- @")) continue;
+    const studio = trimmed.match(/\bstudio:\s*([^\s|]+)/i)?.[1]?.trim();
+    const path = trimmed.match(/\bpath:\s*([^|]+?)(?:\s*\||$)/i)?.[1]?.trim() ?? "";
+    const fromPath =
+      path.match(/\/Studio\/assets\/([^/.]+)/i)?.[1] ||
+      path.match(/^asset:([^\s|/]+)/i)?.[1] ||
+      undefined;
+    // Skip element chips.
+    if (/\/Studio\/elements\//i.test(path) || /\belement:\s*/i.test(trimmed)) continue;
+    const id = String(fromPath || studio || "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
 function modelLabel(resolvedModel: string | undefined): string | undefined {
   const raw = resolvedModel?.trim();
   if (!raw) return undefined;
@@ -228,6 +255,18 @@ export const listMyGenerations = authedQuery({
   },
 });
 
+const referenceReturn = v.object({
+  assetId: v.id("assets"),
+  name: v.string(),
+  kind: v.union(
+    v.literal("image"),
+    v.literal("video"),
+    v.literal("audio"),
+    v.literal("file"),
+  ),
+  thumbnailUrl: v.optional(v.string()),
+});
+
 const detailReturn = v.object({
   jobId: v.id("generationJobs"),
   assetId: v.optional(v.id("assets")),
@@ -259,6 +298,7 @@ const detailReturn = v.object({
   height: v.optional(v.number()),
   error: v.optional(v.string()),
   referenceAssetIds: v.array(v.id("assets")),
+  references: v.array(referenceReturn),
 });
 
 /**
@@ -318,6 +358,42 @@ export const getGenerationDetail = authedQuery({
       .map((row) => row.assetId)
       .filter((id): id is Id<"assets"> => id != null);
 
+    const promptRefIds = assetIdsFromPromptReferences(job.userPrompt);
+    const allRefIds: Id<"assets">[] = [];
+    const seenRefIds = new Set<string>();
+    for (const id of [...referenceAssetIds, ...promptRefIds]) {
+      if (seenRefIds.has(id)) continue;
+      seenRefIds.add(id);
+      allRefIds.push(id as Id<"assets">);
+    }
+
+    const references: Array<{
+      assetId: Id<"assets">;
+      name: string;
+      kind: "image" | "video" | "audio" | "file";
+      thumbnailUrl?: string;
+    }> = [];
+    for (const refId of allRefIds) {
+      const refAsset = await ctx.db.get("assets", refId);
+      if (!refAsset || refAsset.deletedAt || refAsset.purgedAt) continue;
+      if (refAsset.ownerId !== ctx.user._id) continue;
+      const refMedia = await signTileMedia(refAsset, args.expiresUnix);
+      const kind =
+        refAsset.kind === "image" || refAsset.kind === "video" || refAsset.kind === "audio"
+          ? refAsset.kind
+          : "file";
+      references.push({
+        assetId: refAsset._id,
+        name: refAsset.name?.trim() || "Reference",
+        kind,
+        ...(refMedia.thumbnailUrl
+          ? { thumbnailUrl: refMedia.thumbnailUrl }
+          : refAsset.kind === "image" && refMedia.playableUrl
+            ? { thumbnailUrl: refMedia.playableUrl }
+            : {}),
+      });
+    }
+
     const name =
       asset?.name?.trim() ||
       promptSnippet(job.userPrompt, 48) ||
@@ -357,7 +433,8 @@ export const getGenerationDetail = authedQuery({
       ...(asset?.width != null ? { width: asset.width } : {}),
       ...(asset?.height != null ? { height: asset.height } : {}),
       ...(job.error ? { error: job.error } : {}),
-      referenceAssetIds,
+      referenceAssetIds: allRefIds,
+      references,
     };
   },
 });
