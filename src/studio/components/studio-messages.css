@@ -1424,7 +1424,7 @@
 }
 
 .studio-dm-composer.is-split .studio-dm-composer-row.is-extras {
-  min-height: 34px;
+  min-height: 38px;
   padding: 4px 8px;
   gap: 6px;
 }
@@ -1436,9 +1436,9 @@
 
 .studio-dm-composer.is-split .studio-settings-pill.studio-dm-extra-pill {
   flex: 0 0 auto;
-  height: 24px;
-  min-height: 24px;
-  padding: 0 9px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 10px;
   gap: 5px;
   font-size: 11px;
   font-weight: 650;
@@ -1451,10 +1451,10 @@
 }
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-settings-pill.studio-dm-extra-pill {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  min-height: 28px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
   padding: 0;
   gap: 0;
   justify-content: center;
@@ -1462,20 +1462,20 @@
 }
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-settings-pill.studio-dm-extra-pill svg {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
 }
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-composer-circle-btn.studio-dm-composer-circle,
 .studio-dm-composer.is-split.is-mobile-icons .studio-composer-circle-btn.studio-composer-send-btn {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  min-height: 28px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
 }
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-dm-composer-row.is-extras {
-  min-height: 36px;
+  min-height: 40px;
   padding: 4px 8px;
   gap: 8px;
 }
@@ -1507,8 +1507,8 @@
 }
 
 .studio-dm-composer.is-split .studio-settings-pill.studio-dm-extra-pill svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
   stroke-width: 2.25;
 }
@@ -1522,27 +1522,35 @@
   white-space: nowrap;
 }
 
+/* Match Create .studio-composer-circle-btn (30 desktop / 32 mobile). */
 .studio-dm-composer.is-split .studio-composer-circle-btn.studio-dm-composer-circle {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  min-height: 24px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
   flex: 0 0 auto;
 }
 
 .studio-dm-composer.is-split .studio-composer-circle-btn.studio-dm-composer-circle svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   stroke-width: 2.25;
 }
 
 .studio-dm-composer.is-split .studio-composer-circle-btn.studio-composer-send-btn {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  min-height: 24px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
   padding: 0;
   gap: 0;
+}
+
+.studio-dm-composer.is-split.is-mobile-icons .studio-composer-circle-btn.studio-dm-composer-circle svg,
+.studio-dm-composer.is-split.is-mobile-icons .studio-composer-circle-btn.studio-composer-send-btn svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.2;
 }
 
 .studio-dm-composer.is-split .studio-composer-circle-btn.studio-dm-composer-circle:disabled:not(.studio-composer-send-btn) {
