@@ -1,6 +1,8 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY packages/studio-tools/package.json ./packages/studio-tools/
+COPY packages/studio-mcp/package.json ./packages/studio-mcp/
 RUN npm ci
 
 FROM node:22-alpine AS builder
