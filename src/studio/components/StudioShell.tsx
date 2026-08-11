@@ -31628,6 +31628,7 @@ function ActivePane({
         onOpenAgentSettings={onOpenAgentSettings}
         onBindThreadTab={onBindAgentThreadTab}
         onOpenNewAgentTab={onOpenNewAgentTab}
+        isMobile={isMobileLayout}
       />
     </div>
   );

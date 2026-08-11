@@ -71,43 +71,15 @@
 }
 
 .studio-agent-composer-dock {
+  flex: 0 0 auto;
   width: 100%;
-  padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 0;
   box-sizing: border-box;
 }
 
-.studio-agent-composer-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px 12px;
-}
-
-.studio-agent-composer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.studio-agent-composer-input-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: end;
-}
-
-.studio-agent-composer-textarea {
-  width: 100%;
-  min-height: 44px;
-  max-height: 160px;
-  resize: none;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  line-height: 1.4;
-  padding: 8px 4px;
-  outline: none;
+/* Same shell width band as Create / DM composers. */
+.studio-agent-composer-dock .studio-dm-composer.is-split {
+  max-width: var(--studio-composer-shell-max, min(600px, 94vw));
 }
 
 .studio-agent-primary-btn,

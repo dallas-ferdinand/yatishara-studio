@@ -1,6 +1,7 @@
 /**
  * Studio Agent Mode — Create/DM layout: chat stream + bottom composer.
  * Thread list lives in History (Create-style). BYOK lives in Settings → Agent.
+ * Composer chrome matches DM/Create glass box (studio-dm-composer / accent corners).
  */
 "use client";
 
@@ -11,6 +12,8 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { ArrowUp, Bot, Check, Loader2, Plus, Settings, X } from "lucide-react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import "./studio-messages.css";
+import "./studio-agent.css";
 
 type StudioAgentPaneProps = {
   activeThreadId: Id<"agentThreads"> | null;
@@ -20,7 +23,16 @@ type StudioAgentPaneProps = {
   /** After minting a thread, promote agent:main → agent:<id> like Create→thread. */
   onBindThreadTab?: (threadId: Id<"agentThreads">) => void;
   onOpenNewAgentTab?: () => void;
+  isMobile?: boolean;
 };
+
+function autosizeAgentComposer(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "0px";
+  const next = Math.min(120, Math.max(36, el.scrollHeight));
+  el.style.height = `${next}px`;
+  el.classList.toggle("is-single-line", next <= 40);
+}
 
 export function StudioAgentPane({
   activeThreadId,
@@ -29,6 +41,7 @@ export function StudioAgentPane({
   onOpenAgentSettings,
   onBindThreadTab,
   onOpenNewAgentTab,
+  isMobile = false,
 }: StudioAgentPaneProps) {
   const createThread = useMutation(api.agentThreads.create);
   const decideApproval = useMutation(api.agentApprovals.decide);
@@ -37,6 +50,7 @@ export function StudioAgentPane({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const streamRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const stickToBottomRef = useRef(true);
 
   const messages = useQuery(
@@ -58,6 +72,10 @@ export function StudioAgentPane({
     if (!el || !stickToBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
   }, [messages?.length, busy]);
+
+  useEffect(() => {
+    autosizeAgentComposer(inputRef.current);
+  }, [draft]);
 
   const ensureThread = useCallback(async () => {
     if (activeThreadId) return activeThreadId;
@@ -113,6 +131,7 @@ export function StudioAgentPane({
   }
 
   const hasMessages = Boolean(messages?.length);
+  const canSend = Boolean(draft.trim()) && !busy;
 
   return (
     <div className="studio-agent-pane" data-studio-agent="">
@@ -227,64 +246,78 @@ export function StudioAgentPane({
         </div>
       </div>
 
-      <div className="studio-chat-composer-align studio-agent-composer-dock">
-        <div className="cursor-composer studio-agent-composer-shell">
-          <div className="studio-agent-composer-toolbar">
-            <button
-              type="button"
-              className="studio-composer-circle-btn"
-              title="New agent chat"
-              aria-label="New agent chat"
-              onClick={() => void handleNewChat()}
+      <div className="studio-agent-composer-dock">
+        <footer
+          className={`studio-dm-composer is-split${isMobile ? " is-mobile-icons" : ""}`}
+        >
+          <div className="studio-dm-composer-box">
+            <div className="studio-dm-composer-row is-message">
+              <textarea
+                ref={(el) => {
+                  inputRef.current = el;
+                  autosizeAgentComposer(el);
+                }}
+                value={draft}
+                rows={2}
+                enterKeyHint={isMobile ? "enter" : "send"}
+                placeholder="Ask the agent to set up a project, generate, or work across Studio…"
+                aria-label="Message Studio Agent"
+                disabled={busy}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  autosizeAgentComposer(event.currentTarget);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && !isMobile) {
+                    event.preventDefault();
+                    void handleSend();
+                  }
+                }}
+              />
+            </div>
+            <div
+              className="studio-dm-composer-row is-extras"
+              role="toolbar"
+              aria-label="Agent actions"
             >
-              <Plus size={14} strokeWidth={2.25} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="studio-composer-circle-btn"
-              title="Agent settings"
-              aria-label="Agent settings"
-              onClick={() => onOpenAgentSettings?.()}
-            >
-              <Settings size={14} strokeWidth={2.25} aria-hidden="true" />
-            </button>
+              <button
+                type="button"
+                className="studio-settings-pill studio-dm-extra-pill"
+                title="New agent chat"
+                aria-label="New agent chat"
+                onClick={() => void handleNewChat()}
+              >
+                <Plus aria-hidden="true" />
+                <span className="studio-dm-extra-pill-label">New</span>
+              </button>
+              <button
+                type="button"
+                className="studio-settings-pill studio-dm-extra-pill"
+                title="Agent settings"
+                aria-label="Agent settings"
+                onClick={() => onOpenAgentSettings?.()}
+              >
+                <Settings aria-hidden="true" />
+                <span className="studio-dm-extra-pill-label">Settings</span>
+              </button>
+              <span className="studio-dm-extras-spacer" aria-hidden="true" />
+              <button
+                type="button"
+                className="studio-composer-circle-btn studio-dm-composer-circle studio-composer-send-btn"
+                disabled={!canSend}
+                aria-label="Send"
+                title="Send"
+                onClick={() => void handleSend()}
+              >
+                {busy ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <ArrowUp aria-hidden="true" />
+                )}
+              </button>
+            </div>
           </div>
-          <div className="studio-agent-composer-input-row">
-            <textarea
-              className="studio-agent-composer-textarea"
-              rows={2}
-              placeholder="Ask the agent to set up a project, generate, or work across Studio…"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              disabled={busy}
-            />
-            <button
-              type="button"
-              className="studio-composer-circle-btn studio-composer-send-btn"
-              disabled={busy || !draft.trim()}
-              aria-label="Send"
-              title="Send"
-              onClick={() => void handleSend()}
-            >
-              {busy ? (
-                <Loader2
-                  size={14}
-                  strokeWidth={2.25}
-                  className="animate-spin"
-                  aria-hidden="true"
-                />
-              ) : (
-                <ArrowUp size={14} strokeWidth={2.25} aria-hidden="true" />
-              )}
-            </button>
-          </div>
-        </div>
+        </footer>
       </div>
     </div>
   );
