@@ -8816,12 +8816,15 @@ export function StudioShell({
             opacity: 0 !important;
           }
           .studio-polish.is-studio-mobile .studio-mode-row {
-            background: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent) !important;
+            background: transparent !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
             transform: none !important;
             filter: none !important;
             isolation: auto !important;
+          }
+          .studio-polish.is-studio-mobile .studio-mode-row.is-active {
+            background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 16%, var(--mos-panel, #12151c)) !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tabs.is-dragging-strip,
           .studio-polish.is-studio-mobile .cursor-unified-tab.is-entering {
@@ -9060,94 +9063,68 @@ export function StudioShell({
           }
           .studio-polish .studio-mode-switcher {
             width: auto;
-            min-height: 28px;
-            height: 28px;
+            height: 34px;
+            min-height: 34px;
             flex: 0 0 auto;
             display: inline-flex;
+            align-items: center;
             gap: 2px;
             padding: 2px;
-            border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 42%, transparent) !important;
+            border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 55%, transparent) !important;
             border-radius: 999px;
-            background: color-mix(in srgb, var(--mos-panel, var(--color-cursor-panel, #12151c)) 72%, transparent) !important;
-            backdrop-filter: saturate(120%) blur(4px);
-            -webkit-backdrop-filter: saturate(120%) blur(4px);
+            background: var(--studio-composer-glass-muted, color-mix(in srgb, var(--mos-panel, #12151c) 78%, transparent)) !important;
+            backdrop-filter: var(--studio-composer-glass-blur, saturate(120%) blur(4px));
+            -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(120%) blur(4px));
             box-shadow: none !important;
           }
           .studio-polish .studio-mode-row {
             flex-direction: row;
-            width: 26px;
-            min-width: 26px;
-            min-height: 24px;
-            height: 24px;
+            width: 30px;
+            min-width: 30px;
+            height: 30px;
+            min-height: 30px;
+            flex: 0 0 30px;
+            aspect-ratio: 1 / 1;
             justify-content: center;
             gap: 0;
             padding: 0;
             border: 1px solid transparent;
             border-radius: 999px;
-            background: transparent;
-            backdrop-filter: none;
-            -webkit-backdrop-filter: none;
-            color: color-mix(in srgb, var(--color-cursor-text-bright, var(--color-cursor-fg)) 48%, transparent);
+            background: transparent !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            color: color-mix(in srgb, var(--color-cursor-text-bright, var(--color-cursor-fg)) 52%, transparent);
             font-size: 10px;
           }
           .studio-polish .studio-mode-row.is-active {
-            border: 1px solid transparent !important;
-            background:
-              radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent-hover) 22%, transparent), transparent 46%),
-              linear-gradient(
-                180deg,
-                color-mix(in srgb, var(--cursor-accent-hover) 34%, transparent) 0%,
-                color-mix(in srgb, var(--cursor-accent) 22%, transparent) 46%,
-                color-mix(in srgb, var(--cursor-accent) 12%, #000 28%) 100%
-              ),
-              linear-gradient(
-                180deg,
-                color-mix(in srgb, var(--mos-panel, #0a101c) 88%, #000) 0%,
-                color-mix(in srgb, var(--mos-bg, #05080f) 92%, #000) 100%
-              ) !important;
-            color: #ffffff !important;
-            box-shadow:
-              inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent),
-              inset 0 -2px 0 color-mix(in srgb, #000 28%, transparent),
-              0 0 14px color-mix(in srgb, var(--cursor-accent) 12%, transparent) !important;
+            border: 1px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 42%, transparent) !important;
+            background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 16%, var(--mos-panel, #12151c)) !important;
+            color: var(--color-cursor-text-bright, #fff) !important;
+            box-shadow: none !important;
           }
           .studio-polish .studio-mode-row.is-active svg,
           .studio-polish .studio-mode-row.is-active svg * {
-            color: #ffffff !important;
-            stroke: #ffffff !important;
+            color: inherit !important;
+            stroke: currentColor !important;
             fill: none !important;
             filter: none !important;
           }
           .studio-polish .studio-mode-row.is-active::before {
-            content: "" !important;
-            display: block !important;
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-            border-radius: inherit;
-            padding: 1px;
-            pointer-events: none;
-            background: linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 88%, #fff 10%) 0%,
-              color-mix(in srgb, var(--cursor-accent) 58%, transparent) 38%,
-              color-mix(in srgb, var(--cursor-accent) 22%, transparent) 68%,
-              transparent 100%
-            ) !important;
-            -webkit-mask:
-              linear-gradient(#fff 0 0) content-box,
-              linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
-            box-shadow: none !important;
+            content: none !important;
+            display: none !important;
           }
           .studio-polish .studio-mode-row svg {
-            width: 13px;
-            height: 13px;
+            width: 14px;
+            height: 14px;
           }
           [data-appearance="light"] .studio-polish .studio-mode-switcher {
-            background: color-mix(in srgb, var(--mos-panel, #ececf0) 88%, #fff) !important;
-            border-color: color-mix(in srgb, var(--color-cursor-border, var(--mos-border)) 70%, transparent) !important;
+            background: color-mix(in srgb, var(--mos-panel, #ececf0) 92%, #fff) !important;
+            border-color: color-mix(in srgb, var(--color-cursor-border, var(--mos-border)) 75%, transparent) !important;
+          }
+          [data-appearance="light"] .studio-polish .studio-mode-row.is-active {
+            color: var(--color-cursor-fg, #1a1a1a) !important;
+            background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 14%, #fff) !important;
+            border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 45%, transparent) !important;
           }
           .studio-polish .studio-generate-column--desktop {
             display: none !important;
@@ -16542,17 +16519,18 @@ export function StudioShell({
           display: inline-flex;
           flex-direction: row;
           align-items: center;
+          justify-content: center;
           gap: 2px;
           flex: 0 0 auto;
           width: auto;
-          min-height: 28px;
-          height: 28px;
+          height: 34px;
+          min-height: 34px;
           align-self: center;
-          border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 42%, transparent);
+          border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 55%, transparent);
           border-radius: 999px;
-          background: color-mix(in srgb, var(--mos-panel, var(--color-cursor-panel, #12151c)) 72%, transparent);
-          backdrop-filter: saturate(120%) blur(4px);
-          -webkit-backdrop-filter: saturate(120%) blur(4px);
+          background: var(--studio-composer-glass-muted, color-mix(in srgb, var(--mos-panel, #12151c) 78%, transparent));
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(120%) blur(4px));
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(120%) blur(4px));
           box-shadow: none;
           padding: 2px;
         }
@@ -16563,17 +16541,19 @@ export function StudioShell({
           align-items: center;
           justify-content: center;
           gap: 0;
-          width: 26px;
-          min-width: 26px;
-          min-height: 24px;
-          height: 24px;
+          width: 30px;
+          min-width: 30px;
+          height: 30px;
+          min-height: 30px;
+          flex: 0 0 30px;
+          aspect-ratio: 1 / 1;
           border: 1px solid transparent;
           border-radius: 999px;
           background: transparent;
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
           padding: 0;
-          color: color-mix(in srgb, var(--color-cursor-text-bright, var(--color-cursor-fg)) 48%, transparent);
+          color: color-mix(in srgb, var(--color-cursor-text-bright, var(--color-cursor-fg)) 52%, transparent);
           font-size: 10px;
           font-weight: 650;
           line-height: 1;
@@ -16588,72 +16568,38 @@ export function StudioShell({
             transform var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-mode-row svg {
-          width: 13px;
-          height: 13px;
+          width: 14px;
+          height: 14px;
           flex: 0 0 auto;
-          stroke-width: 2.15;
+          stroke-width: 2.25;
           color: inherit;
-          opacity: 0.82;
+          opacity: 0.88;
         }
         .studio-mode-row:hover {
-          color: color-mix(in srgb, var(--color-cursor-text-bright, var(--color-cursor-fg)) 78%, transparent);
+          color: color-mix(in srgb, var(--color-cursor-text-bright, var(--color-cursor-fg)) 82%, transparent);
           background: color-mix(in srgb, var(--color-cursor-fg, #fff) 8%, transparent);
           border-color: transparent;
           transform: none;
         }
         .studio-mode-row.is-active {
-          border: 1px solid transparent;
-          background:
-            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent-hover) 22%, transparent), transparent 46%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 34%, transparent) 0%,
-              color-mix(in srgb, var(--cursor-accent) 22%, transparent) 46%,
-              color-mix(in srgb, var(--cursor-accent) 12%, #000 28%) 100%
-            ),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--mos-panel, #0a101c) 88%, #000) 0%,
-              color-mix(in srgb, var(--mos-bg, #05080f) 92%, #000) 100%
-            );
-          color: #ffffff;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 42%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 16%, var(--mos-panel, #12151c));
+          color: var(--color-cursor-text-bright, #fff);
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent),
-            inset 0 -2px 0 color-mix(in srgb, #000 28%, transparent),
-            0 0 14px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          box-shadow: none;
         }
         .studio-mode-row.is-active svg,
         .studio-mode-row.is-active svg * {
           opacity: 1;
-          color: #ffffff;
-          stroke: #ffffff;
+          color: inherit;
+          stroke: currentColor;
           fill: none;
           filter: none;
         }
         .studio-mode-row.is-active::before {
-          content: "";
-          display: block;
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          border-radius: inherit;
-          padding: 1px;
-          pointer-events: none;
-          background: linear-gradient(
-            180deg,
-            color-mix(in srgb, var(--cursor-accent-hover) 88%, #fff 10%) 0%,
-            color-mix(in srgb, var(--cursor-accent) 58%, transparent) 38%,
-            color-mix(in srgb, var(--cursor-accent) 22%, transparent) 68%,
-            transparent 100%
-          );
-          -webkit-mask:
-            linear-gradient(#fff 0 0) content-box,
-            linear-gradient(#fff 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
-          box-shadow: none;
+          content: none;
+          display: none;
         }
         .studio-mode-row.is-active > * {
           position: relative;
@@ -16663,8 +16609,8 @@ export function StudioShell({
           display: none;
         }
         [data-appearance="light"] .studio-mode-switcher {
-          background: color-mix(in srgb, var(--mos-panel, #ececf0) 88%, #fff);
-          border-color: color-mix(in srgb, var(--color-cursor-border, var(--mos-border)) 70%, transparent);
+          background: color-mix(in srgb, var(--mos-panel, #ececf0) 92%, #fff);
+          border-color: color-mix(in srgb, var(--color-cursor-border, var(--mos-border)) 75%, transparent);
         }
         [data-appearance="light"] .studio-mode-row {
           color: color-mix(in srgb, var(--color-cursor-fg, #1a1a1a) 55%, transparent);
@@ -16674,7 +16620,9 @@ export function StudioShell({
           background: color-mix(in srgb, #000 5%, transparent);
         }
         [data-appearance="light"] .studio-mode-row.is-active {
-          color: #fff;
+          color: var(--color-cursor-fg, #1a1a1a);
+          background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 14%, #fff);
+          border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 45%, transparent);
         }
         .studio-composer .cursor-composer-box.is-preset-open {
           overflow: visible;
@@ -26735,11 +26683,13 @@ function StudioComposer({
         const inputBoxRect = inputBox.getBoundingClientRect();
         const modeSwitcher = composer.querySelector(".studio-mode-switcher");
         const modeBox = modeSwitcher?.getBoundingClientRect();
-        // Hard clip at the input glass. End-pad parks the last message above the pills.
+        // Hard clip at the input glass.
         const clearance = Math.max(0, Math.round(chatBox.bottom - inputBoxRect.top));
-        const pillsBand = modeBox
-          ? Math.max(0, Math.round(inputBoxRect.top - modeBox.top))
-          : 36;
+        // Mode pill lives inside the composer toolbar now — no extra band above.
+        const pillsBand =
+          modeBox && modeBox.top < inputBoxRect.top
+            ? Math.max(0, Math.round(inputBoxRect.top - modeBox.top))
+            : 0;
         const endPad = pillsBand + 12;
         const clearancePx = `${clearance}px`;
         const endPadPx = `${endPad}px`;
@@ -27928,7 +27878,11 @@ function StudioModeSwitcher({ mode, setMode }) {
   ];
 
   return (
-    <div className="studio-mode-switcher" role="radiogroup" aria-label="Content type">
+    <div
+      className="studio-mode-switcher"
+      role="tablist"
+      aria-label="Content type"
+    >
       {items.map((item) => {
         const Icon = item.icon;
         const active = mode === item.value;
@@ -27936,9 +27890,9 @@ function StudioModeSwitcher({ mode, setMode }) {
           <button
             key={item.value}
             type="button"
-            className={`studio-mode-row${active ? " is-active" : ""}`}
-            role="radio"
-            aria-checked={active}
+            className={`studio-mode-row studio-composer-circle-btn${active ? " is-active" : ""}`}
+            role="tab"
+            aria-selected={active}
             aria-label={item.label}
             title={item.label}
             onClick={() => setMode(item.value)}
