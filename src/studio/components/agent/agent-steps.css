@@ -149,24 +149,71 @@
   width: 100%;
   max-width: min(100%, 34rem);
   margin-left: 19px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 12%, transparent);
-  border-radius: 14px;
-  background: var(--mos-plate, var(--mos-panel, #fff));
+  padding: 12px 13px;
+  border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 11%, transparent);
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--cursor-accent, #7cff6b) 9%, transparent),
+      transparent 42%
+    ),
+    color-mix(in srgb, var(--mos-plate, var(--mos-panel, #fff)) 94%, transparent);
   box-shadow:
     0 1px 2px color-mix(in srgb, #000 10%, transparent),
-    0 3px 10px color-mix(in srgb, #000 8%, transparent);
+    0 8px 24px color-mix(in srgb, #000 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 38%, transparent);
   box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+}
+
+.studio-agent-approval-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(
+    180deg,
+    var(--cursor-accent, #7cff6b),
+    color-mix(in srgb, var(--cursor-accent, #7cff6b) 20%, transparent)
+  );
 }
 
 .studio-agent-approval-card-head {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
+.studio-agent-approval-card-head-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.studio-agent-approval-card-head-copy {
+  min-width: 0;
+}
+
+.studio-agent-approval-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #fff 32%, transparent), transparent),
+    color-mix(in srgb, var(--cursor-accent, #7cff6b) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cursor-accent, #7cff6b) 24%, transparent);
+  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 88%, transparent);
+}
+
+.studio-agent-approval-card-kicker,
 .studio-agent-approval-card-title,
 .studio-agent-approval-card-status,
 .studio-agent-approval-card-summary,
@@ -174,21 +221,35 @@
   margin: 0;
 }
 
+.studio-agent-approval-card-kicker {
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 48%, transparent);
+}
+
 .studio-agent-approval-card-title {
   font-size: 13px;
   font-weight: 650;
   color: var(--mos-ink, var(--color-cursor-text));
+  line-height: 1.2;
 }
 
 .studio-agent-approval-card-status {
-  font-size: 11px;
-  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 55%, transparent);
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 72%, transparent);
+  background: color-mix(in srgb, var(--mos-ink, #111) 6%, transparent);
   white-space: nowrap;
 }
 
 .studio-agent-approval-card-summary {
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 82%, transparent);
 }
 
@@ -197,6 +258,10 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--mos-ink, var(--color-cursor-text));
+}
+
+.studio-agent-approval-card .studio-agent-step-approval-actions {
+  margin-top: 10px;
 }
 
 .studio-agent-live-progress {

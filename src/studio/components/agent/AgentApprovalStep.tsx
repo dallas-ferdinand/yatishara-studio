@@ -1,9 +1,8 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Check, Send, Share2, Sparkles, Trash2, X } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { formatTtdFromCredits } from "@/studio/lib/money";
-import { AgentStepRow } from "./AgentStepRow";
 import { humanToolTitle } from "./agentToolTitles";
 import type { AgentApprovalRow } from "./agentStepUtils";
 import type { DisplayStep } from "./agentStepUtils";
@@ -20,15 +19,13 @@ type AgentApprovalStepProps = {
 export function AgentApprovalStep({
   step,
   approval,
-  expanded,
-  onToggle,
   onDecide,
-  onOpenFolder,
 }: AgentApprovalStepProps) {
   const isPending = approval.status === "pending";
   const approvalTitle = approval.toolName
     ? humanToolTitle(approval.toolName)
     : approval.title || step.title;
+  const Icon = approvalIcon(approval.toolName);
   const statusLabel = isPending
     ? "Waiting for your confirmation"
     : approval.status === "completed"
@@ -41,28 +38,30 @@ export function AgentApprovalStep({
             ? "Failed"
             : approval.status;
 
-  const enrichedStep: DisplayStep = {
-    ...step,
-    kind: "approval",
-    title: approvalTitle,
-    subtitle: undefined,
-    outcome: undefined,
-  };
-
   return (
-    <div className="studio-agent-approval-card-wrap">
-      <AgentStepRow
-        step={enrichedStep}
-        expanded={expanded}
-        onToggle={onToggle}
-        onOpenFolder={onOpenFolder}
-      />
+    <div
+      className="studio-agent-approval-card-wrap"
+      role="listitem"
+      data-step-status={step.status}
+    >
       <div className="studio-agent-approval-card">
         <div className="studio-agent-approval-card-head">
-          <p className="studio-agent-approval-card-title">{approvalTitle}</p>
+          <div className="studio-agent-approval-card-head-main">
+            <span className="studio-agent-approval-card-icon" aria-hidden="true">
+              <Icon size={14} />
+            </span>
+            <div className="studio-agent-approval-card-head-copy">
+              <p className="studio-agent-approval-card-kicker">
+                {isPending ? "Confirmation needed" : "Approval"}
+              </p>
+              <p className="studio-agent-approval-card-title">{approvalTitle}</p>
+            </div>
+          </div>
           <p className="studio-agent-approval-card-status">{statusLabel}</p>
         </div>
-        <p className="studio-agent-approval-card-summary">{approval.summary}</p>
+        <p className="studio-agent-approval-card-summary">
+          {approvalSummary(approval)}
+        </p>
         {approval.estimatedCredits != null ? (
           <p className="studio-agent-approval-card-cost">
             Cost: {formatTtdFromCredits(approval.estimatedCredits)}
@@ -91,4 +90,30 @@ export function AgentApprovalStep({
       </div>
     </div>
   );
+}
+
+function approvalIcon(toolName?: string) {
+  const name = String(toolName || "");
+  if (name.includes("share") || name.includes("post")) return Share2;
+  if (name.includes("send")) return Send;
+  if (name.includes("trash") || name.includes("delete")) return Trash2;
+  if (name.includes("generate")) return Sparkles;
+  return Share2;
+}
+
+function approvalSummary(approval: AgentApprovalRow) {
+  const name = String(approval.toolName || "");
+  if (name === "studio_share_asset_post") {
+    return "This will publish the selected asset to your public profile feed.";
+  }
+  if (name === "studio_send_message") {
+    return "This will send the drafted message as you.";
+  }
+  if (name === "studio_trash") {
+    return "This will move the selected item to trash.";
+  }
+  if (name.includes("generate")) {
+    return "This will start a paid generation request.";
+  }
+  return approval.summary || "Review this action and confirm if you want me to continue.";
 }
