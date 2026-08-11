@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConvex, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -13,6 +13,31 @@ import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import "./studio-create-library.css";
 
 const PAGE_SIZE = 24;
+
+/** Match studio-create-library.css breakpoints for LTR column count. */
+function columnCountForWidth(width: number): number {
+  if (width >= 1500) return 5;
+  if (width >= 1100) return 4;
+  if (width >= 720) return 3;
+  return 2;
+}
+
+function useMasonryColumnCount() {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [cols, setCols] = useState(2);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const apply = () => setCols(columnCountForWidth(el.clientWidth));
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return { ref, cols };
+}
 
 type LightboxState = {
   jobId: string;
@@ -141,6 +166,17 @@ export function StudioCreateLibrary({
   }, [lightbox, closePreview]);
 
   const loading = firstPage === undefined;
+  const { ref: masonryRef, cols } = useMasonryColumnCount();
+
+  // Round-robin into columns so newest runs left→right across the top
+  // (CSS columns fill top→bottom in col 1 first — wrong reading order).
+  const masonryColumns = useMemo(() => {
+    const columns: GenerationLibraryTile[][] = Array.from({ length: cols }, () => []);
+    tiles.forEach((tile, index) => {
+      columns[index % cols]!.push(tile);
+    });
+    return columns;
+  }, [tiles, cols]);
 
   return (
     <div className={`studio-create-library${lightbox ? " is-previewing" : ""}`}>
@@ -157,19 +193,23 @@ export function StudioCreateLibrary({
           </div>
         ) : (
           <>
-            <div className="studio-create-masonry">
-              {tiles.map((tile) => (
-                <div key={tile.jobId} className="studio-create-masonry-item">
-                  <StudioGenerationTile
-                    tile={tile}
-                    selected={selectedJobId === tile.jobId}
-                    isMobile={isMobile}
-                    onSelect={openPreview}
-                    onPlay={openPreview}
-                    onOpenDetails={openPreview}
-                    onUpscale={onUpscale}
-                    onGenerateVideo={onGenerateVideo}
-                  />
+            <div ref={masonryRef} className="studio-create-masonry">
+              {masonryColumns.map((column, columnIndex) => (
+                <div key={columnIndex} className="studio-create-masonry-col">
+                  {column.map((tile) => (
+                    <div key={tile.jobId} className="studio-create-masonry-item">
+                      <StudioGenerationTile
+                        tile={tile}
+                        selected={selectedJobId === tile.jobId}
+                        isMobile={isMobile}
+                        onSelect={openPreview}
+                        onPlay={openPreview}
+                        onOpenDetails={openPreview}
+                        onUpscale={onUpscale}
+                        onGenerateVideo={onGenerateVideo}
+                      />
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
