@@ -467,12 +467,13 @@
   align-self: stretch;
   width: 100%;
   max-width: 100%;
-  margin: 6px 0 4px;
+  /* Stream already gaps children 12px — no extra margin. */
+  margin: 0;
   padding: 0;
   border-radius: 10px;
-  /* Same plate as received assistant bubbles — not a darker grey wash. */
+  /* Same plate as received assistant bubbles (mos-plate), not pure white. */
   border: 1px solid color-mix(in srgb, var(--mos-ink, #111) 12%, transparent);
-  background: var(--mos-plate, var(--mos-panel, #fff));
+  background: var(--mos-plate, var(--mos-panel, #ececf0));
   box-shadow:
     0 1px 2px color-mix(in srgb, #000 12%, transparent),
     0 3px 10px color-mix(in srgb, #000 10%, transparent);
@@ -481,7 +482,7 @@
 }
 
 [data-appearance="light"] .studio-agent-ask-card {
-  background: #fff;
+  background: var(--mos-plate, #ececf0);
   border: 1px solid color-mix(in srgb, #000 12%, transparent);
 }
 
