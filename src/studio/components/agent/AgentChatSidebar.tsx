@@ -116,108 +116,118 @@ export function AgentChatSidebar({
       <div className="studio-agent-chat-sidebar-body">
         {tab === "info" ? (
           <div className="studio-agent-sidebar-section">
-            <p className="studio-agent-sidebar-kicker">Summary</p>
-            <div className="studio-agent-cost-grid">
-              <div>
+            <div className="studio-agent-cost-grid" role="group" aria-label="Chat summary">
+              <div className="studio-agent-cost-stat">
                 <strong>
                   {formatTtdFromCredits(insight?.creditsSpent ?? 0, price)}
                 </strong>
                 <span>Spent</span>
               </div>
-              <div>
+              <div className="studio-agent-cost-stat">
                 <strong>{insight?.turnCount ?? 0}</strong>
                 <span>Turns</span>
               </div>
-              <div>
+              <div className="studio-agent-cost-stat">
                 <strong>{insight?.media?.length ?? 0}</strong>
                 <span>Media</span>
               </div>
             </div>
 
-            <p className="studio-agent-sidebar-kicker">To-do lists</p>
-            {!board.lists.length ? (
-              <p className="studio-agent-sidebar-empty">
-                No to-do lists yet. Multi-step work will show up here.
-              </p>
-            ) : (
-              <div className="studio-agent-todo-accordions">
-                {board.lists.map((list) => {
-                  const isCurrent =
-                    list.id === board.activeId ||
-                    list.status === "working" ||
-                    list.status === "active";
-                  const done = list.steps.filter((s) => s.status === "done").length;
-                  const total = list.steps.length;
-                  const working =
-                    agentBusy &&
-                    (list.status === "working" || list.id === board.activeId);
-                  return (
-                    <details
-                      key={`${list.id}:${isCurrent ? "open" : "closed"}:${list.status}`}
-                      className={`studio-agent-todo-acc is-${list.status}`}
-                      open={isCurrent}
-                    >
-                      <summary>
-                        <span className="studio-agent-todo-acc-title">
-                          {list.title}
-                        </span>
-                        <span className="studio-agent-todo-acc-meta">
-                          <span className="studio-agent-todo-badge" title="Items">
-                            <CircleHelp size={11} aria-hidden="true" />
-                            {total}
+            <div className="studio-agent-sidebar-block">
+              <p className="studio-agent-sidebar-kicker">To-do</p>
+              {!board.lists.length ? (
+                <p className="studio-agent-sidebar-empty">
+                  No to-do lists yet. Multi-step work shows up here.
+                </p>
+              ) : (
+                <div className="studio-agent-todo-accordions">
+                  {board.lists.map((list) => {
+                    const isCurrent =
+                      list.id === board.activeId ||
+                      list.status === "working" ||
+                      list.status === "active";
+                    const done = list.steps.filter((s) => s.status === "done").length;
+                    const total = list.steps.length;
+                    const working =
+                      agentBusy &&
+                      (list.status === "working" || list.id === board.activeId);
+                    return (
+                      <details
+                        key={`${list.id}:${isCurrent ? "open" : "closed"}:${list.status}`}
+                        className={`studio-agent-todo-acc is-${list.status}`}
+                        open={isCurrent}
+                      >
+                        <summary>
+                          <span className="studio-agent-todo-acc-title">
+                            {list.title}
                           </span>
-                          <span className="studio-agent-todo-badge" title="Completed">
-                            <Check size={11} aria-hidden="true" />
-                            {done}
-                          </span>
-                          {working ? (
-                            <Loader2
-                              size={12}
-                              className="animate-spin"
-                              aria-label="Working"
-                            />
-                          ) : null}
-                        </span>
-                      </summary>
-                      <ul className="studio-agent-todo-list">
-                        {list.steps.map((step) => (
-                          <li
-                            key={step.id}
-                            className={`is-${step.status}`}
-                            data-status={step.status}
-                          >
-                            <span className="studio-agent-todo-mark" aria-hidden="true">
-                              {step.status === "done"
-                                ? "✓"
-                                : step.status === "doing" && working
-                                  ? "…"
-                                  : "○"}
+                          <span className="studio-agent-todo-acc-meta">
+                            <span className="studio-agent-todo-badge" title="Items">
+                              <CircleHelp size={10} aria-hidden="true" />
+                              {total}
                             </span>
-                            <span>{step.text}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  );
-                })}
-              </div>
-            )}
+                            <span className="studio-agent-todo-badge is-done" title="Completed">
+                              <Check size={10} aria-hidden="true" />
+                              {done}
+                            </span>
+                            {working ? (
+                              <Loader2
+                                size={12}
+                                className="animate-spin"
+                                aria-label="Working"
+                              />
+                            ) : null}
+                          </span>
+                        </summary>
+                        <ul className="studio-agent-todo-list">
+                          {list.steps.map((step) => (
+                            <li
+                              key={step.id}
+                              className={`is-${step.status}`}
+                              data-status={step.status}
+                            >
+                              <span
+                                className={`studio-agent-todo-check is-${step.status === "done" ? "done" : step.status === "doing" && working ? "doing" : "pending"}`}
+                                aria-hidden="true"
+                              >
+                                {step.status === "done" ? (
+                                  <Check size={10} strokeWidth={2.5} />
+                                ) : step.status === "doing" && working ? (
+                                  <Loader2 size={10} className="animate-spin" />
+                                ) : null}
+                              </span>
+                              <span className="studio-agent-todo-step-text">{step.text}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-            <p className="studio-agent-sidebar-kicker">Recent turns</p>
-            <ul className="studio-agent-turn-cost-list">
-              {(insight?.runs ?? []).slice(0, 12).map((run) => (
-                <li key={String(run._id)}>
-                  <span className="studio-agent-turn-cost-msg">
-                    {run.userMessage || "(attachments)"}
-                  </span>
-                  <span className="studio-agent-turn-cost-meta">
-                    {run.creditsSpent
-                      ? formatTtdFromCredits(run.creditsSpent, price)
-                      : run.status}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="studio-agent-sidebar-block">
+              <p className="studio-agent-sidebar-kicker">Recent turns</p>
+              {!insight?.runs?.length ? (
+                <p className="studio-agent-sidebar-empty">No turns yet.</p>
+              ) : (
+                <ul className="studio-agent-turn-cost-list">
+                  {(insight?.runs ?? []).slice(0, 12).map((run) => (
+                    <li key={String(run._id)}>
+                      <span className="studio-agent-turn-cost-msg">
+                        {run.userMessage || "(attachments)"}
+                      </span>
+                      <span className="studio-agent-turn-cost-meta">
+                        {run.creditsSpent
+                          ? formatTtdFromCredits(run.creditsSpent, price)
+                          : run.status}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         ) : null}
 
