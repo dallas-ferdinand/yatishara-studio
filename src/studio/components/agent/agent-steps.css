@@ -748,10 +748,105 @@
 }
 
 .studio-agent-ask-card.is-done {
-  opacity: 0.75;
+  opacity: 1;
   width: 100%;
   max-width: 100%;
-  padding: 10px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.studio-agent-ask-done-hero {
+  position: relative;
+  padding: 12px 14px;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 92% 8%,
+      color-mix(in srgb, var(--cursor-accent, #7cff6b) 24%, transparent),
+      transparent 54%
+    ),
+    radial-gradient(
+      circle at 6% 100%,
+      color-mix(in srgb, var(--cursor-accent, #7cff6b) 10%, transparent),
+      transparent 46%
+    ),
+    var(--mos-plate, var(--cursor-surface, #fff));
+}
+
+.studio-agent-ask-done-watermark {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  width: 88px;
+  height: 88px;
+  transform: translateY(-48%) rotate(-8deg);
+  color: var(--cursor-accent, #7cff6b);
+  opacity: 0.2;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.studio-agent-ask-done-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding-right: 52px;
+}
+
+.studio-agent-ask-done-kicker {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--mos-ink, #111) 48%, transparent);
+}
+
+.studio-agent-ask-done-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.studio-agent-ask-done-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border-soft)) 70%, transparent);
+  background: color-mix(in srgb, var(--mos-bg, #f5f5f7) 42%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent);
+}
+
+[data-appearance="dark"] .studio-agent-ask-done-list li {
+  background: color-mix(in srgb, var(--mos-bg, #05080f) 38%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent);
+}
+
+.studio-agent-ask-done-prompt {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-agent-ask-done-value {
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--color-cursor-text-bright, var(--mos-ink));
+  overflow-wrap: anywhere;
 }
 
 .studio-agent-ask-card.is-done .studio-agent-ask-kicker {

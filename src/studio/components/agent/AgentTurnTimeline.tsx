@@ -135,16 +135,20 @@ function TurnBlock({
   onToggleStep,
   approvalById,
   onDecideApproval,
+  onAnswerQuestions,
   onOpenFolder,
   thumbById,
+  questions,
 }: {
   turn: AgentTurn;
   expandedStepId: string | null;
   onToggleStep: (id: string) => void;
   approvalById: Map<string, AgentApprovalRow>;
   onDecideApproval: AgentTurnTimelineProps["onDecideApproval"];
+  onAnswerQuestions: AgentTurnTimelineProps["onAnswerQuestions"];
   onOpenFolder?: (folderId: Id<"folders">) => void;
   thumbById: Map<string, { url: string; kind: string; readUrl?: string }>;
+  questions: AgentQuestionRow[];
 }) {
   const inline = useMemo(
     () => splitUserTextWithAttachments(turn.userText, turn.attachments ?? []),
@@ -168,6 +172,7 @@ function TurnBlock({
       step.status === "queued" ||
       step.status === "pending_approval",
   );
+  const hasPendingQuestion = questions.some((q) => q.status === "pending");
   const primaryPreview = (turn.attachments ?? [])
     .map((attachment) => {
       const preview = previewFor(attachment);
@@ -251,6 +256,14 @@ function TurnBlock({
           })}
         </div>
       ) : null}
+
+      {questions.map((q) => (
+        <AgentQuestionStep
+          key={String(q._id)}
+          question={q}
+          onAnswer={onAnswerQuestions}
+        />
+      ))}
 
       {(() => {
         const mediaItems = turn.steps.flatMap((step) => step.media ?? []);
@@ -346,7 +359,11 @@ function TurnBlock({
         );
       })()}
 
-      {turn.isLive && !turn.assistantText && !hasActiveStep ? (
+      {/* Never show Working… while a question card is waiting — the ask IS the next beat. */}
+      {turn.isLive &&
+      !turn.assistantText &&
+      !hasActiveStep &&
+      !hasPendingQuestion ? (
         <div className="studio-agent-live-progress" role="status">
           <span className="studio-agent-step-icon" aria-hidden="true">
             <Loader2 size={13} className="animate-spin" />
@@ -506,31 +523,61 @@ export function AgentTurnTimeline({
   }
 
   const pendingQuestions = questions.filter((q) => q.status === "pending");
-  const recentQuestions = questions.slice(-4);
+  const answeredQuestions = questions.filter((q) => q.status === "answered");
+  const questionsByRun = useMemo(() => {
+    const map = new Map<string, AgentQuestionRow[]>();
+    const pool = [
+      ...pendingQuestions,
+      // Keep recent answered cards attached to their turn (billing-style summary).
+      ...answeredQuestions.slice(-6),
+    ];
+    for (const q of pool) {
+      const key = q.runId ? String(q.runId) : "__orphan__";
+      const list = map.get(key) ?? [];
+      if (list.some((row) => String(row._id) === String(q._id))) continue;
+      list.push(q);
+      map.set(key, list);
+    }
+    return map;
+  }, [pendingQuestions, answeredQuestions]);
+  const orphanQuestions = questionsByRun.get("__orphan__") ?? [];
 
   return (
     <>
-      {turns.map((turn) => (
-        <TurnBlock
-          key={turn.id}
-          turn={turn}
-          expandedStepId={expandedStepId}
-          onToggleStep={toggleStep}
-          approvalById={approvalById}
-          onDecideApproval={onDecideApproval}
-          onOpenFolder={onOpenFolder}
-          thumbById={thumbById}
-        />
-      ))}
-      {(pendingQuestions.length ? pendingQuestions : recentQuestions.slice(-1)).map(
-        (q) => (
-          <AgentQuestionStep
-            key={String(q._id)}
-            question={q}
-            onAnswer={onAnswerQuestions}
+      {turns.map((turn) => {
+        const turnQuestions = turn.runId
+          ? questionsByRun.get(String(turn.runId)) ?? []
+          : [];
+        const extras =
+          turn.isLive && orphanQuestions.length ? orphanQuestions : [];
+        const attached = [...turnQuestions, ...extras].filter(
+          (q, index, arr) =>
+            arr.findIndex((row) => String(row._id) === String(q._id)) === index,
+        );
+        return (
+          <TurnBlock
+            key={turn.id}
+            turn={turn}
+            expandedStepId={expandedStepId}
+            onToggleStep={toggleStep}
+            approvalById={approvalById}
+            onDecideApproval={onDecideApproval}
+            onAnswerQuestions={onAnswerQuestions}
+            onOpenFolder={onOpenFolder}
+            thumbById={thumbById}
+            questions={attached}
           />
-        ),
-      )}
+        );
+      })}
+      {!turns.some((t) => t.isLive)
+        ? orphanQuestions.map((q) => (
+            <AgentQuestionStep
+              key={String(q._id)}
+              question={q}
+              onAnswer={onAnswerQuestions}
+            />
+          ))
+        : null}
     </>
   );
 }

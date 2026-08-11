@@ -206,10 +206,15 @@ export const answer = authedMutation({
     if (row.runId) {
       const run = await ctx.db.get("agentRuns", row.runId);
       planJson = run?.planJson;
-      if (run && run.status === "awaiting_question") {
+      if (
+        run &&
+        (run.status === "awaiting_question" || run.status === "running")
+      ) {
         await ctx.db.patch(run._id, {
           status: "completed",
+          finishedAt: now,
           updatedAt: now,
+          // Preserve credits already billed when the ask pause landed.
         });
       }
     }

@@ -33,6 +33,22 @@ type AgentChatSidebarProps = {
 
 type TabId = "info" | "media";
 
+function turnCostLabel(
+  run: { creditsSpent?: number; status: string },
+  price?: number,
+) {
+  if (typeof run.creditsSpent === "number") {
+    return formatTtdFromCredits(run.creditsSpent, price);
+  }
+  if (run.status === "awaiting_question") return "Awaiting answers";
+  if (run.status === "awaiting_approval") return "Awaiting approval";
+  if (run.status === "running" || run.status === "queued") return "Running";
+  if (run.status === "cancelled") return "Cancelled";
+  if (run.status === "failed") return "Failed";
+  if (run.status === "completed") return "—";
+  return "—";
+}
+
 /** Wrap query matches like DM search pills — grouped words, no extra spacing. */
 function highlightSearchMatches(text: string, query: string): ReactNode {
   const raw = query.trim();
@@ -423,9 +439,7 @@ export function AgentChatSidebar({
                             )}
                           </span>
                           <span className="studio-agent-turn-cost-meta">
-                            {run.creditsSpent
-                              ? formatTtdFromCredits(run.creditsSpent, price)
-                              : run.status}
+                            {turnCostLabel(run, price)}
                           </span>
                         </li>
                       ))}
@@ -581,9 +595,7 @@ export function AgentChatSidebar({
                         {run.userMessage || "(attachments)"}
                       </span>
                       <span className="studio-agent-turn-cost-meta">
-                        {run.creditsSpent
-                          ? formatTtdFromCredits(run.creditsSpent, price)
-                          : run.status}
+                        {turnCostLabel(run, price)}
                       </span>
                     </li>
                   ))}

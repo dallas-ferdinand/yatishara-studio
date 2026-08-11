@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export type AgentQuestionOption = { id: string; label: string };
@@ -15,6 +15,7 @@ export type AgentQuestionItem = {
 export type AgentQuestionRow = {
   _id: Id<"agentQuestions">;
   threadId: Id<"agentThreads">;
+  runId?: Id<"agentRuns">;
   intro?: string;
   questionsJson: string;
   answersJson?: string;
@@ -252,16 +253,34 @@ export function AgentQuestionStep({ question, onAnswer }: AgentQuestionStepProps
     } catch {
       answers = [];
     }
+    const itemsById = new Map(items.map((item) => [item.id, item]));
     return (
       <div className="studio-agent-ask-card is-done" role="listitem">
-        <p className="studio-agent-ask-kicker">Answered</p>
-        <ul className="studio-agent-ask-summary">
-          {answers.map((ans) => (
-            <li key={ans.questionId}>
-              <span>{ans.optionLabel || ans.customText || "—"}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="studio-agent-ask-done-hero">
+          <CheckCircle2
+            className="studio-agent-ask-done-watermark"
+            aria-hidden="true"
+          />
+          <div className="studio-agent-ask-done-copy">
+            <p className="studio-agent-ask-done-kicker">Answered</p>
+            <ul className="studio-agent-ask-done-list">
+              {answers.map((ans) => {
+                const prompt =
+                  itemsById.get(ans.questionId)?.prompt ||
+                  shortTitle(ans.questionId, 0);
+                const value = ans.optionLabel || ans.customText || "—";
+                return (
+                  <li key={ans.questionId}>
+                    <span className="studio-agent-ask-done-prompt">
+                      {shortTitle(prompt, 0)}
+                    </span>
+                    <strong className="studio-agent-ask-done-value">{value}</strong>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
       </div>
     );
   }

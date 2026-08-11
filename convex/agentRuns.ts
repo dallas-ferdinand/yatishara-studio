@@ -111,6 +111,27 @@ export const setPlanJson = internalMutation({
   },
 });
 
+export const setRunCredits = internalMutation({
+  args: {
+    runId: v.id("agentRuns"),
+    creditsSpent: v.number(),
+    usedByok: v.optional(v.boolean()),
+    model: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("agentRuns", args.runId);
+    if (!row || row.status === "cancelled") return null;
+    await ctx.db.patch(row._id, {
+      creditsSpent: Math.max(0, Math.floor(args.creditsSpent)),
+      usedByok: args.usedByok ?? row.usedByok,
+      model: args.model ?? row.model,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const completeRun = internalMutation({
   args: {
     runId: v.id("agentRuns"),

@@ -438,6 +438,7 @@ export const sendTurn = action({
         error?: string;
         pendingApproval?: boolean;
         pendingAsk?: boolean;
+        model?: string;
         usage?: { inputTokens?: number; outputTokens?: number };
       } = {};
       try {
@@ -471,11 +472,53 @@ export const sendTurn = action({
       }
 
       if (body.pendingApproval || body.pendingAsk) {
+        // LLM already ran to reach this pause — always bill measured usage.
+        let creditsSpent = 0;
+        if (!usedByok) {
+          const inputTokens = Math.max(
+            0,
+            Math.floor(Number(body.usage?.inputTokens ?? 0)),
+          );
+          const outputTokens = Math.max(
+            0,
+            Math.floor(Number(body.usage?.outputTokens ?? 0)),
+          );
+          creditsSpent = textCreditCost({
+            inputTokens,
+            outputTokens,
+            textModel: "pro",
+          });
+          const folderId = await ctx.runMutation(
+            api.folders.ensureMessagesFolderForMe,
+            {},
+          );
+          await ctx.runMutation(chargeTextGenerationRef, {
+            folderId,
+            inputTokens,
+            outputTokens,
+            textModel: "pro",
+          });
+        }
+        await ctx.runMutation(internal.agentRuns.setRunCredits, {
+          runId,
+          creditsSpent,
+          usedByok,
+          model: body.model,
+        });
+        if (body.pendingAsk) {
+          await ctx.runMutation(internal.agentRuns.markAwaitingQuestion, {
+            runId,
+          });
+        } else if (body.pendingApproval) {
+          await ctx.runMutation(internal.agentRuns.markAwaitingApproval, {
+            runId,
+          });
+        }
         await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
         return {
           ok: true,
           assistantText: "",
-          creditsSpent: 0,
+          creditsSpent,
           usedByok,
           runId: String(runId),
           pendingApproval: Boolean(body.pendingApproval),
