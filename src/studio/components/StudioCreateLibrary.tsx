@@ -10,6 +10,8 @@ import {
   StudioGenerationTile,
   type GenerationLibraryTile,
 } from "./StudioGenerationTile";
+import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
+import { orbSeedForVoice } from "./StudioOrbPlayButton";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
 import "./studio-create-library.css";
 
@@ -49,6 +51,7 @@ type LightboxState = {
   thumbUrl?: string;
   kind: "image" | "video" | "audio";
   name: string;
+  durationSeconds?: number;
   loading?: boolean;
 };
 
@@ -184,12 +187,15 @@ export function StudioCreateLibrary({
     if (!url && !thumbUrl) {
       return { jobId: selectedJobId, kind, name, loading: true };
     }
+    const durationSeconds =
+      detailReady?.durationSeconds ?? tile?.durationSeconds;
     return {
       jobId: selectedJobId,
       url,
       thumbUrl,
       kind,
       name,
+      ...(durationSeconds != null ? { durationSeconds } : {}),
     };
   }, [selectedJobId, tiles, lightboxDetail]);
 
@@ -291,12 +297,16 @@ export function StudioCreateLibrary({
               onDownload={downloadLightbox}
             />
           ) : lightbox.kind === "audio" && lightbox.url ? (
-            <DeskMediaPlayer
-              kind="audio"
-              layout="studio-preview"
-              src={lightbox.url}
-              onDownload={downloadLightbox}
-            />
+            <div className="studio-gen-lightbox-audio">
+              <StudioChatAudioPlayer
+                src={lightbox.url}
+                title={lightbox.name}
+                variant="pane"
+                compact
+                durationHint={lightbox.durationSeconds}
+                orbSeed={orbSeedForVoice(lightbox.jobId, lightbox.name)}
+              />
+            </div>
           ) : (
             <ImageZoomViewer
               thumbUrl={lightbox.thumbUrl || lightbox.url}

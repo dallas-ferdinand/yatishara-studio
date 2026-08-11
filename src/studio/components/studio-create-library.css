@@ -1043,6 +1043,131 @@
   color: var(--color-cursor-muted, #8b8b8b);
 }
 
+/* Audio preview stage — same orb + waveform as grid tiles, centered large. */
+.studio-gen-lightbox-audio {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 28px 32px;
+  box-sizing: border-box;
+}
+
+.studio-gen-lightbox-audio .studio-chat-audio-player,
+.studio-gen-lightbox-audio .studio-chat-audio-player.is-pane,
+.studio-gen-lightbox-audio .studio-chat-audio-player.is-pane.is-compact,
+.studio-gen-lightbox-audio .studio-chat-audio-pane,
+[data-appearance="light"] .studio-gen-lightbox-audio .studio-chat-audio-player,
+[data-appearance="light"] .studio-gen-lightbox-audio .studio-chat-audio-player.is-pane,
+[data-appearance="light"] .studio-gen-lightbox-audio .studio-chat-audio-pane {
+  width: min(100%, 420px);
+  min-width: 0 !important;
+  max-width: 420px;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
+}
+
+.studio-gen-lightbox-audio .studio-chat-audio-pane {
+  display: flex;
+  align-items: stretch;
+  place-items: stretch;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.studio-gen-lightbox-audio .studio-chat-audio-player.is-pane,
+.studio-gen-lightbox-audio .studio-chat-audio-player.is-pane.is-compact {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  gap: 12px;
+  padding: 0;
+}
+
+.studio-gen-lightbox-audio .studio-chat-audio-orb-hero {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  margin: 0 !important;
+  padding: 0;
+}
+
+.studio-gen-lightbox-audio .studio-chat-audio-meta {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: 0;
+}
+
+.studio-gen-lightbox-audio .studio-chat-audio-row.is-wave-fill {
+  flex: 0 0 auto;
+  min-height: 64px;
+  height: 64px;
+  align-items: stretch;
+  width: 100%;
+}
+
+.studio-gen-lightbox-audio .studio-chat-audio-wave {
+  min-width: 0;
+  width: 100%;
+  height: 64px !important;
+  min-height: 64px;
+}
+
+.studio-gen-lightbox-audio .studio-chat-audio-player.is-pane .studio-chat-audio-wave {
+  height: 64px !important;
+}
+
+.studio-gen-lightbox-audio .studio-chat-audio-waveform {
+  width: 100%;
+  height: 100% !important;
+}
+
+.studio-gen-lightbox-audio .studio-chat-audio-time {
+  font-size: 12px;
+  text-align: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.studio-gen-lightbox-audio .studio-orb-play,
+.studio-gen-lightbox-audio .studio-orb-play.is-md,
+.studio-gen-lightbox-audio .studio-orb-play.is-lg {
+  width: 140px !important;
+  height: 140px !important;
+  min-width: 140px !important;
+  min-height: 140px !important;
+  max-width: 140px !important;
+  max-height: 140px !important;
+  flex: 0 0 140px;
+  aspect-ratio: 1 / 1;
+  border-radius: 999px;
+  overflow: hidden;
+  align-self: center;
+  justify-self: center;
+  filter: none;
+  background: transparent;
+}
+
+.studio-gen-lightbox-audio .studio-orb-frame,
+.studio-gen-lightbox-audio .studio-orb-well,
+.studio-gen-lightbox-audio .studio-orb-canvas,
+.studio-gen-lightbox-audio .studio-orb-fallback {
+  border-radius: 999px !important;
+  overflow: hidden;
+}
+
 @media (max-width: 720px) {
   .studio-gen-detail.is-mobile-sheet {
     position: fixed;
