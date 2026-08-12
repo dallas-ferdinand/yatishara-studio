@@ -225,6 +225,7 @@ export function StudioGenerationTile({
           className="studio-gen-tile-ghost-loader"
           size={tile.kind === "audio" ? "md" : "lg"}
           appearance="light"
+          ring
         />
         <span className="studio-gen-tile-progress-label">{tile.stage}</span>
       </div>

@@ -181,6 +181,9 @@
 }
 
 .studio-gen-tile-progress-label {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -192,8 +195,17 @@
   color: color-mix(in srgb, #1a1a1a 68%, transparent);
 }
 
-.studio-gen-tile-ghost-loader {
-  max-width: 72%;
+/* Ring-sized loader — never full-bleed absolute (that centered the label over the logo). */
+.studio-gen-tile-progress .studio-gen-tile-ghost-loader,
+.studio-gen-tile-progress .media-load-frame-wave {
+  position: relative !important;
+  inset: auto !important;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: var(--logo-loader-ring, 56px);
+  height: var(--logo-loader-ring, 56px);
+  max-width: none;
 }
 
 .studio-gen-tile-media.is-audio-player {
@@ -366,11 +378,13 @@
   position: absolute;
   top: 8px;
   right: 8px;
+  left: auto;
+  bottom: auto;
   inset: auto;
-  z-index: 4;
+  z-index: 5;
   margin: 0;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -380,6 +394,7 @@
   color: #fff;
   cursor: pointer;
   pointer-events: auto;
+  transform: none !important;
 }
 
 .studio-gen-tile-stop.is-static {
