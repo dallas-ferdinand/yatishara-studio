@@ -56,7 +56,9 @@ function StepIcon({
 
   // Exact Pi tools
   if (name === "skills") return <BookOpen size={13} aria-hidden="true" />;
-  if (name === "remember") return <Brain size={13} aria-hidden="true" />;
+  if (name === "remember" || name === "recall") {
+    return <Brain size={13} aria-hidden="true" />;
+  }
   if (name === "plan") return <ListTodo size={13} aria-hidden="true" />;
   if (name === "ask") return <HelpCircle size={13} aria-hidden="true" />;
   if (name === "catalog" || name === "describe") {

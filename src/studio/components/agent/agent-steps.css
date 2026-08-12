@@ -1,4 +1,4 @@
-/* Agent turn timeline — Cursor-like horizontal icon+text steps (no pills). */
+/* Agent turn timeline — vertical tool rows (icon + label), not a horizontal wrap. */
 
 .studio-agent-turn {
   display: flex;
@@ -22,10 +22,9 @@
 
 .studio-agent-turn-steps {
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 14px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   margin: 2px 0;
   padding: 0 0 0 4px;
   min-width: 0;
@@ -44,12 +43,12 @@
 }
 
 .studio-agent-step {
-  display: inline-flex;
+  display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 8px;
-  width: auto;
+  width: 100%;
   max-width: 100%;
   min-width: 0;
 }

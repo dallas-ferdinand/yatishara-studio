@@ -144,6 +144,8 @@ export const retrieveForRun = internalQuery({
     ownerId: v.id("users"),
     projectFolderId: v.optional(v.id("folders")),
     limit: v.optional(v.number()),
+    /** Optional user message — boost memories whose title/body overlap tokens. */
+    query: v.optional(v.string()),
   },
   returns: v.array(
     v.object({
@@ -172,9 +174,40 @@ export const retrieveForRun = internalQuery({
       }
       return true;
     });
-    const pinned = filtered.filter((row) => row.pinned);
-    const rest = filtered.filter((row) => !row.pinned);
-    return [...pinned, ...rest].slice(0, limit).map((row) => ({
+
+    const tokens = String(args.query ?? "")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 3)
+      .slice(0, 24);
+
+    const scored = filtered.map((row) => {
+      let score = row.pinned ? 1000 : 0;
+      // Prefer project-scoped rows when CWD is set.
+      if (
+        args.projectFolderId &&
+        row.projectFolderId &&
+        row.projectFolderId === args.projectFolderId
+      ) {
+        score += 200;
+      } else if (!row.projectFolderId) {
+        score += 40; // global prefs still useful
+      }
+      if (tokens.length) {
+        const hay = `${row.title}\n${row.body}`.toLowerCase();
+        for (const t of tokens) {
+          if (hay.includes(t)) score += 12;
+        }
+      }
+      // Mild recency: newer updatedAt ranks slightly higher among equals.
+      score += Math.min(30, Math.floor((row.updatedAt % 1_000_000) / 50_000));
+      return { row, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score || b.row.updatedAt - a.row.updatedAt);
+
+    return scored.slice(0, limit).map(({ row }) => ({
       _id: row._id,
       kind: row.kind,
       title: row.title,

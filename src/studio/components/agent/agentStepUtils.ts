@@ -282,6 +282,27 @@ export function extractOutcome(
     if (title) return { label: title };
   }
 
+  if (toolName === "recall") {
+    const count = typeof payload.count === "number" ? payload.count : undefined;
+    if (typeof count === "number") {
+      if (count === 0) return { label: "none" };
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      const titles = items
+        .map((row) =>
+          row && typeof row === "object" && typeof (row as { title?: unknown }).title === "string"
+            ? String((row as { title: string }).title).trim()
+            : "",
+        )
+        .filter(Boolean)
+        .slice(0, 3);
+      if (titles.length) {
+        const more = count > titles.length ? ` +${count - titles.length}` : "";
+        return { label: `${titles.join(" · ")}${more}` };
+      }
+      return { label: `${count} memor${count === 1 ? "y" : "ies"}` };
+    }
+  }
+
   if (toolName === "plan") {
     const action = typeof payload.action === "string" ? payload.action : undefined;
     if (action) return { label: action.replace(/_/g, " ") };

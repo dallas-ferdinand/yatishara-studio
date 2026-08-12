@@ -83,9 +83,49 @@ function isSeparatorRow(line) {
 
 function isSeparatorOnlyLine(line) {
   const t = String(line ?? "").trim();
+  // GFM separators require hyphens. Bare `||||` must NOT match — that used to
+  // promote pipe soup into fake tables and then ReDoS the sep-glue regex.
+  if (!t.includes("-")) return false;
   if (/^\|[-:\s|]+\|$/.test(t)) return true;
   if (/^\|?\s*:?-{2,}\s*:?\s*\|?$/.test(t)) return true;
   return isSeparatorRow(line);
+}
+
+/**
+ * Split `|---|---|Cell` (separator cells glued to data on the SAME line).
+ * Linear scan — the old nested regex backtracked exponentially on long
+ * `| --- | --- | … |` rows and froze Script open / normalize.
+ */
+function splitGluedSeparatorData(line) {
+  const t = String(line ?? "");
+  if (!t.includes("|") || !t.includes("-")) return null;
+  let i = 0;
+  if (t[i] !== "|") return null;
+  i += 1;
+  let sepCells = 0;
+  while (i < t.length) {
+    while (i < t.length && (t[i] === " " || t[i] === "\t")) i += 1;
+    if (t[i] === ":") i += 1;
+    if (t[i] !== "-") break;
+    while (i < t.length && t[i] === "-") i += 1;
+    if (t[i] === ":") i += 1;
+    while (i < t.length && (t[i] === " " || t[i] === "\t")) i += 1;
+    if (t[i] !== "|") break;
+    i += 1;
+    sepCells += 1;
+    let j = i;
+    while (j < t.length && (t[j] === " " || t[j] === "\t")) j += 1;
+    if (j >= t.length) return null;
+    const c = t[j];
+    // Data glued after separator cells (not another --- cell).
+    if (/[A-Za-z0-9(\[]/.test(c)) {
+      if (sepCells < 1) return null;
+      const cell = t.slice(j).trim();
+      if (!cell) return null;
+      return { sep: t.slice(0, i), cell };
+    }
+  }
+  return null;
 }
 
 /** Rebuild broken GFM pipe tables so marked can parse them. */
@@ -94,8 +134,15 @@ function repairPipeTables(text) {
   const out = [];
   let i = 0;
   let inFence = false;
+  let guard = 0;
 
   while (i < lines.length) {
+    // Stall guard: pipeish true but zero lines consumed → infinite loop.
+    if ((guard += 1) > lines.length + 8) {
+      out.push(...lines.slice(i));
+      break;
+    }
+    const startI = i;
     const line = lines[i];
     if (/^```/.test(line.trim())) {
       inFence = !inFence;
@@ -123,9 +170,16 @@ function repairPipeTables(text) {
       i += 1;
     }
 
+    // If predicates disagreed and nothing was consumed, force-advance.
+    if (!block.length || i === startI) {
+      out.push(line);
+      i = startI + 1;
+      continue;
+    }
+
     const repaired = repairTableBlock(block);
     if (out.length && out[out.length - 1].trim() !== "") out.push("");
-    out.push(...repaired);
+    out.push(...(repaired.length ? repaired : block));
   }
 
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -195,10 +249,11 @@ export function stabilizeStreamingMarkdown(raw) {
   if (isTableLine(last2) && !lines.some((l) => isSeparatorRow(l) || isSeparatorOnlyLine(l))) {
     const cells = splitPipeRow(last2);
     if (cells && cells.length >= 2 && cells.length <= MAX_TABLE_COLS) {
+      const cols = Math.min(MAX_TABLE_COLS, cells.length);
       lines.splice(
         lines.length - 1,
         0,
-        formatPipeRow(Array.from({ length: cells.length }, () => "---")),
+        formatPipeRow(Array.from({ length: cols }, () => "---")),
       );
       s = lines.join("\n");
     }
@@ -214,12 +269,17 @@ export function normalizeMarkdown(raw) {
   // Blank line before pipe tables (GFM) — repairPipeTables normalizes rows first
   s = s.replace(/([^\n|])\n(\|[^\n]+\|)/g, "$1\n\n$2");
 
-  // Separator glued to data on SAME line only: |---|---|Cell (not valid | --- | --- |)
-  s = s.replace(/^(\|(?:\s*:?\s*-+\s*:?\s*\|)+)([A-Za-z0-9(\[].*)$/gm, (_, sep, tail) => {
-    const cell = tail.trim();
-    if (!cell) return sep;
-    return `${sep}\n| ${cell}${cell.includes("|") ? "" : " |"}`;
-  });
+  // Separator glued to data on SAME line only: |---|---|Cell
+  // (linear split — do not use nested sep-cell regex; it ReDoS'd on long rows)
+  s = s
+    .split("\n")
+    .map((line) => {
+      const glued = splitGluedSeparatorData(line);
+      if (!glued) return line;
+      const cell = glued.cell;
+      return `${glued.sep}\n| ${cell}${cell.includes("|") ? "" : " |"}`;
+    })
+    .join("\n");
 
   // Ensure pipe rows have closing | (real tables only — not prompt pipe soup)
   s = s.replace(/^([^\n]*\|[^\n]+)$/gm, (line) => {

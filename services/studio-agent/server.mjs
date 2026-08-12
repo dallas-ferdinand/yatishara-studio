@@ -406,11 +406,15 @@ async function runPiTurn(body, abortSignal) {
 
     const memoryBlock =
       Array.isArray(memories) && memories.length
-        ? `Memories:\n${memories
-            .slice(0, 8)
-            .map((m) => `- [${m.kind}] ${m.title}: ${String(m.body).slice(0, 120)}`)
+        ? `Memories (already loaded for this turn — use them; do not claim you have no memory):\n${memories
+            .slice(0, 10)
+            .map((m) => {
+              const pin = m.pinned ? " pinned" : "";
+              const body = String(m.body ?? "").replace(/\s+/g, " ").trim().slice(0, 280);
+              return `- [${m.kind}${pin}] ${m.title}: ${body}`;
+            })
             .join("\n")}`
-        : "";
+        : "Memories: none loaded for this turn.";
 
     const attachmentBlock = Array.isArray(workingSet) && workingSet.length
       ? `Attached (use these ids):\n${workingSet
@@ -486,6 +490,7 @@ async function runPiTurn(body, abortSignal) {
       "inspect: only for pixels beyond attached vision; max 8; videos → pull frames first.",
       "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets. No ids/JSON/debug talk.",
       "remember: ONLY short pointers — where a script/prompt lives (document title + folder path), durable prefs, decisions. NEVER store full prompts, shot lists, or script bodies in memory — those go in studio_create_document .md Scripts. Saying \"saved to memory\" for a prompt is wrong.",
+      "Memories block above is auto-loaded each turn (you will also see a Recall memory step in chat). Prefer those facts when relevant; do not invent that you checked memory if the block says none.",
       seedBoard
         ? `Existing TODO board (continue/update):\n${typeof seedBoard === "string" ? seedBoard : JSON.stringify(seedBoard).slice(0, 2500)}`
         : "",

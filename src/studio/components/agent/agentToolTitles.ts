@@ -16,6 +16,7 @@ const TITLE_MAP: Record<string, string> = {
   invoke: "Run action",
   inspect: "Inspect media",
   remember: "Save memory",
+  recall: "Recall memory",
   skills: "Load skill",
   plan: "Update todo",
   ask: "Ask question",
@@ -64,6 +65,7 @@ const LIVE_TITLE_MAP: Record<string, string> = {
   "Run action": "Running action",
   "Inspect media": "Inspecting media",
   "Save memory": "Saving memory",
+  "Recall memory": "Recalling memory",
   "Load skill": "Loading skill",
   "Update todo": "Updating todo",
   "Ask question": "Asking question",
@@ -109,6 +111,7 @@ const PAST_TITLE_MAP: Record<string, string> = {
   "Run action": "Ran action",
   "Inspect media": "Inspected media",
   "Save memory": "Saved memory",
+  "Recall memory": "Recalled memory",
   "Load skill": "Loaded skill",
   "Update todo": "Updated todo",
   "Ask question": "Asked question",
@@ -180,6 +183,7 @@ const META_TOOLS = new Set(["catalog", "describe"]);
 const ALWAYS_VISIBLE_TOOLS = new Set([
   "skills",
   "remember",
+  "recall",
   "plan",
   "ask",
   "inspect",
@@ -243,7 +247,7 @@ export function deriveStepKind(
   if (status === "failed" || error) return "error";
   if (status === "pending_approval") return "approval";
   if (ALWAYS_VISIBLE_TOOLS.has(toolName)) {
-    if (toolName === "inspect") return "read";
+    if (toolName === "inspect" || toolName === "recall") return "read";
     if (toolName === "ask") return "approval";
     return "write";
   }

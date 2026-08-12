@@ -2470,6 +2470,39 @@ select.cursor-select:focus {
   border-radius: 0;
   background: transparent;
 }
+/* Prompt/Copy fences: capped height; scroll only after click (is-scroll-active).
+   Hover must not eat wheel — see desk/lib/doc-code-scroll.js */
+.cursor-doc-page .mos-code .mos-code-body,
+.cursor-doc-page .mos-code pre,
+.cursor-doc-page .code-shell .mos-code-body,
+.cursor-doc-page .code-shell pre {
+  max-height: min(320px, 40vh);
+  overflow-x: hidden;
+  overflow-y: hidden;
+  overscroll-behavior: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.cursor-doc-page .mos-code.is-clipped:not(.is-scroll-active) .mos-code-body,
+.cursor-doc-page .mos-code.is-clipped:not(.is-scroll-active) pre,
+.cursor-doc-page .code-shell.is-clipped:not(.is-scroll-active) .mos-code-body,
+.cursor-doc-page .code-shell.is-clipped:not(.is-scroll-active) pre {
+  mask-image: linear-gradient(to bottom, #000 0%, #000 78%, transparent 100%);
+}
+.cursor-doc-page .mos-code.is-scroll-active,
+.cursor-doc-page .code-shell.is-scroll-active {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--mos-accent, #5b8def) 22%, transparent),
+    0 1px 2px color-mix(in srgb, var(--mos-ink, #111) 3%, transparent),
+    0 8px 20px color-mix(in srgb, var(--mos-ink, #111) 5%, transparent);
+}
+.cursor-doc-page .mos-code.is-scroll-active .mos-code-body,
+.cursor-doc-page .mos-code.is-scroll-active pre,
+.cursor-doc-page .code-shell.is-scroll-active .mos-code-body,
+.cursor-doc-page .code-shell.is-scroll-active pre {
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  mask-image: none;
+}
 .cursor-doc-page pre code,
 .cursor-doc-page .mos-code-body code {
   background: transparent;

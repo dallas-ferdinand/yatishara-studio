@@ -459,7 +459,7 @@ function preloadStudioHotPanes() {
   void import("./PostComposeTab");
   void import("./StudioRenameDialog");
   void import("./StudioListAssetPane");
-  // MarkdownDocEditor is statically imported — no lazy chunk for Scripts.
+  // Scripts open via StudioScriptPane (static import, pane-local error boundary).
 }
 
 /** Intent mark now; chunk warm after paint so taps aren't blocked. */

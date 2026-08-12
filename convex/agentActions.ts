@@ -271,7 +271,9 @@ export const sendTurn = action({
 
     const memories = await ctx.runQuery(internal.agentMemory.retrieveForRun, {
       ownerId,
+      projectFolderId: args.currentFolderId,
       limit: 12,
+      query: message,
     });
 
     const folderRows = await ctx.runQuery(internal.agentMessages.listFoldersForOwner, {
@@ -430,6 +432,36 @@ export const sendTurn = action({
     });
 
     await ctx.runMutation(internal.agentRuns.markRunning, { runId });
+
+    // Visible chip: memories are injected into the Pi system prompt every turn,
+    // but without a tool row users think recall never runs (only remember shows).
+    {
+      const recallId = await ctx.runMutation(internal.agentRuns.recordToolStart, {
+        ownerId,
+        threadId: args.threadId,
+        runId,
+        toolName: "recall",
+        argsJson: JSON.stringify({
+          limit: 12,
+          projectFolderId: args.currentFolderId
+            ? String(args.currentFolderId)
+            : null,
+          query: message.slice(0, 240),
+        }),
+      });
+      await ctx.runMutation(internal.agentRuns.recordToolResult, {
+        toolCallId: recallId,
+        ok: true,
+        resultJson: JSON.stringify({
+          count: memories.length,
+          items: memories.map((m) => ({
+            title: m.title,
+            kind: m.kind,
+            pinned: Boolean(m.pinned),
+          })),
+        }),
+      });
+    }
 
     const callbackBase = apiBase;
     const controller = new AbortController();

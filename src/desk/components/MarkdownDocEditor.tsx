@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { Icon } from "./Icons";
 import { docHtmlToMarkdown, markdownToDocHtml } from "@/desk/lib/markdown-doc";
 import { enhanceCodeBlocks } from "@/desk/lib/markdown-desk.js";
+import { mountDocCodeScrollFocus } from "@/desk/lib/doc-code-scroll.js";
 
 function ToolbarButton({ title, icon, onClick, active = false }) {
   return (
@@ -45,6 +46,19 @@ function decorateDocShells(root) {
       event.stopPropagation();
     });
   });
+  root.querySelectorAll(".mos-code, .code-shell").forEach((shell) => {
+    const body =
+      shell.querySelector(".mos-code-body, pre.code-block, pre") ?? null;
+    if (!body) return;
+    const markClipped = () => {
+      shell.classList.toggle(
+        "is-clipped",
+        body.scrollHeight > body.clientHeight + 2,
+      );
+    };
+    markClipped();
+    requestAnimationFrame(markClipped);
+  });
 }
 
 function fallbackDocHtml(markdown) {
@@ -58,10 +72,15 @@ function fallbackDocHtml(markdown) {
 
 export function MarkdownDocEditor({ value, onChange, onSave, name }) {
   const editorRef = useRef(null);
+  const scrollRef = useRef(null);
   const lastMarkdownRef = useRef(value ?? "");
   const dirtyRef = useRef(false);
   // HTML→markdown is lossy (fences, spacing). Only write back after a real edit.
   const userEditedRef = useRef(false);
+
+  useEffect(() => {
+    return mountDocCodeScrollFocus(scrollRef.current);
+  }, []);
 
   const syncFromMarkdown = useCallback((md) => {
     const el = editorRef.current;
@@ -157,7 +176,7 @@ export function MarkdownDocEditor({ value, onChange, onSave, name }) {
           tools
         )}
       </div>
-      <div className="cursor-doc-scroll">
+      <div className="cursor-doc-scroll" ref={scrollRef}>
         <div
           ref={editorRef}
           className="cursor-doc-page cursor-editor-md mos-md md-prose"

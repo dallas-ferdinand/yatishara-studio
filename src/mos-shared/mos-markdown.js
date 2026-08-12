@@ -304,6 +304,7 @@ function parseBlocks(src, opts = {}) {
 
   while (i < lines.length) {
     const line = lines[i];
+    const startI = i;
 
     if (isBlank(line)) {
       i += 1;
@@ -380,11 +381,18 @@ function parseBlocks(src, opts = {}) {
       while (i < lines.length) {
         const m = lines[i].match(/^(\s*)[-*+]\s+(.+)$/);
         if (!m || m[1].includes("\t")) break;
-        if (/^\s*[-*+]\s+\[/.test(lines[i])) break;
+        // Only hand off real task checkboxes (`- [ ]` / `- [x]`), not
+        // markdown links like `- [file](asset://…)`. The old `/\[/` break
+        // never consumed the line → infinite loop → Studio freeze on Script open.
+        if (/^\s*[-*+]\s+\[[ xX]\](\s|$)/.test(lines[i])) break;
         items.push({ text: m[2] });
         i += 1;
       }
-      blocks.push(renderList(items, false));
+      if (items.length) blocks.push(renderList(items, false));
+      else {
+        blocks.push(paragraphHtml([line]));
+        i += 1;
+      }
       continue;
     }
 
@@ -397,7 +405,11 @@ function parseBlocks(src, opts = {}) {
         items.push({ text: m[3] });
         i += 1;
       }
-      blocks.push(renderList(items, true));
+      if (items.length) blocks.push(renderList(items, true));
+      else {
+        blocks.push(paragraphHtml([line]));
+        i += 1;
+      }
       continue;
     }
 
@@ -419,6 +431,11 @@ function parseBlocks(src, opts = {}) {
       i += 1;
     }
     if (paraLines.length) blocks.push(paragraphHtml(paraLines));
+    // Never stall: a line that matches no producer must still advance.
+    else if (i === startI) {
+      blocks.push(paragraphHtml([line]));
+      i += 1;
+    }
   }
 
   return blocks.join("\n");
