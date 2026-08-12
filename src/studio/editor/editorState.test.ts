@@ -451,6 +451,48 @@ describe("split_at_playhead one-frame cuts", () => {
     state = reducer(state, { type: "split_at_playhead" });
     expect(state.project.clips).toHaveLength(1);
   });
+
+  it("splits a clip by id even when another clip is selected", () => {
+    let state = createInitialState(
+      createEmptyProject({ name: "Test", folderId: "folder1" }),
+    );
+    state = reducer(state, {
+      type: "add_clip",
+      clip: {
+        assetId: "a1",
+        trackId: "track-v1",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 4,
+        sourceDuration: 10,
+        label: "first",
+        kind: "video",
+      },
+    });
+    state = reducer(state, {
+      type: "add_clip",
+      clip: {
+        assetId: "a2",
+        trackId: "track-v1",
+        startTime: 4,
+        trimIn: 0,
+        trimOut: 4,
+        sourceDuration: 10,
+        label: "second",
+        kind: "video",
+      },
+    });
+    const first = state.project.clips.find((c) => c.label === "first")!;
+    const second = state.project.clips.find((c) => c.label === "second")!;
+    state = reducer(state, { type: "select_clip", clipId: first.id });
+    state = reducer(state, { type: "set_playhead", time: 6 });
+    state = reducer(state, { type: "split_at_playhead", clipId: second.id });
+    const clips = [...state.project.clips].sort((a, b) => a.startTime - b.startTime);
+    expect(clips).toHaveLength(3);
+    expect(clips[0]!.id).toBe(first.id);
+    expect(clips[1]!.startTime).toBe(4);
+    expect(clips[2]!.startTime).toBe(6);
+  });
 });
 
 describe("contentEndTime", () => {

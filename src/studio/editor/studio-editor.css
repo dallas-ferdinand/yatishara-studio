@@ -3599,6 +3599,53 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   border-right: none;
 }
 
+.studio-editor-clip-snip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18px;
+  margin-left: -9px;
+  z-index: 12;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.studio-editor-clip-snip::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  border-left: 1px dashed rgba(255, 255, 255, 0.92);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.studio-editor-clip-snip-icon {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #111314;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+
+.studio-editor-clip-snip:hover .studio-editor-clip-snip-icon {
+  background: var(--studio-clip-accent, #00c2c7);
+  color: #111;
+}
+
 .studio-editor-playhead {
   position: absolute;
   top: 0;
@@ -3606,10 +3653,22 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   width: 16px;
   margin-left: -8px;
   background: transparent;
-  pointer-events: auto;
+  pointer-events: none;
   cursor: var(--studio-cursor-resize-x, ew-resize);
   touch-action: none;
   z-index: 8;
+}
+
+.studio-editor-playhead-grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 18px;
+  pointer-events: auto;
+  cursor: var(--studio-cursor-resize-x, ew-resize);
+  touch-action: none;
+  z-index: 2;
 }
 
 /* Crisp black scrub line — from top of ruler all the way down. */

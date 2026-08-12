@@ -26,7 +26,7 @@ import {
 } from "./editorEffects";
 import { transitionJointsOnTrack, visibleTracks } from "./editorTimelineUtils";
 import { computeRippleLayout, isMainStoryTrack, collapsePlacementsForTrack } from "./editorRipple";
-import { clipDuration, formatTimecodeFull, formatTimecodeRuler } from "./editorState";
+import { clipCanSplitAt, clipDuration, formatTimecodeFull, formatTimecodeRuler } from "./editorState";
 import { MIN_CLIP_SEC, quantizeToFrame } from "./projectContract";
 import {
   collectSnapTimes,
@@ -389,6 +389,7 @@ function TimelineClipBlock({
   rippleStartTime,
   isPickedUp,
   overlaySnapEnabled = true,
+  onSplit,
 }) {
   const durationSec = clipDuration(clip);
   const width = clipLaneWidthPx(durationSec, pps);
@@ -420,7 +421,7 @@ function TimelineClipBlock({
     if (
       mode === "move" &&
       event.target?.closest?.(
-        ".studio-editor-clip-fade-handle, .studio-editor-clip-handle",
+        ".studio-editor-clip-fade-handle, .studio-editor-clip-handle, .studio-editor-clip-snip",
       )
     ) {
       return;
@@ -525,6 +526,7 @@ function TimelineClipBlock({
             allowedTrackId,
             clip.id,
             playhead,
+            { includeTimelineStart: true },
           );
           const resolved = resolveSecondaryDropStart({
             preferredStart: Math.max(0, rawStart),
@@ -554,6 +556,7 @@ function TimelineClipBlock({
               allowedTrackId ?? clip.trackId,
               clip.id,
               playhead,
+              { includeTimelineStart: false },
             );
             const { startTime, guide } = snapClipMove(
               clip,
@@ -844,6 +847,31 @@ function TimelineClipBlock({
           }}
         />
       )}
+      {!isText && !isPickedUp && !dragging && onSplit && clipCanSplitAt(clip, playhead) ? (
+        <button
+          type="button"
+          className="studio-editor-clip-snip"
+          style={{
+            left: (playhead - (rippleStartTime != null ? rippleStartTime : clip.startTime)) * pps,
+          }}
+          title="Split here (S)"
+          aria-label="Split clip at playhead"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onSelect(clip.id);
+            onSplit(clip.id);
+          }}
+        >
+          <span className="studio-editor-clip-snip-icon" aria-hidden="true">
+            <Scissors size={10} />
+          </span>
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1170,6 +1198,8 @@ export function EditorTimeline({
   onSetJointTransition,
   onAddTextClip: _onAddTextClip,
   overlaySnapEnabled = true,
+  onSplitClip,
+  playing = false,
 }) {
   const scrollRef = useRef(null);
   const trackRowRefs = useRef(new Map());
@@ -1843,6 +1873,7 @@ export function EditorTimeline({
                           }
                           isPickedUp={pickup?.clipId === clip.id}
                           overlaySnapEnabled={overlaySnapEnabled}
+                          onSplit={playing ? undefined : onSplitClip}
                           renameToken={
                             renameRequest?.clipId === clip.id ? renameRequest.token : undefined
                           }
@@ -1925,8 +1956,12 @@ export function EditorTimeline({
           <div
             className={`studio-editor-playhead${scrubbing ? " is-scrubbing" : ""}`}
             style={{ left: TRACK_RAIL_WIDTH + playhead * pixelsPerSecond }}
-            onPointerDown={(event) => beginPlayheadScrub(event, "playhead")}
-          />
+          >
+            <span
+              className="studio-editor-playhead-grip"
+              onPointerDown={(event) => beginPlayheadScrub(event, "playhead")}
+            />
+          </div>
           {snapGuideTime !== null ? (
             <div
               className="studio-editor-snap-guide"

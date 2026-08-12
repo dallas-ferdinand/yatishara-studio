@@ -20,13 +20,14 @@ import {
 } from "./EditorInspector";
 import { EditorTimeline, EditorTransportBar } from "./EditorTimeline";
 import {
+  clipCanSplitAt,
   clipDuration,
   createEmptyProject,
   createInitialState,
   projectEndTime,
   reducer,
 } from "./editorState";
-import { MIN_CLIP_SEC, quantizeToFrame } from "./projectContract";
+import { quantizeToFrame } from "./projectContract";
 import { readOverlaySnapEnabled, writeOverlaySnapEnabled } from "./editorSnap";
 import { useEditorHotkeys } from "./useEditorHotkeys";
 import { jointByKey } from "./editorTimelineUtils";
@@ -552,21 +553,13 @@ export function StudioVideoEditor({
   }, [selectedJoint, state.ui.editorMode]);
 
   const splitAt = quantizeToFrame(state.ui.playhead);
-  const canSplit =
-    Boolean(selectedClip) &&
-    selectedClip.kind !== "text" &&
-    splitAt - selectedClip.startTime >= MIN_CLIP_SEC - 1e-6 &&
-    selectedClip.startTime + clipDuration(selectedClip) - splitAt >= MIN_CLIP_SEC - 1e-6;
+  const canSplit = clipCanSplitAt(selectedClip, splitAt);
 
   const menuClip = clipMenu
     ? state.project.clips.find((clip) => clip.id === clipMenu.clipId) ?? null
     : null;
   const menuMedia = menuClip?.assetId ? mediaById.get(menuClip.assetId) ?? null : null;
-  const menuCanSplit =
-    Boolean(menuClip) &&
-    menuClip.kind !== "text" &&
-    splitAt - menuClip.startTime >= MIN_CLIP_SEC - 1e-6 &&
-    menuClip.startTime + clipDuration(menuClip) - splitAt >= MIN_CLIP_SEC - 1e-6;
+  const menuCanSplit = clipCanSplitAt(menuClip, splitAt);
 
   const resolveClipDownloadUrl = useCallback(
     async (clip) => {
@@ -980,6 +973,10 @@ export function StudioVideoEditor({
                   editorMode={state.ui.editorMode}
                   mediaById={mediaById}
                   overlaySnapEnabled={overlaySnapEnabled}
+                  playing={state.ui.playing}
+                  onSplitClip={(clipId) =>
+                    dispatch({ type: "split_at_playhead", clipId })
+                  }
                   onSelectClip={(clipId) => dispatch({ type: "select_clip", clipId })}
                   onSelectJoint={(jointKey) => dispatch({ type: "select_joint", jointKey })}
                   onSetPlayhead={(time) => {

@@ -12,8 +12,12 @@ export function collectSnapTimes(
   _trackId: string,
   excludeClipId: string | null,
   playhead: number,
+  options?: { includeTimelineStart?: boolean },
 ): number[] {
-  const times = new Set<number>([0]);
+  const times = new Set<number>();
+  if (options?.includeTimelineStart !== false) {
+    times.add(0);
+  }
   if (Number.isFinite(playhead) && playhead >= 0) {
     times.add(playhead);
   }

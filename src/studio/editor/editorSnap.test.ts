@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveSecondaryDropStart, snapClipStart } from "./editorSnap";
+import { collectSnapTimes, resolveSecondaryDropStart, snapClipStart } from "./editorSnap";
 
 const A = { startTime: 4, durationSec: 4 }; // 4–8
 
@@ -24,6 +24,19 @@ describe("resolveSecondaryDropStart", () => {
       thresholdSec: 0.2,
     });
     expect(result.startTime).toBeCloseTo(8.05, 5);
+  });
+
+  it("magnets to the layer start when close and snap is on", () => {
+    const result = resolveSecondaryDropStart({
+      preferredStart: 0.08,
+      durationSec: 2,
+      others: [A],
+      snapEnabled: true,
+      snapTimes: [0, 4, 8],
+      thresholdSec: 0.2,
+    });
+    expect(result.startTime).toBe(0);
+    expect(result.guide).toBe(0);
   });
 
   it("magnets to a nearby end when snap is on", () => {
@@ -82,6 +95,39 @@ describe("resolveSecondaryDropStart", () => {
     });
     expect(after.startTime).toBeCloseTo(8.4, 5);
     expect(after.sticky).toBeNull();
+  });
+});
+
+describe("collectSnapTimes", () => {
+  const project = {
+    name: "t",
+    folderId: "f",
+    duration: 30,
+    tracks: [{ id: "track-v1", kind: "video", label: "V1" }],
+    clips: [
+      {
+        id: "c1",
+        assetId: "a1",
+        trackId: "track-v1",
+        startTime: 2,
+        trimIn: 0,
+        trimOut: 2,
+        label: "c",
+        kind: "video",
+      },
+    ],
+  };
+
+  it("includes timeline start on free layers", () => {
+    const times = collectSnapTimes(project, "track-v2", "x", 1.5);
+    expect(times[0]).toBe(0);
+  });
+
+  it("omits timeline start on the main line so drop preview does not magnet to 0", () => {
+    const times = collectSnapTimes(project, "track-v1", "x", 1.5, {
+      includeTimelineStart: false,
+    });
+    expect(times.includes(0)).toBe(false);
   });
 });
 

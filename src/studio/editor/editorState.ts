@@ -38,6 +38,14 @@ export function clipDuration(clip: EditorClip): number {
   return clipDurationSec(clip);
 }
 
+/** True when `time` sits far enough inside a non-text clip to split it. */
+export function clipCanSplitAt(clip: EditorClip | null | undefined, time: number): boolean {
+  if (!clip || clip.kind === "text") return false;
+  const t = quantizeToFrame(time);
+  const end = clip.startTime + clipDuration(clip);
+  return t - clip.startTime >= MIN_CLIP_SEC - 1e-6 && end - t >= MIN_CLIP_SEC - 1e-6;
+}
+
 const JOINT_GAP_SEC = 0.05;
 
 function clearTransitionOut(clip: EditorClip): EditorClip {
@@ -227,7 +235,7 @@ export type EditorAction =
   | { type: "set_side_panel"; panel: EditorSidePanel }
   | { type: "delete_selected" }
   | { type: "duplicate_selected" }
-  | { type: "split_at_playhead" }
+  | { type: "split_at_playhead"; clipId?: string }
   | { type: "add_clip"; clip: Omit<EditorClip, "id"> }
   | { type: "add_text_clip"; startTime?: number; trackId?: string; newLane?: boolean; insertTrackAt?: number; text?: import("./types").TextClipContent }
   | { type: "add_track_layer"; kind: "video" | "text" }
@@ -538,13 +546,11 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       return action.live ? withLive(state, nextProject) : withHistory(state, nextProject);
     }
     case "split_at_playhead": {
-      const clip = state.project.clips.find((item) => item.id === state.ui.selectedClipId);
+      const clipId = action.clipId ?? state.ui.selectedClipId;
+      const clip = state.project.clips.find((item) => item.id === clipId);
       if (!clip || clip.kind === "text") return state;
       const t = quantizeToFrame(state.ui.playhead);
-      const clipEnd = clip.startTime + clipDuration(clip);
-      const leftDur = t - clip.startTime;
-      const rightDur = clipEnd - t;
-      if (leftDur < MIN_CLIP_SEC - 1e-6 || rightDur < MIN_CLIP_SEC - 1e-6) return state;
+      if (!clipCanSplitAt(clip, t)) return state;
       const offset = t - clip.startTime;
       const splitPoint = clip.trimIn + offset;
       const [leftLabel, rightLabel] = labelsForSplit(clip.label);
