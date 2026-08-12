@@ -1771,6 +1771,46 @@ export default defineSchema({
     .index("by_user_and_purchased", ["userId", "purchasedAt"]),
 
   /**
+   * CSR-only Academy course deposit / installment plan (Sophie).
+   * Course stays locked until status=completed; Academy UI shows Partially paid.
+   */
+  academyCoursePaymentPlans: defineTable({
+    userId: v.id("users"),
+    courseId: v.id("academyCourses"),
+    status: v.union(
+      v.literal("active"),
+      v.literal("completed"),
+      v.literal("expired"),
+    ),
+    /** List / regular price snapshot (credits) at deposit. */
+    listPriceCredits: v.number(),
+    /** Sale total locked at deposit; omit when deposited off-sale. */
+    lockedSalePriceCredits: v.optional(v.number()),
+    saleEndsAt: v.optional(v.number()),
+    /** saleEndsAt + 15d — within this window, unlock at locked sale total. */
+    saleHoldEndsAt: v.optional(v.number()),
+    /** First soft-accepted deposit amount (cents). */
+    depositCents: v.number(),
+    /** Sum of all soft-accepted payments on this plan (cents). */
+    totalPaidCents: v.number(),
+    /** First deposit soft-accept time. */
+    depositAt: v.number(),
+    /** depositAt + 90d — after this, plan expires and must restart. */
+    expiresAt: v.number(),
+    phone: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    expiredAt: v.optional(v.number()),
+    purchaseId: v.optional(v.id("academyPurchases")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_and_course", ["userId", "courseId"])
+    .index("by_user_and_status", ["userId", "status"])
+    .index("by_status_and_expires", ["status", "expiresAt"])
+    .index("by_course", ["courseId"]),
+
+  /**
    * Lesson (or course-overview) discussion — same shape as profileComments.
    * Prefer lessonId for per-lesson threads; omit lessonId for course overview Q&A.
    */

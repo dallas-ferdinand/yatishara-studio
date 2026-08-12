@@ -55,4 +55,11 @@ crons.daily(
   {},
 );
 
+crons.daily(
+  "expire academy course deposit plans",
+  { hourUTC: 6, minuteUTC: 30 },
+  internal.studioCs.internalExpireCoursePaymentPlans,
+  {},
+);
+
 export default crons;

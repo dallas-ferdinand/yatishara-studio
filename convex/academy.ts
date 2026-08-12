@@ -29,6 +29,10 @@ import {
   isCourseSaleActive,
 } from "./lib/academyPricing";
 import {
+  amountDueCents,
+  planIsExpired,
+} from "./lib/academyPaymentPlan";
+import {
   commentSortFetchCap,
   normalizeCommentSort,
   sortCommentRows,
@@ -100,6 +104,55 @@ async function findPurchase(
   );
 }
 
+const paymentPlanReturn = v.object({
+  status: v.literal("active"),
+  totalPaidCents: v.number(),
+  amountDueCents: v.number(),
+  targetTotalCents: v.number(),
+  depositCents: v.number(),
+  depositAt: v.number(),
+  expiresAt: v.number(),
+  saleHoldEndsAt: v.optional(v.number()),
+});
+
+async function findActivePaymentPlan(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  courseId: Id<"academyCourses">,
+  now = Date.now(),
+): Promise<Doc<"academyCoursePaymentPlans"> | null> {
+  const rows = await ctx.db
+    .query("academyCoursePaymentPlans")
+    .withIndex("by_user_and_course", (q) =>
+      q.eq("userId", userId).eq("courseId", courseId),
+    )
+    .collect();
+  const active = rows.find((r) => r.status === "active");
+  if (!active) return null;
+  if (planIsExpired(active, now)) return null;
+  return active;
+}
+
+function paymentPlanForLearner(
+  plan: Doc<"academyCoursePaymentPlans"> | null,
+  now = Date.now(),
+) {
+  if (!plan || plan.status !== "active" || planIsExpired(plan, now)) {
+    return undefined;
+  }
+  const due = amountDueCents(plan, now);
+  return {
+    status: "active" as const,
+    totalPaidCents: Math.round(Number(plan.totalPaidCents) || 0),
+    amountDueCents: due,
+    targetTotalCents: Math.round(Number(plan.totalPaidCents) || 0) + due,
+    depositCents: Math.round(Number(plan.depositCents) || 0),
+    depositAt: plan.depositAt,
+    expiresAt: plan.expiresAt,
+    saleHoldEndsAt: plan.saleHoldEndsAt,
+  };
+}
+
 async function listLessonsForCourse(
   ctx: QueryCtx | MutationCtx,
   courseId: Id<"academyCourses">,
@@ -135,6 +188,7 @@ const catalogCourseReturn = v.object({
   status: courseStatusValidator,
   coverUrl: v.optional(v.string()),
   owned: v.boolean(),
+  paymentPlan: v.optional(paymentPlanReturn),
   lessonCount: v.number(),
   sortOrder: v.number(),
   updatedAt: v.number(),
@@ -195,6 +249,7 @@ const courseDetailReturn = v.object({
   comingSoon: v.boolean(),
   coverUrl: v.optional(v.string()),
   owned: v.boolean(),
+  paymentPlan: v.optional(paymentPlanReturn),
   hasIntroVideo: v.boolean(),
   lessonCount: v.number(),
   lessons: v.array(lessonSummaryReturn),
@@ -213,6 +268,9 @@ export const listPublishedCourses = authedQuery({
     const out = [];
     for (const course of rows) {
       const purchase = await findPurchase(ctx, ctx.user._id, course._id);
+      const plan = purchase
+        ? null
+        : await findActivePaymentPlan(ctx, ctx.user._id, course._id);
       const lessons = await listLessonsForCourse(ctx, course._id, {
         publishedOnly: true,
       });
@@ -224,6 +282,7 @@ export const listPublishedCourses = authedQuery({
         ...pricingFieldsForCourse(course),
         coverUrl: await coverUrlFor(course.coverBunnyPath, CN_CARD_TRANSFORM),
         owned: Boolean(purchase),
+        paymentPlan: paymentPlanForLearner(plan),
         lessonCount: lessons.length,
         sortOrder: course.sortOrder,
         updatedAt: course.updatedAt,
@@ -243,6 +302,7 @@ export const listMyCourses = authedQuery({
       .order("desc")
       .collect();
 
+    const ownedIds = new Set(purchases.map((p) => String(p.courseId)));
     const out = [];
     for (const purchase of purchases) {
       const course = await ctx.db.get("academyCourses", purchase.courseId);
@@ -258,6 +318,36 @@ export const listMyCourses = authedQuery({
         ...pricingFieldsForCourse(course),
         coverUrl: await coverUrlFor(course.coverBunnyPath, CN_CARD_TRANSFORM),
         owned: true,
+        lessonCount: lessons.length,
+        sortOrder: course.sortOrder,
+        updatedAt: course.updatedAt,
+      });
+    }
+
+    const activePlans = await ctx.db
+      .query("academyCoursePaymentPlans")
+      .withIndex("by_user_and_status", (q) =>
+        q.eq("userId", ctx.user._id).eq("status", "active"),
+      )
+      .collect();
+    const now = Date.now();
+    for (const plan of activePlans) {
+      if (ownedIds.has(String(plan.courseId))) continue;
+      if (planIsExpired(plan, now)) continue;
+      const course = await ctx.db.get("academyCourses", plan.courseId);
+      if (!course || course.status !== "published") continue;
+      const lessons = await listLessonsForCourse(ctx, course._id, {
+        publishedOnly: true,
+      });
+      out.push({
+        _id: course._id,
+        title: course.title,
+        slug: course.slug,
+        blurb: blurbFromMarkdown(course.descriptionMarkdown),
+        ...pricingFieldsForCourse(course),
+        coverUrl: await coverUrlFor(course.coverBunnyPath, CN_CARD_TRANSFORM),
+        owned: false,
+        paymentPlan: paymentPlanForLearner(plan, now),
         lessonCount: lessons.length,
         sortOrder: course.sortOrder,
         updatedAt: course.updatedAt,
@@ -290,6 +380,9 @@ export const getCourse = authedQuery({
     // Learner entitlement = purchase only. Admins see the same unpaid lock UI
     // unless they buy / are granted the course (admin tools stay separate).
     const owned = Boolean(purchase);
+    const plan = owned
+      ? null
+      : await findActivePaymentPlan(ctx, ctx.user._id, course._id);
     if (course.status !== "published" && !admin) return null;
 
     const lessonDocs = await listLessonsForCourse(ctx, course._id, {
@@ -325,6 +418,7 @@ export const getCourse = authedQuery({
       ...pricingFieldsForCourse(course),
       coverUrl: await coverUrlFor(course.coverBunnyPath, ACADEMY_COVER_TRANSFORM),
       owned,
+      paymentPlan: paymentPlanForLearner(plan),
       hasIntroVideo: Boolean(courseIntroVideoId(course)),
       lessonCount: lessonDocs.filter((l) => l.status === "published").length,
       lessons,
@@ -422,6 +516,12 @@ export const purchaseCourse = authedMutation({
     alreadyOwned: v.boolean(),
   }),
   handler: async (ctx, args) => {
+    const plan = await findActivePaymentPlan(ctx, ctx.user._id, args.courseId);
+    if (plan) {
+      throw new Error(
+        "This course has a deposit in progress. Message Studio support on WhatsApp to pay the balance.",
+      );
+    }
     return await purchaseCourseForUser(ctx, ctx.user._id, args.courseId);
   },
 });

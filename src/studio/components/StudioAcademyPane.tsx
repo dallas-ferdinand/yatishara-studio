@@ -66,6 +66,19 @@ function courseBannerUrl(course: {
 
 const ACADEMY_HERO_BANNER = "/academy/academy-hero.webp";
 
+/** Studio Sophie CS — deposit / balance chase (CSR-only). */
+const STUDIO_CS_WA_E164 = "18683377338";
+
+function studioCsDepositWhatsAppUrl(courseTitle?: string) {
+  const title = String(courseTitle || "the course").trim() || "the course";
+  const text = `Hi Sophie, I have an inquiry about the deposit / paying the balance for ${title}.`;
+  return `https://wa.me/${STUDIO_CS_WA_E164}?text=${encodeURIComponent(text)}`;
+}
+
+function formatPlanDueLabel(cents: number) {
+  return formatTtdCents(Math.max(0, Math.round(Number(cents) || 0)));
+}
+
 function usePreloadAcademyHero() {
   useEffect(() => {
     const link = document.createElement("link");
@@ -213,8 +226,11 @@ function CheckoutDock({
   showHead,
   onBuyClick,
   onPaywiseClick,
+  onWhatsAppBalanceClick,
   busy,
   owned,
+  partiallyPaid,
+  amountDueLabel,
   priceLabel,
   priceShort,
   listPriceLabel,
@@ -230,8 +246,11 @@ function CheckoutDock({
   showHead: boolean;
   onBuyClick: () => void;
   onPaywiseClick?: () => void;
+  onWhatsAppBalanceClick?: () => void;
   busy: boolean;
   owned: boolean;
+  partiallyPaid?: boolean;
+  amountDueLabel?: string;
   priceLabel: string;
   priceShort: string;
   listPriceLabel?: string | null;
@@ -250,6 +269,7 @@ function CheckoutDock({
   const onSale = Boolean(listPriceLabel && discountLabel);
   const countdown =
     !owned &&
+    !partiallyPaid &&
     onSale &&
     saleEndsAt != null &&
     Number.isFinite(saleEndsAt) ? (
@@ -269,12 +289,22 @@ function CheckoutDock({
           />
           <div className="studio-academy-checkout-hero-copy">
             <strong className="studio-academy-checkout-amount">
-              {onSale && listPriceLabel ? (
-                <s className="studio-academy-card-compare">{listPriceLabel}</s>
-              ) : null}
-              <span className="studio-academy-card-now">{priceLabel}</span>
+              {partiallyPaid ? (
+                <span className="studio-academy-card-now">
+                  {amountDueLabel
+                    ? `${amountDueLabel} left`
+                    : "Partially paid"}
+                </span>
+              ) : (
+                <>
+                  {onSale && listPriceLabel ? (
+                    <s className="studio-academy-card-compare">{listPriceLabel}</s>
+                  ) : null}
+                  <span className="studio-academy-card-now">{priceLabel}</span>
+                </>
+              )}
             </strong>
-            {!owned ? (
+            {!owned && !partiallyPaid ? (
               <ul
                 className="studio-academy-checkout-chips"
                 aria-label="Course access"
@@ -282,11 +312,37 @@ function CheckoutDock({
                 <li>Lifetime access</li>
               </ul>
             ) : null}
+            {partiallyPaid ? (
+              <ul
+                className="studio-academy-checkout-chips"
+                aria-label="Deposit status"
+              >
+                <li>Partially paid</li>
+                <li>Finish with Sophie on WhatsApp</li>
+              </ul>
+            ) : null}
           </div>
         </header>
 
         {owned ? (
           <p className="studio-academy-checkout-note">You own this course.</p>
+        ) : partiallyPaid ? (
+          <>
+            <p className="studio-academy-checkout-note">
+              Your deposit is on file. Course unlocks when the balance is paid
+              in full. Message Sophie to pay the rest.
+            </p>
+            <div className="studio-academy-checkout-actions">
+              <button
+                type="button"
+                className="public-offers-btn is-primary"
+                onClick={onWhatsAppBalanceClick}
+              >
+                <MessageCircle aria-hidden="true" />
+                Pay balance on WhatsApp
+              </button>
+            </div>
+          </>
         ) : needsTopUp ? (
           <>
             {countdown}
@@ -568,6 +624,15 @@ export function StudioAcademyPane({
     academy.listTab === "mine" ? mine === undefined : catalog === undefined;
   const detailOpen = Boolean(academy.courseId);
   const owned = Boolean(detail?.owned);
+  const paymentPlan = detail?.paymentPlan ?? null;
+  const partiallyPaid = Boolean(!owned && paymentPlan?.status === "active");
+  const amountDueLabel = partiallyPaid
+    ? formatPlanDueLabel(paymentPlan!.amountDueCents)
+    : undefined;
+  const openDepositWhatsApp = () => {
+    const url = studioCsDepositWhatsAppUrl(detail?.title);
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
   const selectedLesson = academy.lessonId
     ? (detail?.lessons.find((l) => l._id === academy.lessonId) ?? null)
     : null;
@@ -607,6 +672,7 @@ export function StudioAcademyPane({
   const needsTopUp =
     Boolean(detail) &&
     !owned &&
+    !partiallyPaid &&
     Number.isFinite(balance) &&
     priceCredits > 0 &&
     balance < priceCredits;
@@ -642,7 +708,7 @@ export function StudioAcademyPane({
   ]);
 
   async function buy() {
-    if (!academy.courseId || !detail || needsTopUp) return;
+    if (!academy.courseId || !detail || needsTopUp || partiallyPaid) return;
     setBusy(true);
     try {
       await purchase({ courseId: academy.courseId });
@@ -663,12 +729,29 @@ export function StudioAcademyPane({
   }
 
   function handleBuyClick() {
-    if (!academy.courseId || owned || busy || !detail || needsTopUp) return;
+    if (
+      !academy.courseId ||
+      owned ||
+      partiallyPaid ||
+      busy ||
+      !detail ||
+      needsTopUp
+    ) {
+      return;
+    }
     setPurchaseConfirmOpen(true);
   }
 
   async function handlePaywiseCheckout() {
-    if (!academy.courseId || !detail || !needsTopUp || busy) return;
+    if (
+      !academy.courseId ||
+      !detail ||
+      partiallyPaid ||
+      !needsTopUp ||
+      busy
+    ) {
+      return;
+    }
     if (!clientRequestIdRef.current) {
       clientRequestIdRef.current = newClientRequestId();
     }
@@ -705,8 +788,11 @@ export function StudioAcademyPane({
   const checkoutDockProps = {
     onBuyClick: handleBuyClick,
     onPaywiseClick: () => void handlePaywiseCheckout(),
+    onWhatsAppBalanceClick: openDepositWhatsApp,
     busy,
     owned,
+    partiallyPaid,
+    amountDueLabel,
     priceLabel,
     priceShort,
     listPriceLabel,
@@ -847,6 +933,10 @@ export function StudioAcademyPane({
                           )}
                           {course.owned ? (
                             <span className="studio-academy-card-owned">Owned</span>
+                          ) : course.paymentPlan?.status === "active" ? (
+                            <span className="studio-academy-card-owned is-partial">
+                              Partially paid
+                            </span>
                           ) : null}
                           {comingSoon ? (
                             <span className="studio-academy-card-soon">
@@ -1125,16 +1215,34 @@ export function StudioAcademyPane({
         {commentsDock}
         <nav
           className="public-offers-mobile-book-nav studio-cn-book-bar"
-          aria-label={owned ? "Course actions" : "Buy this course"}
+          aria-label={
+            owned
+              ? "Course actions"
+              : partiallyPaid
+                ? "Pay course balance"
+                : "Buy this course"
+          }
         >
           {!owned ? (
             <span className="studio-cn-book-bar-price">
-              {listPriceLabel ? (
-                <s className="studio-academy-card-compare studio-cn-book-bar-compare">
-                  {listPriceLabel}
-                </s>
-              ) : null}
-              <span className="studio-academy-card-now">{priceShort || priceLabel}</span>
+              {partiallyPaid ? (
+                <span className="studio-academy-card-now">
+                  {amountDueLabel
+                    ? `${amountDueLabel} left`
+                    : "Partially paid"}
+                </span>
+              ) : (
+                <>
+                  {listPriceLabel ? (
+                    <s className="studio-academy-card-compare studio-cn-book-bar-compare">
+                      {listPriceLabel}
+                    </s>
+                  ) : null}
+                  <span className="studio-academy-card-now">
+                    {priceShort || priceLabel}
+                  </span>
+                </>
+              )}
             </span>
           ) : (
             <span className="studio-cn-book-bar-price">Discussion</span>
@@ -1157,10 +1265,24 @@ export function StudioAcademyPane({
               <button
                 type="button"
                 className="public-offers-btn is-primary studio-cn-book-bar-cta"
-                onClick={() => setCheckoutSheetOpen(true)}
+                onClick={() => {
+                  if (partiallyPaid) {
+                    openDepositWhatsApp();
+                    return;
+                  }
+                  setCheckoutSheetOpen(true);
+                }}
               >
-                <Zap aria-hidden="true" />
-                {needsTopUp ? "Pay with PayWise" : "Pay with wallet"}
+                {partiallyPaid ? (
+                  <MessageCircle aria-hidden="true" />
+                ) : (
+                  <Zap aria-hidden="true" />
+                )}
+                {partiallyPaid
+                  ? "Pay balance"
+                  : needsTopUp
+                    ? "Pay with PayWise"
+                    : "Pay with wallet"}
               </button>
             ) : null}
           </div>
@@ -1169,7 +1291,9 @@ export function StudioAcademyPane({
           <StudioCnBookSheet
             open={checkoutSheetOpen}
             onClose={() => setCheckoutSheetOpen(false)}
-            ariaLabel="Course checkout"
+            ariaLabel={
+              partiallyPaid ? "Course deposit balance" : "Course checkout"
+            }
             className="is-academy-checkout"
             backLayerId="academy-checkout-sheet"
             fitContent

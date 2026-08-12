@@ -21569,6 +21569,19 @@ export function StudioShell({
           background: color-mix(in srgb, var(--mos-page, #f5f5f7) 88%, transparent);
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
+        .studio-academy-card-owned.is-partial {
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          background: color-mix(
+            in srgb,
+            var(--mos-amber, #c2410c) 18%,
+            var(--mos-page, #f5f5f7)
+          );
+          border-color: color-mix(
+            in srgb,
+            var(--mos-amber, #c2410c) 35%,
+            var(--color-cursor-border-soft, var(--mos-border-soft))
+          );
+        }
         .studio-academy-card-soon {
           position: absolute;
           z-index: 2;
