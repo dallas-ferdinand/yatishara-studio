@@ -9,7 +9,8 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
 
 export const config = {
   matcher: [
-    "/((?!.*\\..*|_next|api/health).*)",
+    // Public PayWise short links: /pay/<code> (no auth gate).
+    "/((?!.*\\..*|_next|api/health|pay/).*)",
     "/",
     "/(api|trpc)((?!/health).*)",
   ],

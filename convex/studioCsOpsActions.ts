@@ -135,7 +135,15 @@ export const adminGetSession = action({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const phone = args.phone.replace(/\D/g, "");
-    return studioCsFetch(`/api/studio-cs/sessions/${phone}`);
+    try {
+      return await studioCsFetch(`/api/studio-cs/sessions/${phone}`);
+    } catch (err) {
+      // Soft-miss after Ops Reset deletes the customer — avoid Convex "Server Error".
+      if (/not_found/i.test(String(err instanceof Error ? err.message : err))) {
+        return { ok: false, error: "not_found", session: null };
+      }
+      throw err;
+    }
   },
 });
 
@@ -289,12 +297,8 @@ export const adminResetChat = action({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const phone = args.phone.replace(/\D/g, "");
-    // Sophie Ops reset is Dallas test-number only (enforced again on :8795).
-    if (phone !== "18684762078") {
-      throw new Error(
-        "Reset chat is only available for the Dallas test number (+1 868 476-2078).",
-      );
-    }
+    // Pass session key through (may be LID). :8795 enforces Dallas test
+    // number via phone key or reply_jid alias.
     return studioCsFetch(`/api/studio-cs/sessions/${phone}/reset`, {
       method: "POST",
       body: "{}",
