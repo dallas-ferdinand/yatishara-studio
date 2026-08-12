@@ -3613,37 +3613,42 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   pointer-events: auto;
 }
 
-.studio-editor-clip-snip::before {
+.studio-editor-clip-snip-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  color: var(--studio-clip-accent, #00c2c7);
+  pointer-events: none;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
+}
+
+.studio-editor-clip-snip-icon::before,
+.studio-editor-clip-snip-icon::after {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 50%;
-  width: 0;
-  border-left: 1px dashed rgba(255, 255, 255, 0.92);
-  transform: translateX(-50%);
-  pointer-events: none;
+  width: 6px;
+  box-sizing: border-box;
+  border-style: solid;
+  border-color: currentColor;
 }
 
-.studio-editor-clip-snip-icon {
-  position: absolute;
-  top: 3px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: #111314;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);
-  pointer-events: none;
+.studio-editor-clip-snip-icon::before {
+  left: 0;
+  border-width: 2px 2px 2px 0;
+}
+
+.studio-editor-clip-snip-icon::after {
+  right: 0;
+  border-width: 2px 0 2px 2px;
 }
 
 .studio-editor-clip-snip:hover .studio-editor-clip-snip-icon {
-  background: var(--studio-clip-accent, #00c2c7);
-  color: #111;
+  transform: translate(-50%, -50%) scale(1.08);
 }
 
 .studio-editor-playhead {

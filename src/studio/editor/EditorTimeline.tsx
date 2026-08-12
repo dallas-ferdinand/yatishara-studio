@@ -855,9 +855,7 @@ function TimelineClipBlock({
             onSplit(clip.id);
           }}
         >
-          <span className="studio-editor-clip-snip-icon" aria-hidden="true">
-            <Scissors size={10} />
-          </span>
+          <span className="studio-editor-clip-snip-icon" aria-hidden="true" />
         </button>
       ) : null}
     </div>
