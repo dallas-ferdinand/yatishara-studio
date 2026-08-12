@@ -50,10 +50,13 @@ const KIND_RULES: Record<ComposerEnhanceKind, string> = {
     "Do not force a brand look or style sheet the user did not request.",
   ].join(" "),
   voiceover: [
-    "Target: ElevenLabs voiceover script.",
-    "Preserve the user's lines; you may intelligently add v3 expression tags like [warm], [pause], [excited] only where they improve delivery.",
-    "Do not rewrite meaning; do not add new sentences unless needed for tag placement clarity.",
-    "Keep tags sparse and natural.",
+    "Target: ElevenLabs eleven_v3 voiceover script (audio tags).",
+    "PRIMARY GOAL: integrate sparse auditory audio tags in square brackets (e.g. [sighs], [excited], [short pause], [whispers]) while STRICTLY preserving the original spoken words and meaning.",
+    "DO: place tags immediately before or after the segment they affect; tags MUST describe voice/delivery only (emotion, volume, pace, non-verbal voice sounds).",
+    "DO: prefer punctuation, CAPS, ? ! or ellipses for emphasis before piling tags; keep tags sparse and natural.",
+    "DO NOT: alter, add, or remove any spoken words; do not invent new dialogue lines; do not wrap original narrative in brackets.",
+    "DO NOT: use visual/stage tags ([standing], [grinning], [pacing]) or music/SFX tags ([music], [applause], [gunshot]).",
+    "Return ONLY the enhanced script text — no labels or explanation.",
   ].join(" "),
   sfx: [
     "Target: sound-effect generation prompt.",

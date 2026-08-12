@@ -433,8 +433,12 @@ button.studio-agent-media-card.is-openable:hover .studio-agent-media-frame {
 }
 
 .studio-agent-media-card.is-pending.is-audio {
-  aspect-ratio: var(--agent-gen-aspect, 3 / 1);
-  max-height: 120px;
+  aspect-ratio: auto;
+  max-height: none;
+  max-width: 280px;
+  width: 100%;
+  background: transparent;
+  overflow: visible;
 }
 
 .studio-agent-media-pending-plate {
@@ -455,7 +459,16 @@ button.studio-agent-media-card.is-openable:hover .studio-agent-media-frame {
   background: color-mix(in srgb, var(--mos-ink, #111) 6%, transparent);
 }
 
-.studio-agent-media-card.is-audio audio {
+.studio-agent-media-card.is-audio {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  max-width: 280px;
+  width: 100%;
+}
+
+.studio-agent-media-card.is-audio .studio-chat-audio-player {
   width: 100%;
 }
 

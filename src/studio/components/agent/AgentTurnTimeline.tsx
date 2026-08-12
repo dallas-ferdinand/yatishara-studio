@@ -13,6 +13,11 @@ import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { StudioChatMarkdown } from "../StudioChatMarkdown";
+import {
+  StudioChatAudioPlayer,
+  StudioChatAudioPlayerLoading,
+} from "../StudioChatAudioPlayer";
+import { orbSeedForVoice } from "../StudioOrbPlayButton";
 import { LogoLoader } from "../logo-loader";
 import { AgentApprovalStep } from "./AgentApprovalStep";
 import { AgentQuestionStep, type AgentQuestionRow } from "./AgentQuestionStep";
@@ -307,7 +312,11 @@ function TurnBlock({
               <div
                 key={`pending-${pending.kind}-${index}`}
                 className={`studio-agent-media-card is-pending is-${pending.kind}`}
-                style={{ ["--agent-gen-aspect" as string]: pending.aspectRatio }}
+                style={
+                  pending.kind === "audio"
+                    ? undefined
+                    : { ["--agent-gen-aspect" as string]: pending.aspectRatio }
+                }
                 role="status"
                 aria-label={
                   pending.kind === "video"
@@ -317,9 +326,13 @@ function TurnBlock({
                       : "Generating image"
                 }
               >
-                <div className="studio-agent-media-pending-plate">
-                  <LogoLoader size="md" />
-                </div>
+                {pending.kind === "audio" ? (
+                  <StudioChatAudioPlayerLoading label="Generating voiceover" />
+                ) : (
+                  <div className="studio-agent-media-pending-plate">
+                    <LogoLoader size="md" />
+                  </div>
+                )}
               </div>
             ))}
             {mediaItems.map((media, index) => {
@@ -336,14 +349,18 @@ function TurnBlock({
                 media.url || resolved?.readUrl || resolved?.url || previewUrl;
               const key = media.assetId || `${kind}-${index}`;
               if (kind === "audio" && fullUrl) {
+                const audioTitle = media.name || "Voiceover";
                 return (
                   <div key={key} className="studio-agent-media-card is-audio">
-                    <audio controls preload="metadata" src={fullUrl}>
-                      <track kind="captions" />
-                    </audio>
-                    {media.name ? (
-                      <span className="studio-agent-media-caption">{media.name}</span>
-                    ) : null}
+                    <StudioChatAudioPlayer
+                      src={fullUrl}
+                      title={audioTitle}
+                      showTitle
+                      orbSeed={orbSeedForVoice(
+                        String(media.assetId || key),
+                        audioTitle,
+                      )}
+                    />
                     {media.assetId && onOpenAsset ? (
                       <button
                         type="button"

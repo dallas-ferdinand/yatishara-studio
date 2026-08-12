@@ -30,6 +30,7 @@ Read **these resources** before exploring dozens of tools. Prefer tools marked \
 | Characters / props / style sheets | \`studio://guides/elements\` |
 | Cut / timeline / export video | \`studio://guides/editing\` |
 | Pull stills from MP4s | \`studio://guides/pull-frames\` |
+| Voiceover from edited video | \`studio://guides/voiceover\` |
 | Studio Assistance briefs (UI) | \`studio://guides/assistance\` |
 | Assets, upload, docs, trash | \`studio://guides/media\` |
 | Voices / VO library | \`studio://guides/voices\` |
@@ -296,7 +297,7 @@ const MEDIA = guide(
 
 ## Documents
 
-\`studio_get_document\`, \`studio_create_document\`, \`studio_update_document\`
+\`studio_get_document\`, \`studio_create_document\`, \`studio_patch_document\` (prefer for small edits), \`studio_update_document\`
 
 ## Trash
 
@@ -316,6 +317,53 @@ const VOICES = guide(
 - \`studio_save_voice\` / \`studio_remove_voice\`
 
 Generate spoken audio with \`studio_generate_audio\` (see \`studio://guides/generation\`). Confirm cost via estimate when spending credits.
+
+Voiceover-from-video workflow: \`studio://guides/voiceover\`.
+`
+);
+const VOICEOVER = guide(
+  "voiceover",
+  "voiceover",
+  "Write VO from an edited video: pull frames, save VO script, copyable spoken fence, optional ElevenLabs v3 audio.",
+  `# Voiceover from video
+
+Use when the user attaches an **edited video** (or asks for VO / narrator copy for a clip).
+
+## Steps
+
+1. \`studio_get_asset\` / \`studio_view_media\` \u2014 duration + name
+2. \`studio_pull_frames\` with VO cadence: \`count = clamp(round(durationSec / 2), 4, 8)\` across the full clip (not the edit-QC default of 3)
+3. Inspect / Read the stills (max 8) \u2014 fit hook \u2192 body \u2192 CTA to visual beats (~2\u20132.5 spoken words/sec)
+4. \`studio_create_document\` titled \`VO script \u2014 <short>\` with:
+
+~~~
+# VO script \u2014 <short>
+
+## Beat notes
+(Optional timing/intent \u2014 not for Copy)
+
+## Voiceover
+\`\`\`text
+Spoken lines only. No timestamps. No stage directions.
+\`\`\`
+
+## References
+- [Edit](asset://\u2026)
+- [Frame \xB7 \u2026](asset://\u2026)
+~~~
+
+5. Paste the spoken \`\`\`text\`\`\` fence in chat so Copy grabs lines only
+6. Ask once before audio. On yes: pick voice (\`studio_explore_voices\`) \u2192 \`studio_estimate_generation\` \u2192 \`studio_generate_audio\` (\`audioType: voiceover\`, eleven_v3)
+
+## ElevenLabs v3 tags
+
+Enhance / tag = **auditory tags only** in square brackets (\`[sighs]\`, \`[excited]\`, \`[short pause]\`). Never rewrite spoken words. No visual/SFX tags. See Studio \`docs/elevenlabs-v3-audio-tags.md\`.
+
+## Related
+
+- Frames: \`studio://guides/pull-frames\`
+- Voices: \`studio://guides/voices\`
+- Generation: \`studio://guides/generation\`
 `
 );
 const MESSAGES = guide(
@@ -406,6 +454,7 @@ const STUDIO_GUIDES = [
   ASSISTANCE,
   MEDIA,
   VOICES,
+  VOICEOVER,
   MESSAGES,
   SOCIAL,
   NETWORK,

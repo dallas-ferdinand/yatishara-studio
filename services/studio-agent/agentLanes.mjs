@@ -43,6 +43,12 @@ export const INTENT_BLURBS = {
     "Price a generation before paid generate. Args:{mode,prompt,...}. Prefer this before generate when spend isn't confirmed. Report $ / TTD only — never say credits.",
   studio_list_video_models:
     "List real Studio video models + descriptions/caps. Call before inventing model details. Never invent legacy/pipeline marketing.",
+  studio_pull_frames:
+    "Extract N stills from a video (VO cadence: count=clamp(round(duration/2),4,8)). Args:{assetId,startSec?,endSec?,count?} or timesSec[]. Then inspect frame assets.",
+  studio_generate_audio:
+    "ElevenLabs audio. Args:{prompt,audioType:voiceover|sfx|music,elevenVoiceId? for VO,folderId?}. VO uses eleven_v3. Paid+approval. Estimate first. Quote $ / TTD only.",
+  studio_explore_voices:
+    "List/search ElevenLabs voices for voiceover. Pick elevenVoiceId before studio_generate_audio when none is chosen.",
 };
 
 /** Curated starter set when catalog has no q/category (token budget). */
@@ -93,6 +99,16 @@ export function detectActionLane(message, workingSet) {
       /\b(it|this|that|the\s+(prompt|script))\b/.test(text));
   if (editAsk) {
     return "LANE: EDIT existing Script — get real documentId (CWD index / folder_contents), studio_get_document, then studio_patch_document with exact oldString→newString for ONLY the asked change. Preserve ``` fence, headings, References, and everything they did not mention. Never studio_update_document full rewrite unless the body is empty or they explicitly asked rewrite/from scratch. Never create a second Script with the same title.";
+  }
+
+  // Voiceover from video / VO script — before generic script craft
+  if (
+    !editAsk &&
+    (/\b(voice\s*-?\s*over|voiceover|\bvo\b|narrat(e|or|ion))\b/.test(text) ||
+      (/\b(script|write|craft)\b/.test(text) &&
+        /\b(voice\s*-?\s*over|voiceover|\bvo\b|narrat)/.test(text)))
+  ) {
+    return "LANE: skills {id:\"prompt-voiceover\"}. Video chip → pull_frames (count clamp(round(dur/2),4,8)) → inspect → studio_create_document title \"VO script — …\" with ## Voiceover ```text fence (spoken lines only). ALWAYS paste that fence in chat for Copy. Ask once to generate ElevenLabs audio; only on yes → estimate → studio_generate_audio. Tags-only enhance for v3 — never rewrite spoken words.";
   }
 
   // Prompt craft before generate — progressive skill load + save as editable doc

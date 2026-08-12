@@ -116,7 +116,8 @@ export const COMPOSER_SCRIPT_TYPES: ComposerScriptTypeDefinition[] = [
   {
     slug: "vo_script",
     label: "VO / narrator script",
-    description: "Voiceover and narrator lines only — timing cues, pronunciation notes, no shot breakdown.",
+    description:
+      "Voiceover and narrator lines only — spoken copy in a copyable fence; beat notes separate from the script text.",
     titlePrefix: "VO script",
     includesGenerationPrompt: false,
     includesStoryboardPrompt: false,
@@ -209,9 +210,10 @@ export function scriptTypeSystemPrompt(slug: ComposerScriptTypeSlug): string {
     case "vo_script":
       return [
         "Write a voiceover / narrator script in Markdown.",
-        "Table or line-by-line format with timecodes or beat markers when duration is known.",
-        "Pronunciation notes, pauses, emphasis — no camera or shot breakdown.",
-        "Match witness-object tone: intimate, human, not announcer hype unless brief requests.",
+        "Structure: optional short ## Beat notes (timecodes, intent — for humans only), then ## Voiceover with exactly one ```text fence containing spoken lines only.",
+        "Inside the ```text fence: no timestamps, no stage directions, no camera notes — only words the talent says (optional ElevenLabs v3 audio tags like [sighs] / [excited] if useful).",
+        "Pronunciation notes belong in Beat notes, never inside the spoken fence.",
+        "No shot breakdown. Match witness-object tone: intimate, human, not announcer hype unless brief requests.",
       ].join(" ");
     default:
       return [
