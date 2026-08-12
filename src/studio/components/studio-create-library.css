@@ -172,6 +172,69 @@
   opacity: 0;
 }
 
+.studio-gen-tile-video {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--mos-bg, #000) 40%, transparent);
+}
+
+.studio-gen-tile-video img,
+.studio-gen-tile-video video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  vertical-align: top;
+}
+
+.studio-gen-tile-video video.is-under-poster {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.studio-gen-tile-video.is-playing video {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.studio-gen-tile-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 12px color-mix(in srgb, #000 35%, transparent);
+}
+
+.studio-gen-tile-play svg {
+  margin-left: 2px;
+}
+
+.studio-gen-tile-play:hover {
+  background: color-mix(in srgb, #000 72%, transparent);
+}
+
+[data-appearance="light"] .studio-gen-tile-play {
+  background: color-mix(in srgb, #000 48%, transparent);
+}
+
 .studio-gen-tile-img-skeleton {
   position: absolute;
   inset: 0;

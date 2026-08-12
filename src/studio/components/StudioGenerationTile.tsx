@@ -18,6 +18,7 @@ import {
   Eye,
   Film,
   Loader2,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
@@ -128,95 +129,103 @@ function GenTileImg({ src }: { src: string }) {
   );
 }
 
-function GenTileVideo({ src }: { src: string }) {
-  const [retryTick, setRetryTick] = useState(0);
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
+const TILE_VIDEO_PLAY_EVENT = "studio-gen-tile-video-play";
+
+/** Inline Create-grid video: center play, click to play/pause in-place. */
+function GenTileInlineVideo({
+  src,
+  poster,
+}: {
+  src: string;
+  poster?: string;
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const loadedSrcRef = useRef("");
-  const attemptRef = useRef(0);
-  const retryTimerRef = useRef(0);
-
-  const markLoaded = useCallback((url: string) => {
-    if (!url) return;
-    loadedSrcRef.current = url;
-    attemptRef.current = 0;
-    queueMicrotask(() => {
-      setLoaded(true);
-      setFailed(false);
-    });
-  }, []);
-
-  useLayoutEffect(() => {
-    attemptRef.current = 0;
-    window.clearTimeout(retryTimerRef.current);
-
-    if (!src) {
-      loadedSrcRef.current = "";
-      setLoaded(false);
-      setFailed(false);
-      return;
-    }
-
-    if (loadedSrcRef.current === src) {
-      setFailed(false);
-      setLoaded(true);
-      return;
-    }
-
-    setFailed(false);
-    setLoaded(false);
-
-    const video = videoRef.current;
-    if (video && video.readyState >= 1) {
-      markLoaded(src);
-    }
-  }, [src, retryTick, markLoaded]);
+  const [playing, setPlaying] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    return () => window.clearTimeout(retryTimerRef.current);
-  }, []);
+    function onOtherPlay(event: Event) {
+      const detail = (event as CustomEvent<{ src?: string }>).detail;
+      if (detail?.src === src) return;
+      const video = videoRef.current;
+      if (!video) return;
+      video.pause();
+      setPlaying(false);
+    }
+    window.addEventListener(TILE_VIDEO_PLAY_EVENT, onOtherPlay);
+    return () => {
+      window.removeEventListener(TILE_VIDEO_PLAY_EVENT, onOtherPlay);
+      videoRef.current?.pause();
+    };
+  }, [src]);
 
-  if (failed) return null;
+  async function togglePlayback(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const video = videoRef.current;
+    if (!video || failed) return;
+    if (!video.paused && !video.ended) {
+      video.pause();
+      setPlaying(false);
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent(TILE_VIDEO_PLAY_EVENT, { detail: { src } }),
+    );
+    try {
+      video.muted = false;
+      await video.play();
+      setPlaying(true);
+      setFailed(false);
+    } catch {
+      try {
+        video.muted = true;
+        await video.play();
+        setPlaying(true);
+        setFailed(false);
+      } catch {
+        setFailed(true);
+        setPlaying(false);
+      }
+    }
+  }
 
   return (
-    <span className={`studio-gen-tile-img-wrap${loaded ? " is-ready" : ""}`}>
-      {!loaded ? (
-        <span className="studio-gen-tile-img-skeleton" aria-hidden="true">
-          <MediaLoadWave
-            className="studio-gen-tile-ghost-loader"
-            size="lg"
-            appearance="light"
-            ring
-          />
-        </span>
+    <span
+      className={`studio-gen-tile-video${playing ? " is-playing" : ""}${
+        failed ? " is-failed" : ""
+      }`}
+    >
+      {poster && !playing ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={poster} alt="" draggable={false} decoding="async" />
       ) : null}
       <video
-        key={`${src}::${retryTick}`}
         ref={videoRef}
         src={src}
-        muted
+        poster={poster}
         playsInline
         preload="metadata"
-        onLoadedData={() => markLoaded(src)}
-        onError={() => {
-          const attempt = attemptRef.current + 1;
-          attemptRef.current = attempt;
-          if (attempt > 5) {
-            loadedSrcRef.current = "";
-            queueMicrotask(() => {
-              setFailed(true);
-              setLoaded(false);
-            });
-            return;
-          }
-          window.clearTimeout(retryTimerRef.current);
-          retryTimerRef.current = window.setTimeout(
-            () => setRetryTick((tick) => tick + 1),
-            Math.min(4000, 350 * 2 ** (attempt - 1)),
-          );
-        }}
+        className={poster && !playing ? "is-under-poster" : undefined}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+        onClick={(event) => void togglePlayback(event)}
+        onError={() => setFailed(true)}
       />
+      {!playing && !failed ? (
+        <button
+          type="button"
+          className="studio-gen-tile-play"
+          data-studio-no-press="1"
+          title="Play"
+          aria-label="Play video"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => void togglePlayback(event)}
+        >
+          <Play className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+        </button>
+      ) : null}
     </span>
   );
 }
@@ -421,12 +430,10 @@ export function StudioGenerationTile({
       </div>
     );
   } else if (tile.kind === "video" && !failed && (videoSrc || posterUrl)) {
-    mediaBody = videoSrc && !posterUrl ? (
-      <GenTileVideo src={videoSrc} />
+    mediaBody = videoSrc ? (
+      <GenTileInlineVideo src={videoSrc} poster={posterUrl} />
     ) : posterUrl ? (
       <GenTileImg src={posterUrl} />
-    ) : videoSrc ? (
-      <GenTileVideo src={videoSrc} />
     ) : null;
   } else if (tile.kind === "image" && !failed && imageSrc) {
     mediaBody = <GenTileImg src={imageSrc} />;
