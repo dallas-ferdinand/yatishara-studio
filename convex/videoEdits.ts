@@ -432,9 +432,13 @@ export const save = authedMutation({
       // Intentional moves go through videoEdits.update({ folderId }).
       const folderId = existing.folderId;
       const projectPayload = { ...args.project, name, folderId };
+      const projectJson = JSON.stringify(projectPayload);
+      if (existing.projectJson === projectJson && existing.name === name) {
+        return { projectId: args.projectId, updatedAt: existing.updatedAt };
+      }
       await ctx.db.patch(args.projectId, {
         name,
-        projectJson: JSON.stringify(projectPayload),
+        projectJson,
         updatedAt: now,
       });
       return { projectId: args.projectId, updatedAt: now };

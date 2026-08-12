@@ -9,6 +9,7 @@ import { workspaceFileRawUrl, workspaceFileThumbUrl } from "@/desk/lib/workspace
 import { displayEntryPath } from "@/desk/lib/display-path";
 import { externalPreviewUrl } from "@mos-app/preview.js";
 import { MediaLoadWave } from "@/studio/components/media-load-frame";
+import { mediaUrlPath } from "@/studio/lib/mediaUrls";
 
 const TEXT_KINDS = new Set(["code", "markdown", "html", "csv", "text"]);
 
@@ -187,8 +188,11 @@ function ProgressiveThumb({
       return;
     }
 
-    // Same URL already shown — keep it painted (avoids Convex re-render blink).
-    if (loadedSrcRef.current === src) {
+    // Same media path already shown — ignore signed-token churn on Convex refetch.
+    if (
+      loadedSrcRef.current === src ||
+      (loadedSrcRef.current && mediaUrlPath(loadedSrcRef.current) === mediaUrlPath(src))
+    ) {
       setFailed((prev) => (prev ? false : prev));
       setHiLoaded((prev) => (prev ? prev : true));
       setShowUnderlay((prev) => (prev ? false : prev));
@@ -238,7 +242,7 @@ function ProgressiveThumb({
         </>
       ) : null}
       <img
-        key={`${src}::${retryTick}`}
+        key={`${mediaUrlPath(src)}::${retryTick}`}
         ref={hiRef}
         src={src}
         alt=""
@@ -277,18 +281,28 @@ function VideoThumb({ src, className = "", fallbackIcon = "play" }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [retryTick, setRetryTick] = useState(0);
+  const [heldSrc, setHeldSrc] = useState(src);
+  const pathRef = useRef(mediaUrlPath(src));
   const attemptRef = useRef(0);
   const retryTimerRef = useRef(0);
 
   useEffect(() => {
-    setLoaded(false);
-    setFailed(false);
-    attemptRef.current = 0;
+    if (!src) return;
+    const path = mediaUrlPath(src);
+    if (path !== pathRef.current) {
+      pathRef.current = path;
+      setHeldSrc(src);
+      setLoaded(false);
+      setFailed(false);
+      attemptRef.current = 0;
+    }
     window.clearTimeout(retryTimerRef.current);
     return () => window.clearTimeout(retryTimerRef.current);
   }, [src]);
 
-  if (!src || failed) {
+  const displaySrc = heldSrc || src;
+
+  if (!displaySrc || failed) {
     return (
       <div className="desk-file-thumb-fallback">
         <Icon name={fallbackIcon} size={26} className="text-cursor-muted" />
@@ -304,8 +318,8 @@ function VideoThumb({ src, className = "", fallbackIcon = "play" }) {
         </span>
       ) : null}
       <video
-        key={`${src}::${retryTick}`}
-        src={src}
+        key={`${mediaUrlPath(displaySrc)}::${retryTick}`}
+        src={displaySrc}
         className={className}
         crossOrigin="anonymous"
         muted

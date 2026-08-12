@@ -22,6 +22,31 @@ import {
   StudioOrbAvatar,
 } from "@/studio/components/StudioOrbPlayButton";
 import { TabContextMenu, tabCanRename } from "./TabContextMenu";
+import { mediaUrlPath } from "@/studio/lib/mediaUrls";
+
+function StableTabPreview({ src, kind }) {
+  const [heldSrc, setHeldSrc] = useState(src);
+  const [heldKind, setHeldKind] = useState(kind);
+  const pathRef = useRef(mediaUrlPath(src));
+
+  useEffect(() => {
+    if (!src) return;
+    const path = mediaUrlPath(src);
+    if (path !== pathRef.current) {
+      pathRef.current = path;
+      setHeldSrc(src);
+      setHeldKind(kind);
+    }
+  }, [src, kind]);
+
+  const displaySrc = heldSrc || src;
+  const displayKind = heldKind || kind;
+  if (!displaySrc) return null;
+  if (displayKind === "video") {
+    return <video src={displaySrc} muted playsInline preload="metadata" />;
+  }
+  return <img src={displaySrc} alt="" loading="lazy" />;
+}
 
 function tabAudioOrbSeed(tab) {
   if (typeof tab?.previewOrbSeed === "number" && Number.isFinite(tab.previewOrbSeed)) {
@@ -845,7 +870,9 @@ function UnifiedTabStripInner({
         const active = tab.key === activeKey;
         const previewUrl = tab.previewUrl;
         const audioTab = isAudioTab(tab);
-        const showPreview = Boolean(previewUrl || tab.previewInitials || audioTab);
+        const showPreview = Boolean(
+          previewUrl || tab.previewInitials || audioTab || isVideoEditTab(tab),
+        );
         const previewOverlayIcon = audioTab ? null : tabPreviewOverlayIcon(tab);
         return (
           <div
@@ -927,13 +954,9 @@ function UnifiedTabStripInner({
                   className="cursor-unified-tab-audio-orb"
                 />
               </span>
-            ) : tab.previewUrl ? (
+            ) : tab.previewUrl || isVideoEditTab(tab) ? (
               <span className="cursor-unified-tab-preview shrink-0 pointer-events-none" aria-hidden="true">
-                {tab.previewKind === "video" ? (
-                  <video src={tab.previewUrl} muted playsInline preload="metadata" />
-                ) : (
-                  <img src={tab.previewUrl} alt="" loading="lazy" />
-                )}
+                <StableTabPreview src={tab.previewUrl} kind={tab.previewKind} />
                 {previewOverlayIcon ? (
                   <span className="cursor-unified-tab-preview-overlay">
                     <Icon name={previewOverlayIcon} size={10} />

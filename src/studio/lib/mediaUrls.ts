@@ -1,6 +1,13 @@
 /** Bunny Optimizer query params — present only on thumbnail/preview transforms. */
 const THUMB_MAX_WIDTH = 1280;
 
+/** Path only — signed CDN query tokens must not remount <video>/<img> thumbs. */
+export function mediaUrlPath(url: string | null | undefined): string {
+  if (typeof url !== "string" || !url) return "";
+  const cut = url.search(/[?#]/);
+  return cut === -1 ? url : url.slice(0, cut);
+}
+
 export function isBunnyOptimizedUrl(url: string | null | undefined): boolean {
   if (!url || typeof url !== "string" || !/^https?:\/\//i.test(url)) return false;
   try {

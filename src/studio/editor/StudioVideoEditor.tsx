@@ -139,6 +139,9 @@ export function StudioVideoEditor({
   /** Skip autosave briefly after adopting a remote timeline so we don't fight the sync. */
   const suppressAutosaveUntilRef = useRef(0);
   const projectRef = useRef(null);
+  const lastSavedJsonRef = useRef("");
+  const saveInFlightRef = useRef(false);
+  const queueSaveRef = useRef(null);
   /** Sticky home folder for this .studio — never follows the Files rail browse folder. */
   const [homeFolderId, setHomeFolderId] = useState(folderId);
 
@@ -268,6 +271,8 @@ export function StudioVideoEditor({
     setHomeFolderId(folderId);
     setSaveError(null);
     creatingProjectRef.current = false;
+    lastSavedJsonRef.current = "";
+    saveInFlightRef.current = false;
     dispatch({
       type: "replace_project",
       project: createEmptyProject({
@@ -304,6 +309,7 @@ export function StudioVideoEditor({
       setLocalProjectId(saved._id);
       if (saved.folderId) setHomeFolderId(saved.folderId);
       lastAckedUpdatedAtRef.current = Number(saved.updatedAt) || 0;
+      lastSavedJsonRef.current = "";
       onProjectSaved?.(saved._id, resolvedName);
       setHydrated(true);
       return;
@@ -354,6 +360,13 @@ export function StudioVideoEditor({
 
   projectRef.current = state.project;
 
+  useEffect(() => {
+    if (!hydrated || lastSavedJsonRef.current) return;
+    // New unsaved edits must still hit Convex — only snapshot rows we already loaded.
+    if (!localProjectId) return;
+    lastSavedJsonRef.current = JSON.stringify(state.project);
+  }, [hydrated, localProjectId, state.project]);
+
   // MCP / other-tab writes bump Convex updatedAt. Adopt remote timeline instead of
   // letting the 800ms autosave overwrite agent edits with a stale local snapshot.
   useEffect(() => {
@@ -371,14 +384,23 @@ export function StudioVideoEditor({
       String(localProject.frameRatio ?? "") === String(remoteProject.frameRatio ?? "") &&
       Number(localProject.duration ?? 0) === Number(remoteProject.duration ?? 0);
 
-    lastAckedUpdatedAtRef.current = remoteUpdatedAt;
-    if (sameTimeline) return;
+    if (sameTimeline) {
+      lastAckedUpdatedAtRef.current = remoteUpdatedAt;
+      return;
+    }
+    // Local edits in flight or not yet acked — don't adopt (or ack) the echo,
+    // or a slower get() of snapshot A wipes cuts already in B.
+    if (saveInFlightRef.current) return;
+    const localJson = JSON.stringify(localProject ?? {});
+    if (localJson && localJson !== lastSavedJsonRef.current) return;
 
+    lastAckedUpdatedAtRef.current = remoteUpdatedAt;
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
     suppressAutosaveUntilRef.current = Date.now() + 1200;
+    lastSavedJsonRef.current = "";
     dispatch({ type: "replace_project", project: remoteProject });
     if (existing.folderId) setHomeFolderId(existing.folderId);
     onStatus?.("Timeline updated from sync.");
@@ -391,7 +413,10 @@ export function StudioVideoEditor({
           if (Date.now() < suppressAutosaveUntilRef.current) return;
           if (creatingProjectRef.current && !localProjectId) return;
           if (!isRealFolderId(homeFolderId)) return;
+          const json = JSON.stringify(projectSnapshot);
+          if (json && json === lastSavedJsonRef.current) return;
           if (!localProjectId) creatingProjectRef.current = true;
+          saveInFlightRef.current = true;
           try {
             const result = await saveProject({
               projectId: localProjectId ?? undefined,
@@ -400,6 +425,7 @@ export function StudioVideoEditor({
               project: projectSnapshot,
               sourceAssetId,
             });
+            lastSavedJsonRef.current = json;
             if (result?.projectId && !localProjectId) {
               setLocalProjectId(result.projectId);
               onProjectSaved?.(result.projectId, name);
@@ -412,6 +438,7 @@ export function StudioVideoEditor({
             setSaveError(friendlyConvexError(error, "Could not save edit."));
             onStatus?.(friendlyConvexError(error, "Could not save edit."));
           } finally {
+            saveInFlightRef.current = false;
             creatingProjectRef.current = false;
           }
         })
@@ -420,19 +447,25 @@ export function StudioVideoEditor({
     },
     [homeFolderId, localProjectId, onProjectSaved, onStatus, saveProject, sourceAssetId],
   );
+  queueSaveRef.current = queueSave;
 
   useEffect(() => {
     if (!hydrated || saveError) return;
     if (Date.now() < suppressAutosaveUntilRef.current) return;
+    const json = JSON.stringify(state.project);
+    if (json === lastSavedJsonRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       if (Date.now() < suppressAutosaveUntilRef.current) return;
-      void queueSave(state.project, state.project.name);
+      const latest = projectRef.current;
+      if (!latest) return;
+      if (JSON.stringify(latest) === lastSavedJsonRef.current) return;
+      void queueSaveRef.current?.(latest, latest.name);
     }, 800);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [state.project, hydrated, queueSave, saveError]);
+  }, [state.project, hydrated, saveError]);
 
   const mediaItems = useMemo(() => {
     const byId = new Map();
