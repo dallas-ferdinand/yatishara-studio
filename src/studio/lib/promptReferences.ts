@@ -55,6 +55,9 @@ type AssetLike = {
   mediaUrl?: string;
 };
 
+const ASSET_LINK_LINE =
+  /^\s*[-*+]\s*\[([^\]]+)\]\(\s*(?:asset:\/\/)?([a-z0-9]+)(?:\s+"[^"]*")?\s*\)(?:\s*[—\-–:]\s*(.*))?$/i;
+
 function parseReferenceMeta(meta = ""): Omit<PromptReference, "label"> {
   const parts = String(meta)
     .split("|")
@@ -83,8 +86,29 @@ function parseReferenceMeta(meta = ""): Omit<PromptReference, "label"> {
   return out;
 }
 
+/** Agent/script form: `- [Label](asset://id) — note` (and bare asset:// id). */
+export function parseAssetLinkLine(line: string): PromptReference | null {
+  const trimmed = String(line ?? "").trim();
+  const match = trimmed.match(ASSET_LINK_LINE);
+  if (!match) return null;
+  const label = String(match[1] ?? "").trim().replace(/^@/, "");
+  const studioId = String(match[2] ?? "").trim();
+  if (!studioId || !/^[a-z0-9]+$/i.test(studioId)) return null;
+  const notes = String(match[3] ?? "").trim();
+  return {
+    label: label || studioId,
+    kind: "image",
+    path: `/Studio/assets/${studioId}`,
+    studioId,
+    ...(notes ? { notes } : {}),
+  };
+}
+
 export function parseReferenceLine(line: string): PromptReference | null {
   const trimmed = String(line ?? "").trim();
+  const fromLink = parseAssetLinkLine(trimmed);
+  if (fromLink) return fromLink;
+
   const match = trimmed.match(/^-\s*@(.+?)(?:\s*\|\s*(.+))?$/);
   if (!match) return null;
   const label = match[1].trim().replace(/^@/, "");
@@ -124,12 +148,60 @@ function extractReferencesBlock(text: string): { body: string; block: string } {
   return { body: raw.trim(), block: "" };
 }
 
+function collectReferencesFromBlock(block: string): PromptReference[] {
+  const references: PromptReference[] = [];
+  const seen = new Set<string>();
+  for (const line of String(block ?? "").split("\n")) {
+    const ref = parseReferenceLine(line);
+    if (!ref) continue;
+    const key = assetIdFromReference(ref) || `@${ref.label}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    references.push(ref);
+  }
+  return references;
+}
+
+/** Also pick up loose `asset://id` / markdown links anywhere in the doc. */
+function collectInlineAssetLinks(text: string): PromptReference[] {
+  const refs: PromptReference[] = [];
+  const seen = new Set<string>();
+  const re =
+    /\[([^\]]+)\]\(\s*asset:\/\/([a-z0-9]+)\s*\)|asset:\/\/([a-z0-9]+)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(String(text ?? ""))) != null) {
+    const studioId = String(match[2] || match[3] || "").trim();
+    if (!studioId || seen.has(studioId)) continue;
+    seen.add(studioId);
+    const label = String(match[1] || studioId).trim().replace(/^@/, "");
+    refs.push({
+      label: label || studioId,
+      kind: "image",
+      path: `/Studio/assets/${studioId}`,
+      studioId,
+    });
+  }
+  return refs;
+}
+
+function dedupeReferences(refs: PromptReference[]): PromptReference[] {
+  const seen = new Set<string>();
+  const out: PromptReference[] = [];
+  for (const ref of refs) {
+    const id = assetIdFromReference(ref) || ref.label;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(ref);
+  }
+  return out;
+}
+
 export function parsePromptDocument(markdown: string): {
   body: string;
   references: PromptReference[];
 } {
   const unfenced = stripOuterCodeFence(markdown);
-  let working = unfenced;
+  const working = unfenced;
 
   // Agent skill shape: optional title + ```text prompt ``` + References block
   const fencedPrompt = working.match(
@@ -137,18 +209,21 @@ export function parsePromptDocument(markdown: string): {
   );
   if (fencedPrompt) {
     const after = String(fencedPrompt[2] ?? "").trim();
-    if (/References:/i.test(after) || /^##?\s*References/im.test(after)) {
+    if (
+      /References:/i.test(after) ||
+      /^##?\s*References/im.test(after) ||
+      /asset:\/\//i.test(after)
+    ) {
       const normalized = after.startsWith("#")
         ? `\n${after}`
         : after.startsWith("References:")
           ? `\n\n${after}`
           : `\n\n${after}`;
       const { block } = extractReferencesBlock(normalized);
-      const references: PromptReference[] = [];
-      for (const line of block.split("\n")) {
-        const ref = parseReferenceLine(line);
-        if (ref) references.push(ref);
-      }
+      const references = dedupeReferences([
+        ...collectReferencesFromBlock(block),
+        ...collectInlineAssetLinks(after),
+      ]);
       if (references.length) {
         return {
           body: String(fencedPrompt[1] ?? "").trim(),
@@ -159,11 +234,10 @@ export function parsePromptDocument(markdown: string): {
   }
 
   const { body, block } = extractReferencesBlock(working);
-  const references: PromptReference[] = [];
-  for (const line of block.split("\n")) {
-    const ref = parseReferenceLine(line);
-    if (ref) references.push(ref);
-  }
+  const references = dedupeReferences([
+    ...collectReferencesFromBlock(block),
+    ...collectInlineAssetLinks(working),
+  ]);
   return { body: body.trim(), references };
 }
 
@@ -175,6 +249,9 @@ export function looksLikePromptScript(text: string): boolean {
   if (/^##?\s*References\s*$/im.test(t) && /-\s*@/.test(t)) return true;
   if (/\/Studio\/assets\/[a-z0-9]+/i.test(t) && /-\s*@/.test(t)) return true;
   if (/References:\n[\s\S]*?-\s*@/i.test(t)) return true;
+  // Agent scripts: ## References + markdown asset:// links (or loose asset://).
+  if (/asset:\/\/[a-z0-9]+/i.test(t) && /References/i.test(t)) return true;
+  if (/\[([^\]]+)\]\(\s*asset:\/\/[a-z0-9]+\s*\)/i.test(t)) return true;
   return false;
 }
 
@@ -242,11 +319,33 @@ export function referenceToAttachmentDraft(
   };
 }
 
+/**
+ * Ensure sealed prompt body mentions each ref as @Label (Higgs-style),
+ * without duplicating labels already present.
+ */
+export function ensureAtMentionsInBody(
+  body: string,
+  references: PromptReference[],
+): string {
+  let out = String(body ?? "").trim();
+  const missing: string[] = [];
+  for (const ref of references) {
+    const label = String(ref.label || "").trim().replace(/^@/, "");
+    if (!label || /[^a-zA-Z0-9_-]/.test(label)) continue;
+    const re = new RegExp(`@${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+    if (!re.test(out)) missing.push(`@${label}`);
+  }
+  if (!missing.length) return out;
+  const prefix = missing.join(" ");
+  return out ? `${prefix}\n\n${out}` : prefix;
+}
+
 export function hydrateComposerFromText(
   markdown: string,
   assets: AssetLike[] = [],
 ): HydratedPrompt {
-  const { body, references } = parsePromptDocument(markdown);
+  const { body: rawBody, references } = parsePromptDocument(markdown);
+  const body = ensureAtMentionsInBody(rawBody, references);
   const attachments: PromptAttachmentDraft[] = [];
   const seen = new Set<string>();
   for (const ref of references) {
@@ -281,21 +380,15 @@ export function buildReferencesBlock(
   const lines = (attachments ?? [])
     .filter((item) => item.studioKind !== "element" && item.studioId)
     .map((item) => {
-      const path =
-        item.path ||
-        (item.studioId ? `/Studio/assets/${item.studioId}` : "");
-      return [
-        `- @${String(item.label || item.filename || item.studioId).replace(/^@/, "")}`,
-        item.kind ? `kind: ${item.kind}` : "",
-        path ? `path: ${path}` : "",
-        item.filename ? `file: ${item.filename}` : "",
-        item.studioId ? `studio: ${item.studioId}` : "",
-      ]
-        .filter(Boolean)
-        .join(" | ");
+      const label = String(item.label || item.filename || item.studioId).replace(
+        /^@/,
+        "",
+      );
+      // Prefer agent-safe markdown links (paste + Script open).
+      return `- [${label}](asset://${item.studioId})`;
     });
   if (!lines.length) return "";
-  return `References:\n${lines.join("\n")}`;
+  return `## References\n\n${lines.join("\n")}`;
 }
 
 export function buildPromptDocumentMarkdown(
@@ -303,7 +396,15 @@ export function buildPromptDocumentMarkdown(
   attachments: Parameters<typeof buildReferencesBlock>[0],
   opts?: { title?: string; fence?: boolean },
 ): string {
-  const body = String(promptBody ?? "").trim();
+  const asRefs: PromptReference[] = (attachments ?? [])
+    .filter((item) => item.studioKind !== "element" && item.studioId)
+    .map((item) => ({
+      label: String(item.label || item.filename || item.studioId).replace(/^@/, ""),
+      kind: String(item.kind || "image"),
+      path: item.path || `/Studio/assets/${item.studioId}`,
+      studioId: String(item.studioId),
+    }));
+  const body = ensureAtMentionsInBody(String(promptBody ?? "").trim(), asRefs);
   const refs = buildReferencesBlock(attachments);
   const fenced = opts?.fence !== false ? `\`\`\`text\n${body}\n\`\`\`` : body;
   const title = opts?.title ? `# ${opts.title}\n\n` : "";

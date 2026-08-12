@@ -24,6 +24,41 @@ References:
     ]);
   });
 
+  it("parses ## References asset:// markdown links (agent scripts)", () => {
+    const md = `# Prompt — flyer
+
+\`\`\`text
+@flyer Product on a dark table.
+\`\`\`
+
+## References
+
+- [flyer](asset://jd788wn7ppv9t3qjtc3jjq9pd18cb68z) — product reference
+- [hero](asset://abc123def456) — face lock
+`;
+    expect(looksLikePromptScript(md)).toBe(true);
+    const hydrated = hydrateComposerFromText(md, [
+      {
+        _id: "jd788wn7ppv9t3qjtc3jjq9pd18cb68z",
+        name: "flyer.png",
+        kind: "image",
+        signedThumbnailUrl: "https://cdn/t",
+      },
+      {
+        _id: "abc123def456",
+        name: "hero.png",
+        kind: "image",
+      },
+    ]);
+    expect(hydrated.attachments).toHaveLength(2);
+    expect(hydrated.attachments.map((a) => a.studioId)).toEqual([
+      "jd788wn7ppv9t3qjtc3jjq9pd18cb68z",
+      "abc123def456",
+    ]);
+    expect(hydrated.body).toContain("@flyer");
+    expect(hydrated.draftWithMarkers.startsWith("\uFFFC")).toBe(true);
+  });
+
   it("parses ## References and skips elements", () => {
     const md = `# Prompt
 
@@ -53,6 +88,27 @@ Hello
         "hi\n\nReferences:\n- @x | kind: image | path: /Studio/assets/z | studio: z",
       ),
     ).toBe(true);
+    expect(
+      looksLikePromptScript(
+        "## References\n\n- [x](asset://abc123)\n",
+      ),
+    ).toBe(true);
+  });
+
+  it("injects missing @Label mentions for Higgs-style body", () => {
+    const md = `\`\`\`text
+Product on marble.
+\`\`\`
+
+## References
+
+- [Bottle](asset://bottleid1)
+`;
+    const hydrated = hydrateComposerFromText(md, [
+      { _id: "bottleid1", name: "bottle.png", kind: "image" },
+    ]);
+    expect(hydrated.body.startsWith("@Bottle")).toBe(true);
+    expect(hydrated.body).toContain("Product on marble");
   });
 
   it("builds agent-style prompt documents", () => {
@@ -62,7 +118,8 @@ Hello
       { title: "Prompt — hero" },
     );
     expect(out).toContain("```text");
-    expect(out).toContain("studio: id1");
+    expect(out).toContain("asset://id1");
+    expect(out).toContain("@hero");
     const again = parsePromptDocument(out);
     expect(again.references[0]?.studioId).toBe("id1");
   });

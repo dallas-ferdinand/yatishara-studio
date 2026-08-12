@@ -50,7 +50,7 @@ Example `contentMarkdown`:
 # Prompt — <short>
 
 ```text
-<full sealed prompt; may mention @Label visually>
+@Label …full sealed prompt; every References Label appears as @Label (Higgs-style)…
 ```
 
 ## References
@@ -61,6 +61,7 @@ Example `contentMarkdown`:
 **Hard rules for Script files**
 - Plain markdown only: headings, ```text fences, lists, links.
 - References = `## References` + markdown links `asset://{id}` only.
+- Sealed prompt MUST include `@Label` for each References Label so Create paste shows chips + Seedance binds media.
 - **Forbidden:** pipe-meta rows (`| kind: | path: | studio:`), HTML, null bytes, unclosed fences, inventing element paths.
 - Only **asset** ids from attached chips / generated stills. Never invent element ids. Never use `/Studio/elements/…`.
 

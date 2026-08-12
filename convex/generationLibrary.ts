@@ -67,29 +67,47 @@ function promptSnippet(prompt: string | undefined, max = 120): string | undefine
   return `${trimmed.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** Pull asset ids from the appended "References:" block (legacy path: asset:{id}). */
+/** Pull asset ids from References blocks (pipe-meta or asset:// markdown links). */
 function assetIdsFromPromptReferences(prompt: string | undefined): string[] {
   const raw = String(prompt ?? "");
-  const marker = "\n\nReferences:\n";
-  const idx = raw.indexOf(marker);
-  if (idx < 0) return [];
   const ids: string[] = [];
   const seen = new Set<string>();
-  for (const line of raw.slice(idx + marker.length).split("\n")) {
+  const push = (id: string | undefined) => {
+    const cleaned = String(id ?? "").trim();
+    if (!cleaned || seen.has(cleaned)) return;
+    seen.add(cleaned);
+    ids.push(cleaned);
+  };
+
+  for (const match of raw.matchAll(/\[([^\]]+)\]\(\s*asset:\/\/([a-z0-9]+)\s*\)/gi)) {
+    push(match[2]);
+  }
+  for (const match of raw.matchAll(/asset:\/\/([a-z0-9]+)/gi)) {
+    push(match[1]);
+  }
+
+  const marker = "\n\nReferences:\n";
+  const heading = raw.match(/\n##?\s*References\s*\n/i);
+  let block = "";
+  const idx = raw.indexOf(marker);
+  if (idx >= 0) block = raw.slice(idx + marker.length);
+  else if (heading?.index != null) {
+    block = raw.slice(heading.index + heading[0].length);
+  }
+  for (const line of block.split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed.startsWith("- @")) continue;
+    if (!trimmed.startsWith("-")) continue;
+    if (/\/Studio\/elements\//i.test(trimmed) || /\belement:\s*/i.test(trimmed)) {
+      continue;
+    }
     const studio = trimmed.match(/\bstudio:\s*([^\s|]+)/i)?.[1]?.trim();
     const path = trimmed.match(/\bpath:\s*([^|]+?)(?:\s*\||$)/i)?.[1]?.trim() ?? "";
     const fromPath =
       path.match(/\/Studio\/assets\/([^/.]+)/i)?.[1] ||
       path.match(/^asset:([^\s|/]+)/i)?.[1] ||
       undefined;
-    // Skip element chips.
-    if (/\/Studio\/elements\//i.test(path) || /\belement:\s*/i.test(trimmed)) continue;
-    const id = String(fromPath || studio || "").trim();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    ids.push(id);
+    const fromLink = trimmed.match(/asset:\/\/([a-z0-9]+)/i)?.[1];
+    push(fromLink || fromPath || studio);
   }
   return ids;
 }
