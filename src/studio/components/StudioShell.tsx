@@ -1959,17 +1959,7 @@ export function StudioShell({
             folderByIdRef.current.get(activeFolderId) ??
             trashedFolders?.find((folder) => folder._id === activeFolderId) ??
             topFolders?.find((folder) => folder._id === activeFolderId) ??
-            // Loading folders.get: keep a stub so Files create/rename still
-            // resolve against the open folder id (incl. workspace root).
-            (selectedFolder === undefined
-              ? {
-                  _id: activeFolderId,
-                  name:
-                    navTrail.find((crumb) => crumb.id === activeFolderId)?.name ||
-                    topFolders?.[0]?.name ||
-                    "Files",
-                }
-              : null))
+            null)
       : (topFolders?.[0] ?? null);
 
   useEffect(() => {
@@ -2782,7 +2772,7 @@ export function StudioShell({
       }
     }
     return [...byId.values()];
-  }, [activeFolder, events]);
+  }, [activeFolder?._id, events]);
 
   const assetPreviewQueries = useMemo(() => {
     const queries = {};
@@ -4141,7 +4131,7 @@ export function StudioShell({
     const rootId = navTrail[0]?.id;
     if (!activeFolder || !rootId || activeFolder._id === rootId) return "";
     return normalizeExplorerPath(studioPathForFolder(activeFolder));
-  }, [activeFolder, navTrail]);
+  }, [activeFolder?._id, activeFolder?.name, navTrail]);
 
   const visibleExplorerPins = useMemo(() => {
     const parent = normalizeExplorerPath(explorerPinParent);
