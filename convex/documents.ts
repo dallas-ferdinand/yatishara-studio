@@ -45,10 +45,14 @@ export const listByFolder = authedQuery({
 });
 
 export const get = authedQuery({
-  args: { documentId: v.id("documents") },
+  // Callers pass ids from persisted tab keys / list rows. A stale or malformed
+  // id must return null, not throw argument validation inside the shell render.
+  args: { documentId: v.string() },
   returns: v.union(documentReturn, v.null()),
   handler: async (ctx, args) => {
-    const doc = await ctx.db.get("documents", args.documentId);
+    const documentId = ctx.db.normalizeId("documents", args.documentId);
+    if (!documentId) return null;
+    const doc = await ctx.db.get("documents", documentId);
     if (!doc || doc.deletedAt) {
       return null;
     }
@@ -57,7 +61,7 @@ export const get = authedQuery({
       ctx,
       ctx.user._id,
       "document",
-      args.documentId,
+      documentId,
     );
     return ok ? doc : null;
   },
