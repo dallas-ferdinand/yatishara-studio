@@ -126,6 +126,30 @@ export function getDeskBuildGuardInlineScript() {
       try { localStorage.setItem("yatishara-studio-build", build); } catch {}
     };
 
+    // A tab left open across a deploy still asks for its old lazy chunks
+    // (markdown editor, viewers). Those 404 on the new build, which used to
+    // surface as a dead pane / crash wall. Reload once instead.
+    var CHUNK_FAIL = /ChunkLoadError|Loading chunk|dynamically imported module|Importing a module script failed/i;
+    var reloadForStaleChunk = () => {
+      try {
+        const last = Number(sessionStorage.getItem("yatishara-studio-chunk-reload") || "0");
+        if (Date.now() - last < 30000) return;
+        sessionStorage.setItem("yatishara-studio-chunk-reload", String(Date.now()));
+      } catch {}
+      void purgeCaches().finally(() => location.reload());
+    };
+    var chunkFailText = (err, fallback) =>
+      String((err && err.name) || "") + " " + String((err && err.message) || fallback || "");
+    window.addEventListener("error", (event) => {
+      if (CHUNK_FAIL.test(chunkFailText(event && event.error, event && event.message))) {
+        reloadForStaleChunk();
+      }
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event && event.reason;
+      if (CHUNK_FAIL.test(chunkFailText(reason, reason))) reloadForStaleChunk();
+    });
+
     // Preview / local: always drop SW + Cache Storage so hot updates are never sticky.
     if (isPreview) {
       void purge().finally(() => {

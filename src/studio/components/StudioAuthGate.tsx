@@ -56,9 +56,13 @@ class StudioShellErrorBoundary extends Component<
     const message = error?.message
       ? String(error.message).slice(0, 280)
       : "Studio crashed while loading.";
-    const autoReload = /timed out|timeout|out_of_retention|try again later/i.test(
-      message,
-    );
+    // A tab held open across a deploy still asks for its old lazy chunks
+    // (editors, viewers). Those 404 on the new build — reload, don't wall.
+    const autoReload =
+      /timed out|timeout|out_of_retention|try again later/i.test(message) ||
+      /ChunkLoadError|Loading chunk|dynamically imported module|Importing a module script failed/i.test(
+        `${error?.name ?? ""} ${message}`,
+      );
     return { failed: true, message, autoReload };
   }
 
