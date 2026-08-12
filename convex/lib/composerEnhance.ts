@@ -4,6 +4,7 @@
  */
 import { generateText } from "ai";
 import { ARK_MODEL_IDS, arkLanguageModel, resolveArkModelId } from "./byteplusArk";
+import { ELEVEN_V3_AUDIO_TAG_CATALOG } from "./elevenlabsV3AudioTags";
 import {
   measuredTextUsageFromGateway,
   type MeasuredTextUsage,
@@ -51,11 +52,12 @@ const KIND_RULES: Record<ComposerEnhanceKind, string> = {
   ].join(" "),
   voiceover: [
     "Target: ElevenLabs eleven_v3 voiceover script (audio tags).",
-    "PRIMARY GOAL: integrate sparse auditory audio tags in square brackets (e.g. [sighs], [excited], [short pause], [whispers]) while STRICTLY preserving the original spoken words and meaning.",
+    "PRIMARY GOAL: integrate sparse auditory audio tags in square brackets while STRICTLY preserving the original spoken words and meaning.",
     "DO: place tags immediately before or after the segment they affect; tags MUST describe voice/delivery only (emotion, volume, pace, non-verbal voice sounds).",
-    "DO: prefer punctuation, CAPS, ? ! or ellipses for emphasis before piling tags; keep tags sparse and natural.",
+    "DO: prefer punctuation, CAPS, ? ! or ellipses for emphasis before piling tags; keep tags sparse and natural (usually 0–3 per short ad).",
     "DO NOT: alter, add, or remove any spoken words; do not invent new dialogue lines; do not wrap original narrative in brackets.",
-    "DO NOT: use visual/stage tags ([standing], [grinning], [pacing]) or music/SFX tags ([music], [applause], [gunshot]).",
+    "DO NOT: use visual/stage tags ([standing], [grinning], [pacing], [smiling]) or music/SFX tags ([music], [applause], [gunshot], [explosion]).",
+    ELEVEN_V3_AUDIO_TAG_CATALOG,
     "Return ONLY the enhanced script text — no labels or explanation.",
   ].join(" "),
   sfx: [

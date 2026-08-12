@@ -58,16 +58,80 @@ Optional [v3 audio tags] when writing for TTS or after enhance.
 
 Clean markdown only. Asset ids from attached/generated. No pipe-meta. No HTML. Close fences.
 
-## ElevenLabs v3 audio tags
+## ElevenLabs v3 audio tags (offline — no web)
 
-When preparing text for TTS, or when they ask to enhance / tag the VO:
+You have **no online docs**. Use **only** this catalog when tagging for TTS or when they ask to enhance the VO.
 
-- Add sparse **auditory-only** square-bracket tags — e.g. `[whispers]`, `[sighs]`, `[excited]`, `[short pause]`, `[softly]`.
-- Place tags immediately before or after the affected segment.
+**Rules**
+
+- Add sparse **auditory-only** square-bracket tags. Place immediately before or after the affected segment.
 - **STRICTLY** preserve spoken words — do not add, remove, or rewrite dialogue.
-- Do **not** use visual/stage tags (`[grinning]`, `[standing]`) or music/SFX tags.
-- Prefer punctuation / CAPS / `…` for emphasis before piling tags.
-- Canon: Studio `docs/elevenlabs-v3-audio-tags.md` (and Create Enhance wand uses the same rules).
+- Prefer punctuation / CAPS / `…` / `!` / `?` for emphasis before piling tags (usually **0–3 tags** per short ad).
+- Match tags to the voice’s range (soft voice + `[shouts]` often fails or speaks the tag aloud).
+- **Banned:** visual/stage (`[grinning]`, `[standing]`, `[pacing]`, `[smiling]`) and music/SFX (`[music]`, `[applause]`, `[gunshot]`, `[explosion]`).
+
+### Emotion / delivery — when to use
+
+| Tag | Use when |
+|-----|----------|
+| `[happy]` / `[happily]` | Warm win, relief, product payoff |
+| `[excited]` / `[excitedly]` | Hook energy, reveal, limited offer |
+| `[sad]` | Pre-turn pain (sparingly) |
+| `[angry]` / `[annoyed]` | Broken thing, bad service, wasted time |
+| `[appalled]` | Strong disbelief at the problem |
+| `[surprised]` | Before-after flip |
+| `[curious]` / `[curiously]` | Soft question; invite lean-in |
+| `[thoughtful]` | Reflective / witness narrator |
+| `[sarcastic]` | Dry humor only if brand allows |
+| `[mischievously]` | Playful tease |
+| `[professional]` | Corporate / service / HSE open |
+| `[sympathetic]` | Empathy for viewer pain |
+| `[reassuring]` | Calm post-turn / CTA |
+| `[questioning]` | Rhetorical question delivery |
+| `[impressed]` | Reacting to product proof |
+| `[cute]` | Soft lifestyle if voice fits |
+| `[dismissive]` | Shrug off the old way |
+| `[warmly]` | Intimate close / sign-off |
+
+### Volume / register
+
+| Tag | Use when |
+|-----|----------|
+| `[whispers]` / `[whisper]` / `[whispering]` | Secret / intimate moment — not a hard CTA |
+| `[softly]` | Gentle care, night/home comfort |
+| `[shouts]` / `[shout]` | Rare hype only if the voice can shout — else CAPS + `!` |
+
+### Non-verbal voice
+
+| Tag | Use when |
+|-----|----------|
+| `[laughs]` / `[laughing]` / `[chuckles]` / `[giggles]` | Light release after a joke or win |
+| `[laughs harder]` / `[starts laughing]` / `[wheezing]` | Strong comedy only — easy to overdo |
+| `[sighs]` / `[sigh]` / `[frustrated sigh]` | Exhaustion at the problem before relief |
+| `[exhales]` / `[exhales sharply]` | Reset into the fix |
+| `[inhales deeply]` | Rare big-news beat |
+| `[clears throat]` | Comic / formal reset |
+| `[snorts]` | Comic disbelief |
+| `[crying]` | Almost never for product ads |
+| `[happy gasp]` | Delight at the reveal |
+| `[gulps]` / `[swallows]` | Nervous story beat |
+
+### Pacing
+
+| Tag | Use when |
+|-----|----------|
+| `[short pause]` / `[pause]` / `[pauses]` | Problem → product, or before CTA |
+| `[long pause]` | Heavy drama (often too much in 15s) |
+| `[rushed]` | Busy / overwhelm chaos |
+| `[drawn out]` | Weary or sarcastic stretch on a word |
+
+### Accent / performance — only if brief asks
+
+`[strong French accent]` / `[strong X accent]` · `[sings]` / `[singing]` / `[singing quickly]` · `[woo]`
+
+You may infer close variants (e.g. `[excitedly]` from `[excited]`) but stay auditory and sparse.
+
+Same canon lives in Studio `docs/elevenlabs-v3-audio-tags.md` and Create Enhance (`elevenlabsV3AudioTags.ts`).
 
 ## Existing draft (no video)
 

@@ -319,6 +319,8 @@ const VOICES = guide(
 Generate spoken audio with \`studio_generate_audio\` (see \`studio://guides/generation\`). Confirm cost via estimate when spending credits.
 
 Voiceover-from-video workflow: \`studio://guides/voiceover\`.
+
+Offline ElevenLabs v3 tag catalog (when to use each tag): Studio \`docs/elevenlabs-v3-audio-tags.md\` \u2014 also embedded in Agent skill \`prompt-voiceover\` (no web required).
 `
 );
 const VOICEOVER = guide(
@@ -357,7 +359,9 @@ Spoken lines only. No timestamps. No stage directions.
 
 ## ElevenLabs v3 tags
 
-Enhance / tag = **auditory tags only** in square brackets (\`[sighs]\`, \`[excited]\`, \`[short pause]\`). Never rewrite spoken words. No visual/SFX tags. See Studio \`docs/elevenlabs-v3-audio-tags.md\`.
+Enhance / tag = **auditory tags only** in square brackets. Never rewrite spoken words. No visual/SFX tags.
+
+**Offline catalog** (Agent has no web): load skill \`prompt-voiceover\` \u2014 full tag \u2192 when-to-use tables are in the skill body. Human/docs copy: Studio \`docs/elevenlabs-v3-audio-tags.md\`.
 
 ## Related
 
