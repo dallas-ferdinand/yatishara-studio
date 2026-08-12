@@ -62,9 +62,13 @@ type StudioCreateLibraryProps = {
   expiresUnix: number;
   isMobile?: boolean;
   selectedJobId?: string | null;
+  /** Fullscreen lightbox — separate from sidebar selection. */
+  previewJobId?: string | null;
   onSelectTile: (tile: GenerationLibraryTile) => void;
   onOpenDetails: (tile: GenerationLibraryTile) => void;
+  onOpenPreview: (tile: GenerationLibraryTile) => void;
   onCloseDetails?: () => void;
+  onClosePreview?: () => void;
   onUpscale?: (tile: GenerationLibraryTile) => void;
   onGenerateVideo?: (tile: GenerationLibraryTile) => void;
 };
@@ -79,9 +83,12 @@ export function StudioCreateLibrary({
   expiresUnix,
   isMobile,
   selectedJobId,
+  previewJobId = null,
   onSelectTile,
   onOpenDetails,
+  onOpenPreview,
   onCloseDetails,
+  onClosePreview,
   onUpscale,
   onGenerateVideo,
 }: StudioCreateLibraryProps) {
@@ -98,13 +105,14 @@ export function StudioCreateLibrary({
     expiresUnix,
   });
 
-  // Derive media from selected job so preview survives PanelGroup remount
+  // Derive media from selected/preview job so preview survives PanelGroup remount
   // when the detail sidebar first opens (local lightbox state was wiped).
+  const lightboxJobId = previewJobId || null;
   const lightboxDetail = useQuery(
     api.generationLibrary.getGenerationDetail,
-    selectedJobId
+    lightboxJobId
       ? {
-          jobId: selectedJobId as Id<"generationJobs">,
+          jobId: lightboxJobId as Id<"generationJobs">,
           expiresUnix,
         }
       : "skip",
@@ -149,24 +157,31 @@ export function StudioCreateLibrary({
   }, [convex, expiresUnix, loadingMore, nextCursor]);
 
   const closePreview = useCallback(() => {
-    onCloseDetails?.();
-  }, [onCloseDetails]);
+    onClosePreview?.();
+  }, [onClosePreview]);
 
-  const openPreview = useCallback(
+  const selectTile = useCallback(
     (tile: GenerationLibraryTile) => {
-      onOpenDetails(tile);
       onSelectTile(tile);
+      onOpenDetails(tile);
     },
     [onOpenDetails, onSelectTile],
   );
 
+  const openPreview = useCallback(
+    (tile: GenerationLibraryTile) => {
+      onOpenPreview(tile);
+    },
+    [onOpenPreview],
+  );
+
   const lightbox = useMemo((): LightboxState | null => {
-    if (!selectedJobId) return null;
-    const tile = tiles.find((t) => t.jobId === selectedJobId);
+    if (!lightboxJobId) return null;
+    const tile = tiles.find((t) => t.jobId === lightboxJobId);
     const detailReady =
       lightboxDetail &&
       lightboxDetail !== null &&
-      lightboxDetail.jobId === selectedJobId
+      lightboxDetail.jobId === lightboxJobId
         ? lightboxDetail
         : undefined;
     const kind = (detailReady?.kind || tile?.kind) as
@@ -185,22 +200,22 @@ export function StudioCreateLibrary({
       thumbUrl;
 
     if (!kind) {
-      return { jobId: selectedJobId, name, kind: "image", loading: true };
+      return { jobId: lightboxJobId, name, kind: "image", loading: true };
     }
     if (!url && !thumbUrl) {
-      return { jobId: selectedJobId, kind, name, loading: true };
+      return { jobId: lightboxJobId, kind, name, loading: true };
     }
     const durationSeconds =
       detailReady?.durationSeconds ?? tile?.durationSeconds;
     return {
-      jobId: selectedJobId,
+      jobId: lightboxJobId,
       url,
       thumbUrl,
       kind,
       name,
       ...(durationSeconds != null ? { durationSeconds } : {}),
     };
-  }, [selectedJobId, tiles, lightboxDetail]);
+  }, [lightboxJobId, tiles, lightboxDetail]);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -258,9 +273,9 @@ export function StudioCreateLibrary({
                         tile={tile}
                         selected={selectedJobId === tile.jobId}
                         isMobile={isMobile}
-                        onSelect={openPreview}
+                        onSelect={selectTile}
                         onPlay={openPreview}
-                        onOpenDetails={openPreview}
+                        onOpenDetails={selectTile}
                         onUpscale={onUpscale}
                         onGenerateVideo={onGenerateVideo}
                       />

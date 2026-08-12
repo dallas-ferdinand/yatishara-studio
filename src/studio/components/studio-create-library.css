@@ -21,7 +21,8 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 10px 12px 24px;
+  /* Clear floating Create composer so tiles can scroll up past it. */
+  padding: 10px 12px calc(var(--studio-composer-min-height, 96px) + 88px);
   display: flex;
   flex-direction: column;
 }
@@ -105,6 +106,9 @@
   cursor: pointer;
   text-align: left;
   color: inherit;
+  /* Never inherit global press squash — it fights Preview / action hits. */
+  transform: none !important;
+  animation: none !important;
 }
 
 [data-appearance="light"] .studio-gen-tile {
@@ -497,6 +501,10 @@
   background: color-mix(in srgb, #000 52%, transparent);
   color: #fff;
   cursor: pointer;
+  /* Keep hit target stable — no press-scale on overlay actions. */
+  transform: none !important;
+  animation: none !important;
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
 .studio-gen-tile-action:hover {

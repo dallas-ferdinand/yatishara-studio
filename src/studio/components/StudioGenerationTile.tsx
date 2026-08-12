@@ -239,7 +239,7 @@ export function StudioGenerationTile({
       }${failed ? " is-failed" : ""}${busy ? " is-busy" : ""}${
         doneAudio ? " is-audio-ready" : ""
       }`}
-      role="button"
+      data-studio-no-press="1"
       tabIndex={0}
       onClick={handleTileClick}
       onKeyDown={(event) => {
@@ -286,14 +286,22 @@ export function StudioGenerationTile({
         ) : null}
 
         {!doneAudio ? (
-          <div className="studio-gen-tile-overlay" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="studio-gen-tile-overlay"
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
             {canPreview ? (
               <button
                 type="button"
                 className="studio-gen-tile-action"
-                title="Preview"
-                aria-label="Preview"
-                onClick={() => {
+                data-studio-no-press="1"
+                title="Open preview"
+                aria-label="Open preview"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
                   onPlay(tile);
                   setOverlayOpen(false);
                 }}
@@ -305,9 +313,15 @@ export function StudioGenerationTile({
               <button
                 type="button"
                 className="studio-gen-tile-action"
+                data-studio-no-press="1"
                 title="Upscale"
                 aria-label="Upscale"
-                onClick={() => onUpscale(tile)}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onUpscale(tile);
+                }}
               >
                 <Expand className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -316,9 +330,15 @@ export function StudioGenerationTile({
               <button
                 type="button"
                 className="studio-gen-tile-action"
+                data-studio-no-press="1"
                 title="Generate video"
                 aria-label="Generate video"
-                onClick={() => onGenerateVideo(tile)}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onGenerateVideo(tile);
+                }}
               >
                 <Film className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -328,9 +348,12 @@ export function StudioGenerationTile({
           <button
             type="button"
             className="studio-gen-tile-audio-details"
-            title="Preview"
-            aria-label="Preview"
+            data-studio-no-press="1"
+            title="Open preview"
+            aria-label="Open preview"
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
+              event.preventDefault();
               event.stopPropagation();
               onPlay(tile);
             }}

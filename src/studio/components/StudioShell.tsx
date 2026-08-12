@@ -2170,14 +2170,14 @@ export function StudioShell({
     };
   }, [isMobile]);
 
-  /* One-shot press squash when a control initiates (not only while :active). */
+  /* One-shot press squash when a chrome control initiates (not every clickable). */
   useEffect(() => {
     const root = shellRef.current;
     if (!(root instanceof HTMLElement)) return undefined;
     const skipSel =
-      '.cursor-unified-tab, .cursor-tab, [role="tab"], .studio-mobile-nav-btn, .studio-admin-head-tab, .studio-settings-horizontal-menu button, .studio-feed-mode-menu button, [data-studio-nav], [data-studio-no-press]';
+      '.cursor-unified-tab, .cursor-tab, [role="tab"], .studio-mobile-nav-btn, .studio-admin-head-tab, .studio-settings-horizontal-menu button, .studio-feed-mode-menu button, [data-studio-nav], [data-studio-no-press], .studio-gen-tile, .studio-gen-tile-overlay, .studio-gen-tile-action, .studio-create-library, .studio-create-masonry';
     const hitSel =
-      'button, [role="button"], .studio-settings-pill, .studio-settings-trigger, .studio-pill-btn, .studio-composer-circle-btn, .cursor-icon-btn, .cursor-toolbar-icon, .studio-balance-chip-topup, .studio-credit-balance-ring';
+      '.studio-settings-pill, .studio-settings-trigger, .studio-pill-btn, .studio-composer-circle-btn, .cursor-icon-btn, .cursor-toolbar-icon, .studio-balance-chip-topup, .studio-credit-balance-ring, .studio-composer-send-btn, .studio-mode-row';
     const onPointerDown = (event: PointerEvent) => {
       if (event.pointerType === "mouse" && event.button !== 0) return;
       const target = event.target;
@@ -3439,6 +3439,9 @@ export function StudioShell({
     typeof activeTab === "string" && activeTab.startsWith("agent:");
   const showHistory = showAgentHistory;
   const generationDetailOpen = Boolean(generationDetail?.jobId);
+  const generationPreviewOpen = Boolean(
+    generationDetail?.jobId && generationDetail?.preview,
+  );
 
   useEffect(() => {
     if (!showHistory && historyOpen) setHistoryOpen(false);
@@ -9832,12 +9835,10 @@ export function StudioShell({
           box-shadow: none;
         }
         /*
-          Global button push: shrink while held, grow back on release.
-          Includes chrome circle icons. Not workspace tabs / section switches.
+          Press squash only on chrome controls (composer circles, icon pills, etc).
+          Not every button / role=button — that fought Create tile Preview hits.
         */
         .studio-polish :is(
-          button,
-          [role="button"],
           .studio-settings-pill,
           .studio-settings-trigger,
           .studio-pill-btn,
@@ -9846,7 +9847,8 @@ export function StudioShell({
           .cursor-toolbar-icon,
           .studio-balance-chip-topup,
           .studio-credit-balance-ring,
-          .studio-credit-balance-ring > button
+          .studio-credit-balance-ring > button,
+          .studio-mode-row
         ):not(:disabled):not([aria-disabled="true"]):not([data-studio-no-press]) {
           transform-origin: center center;
           transition:
@@ -9857,15 +9859,14 @@ export function StudioShell({
             opacity var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-polish :is(
-          button,
-          [role="button"],
           .studio-settings-pill,
           .studio-settings-trigger,
           .studio-pill-btn,
           .studio-composer-circle-btn,
           .cursor-icon-btn,
           .cursor-toolbar-icon,
-          .studio-balance-chip-topup
+          .studio-balance-chip-topup,
+          .studio-mode-row
         ):not(:disabled):not([aria-disabled="true"]):not([data-studio-no-press]):active {
           transform: scale(var(--studio-press-scale)) !important;
         }
@@ -25670,24 +25671,44 @@ export function StudioShell({
             }}
             expiresUnix={assetUrlExpiresUnix}
             generationDetailJobId={generationDetail?.jobId ?? null}
+            generationPreviewJobId={
+              generationDetail?.preview ? generationDetail.jobId : null
+            }
             isMobileLayout={isMobile}
             onSelectGenerationTile={(tile) => {
               setSettingsOpen(false);
               setHistoryOpen(false);
-              setGenerationDetail({
+              setGenerationDetail((prev) => ({
                 jobId: tile.jobId,
                 assetId: tile.assetId,
-              });
+                // Keep fullscreen if already previewing the same job.
+                preview: Boolean(prev?.preview && prev?.jobId === tile.jobId),
+              }));
             }}
             onOpenGenerationDetails={(tile) => {
+              setSettingsOpen(false);
+              setHistoryOpen(false);
+              setGenerationDetail((prev) => ({
+                jobId: tile.jobId,
+                assetId: tile.assetId,
+                preview: Boolean(prev?.preview && prev?.jobId === tile.jobId),
+              }));
+            }}
+            onOpenGenerationPreview={(tile) => {
               setSettingsOpen(false);
               setHistoryOpen(false);
               setGenerationDetail({
                 jobId: tile.jobId,
                 assetId: tile.assetId,
+                preview: true,
               });
             }}
             onCloseGenerationDetails={() => setGenerationDetail(null)}
+            onCloseGenerationPreview={() => {
+              setGenerationDetail((prev) =>
+                prev?.jobId ? { ...prev, preview: false } : null,
+              );
+            }}
             onLibraryUpscale={(tile) => {
               const entry = libraryTileToEntry(tile);
               if (entry) void handleUpscaleImage(entry);
@@ -25700,7 +25721,7 @@ export function StudioShell({
         </section>
         {typeof activeTab === "string" &&
         (activeTab.startsWith("composer:") || activeTab.startsWith("thread:")) &&
-        !generationDetailOpen ? (
+        !generationPreviewOpen ? (
           <StudioComposer
             draft={draft}
             setDraft={setDraft}
@@ -31847,9 +31868,12 @@ function ActivePane({
   onOpenAsset,
   expiresUnix,
   generationDetailJobId = null,
+  generationPreviewJobId = null,
   onSelectGenerationTile,
   onOpenGenerationDetails,
+  onOpenGenerationPreview,
   onCloseGenerationDetails,
+  onCloseGenerationPreview,
   onLibraryUpscale,
   onLibraryGenerateVideo,
   isMobileLayout = false,
@@ -32210,9 +32234,12 @@ function ActivePane({
         expiresUnix={expiresUnix}
         isMobile={isMobileLayout}
         selectedJobId={generationDetailJobId}
+        previewJobId={generationPreviewJobId}
         onSelectTile={onSelectGenerationTile}
         onOpenDetails={onOpenGenerationDetails}
+        onOpenPreview={onOpenGenerationPreview}
         onCloseDetails={onCloseGenerationDetails}
+        onClosePreview={onCloseGenerationPreview}
         onUpscale={onLibraryUpscale}
         onGenerateVideo={onLibraryGenerateVideo}
       />,
