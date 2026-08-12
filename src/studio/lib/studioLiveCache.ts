@@ -142,3 +142,26 @@ export function cnListingsCacheKey(audioType: string, search: string) {
 export function feedCacheKey(mode: string, seed?: string | null) {
   return `ys-feed-v1:${mode}:${seed ?? "home"}`;
 }
+
+/** Drop in-memory (+ pending session) live cache — call on account switch / sign-out. */
+export function clearStudioLiveCache() {
+  mem.clear();
+  pendingSessionWrites.clear();
+  if (typeof window === "undefined") return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.sessionStorage.length; i += 1) {
+      const key = window.sessionStorage.key(i);
+      if (key && (key.startsWith("ys-") || isHeavyLiveKey(key))) keys.push(key);
+    }
+    for (const key of keys) {
+      try {
+        window.sessionStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}

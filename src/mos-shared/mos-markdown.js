@@ -41,10 +41,16 @@ function isTableLine(line) {
   // Those are list/meta rows, not markdown tables — treating them as tables
   // blew up Script editors (Invalid array length / bad DOM) on open.
   if (/^[-*+]\s+/.test(t) || /^\d+\.\s+/.test(t)) return false;
-  if (t.startsWith("|")) return true;
+  const MAX_TABLE_COLS = 24;
+  if (t.startsWith("|")) {
+    const cells = splitPipeRow(t);
+    if (!cells || cells.length < 2 || cells.length > MAX_TABLE_COLS) return false;
+    return true;
+  }
   const cells = splitPipeRow(t);
-  if (!cells || cells.length < 2) return false;
-  if (cells.length === 2 && cells.every((c) => c.length > 80)) return false;
+  if (!cells || cells.length < 2 || cells.length > MAX_TABLE_COLS) return false;
+  if (cells.some((c) => c.length > 80)) return false;
+  if (cells.length === 2 && cells.every((c) => c.length > 40)) return false;
   return true;
 }
 

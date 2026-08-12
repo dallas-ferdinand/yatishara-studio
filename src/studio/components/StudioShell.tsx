@@ -117,7 +117,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AttachmentPreviewSheet } from "@/desk/components/AttachmentPreviewSheet";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
-import { MarkdownDocEditor } from "@/desk/components/MarkdownDocEditor";
+import { StudioScriptPane } from "@/studio/components/StudioScriptPane";
 import { FileReactionPicker } from "@/studio/components/FileReactionPicker";
 import {
   StudioSharePeoplePanel,
@@ -197,6 +197,7 @@ import {
   takeSignedUrlBudget,
 } from "@/studio/lib/signedUrlBudget";
 import {
+  clearStudioLiveCache,
   folderAssetsCacheKey,
   folderChildrenCacheKey,
   folderDocumentsCacheKey,
@@ -204,6 +205,11 @@ import {
   readStudioLive,
   threadEventsCacheKey,
 } from "@/studio/lib/studioLiveCache";
+import {
+  purgeLegacyUnscopedStudioShellKeys,
+  studioComposerContextsKey,
+  studioOpenTabsKey,
+} from "@/studio/lib/studio-account-storage";
 import {
   markStudioIntent,
   markStudioPaint,
@@ -610,8 +616,6 @@ const STUDIO_PUSH_PROMPT_KEY = "yatishara-studio-push-prompt-v1";
 const ACTIVE_STYLE_SHEET_KEY = "mercuryos-studio-active-style-sheet-v1";
 const COMPOSER_STYLE_MODE_KEY = "mercuryos-studio-composer-style-mode-v1";
 const STUDIO_MAIN_PANEL_SIZES_KEY = "yatishara-studio-main-panel-sizes";
-const STUDIO_OPEN_TABS_KEY = "yatishara-studio-open-tabs-v1";
-const STUDIO_COMPOSER_CONTEXTS_KEY = "yatishara-studio-composer-contexts-v1";
 function isComposerContextTabKey(key) {
   return typeof key === "string" && (key.startsWith("composer:") || key.startsWith("thread:"));
 }
@@ -678,10 +682,12 @@ function serializeComposerContextsForStorage(contexts) {
   return out;
 }
 
-function readPersistedComposerContexts() {
+function readPersistedComposerContexts(userId) {
   if (typeof window === "undefined") return {};
+  const key = studioComposerContextsKey(userId);
+  if (!key) return {};
   try {
-    const raw = window.localStorage.getItem(STUDIO_COMPOSER_CONTEXTS_KEY);
+    const raw = window.localStorage.getItem(key);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? serializeComposerContextsForStorage(parsed) : {};
@@ -690,11 +696,13 @@ function readPersistedComposerContexts() {
   }
 }
 
-function writePersistedComposerContexts(contexts) {
+function writePersistedComposerContexts(contexts, userId) {
   if (typeof window === "undefined") return;
+  const key = studioComposerContextsKey(userId);
+  if (!key) return;
   try {
     window.localStorage.setItem(
-      STUDIO_COMPOSER_CONTEXTS_KEY,
+      key,
       JSON.stringify(serializeComposerContextsForStorage(contexts)),
     );
   } catch {
@@ -880,28 +888,43 @@ function slimTabEntrySnapshots(snapshots) {
 }
 
 let cachedInitialTabSession = null;
-function readPersistedTabSession() {
+let cachedInitialTabSessionUserId = null;
+
+function defaultTabSession() {
   const preferredDefault =
     typeof window !== "undefined"
       ? studioTabKeyForDefault(readStoredStudioDefaultTab())
       : COMPOSER_TAB;
-  const fallback = {
+  return {
     openTabs: [preferredDefault],
     activeTab: preferredDefault,
     activeFolderId: null,
     navTrail: [],
     snapshots: {},
   };
+}
+
+function readPersistedTabSession(userId) {
+  const fallback = defaultTabSession();
   // Never cache SSR/fallback — client must read localStorage or a remount
   // will hydrate stale defaults and the persist effect will wipe open tabs.
   if (typeof window === "undefined") {
     return fallback;
   }
-  if (cachedInitialTabSession) return cachedInitialTabSession;
+  const key = studioOpenTabsKey(userId);
+  // No user yet — never read the legacy unscoped blob (cross-account bleed).
+  if (!key) return fallback;
+  if (
+    cachedInitialTabSession &&
+    cachedInitialTabSessionUserId === userId
+  ) {
+    return cachedInitialTabSession;
+  }
   try {
-    const raw = window.localStorage.getItem(STUDIO_OPEN_TABS_KEY);
+    const raw = window.localStorage.getItem(key);
     if (!raw) {
       cachedInitialTabSession = fallback;
+      cachedInitialTabSessionUserId = userId;
       return fallback;
     }
     const parsed = JSON.parse(raw);
@@ -938,15 +961,19 @@ function readPersistedTabSession() {
       navTrail,
       snapshots: slimTabEntrySnapshots(parsed?.snapshots),
     };
+    cachedInitialTabSessionUserId = userId;
     return cachedInitialTabSession;
   } catch {
     cachedInitialTabSession = fallback;
+    cachedInitialTabSessionUserId = userId;
     return fallback;
   }
 }
 
-function writePersistedTabSession(session) {
+function writePersistedTabSession(session, userId) {
   if (typeof window === "undefined") return;
+  const key = studioOpenTabsKey(userId);
+  if (!key) return;
   try {
     const openTabs = sanitizePersistedOpenTabs(session?.openTabs, {
       allowEmpty: true,
@@ -969,11 +996,17 @@ function writePersistedTabSession(session) {
         : [],
       snapshots: slimTabEntrySnapshots(session?.snapshots),
     };
-    window.localStorage.setItem(STUDIO_OPEN_TABS_KEY, JSON.stringify(next));
+    window.localStorage.setItem(key, JSON.stringify(next));
     cachedInitialTabSession = next;
+    cachedInitialTabSessionUserId = userId;
   } catch {
     /* ignore */
   }
+}
+
+function clearCachedTabSession() {
+  cachedInitialTabSession = null;
+  cachedInitialTabSessionUserId = null;
 }
 const STUDIO_MAIN_SIDEBAR_DEFAULT = 24;
 const STUDIO_MAIN_MAIN_DEFAULT = 76;
@@ -1235,27 +1268,23 @@ export function StudioShell({
 
   const lastGenerationModeRef = useRef("image");
 
-  const [activeFolderId, setActiveFolderId] = useState(
-    () => readPersistedTabSession().activeFolderId,
-  );
-  const [openTabs, setOpenTabs] = useState(() => readPersistedTabSession().openTabs);
-  const [tabEntrySnapshots, setTabEntrySnapshots] = useState(
-    () => readPersistedTabSession().snapshots,
-  );
-  const [activeTab, setActiveTab] = useState(() => readPersistedTabSession().activeTab);
-  const [navTrail, setNavTrail] = useState(() => readPersistedTabSession().navTrail);
+  // Never hydrate from unscoped localStorage — wait for Convex user id.
+  const bootTabSession = defaultTabSession();
+  const [activeFolderId, setActiveFolderId] = useState(null);
+  const [openTabs, setOpenTabs] = useState(() => bootTabSession.openTabs);
+  const [tabEntrySnapshots, setTabEntrySnapshots] = useState(() => ({}));
+  const [activeTab, setActiveTab] = useState(() => bootTabSession.activeTab);
+  const [navTrail, setNavTrail] = useState(() => []);
   const [viewMode, setViewMode] = useState("grid");
   const [browserFullscreen, setBrowserFullscreen] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [filesBrowseMode, setFilesBrowseMode] = useState("yours");
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const composerContextsRef = useRef(
-    typeof window !== "undefined" ? readPersistedComposerContexts() : {},
-  );
+  const composerContextsRef = useRef({});
   const composerPersistTimerRef = useRef(0);
-  const initialComposerKey = composerContextKeyForTab(readPersistedTabSession().activeTab);
-  const initialComposerCtx = composerContextsRef.current[initialComposerKey] ?? {};
+  const initialComposerKey = composerContextKeyForTab(bootTabSession.activeTab);
+  const initialComposerCtx = {};
   const [draft, setDraft] = useState(() => initialComposerCtx.draft ?? "");
   const [attachments, setAttachments] = useState(() => initialComposerCtx.attachments ?? []);
   const [mode, setMode] = useState(() => initialComposerCtx.mode ?? "image");
@@ -1283,22 +1312,9 @@ export function StudioShell({
   }, [mode]);
 
   const tabSessionReadyRef = useRef(false);
+  const tabAccountIdRef = useRef(null);
   const skipNextTabPersistRef = useRef(false);
   const lastPersistedTabSessionRef = useRef("");
-
-  // Restore open tabs from localStorage before paint. SSR / HMR used to seed a
-  // default tab list, then the persist effect wrote that over the real session.
-  useLayoutEffect(() => {
-    cachedInitialTabSession = null;
-    const session = readPersistedTabSession();
-    skipNextTabPersistRef.current = true;
-    setOpenTabs(session.openTabs);
-    setActiveTab(session.activeTab);
-    setActiveFolderId(session.activeFolderId);
-    setNavTrail(session.navTrail);
-    setTabEntrySnapshots(session.snapshots || {});
-    tabSessionReadyRef.current = true;
-  }, []);
 
   useEffect(() => {
     if (isVideoEditorPreviewEnabled()) return;
@@ -1326,6 +1342,8 @@ export function StudioShell({
       skipNextTabPersistRef.current = false;
       return;
     }
+    const userId = tabAccountIdRef.current;
+    if (!userId) return;
     // Script hydrate fills tabEntrySnapshots with full bodies; slim + skip
     // identical writes so opening an MD doesn't spam localStorage / re-render churn.
     const slimmed = {
@@ -1338,7 +1356,7 @@ export function StudioShell({
     const serialized = JSON.stringify(slimmed);
     if (serialized === lastPersistedTabSessionRef.current) return;
     lastPersistedTabSessionRef.current = serialized;
-    writePersistedTabSession(slimmed);
+    writePersistedTabSession(slimmed, userId);
   }, [openTabs, activeTab, activeFolderId, navTrail, tabEntrySnapshots]);
 
   const [aspectRatio, setAspectRatio] = useState(() => initialComposerCtx.aspectRatio ?? "16:9");
@@ -1697,7 +1715,7 @@ export function StudioShell({
   const createTabIndexRef = useRef(0);
   const lastChatTabRef = useRef(
     (() => {
-      const tab = readPersistedTabSession().activeTab;
+      const tab = bootTabSession.activeTab;
       return tab.startsWith("composer:") || tab.startsWith("thread:") ? tab : COMPOSER_TAB;
     })(),
   );
@@ -1707,6 +1725,44 @@ export function StudioShell({
   const syncedBriefAttachmentsRevisionRef = useRef(null);
   const currentUser = useQuery(api.users.current, {});
   const hasCurrentUser = currentUser !== undefined;
+
+  // Per-account tab/recents restore — never reuse another user's localStorage blob.
+  useLayoutEffect(() => {
+    const userId = currentUser?._id ?? null;
+    if (!userId) {
+      tabSessionReadyRef.current = false;
+      return;
+    }
+    if (tabAccountIdRef.current === userId && tabSessionReadyRef.current) {
+      return;
+    }
+    if (tabAccountIdRef.current && tabAccountIdRef.current !== userId) {
+      clearStudioLiveCache();
+      currentEntriesCacheRef.current = new Map();
+      lastRootEntriesRef.current = null;
+      folderByIdRef.current = new Map();
+    }
+    purgeLegacyUnscopedStudioShellKeys();
+    clearCachedTabSession();
+    const session = readPersistedTabSession(userId);
+    skipNextTabPersistRef.current = true;
+    lastPersistedTabSessionRef.current = "";
+    setOpenTabs(session.openTabs);
+    setActiveTab(session.activeTab);
+    setActiveFolderId(session.activeFolderId);
+    setNavTrail(session.navTrail);
+    setTabEntrySnapshots(session.snapshots || {});
+    composerContextsRef.current = readPersistedComposerContexts(userId);
+    const ctxKey = composerContextKeyForTab(session.activeTab);
+    const ctx = composerContextsRef.current[ctxKey] ?? {};
+    setDraft(ctx.draft ?? "");
+    setAttachments(ctx.attachments ?? []);
+    if (ctx.mode === "image" || ctx.mode === "video" || ctx.mode === "audio") {
+      setMode(ctx.mode);
+    }
+    tabAccountIdRef.current = userId;
+    tabSessionReadyRef.current = true;
+  }, [currentUser?._id]);
   const isGenerateSurface =
     typeof activeTab === "string" &&
     (activeTab.startsWith("composer:") ||
@@ -1775,15 +1831,9 @@ export function StudioShell({
       : "skip",
   );
   const explorerUserId = currentUser?._id ?? null;
-  const [pinnedFolders, setPinnedFolders] = useState(() =>
-    typeof window === "undefined" ? [] : loadPinnedFolders(null),
-  );
-  const [folderAccessRows, setFolderAccessRows] = useState(() =>
-    typeof window === "undefined" ? [] : loadFolderAccess(null),
-  );
-  const [recentFileRows, setRecentFileRows] = useState(() =>
-    typeof window === "undefined" ? [] : loadRecentFiles(null),
-  );
+  const [pinnedFolders, setPinnedFolders] = useState([]);
+  const [folderAccessRows, setFolderAccessRows] = useState([]);
+  const [recentFileRows, setRecentFileRows] = useState([]);
 
   useEffect(() => {
     setPinnedFolders(loadPinnedFolders(explorerUserId));
@@ -2018,6 +2068,10 @@ export function StudioShell({
         const parent = nextTrail[nextTrail.length - 1];
         if (parent?.id && (activeFolderId === missingFolderId || idx >= 0)) {
           setActiveFolderId(parent.id);
+        } else if (activeFolderId === missingFolderId) {
+          // Foreign / deleted folder and no trail yet — clear so workspace root can attach.
+          setActiveFolderId(null);
+          setNavTrail([]);
         }
         return nextTrail;
       });
@@ -2026,6 +2080,7 @@ export function StudioShell({
   );
 
   // Folder deleted/trashed while browsing or with an edit open → leave + close tabs.
+  // Also re-run when topFolders arrives so a foreign persisted folder can fall back to root.
   useEffect(() => {
     if (!activeFolderId || isTrashView || isRecentsView || isTrashBrowse) return;
     if (selectedFolder === undefined) return;
@@ -2037,6 +2092,7 @@ export function StudioShell({
     isTrashView,
     isRecentsView,
     isTrashBrowse,
+    topFolders,
     leaveMissingFolder,
   ]);
 
@@ -2487,14 +2543,15 @@ export function StudioShell({
   useEffect(() => {
     if (!activeDocumentId || !activeDocumentDoc) return;
     const key = `document:${activeDocumentId}`;
-    const nextDescription = activeDocumentDoc.contentMarkdown ?? "";
+    // Metadata only — full markdown stays in the Convex query + editor, not shell tabs.
     setTabEntrySnapshots((snapshots) => {
       const prev = snapshots[key];
+      const nextName = `${activeDocumentDoc.title}.md`;
       if (
         prev?.bodyHydrated &&
-        prev.description === nextDescription &&
-        prev.name === `${activeDocumentDoc.title}.md` &&
-        prev.studioId === activeDocumentDoc._id
+        prev.name === nextName &&
+        prev.studioId === activeDocumentDoc._id &&
+        prev.folderId === activeDocumentDoc.folderId
       ) {
         return snapshots;
       }
@@ -2503,7 +2560,7 @@ export function StudioShell({
         [key]: {
           ...(prev ?? {}),
           ...documentToEntry(activeDocumentDoc),
-          description: nextDescription,
+          name: nextName,
           bodyHydrated: true,
         },
       };
@@ -3436,7 +3493,10 @@ export function StudioShell({
     });
     window.clearTimeout(composerPersistTimerRef.current);
     composerPersistTimerRef.current = window.setTimeout(() => {
-      writePersistedComposerContexts(composerContextsRef.current);
+      writePersistedComposerContexts(
+        composerContextsRef.current,
+        tabAccountIdRef.current,
+      );
     }, 250);
     return () => window.clearTimeout(composerPersistTimerRef.current);
   }, [
@@ -3498,7 +3558,10 @@ export function StudioShell({
       musicInstrumental,
       previous: composerContextsRef.current[prevKey],
     });
-    writePersistedComposerContexts(composerContextsRef.current);
+    writePersistedComposerContexts(
+        composerContextsRef.current,
+        tabAccountIdRef.current,
+      );
 
     const next = composerContextsRef.current[composerContextKey] ?? {};
     setDraft(next.draft ?? "");
@@ -3533,7 +3596,10 @@ export function StudioShell({
 
   useEffect(() => {
     return () => {
-      writePersistedComposerContexts(composerContextsRef.current);
+      writePersistedComposerContexts(
+        composerContextsRef.current,
+        tabAccountIdRef.current,
+      );
     };
   }, []);
 
@@ -5877,7 +5943,10 @@ export function StudioShell({
   function closeTab(key) {
     if (isComposerContextTabKey(key)) {
       delete composerContextsRef.current[key];
-      writePersistedComposerContexts(composerContextsRef.current);
+      writePersistedComposerContexts(
+        composerContextsRef.current,
+        tabAccountIdRef.current,
+      );
     }
     setOpenTabs((tabs) => tabs.filter((tab) => tab !== key));
     if (activeTab === key) {
@@ -6019,24 +6088,7 @@ export function StudioShell({
     const key = `${entry.studioKind}:${entry.studioId}`;
     setTabEntrySnapshots((snapshots) => ({ ...snapshots, [key]: entry }));
     openTab(key);
-    if (entry.studioKind === "document" && entry.studioId) {
-      void (async () => {
-        try {
-          const doc = await convex.query(api.documents.get, { documentId: entry.studioId });
-          if (!doc) return;
-          setTabEntrySnapshots((snapshots) => ({
-            ...snapshots,
-            [key]: {
-              ...entry,
-              ...documentToEntry(doc),
-              description: doc.contentMarkdown ?? "",
-            },
-          }));
-        } catch {
-          /* keep lightweight list snapshot */
-        }
-      })();
-    }
+    // Document body loads via documents.get in the pane — do not hydrate into shell state.
     if (isMobile) setMobileSection("composer");
   }
 
@@ -6131,7 +6183,10 @@ export function StudioShell({
       editorHtml: nextHtml,
       draft: nextDraft,
     };
-    writePersistedComposerContexts(composerContextsRef.current);
+    writePersistedComposerContexts(
+        composerContextsRef.current,
+        tabAccountIdRef.current,
+      );
 
     const paint = () => {
       if (composerKeyRef.current !== targetTab) return;
@@ -7775,7 +7830,10 @@ export function StudioShell({
       ...(composerContextsRef.current[ctxKey] ?? {}),
       boundThreadId: threadId,
     };
-    writePersistedComposerContexts(composerContextsRef.current);
+    writePersistedComposerContexts(
+        composerContextsRef.current,
+        tabAccountIdRef.current,
+      );
     return threadId;
   }
 
@@ -8040,13 +8098,29 @@ export function StudioShell({
   }
 
   async function handleRunDocumentInCreate(entry) {
-    const markdown = String(entry?.description ?? "");
+    let markdown = String(entry?.description ?? "");
+    if (!markdown.trim() && entry?.studioId) {
+      try {
+        const doc = await convex.query(api.documents.get, { documentId: entry.studioId });
+        markdown = String(doc?.contentMarkdown ?? "");
+      } catch {
+        /* ignore */
+      }
+    }
     const ok = await applyHydratedPromptToCreate(markdown, { replace: true });
     if (ok) toast.message("Prompt loaded in Create — chips hydrated.");
   }
 
   async function handleUseDocumentInAgent(entry) {
-    const markdown = String(entry?.description ?? "");
+    let markdown = String(entry?.description ?? "");
+    if (!markdown.trim() && entry?.studioId) {
+      try {
+        const doc = await convex.query(api.documents.get, { documentId: entry.studioId });
+        markdown = String(doc?.contentMarkdown ?? "");
+      } catch {
+        /* ignore */
+      }
+    }
     const ok = await applyHydratedPromptToAgent(markdown);
     if (ok) toast.message("Prompt loaded in Agent — chips hydrated.");
   }
@@ -25461,14 +25535,16 @@ export function StudioShell({
                   : null;
               const snap = key ? tabEntrySnapshots[key] : null;
               // listByFolder blanks bodies; editor can emit "" before hydrate — never wipe.
-              if (!next.trim() && !snap?.bodyHydrated) return;
+              if (!next.trim() && !snap?.bodyHydrated && !activeDocumentDoc?.contentMarkdown) {
+                return;
+              }
               void updateDocument({ documentId: entry.studioId, contentMarkdown: next });
               if (key) {
                 setTabEntrySnapshots((snapshots) => ({
                   ...snapshots,
                   [key]: {
                     ...(snapshots[key] ?? entry),
-                    description: next,
+                    // Keep metadata only — body lives in documents.get / editor.
                     bodyHydrated: true,
                   },
                 }));
@@ -25479,6 +25555,10 @@ export function StudioShell({
                 );
               }
             }}
+            activeDocumentMarkdown={
+              activeDocumentDoc?.contentMarkdown ??
+              (activeEntry?.studioKind === "document" ? activeEntry.description : undefined)
+            }
             onRunDocumentInCreate={(entry) => {
               void handleRunDocumentInCreate(entry);
             }}
@@ -26301,6 +26381,11 @@ export function StudioShell({
           }}
           onSignOut={() => {
             setMobileAppMenuOpen(false);
+            clearStudioLiveCache();
+            clearCachedTabSession();
+            purgeLegacyUnscopedStudioShellKeys();
+            tabAccountIdRef.current = null;
+            tabSessionReadyRef.current = false;
             void signOut();
           }}
         />
@@ -31707,6 +31792,7 @@ function ActivePane({
   onBuildElementSheet,
   stylePresets,
   onDocumentChange,
+  activeDocumentMarkdown,
   onRunDocumentInCreate,
   onUseDocumentInAgent,
   onSwitchThreadFolder,
@@ -32149,14 +32235,16 @@ function ActivePane({
   }
   if (activeEntry?.studioKind === "document") {
     return wrapPane(
-      <div className="studio-asset-preview studio-document-preview">
-        <MarkdownDocEditor
-          name={activeEntry.name}
-          value={activeEntry.description ?? ""}
-          onChange={(contentMarkdown) => onDocumentChange(activeEntry, contentMarkdown)}
-          onSave={() => {}}
-        />
-      </div>,
+      <StudioScriptPane
+        name={activeEntry.name}
+        documentId={String(activeEntry.studioId ?? "")}
+        value={
+          activeDocumentMarkdown ??
+          activeEntry.description ??
+          ""
+        }
+        onChange={(contentMarkdown) => onDocumentChange(activeEntry, contentMarkdown)}
+      />,
     );
   }
   if (adminTab) {
@@ -36051,6 +36139,9 @@ function AccountDetailsCard({ currentUser, onSave }) {
             disabled={signOutBusy}
             onClick={() => {
               setSignOutBusy(true);
+              clearStudioLiveCache();
+              clearCachedTabSession();
+              purgeLegacyUnscopedStudioShellKeys();
               void Promise.resolve(signOut()).finally(() => setSignOutBusy(false));
             }}
           >
@@ -36620,7 +36711,9 @@ function documentToEntry(doc) {
     studioId: doc._id,
     folderId: doc.folderId,
     kindLabel: "Script",
-    description: doc.contentMarkdown,
+    // Never stash full Script bodies on explorer/tab entries — opening an MD
+    // used to dump 10–100KB into StudioShell state and wall the app.
+    description: undefined,
     reactionEmoji: doc.reactionEmoji,
   };
 }

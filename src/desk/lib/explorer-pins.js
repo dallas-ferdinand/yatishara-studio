@@ -1,11 +1,10 @@
 /** Per-user pinned explorer folders (Dallas / Shara each have their own list). */
-import { getSession } from "@mos-app/api.js";
-
 const KEY_PREFIX = "mercuryos-explorer-pins";
 
+/** Require explicit Convex user id — never fall back to a shared unscoped key. */
 function storageKey(userId) {
-  const id = userId ?? getSession()?.userId ?? null;
-  return id ? `${KEY_PREFIX}-${id}` : KEY_PREFIX;
+  const id = typeof userId === "string" ? userId.trim() : "";
+  return id ? `${KEY_PREFIX}-${id}` : null;
 }
 
 /** Workspace-relative path with no leading/trailing slashes ("" = root). */
@@ -31,8 +30,10 @@ function normalizePin(raw) {
 }
 
 export function loadPinnedFolders(userId) {
+  const key = storageKey(userId);
+  if (!key) return [];
   try {
-    const raw = JSON.parse(localStorage.getItem(storageKey(userId)) ?? "[]");
+    const raw = JSON.parse(localStorage.getItem(key) ?? "[]");
     if (!Array.isArray(raw)) return [];
     return raw
       .map(normalizePin)
@@ -44,8 +45,10 @@ export function loadPinnedFolders(userId) {
 }
 
 export function savePinnedFolders(pins, userId) {
+  const key = storageKey(userId);
+  if (!key) return [];
   const clean = (pins ?? []).map(normalizePin).filter(Boolean);
-  localStorage.setItem(storageKey(userId), JSON.stringify(clean));
+  localStorage.setItem(key, JSON.stringify(clean));
   return clean;
 }
 

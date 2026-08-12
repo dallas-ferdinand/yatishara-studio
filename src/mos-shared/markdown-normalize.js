@@ -52,16 +52,26 @@ function formatPipeRow(cells) {
 }
 
 /** Pipe-delimited table line — GFM or LLM style (# | A | B |). */
+const MAX_TABLE_COLS = 24;
+
 function isTableLine(line) {
   const t = String(line ?? "").trim();
   if (!t.includes("|")) return false;
   // Script References meta rows (`- file | kind: image | …`) are not tables.
   if (/^[-*+]\s+/.test(t) || /^\d+\.\s+/.test(t)) return false;
-  if (t.startsWith("|")) return true;
+  // Prefer real GFM rows (leading |). Bare pipes in Seedance/prompt prose
+  // used to become mega-tables → Invalid array length on Script open.
+  if (t.startsWith("|")) {
+    const cells = splitPipeRow(t);
+    if (!cells || cells.length < 2) return false;
+    if (cells.length > MAX_TABLE_COLS) return false;
+    return true;
+  }
   const cells = splitPipeRow(t);
-  if (!cells || cells.length < 2) return false;
-  // Avoid code-ish single pipes in prose
-  if (cells.length === 2 && cells.every((c) => c.length > 80)) return false;
+  if (!cells || cells.length < 2 || cells.length > MAX_TABLE_COLS) return false;
+  // Avoid code-ish / prompt pipes in prose
+  if (cells.some((c) => c.length > 80)) return false;
+  if (cells.length === 2 && cells.every((c) => c.length > 40)) return false;
   return true;
 }
 
@@ -83,9 +93,22 @@ function repairPipeTables(text) {
   const lines = text.split("\n");
   const out = [];
   let i = 0;
+  let inFence = false;
 
   while (i < lines.length) {
     const line = lines[i];
+    if (/^```/.test(line.trim())) {
+      inFence = !inFence;
+      out.push(line);
+      i += 1;
+      continue;
+    }
+    if (inFence) {
+      out.push(line);
+      i += 1;
+      continue;
+    }
+
     const pipeish = isTableLine(line) || isSeparatorOnlyLine(line);
 
     if (!pipeish) {
@@ -117,12 +140,12 @@ function repairTableBlock(rows) {
   const headerCells = splitPipeRow(rows[headerIdx]);
   if (!headerCells?.length) return rows.map((r) => normalizePipeRow(r));
 
-  let colCount = headerCells.length;
+  let colCount = Math.min(MAX_TABLE_COLS, headerCells.length);
 
   if (colCount < 2) return rows.map((r) => normalizePipeRow(r));
 
   const fixed = [formatPipeRow(headerCells.slice(0, colCount))];
-  fixed.push(formatPipeRow(Array(colCount).fill("---")));
+  fixed.push(formatPipeRow(Array.from({ length: colCount }, () => "---")));
 
   for (let i = 0; i < rows.length; i++) {
     if (i === headerIdx) continue;
@@ -171,8 +194,12 @@ export function stabilizeStreamingMarkdown(raw) {
   const last2 = lines[lines.length - 1]?.trim() ?? "";
   if (isTableLine(last2) && !lines.some((l) => isSeparatorRow(l) || isSeparatorOnlyLine(l))) {
     const cells = splitPipeRow(last2);
-    if (cells && cells.length >= 2) {
-      lines.splice(lines.length - 1, 0, formatPipeRow(Array(cells.length).fill("---")));
+    if (cells && cells.length >= 2 && cells.length <= MAX_TABLE_COLS) {
+      lines.splice(
+        lines.length - 1,
+        0,
+        formatPipeRow(Array.from({ length: cells.length }, () => "---")),
+      );
       s = lines.join("\n");
     }
   }
@@ -194,12 +221,13 @@ export function normalizeMarkdown(raw) {
     return `${sep}\n| ${cell}${cell.includes("|") ? "" : " |"}`;
   });
 
-  // Ensure pipe rows have closing |
+  // Ensure pipe rows have closing | (real tables only — not prompt pipe soup)
   s = s.replace(/^([^\n]*\|[^\n]+)$/gm, (line) => {
     const t = line.trim();
     if (!t.includes("|")) return line;
+    if (!isTableLine(t) && !isSeparatorOnlyLine(t) && !isSeparatorRow(t)) return line;
     const cells = splitPipeRow(t);
-    if (!cells || cells.length < 2) return line;
+    if (!cells || cells.length < 2 || cells.length > MAX_TABLE_COLS) return line;
     return formatPipeRow(cells);
   });
 

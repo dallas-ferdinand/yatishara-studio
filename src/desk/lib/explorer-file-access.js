@@ -1,5 +1,4 @@
 /** Per-user recent Files activity for Places → Recents (opens, creates, edits, folders). */
-import { getSession } from "@mos-app/api.js";
 import { normalizeExplorerPath } from "./explorer-pins.js";
 
 const KEY_PREFIX = "yatishara-studio-file-access";
@@ -13,9 +12,10 @@ export const RECENT_ACTIVITY = {
 
 const ALLOWED_ACTIVITY = new Set(Object.values(RECENT_ACTIVITY));
 
+/** Require explicit Convex user id — never fall back to a shared unscoped key. */
 function storageKey(userId) {
-  const id = userId ?? getSession()?.userId ?? null;
-  return id ? `${KEY_PREFIX}-${id}` : KEY_PREFIX;
+  const id = typeof userId === "string" ? userId.trim() : "";
+  return id ? `${KEY_PREFIX}-${id}` : null;
 }
 
 function isExcludedKind(studioKind) {
@@ -53,8 +53,10 @@ function normalizeFileAccess(raw) {
 }
 
 export function loadRecentFiles(userId) {
+  const key = storageKey(userId);
+  if (!key) return [];
   try {
-    const raw = JSON.parse(localStorage.getItem(storageKey(userId)) ?? "[]");
+    const raw = JSON.parse(localStorage.getItem(key) ?? "[]");
     if (!Array.isArray(raw)) return [];
     return raw
       .map(normalizeFileAccess)
@@ -67,12 +69,14 @@ export function loadRecentFiles(userId) {
 }
 
 function saveRecentFiles(rows, userId) {
+  const key = storageKey(userId);
+  if (!key) return [];
   const clean = (rows ?? [])
     .map(normalizeFileAccess)
     .filter(Boolean)
     .sort((a, b) => b.openedAt - a.openedAt)
     .slice(0, RECENT_FILES_LIMIT);
-  localStorage.setItem(storageKey(userId), JSON.stringify(clean));
+  localStorage.setItem(key, JSON.stringify(clean));
   return clean;
 }
 

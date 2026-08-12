@@ -1,5 +1,4 @@
 /** Per-user folder visit tracking for Files nav Recents / Frequent. */
-import { getSession } from "@mos-app/api.js";
 import { normalizeExplorerPath } from "./explorer-pins.js";
 
 const KEY_PREFIX = "yatishara-studio-folder-access";
@@ -9,9 +8,10 @@ const FREQUENT_LIMIT = 5;
 /** Need at least this many visits to appear under Frequent. */
 const FREQUENT_MIN_VISITS = 2;
 
+/** Require explicit Convex user id — never fall back to a shared unscoped key. */
 function storageKey(userId) {
-  const id = userId ?? getSession()?.userId ?? null;
-  return id ? `${KEY_PREFIX}-${id}` : KEY_PREFIX;
+  const id = typeof userId === "string" ? userId.trim() : "";
+  return id ? `${KEY_PREFIX}-${id}` : null;
 }
 
 function normalizeAccess(raw) {
@@ -29,8 +29,10 @@ function normalizeAccess(raw) {
 }
 
 export function loadFolderAccess(userId) {
+  const key = storageKey(userId);
+  if (!key) return [];
   try {
-    const raw = JSON.parse(localStorage.getItem(storageKey(userId)) ?? "[]");
+    const raw = JSON.parse(localStorage.getItem(key) ?? "[]");
     if (!Array.isArray(raw)) return [];
     return raw.map(normalizeAccess).filter(Boolean);
   } catch {
@@ -39,8 +41,10 @@ export function loadFolderAccess(userId) {
 }
 
 function saveFolderAccess(rows, userId) {
+  const key = storageKey(userId);
+  if (!key) return [];
   const clean = (rows ?? []).map(normalizeAccess).filter(Boolean);
-  localStorage.setItem(storageKey(userId), JSON.stringify(clean));
+  localStorage.setItem(key, JSON.stringify(clean));
   return clean;
 }
 

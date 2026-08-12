@@ -1,3 +1,9 @@
+import {
+  STUDIO_OPEN_TABS_BASE,
+  STUDIO_COMPOSER_CONTEXTS_BASE,
+  STUDIO_DEFAULT_TAB_BASE,
+} from "@/studio/lib/studio-account-storage";
+
 /** Keys / prefixes that sticky Studio tabs, panels, and build stamps live under. */
 const STUDIO_STORAGE_PREFIXES = [
   "yatishara-studio",
@@ -8,7 +14,9 @@ const STUDIO_STORAGE_PREFIXES = [
 ] as const;
 
 const STUDIO_STORAGE_EXACT = [
-  "yatishara-studio-open-tabs-v1",
+  STUDIO_OPEN_TABS_BASE,
+  STUDIO_COMPOSER_CONTEXTS_BASE,
+  STUDIO_DEFAULT_TAB_BASE,
   "yatishara-studio-main-panel-sizes",
   "yatishara-studio-custom-cursor",
   "yatishara-studio-build",

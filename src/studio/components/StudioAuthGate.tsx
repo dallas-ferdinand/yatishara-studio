@@ -32,6 +32,10 @@ import {
   studioResetHref,
 } from "@/studio/lib/studio-client-reset";
 import {
+  stripDocumentTabsFromOpenSession,
+  studioOpenTabsKey,
+} from "@/studio/lib/studio-account-storage";
+import {
   STUDIO_START_SELLER_APPLY_KEY,
   readStoredStudioDefaultTab,
   writeStoredStudioDefaultTab,
@@ -104,30 +108,7 @@ class StudioShellErrorBoundary extends Component<
           sessionStorage.setItem(key, String(Date.now()));
           if (/Invalid array length|RangeError/i.test(String(error?.message ?? ""))) {
             try {
-              const raw = window.localStorage.getItem("yatishara-studio-open-tabs-v1");
-              if (raw) {
-                const parsed = JSON.parse(raw);
-                const openTabs = Array.isArray(parsed?.openTabs)
-                  ? parsed.openTabs.filter(
-                      (tab: unknown) =>
-                        typeof tab === "string" && !tab.startsWith("document:"),
-                    )
-                  : [];
-                const activeTab =
-                  typeof parsed?.activeTab === "string" &&
-                  !String(parsed.activeTab).startsWith("document:")
-                    ? parsed.activeTab
-                    : openTabs[0] || "composer";
-                window.localStorage.setItem(
-                  "yatishara-studio-open-tabs-v1",
-                  JSON.stringify({
-                    ...parsed,
-                    openTabs,
-                    activeTab,
-                    snapshots: {},
-                  }),
-                );
-              }
+              stripDocumentTabsFromOpenSession();
             } catch {
               /* ignore */
             }
@@ -303,6 +284,7 @@ export function StudioAuthGate({
 
   // Existing users already have a workspace session — skip the chooser silently.
   // Brand-new accounts (no tab session) see the first-run intent picker.
+  // When needsStudioIntent is true, currentUser is already non-null — read _id inside.
   useEffect(() => {
     if (!needsStudioIntent) {
       intentHandledRef.current = false;
@@ -313,9 +295,8 @@ export function StudioAuthGate({
     if (intentHandledRef.current) return;
     intentHandledRef.current = true;
     try {
-      const hasTabs = Boolean(
-        window.localStorage.getItem("yatishara-studio-open-tabs-v1"),
-      );
+      const tabsKey = studioOpenTabsKey(currentUser?._id);
+      const hasTabs = Boolean(tabsKey && window.localStorage.getItem(tabsKey));
       if (hasTabs) {
         setIntentBackfilling(true);
         setShowIntentChooser(false);
@@ -384,6 +365,7 @@ export function StudioAuthGate({
 }
 
 function StudioIntentChooser() {
+  const currentUser = useQuery(api.users.current, {});
   const setDefaultStudioTab = useMutation(api.users.setDefaultStudioTab);
   const [pending, setPending] = useState<StudioDefaultTab | "sell" | null>(null);
   const [error, setError] = useState("");
@@ -396,8 +378,9 @@ function StudioIntentChooser() {
       if (startSeller) {
         window.localStorage.setItem(STUDIO_START_SELLER_APPLY_KEY, "1");
       }
-      // Seed first open so boot lands on the chosen tab.
-      window.localStorage.removeItem("yatishara-studio-open-tabs-v1");
+      // Seed first open so boot lands on the chosen tab (this account only).
+      const tabsKey = studioOpenTabsKey(currentUser?._id);
+      if (tabsKey) window.localStorage.removeItem(tabsKey);
       await setDefaultStudioTab({ tab, markIntentChosen: true });
     } catch (err: unknown) {
       setError(friendlyConvexError(err, "Could not save your choice"));
