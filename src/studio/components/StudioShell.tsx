@@ -9543,8 +9543,12 @@ export function StudioShell({
           [data-panel-group-direction="horizontal"] > [data-panel-resize-handle-id],
           [role="separator"][aria-orientation="vertical"],
           .studio-editor-playhead,
+          .studio-editor-playhead-grip,
+          .studio-editor-clip-snip,
           .studio-editor-clip-handle,
           .studio-editor-joint-handle,
+          .studio-editor-ruler,
+          .studio-editor-track-lane,
           .studio-side-sheet-resize
         ) {
           cursor: var(--studio-cursor-resize-x, ew-resize) !important;
