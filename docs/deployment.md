@@ -39,6 +39,7 @@ Do not run production deploy commands from local development unless intentionall
 
 ## Coolify/VPS Notes
 
+- Coolify UI/API public host: `https://coolify.yatishara.com` — Traefik file route `/data/coolify/proxy/dynamic/coolify-ui.yaml` → `http://coolify:8080`. Coolify compose has **no** Traefik labels; without that file the host hits `default_redirect_503` (“no available server”) and GHA `deploy-coolify` fails with HTTP 503. Local API: `http://127.0.0.1:8000`.
 - Build pack: **dockerimage** (prebuilt GHCR image). Not dockerfile-on-VPS.
 - Image: `ghcr.io/dallas-ferdinand/yatishara-studio` (public package).
 - `Dockerfile` uses Node 22 Alpine, `npm ci`, `npm run build`, and Next standalone output — built in GitHub Actions.
