@@ -98,7 +98,6 @@ import {
   useRef,
   useState,
   useCallback,
-  useSyncExternalStore,
   memo,
 } from "react";
 import { MOBILE_BREAKPOINT, useMobileLayout } from "@/hooks/use-mobile-layout";
@@ -138,11 +137,6 @@ import {
   StudioChatAudioPlayerLoading,
 } from "./StudioChatAudioPlayer";
 import { isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
-import {
-  DEFAULT_PREVIEW_LOAD_QUALITY,
-  PREVIEW_LOAD_QUALITY_EVENT,
-  readPreviewLoadQuality,
-} from "@/studio/editor/previewLoadQuality";
 import {
   STUDIO_DEFAULT_TAB_LABELS,
   STUDIO_DEFAULT_TAB_VALUES,
@@ -32702,29 +32696,15 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
   );
 }
 
-function subscribePreviewLoadQuality(onStoreChange) {
-  if (typeof window === "undefined") return () => {};
-  const onChange = () => onStoreChange();
-  window.addEventListener("storage", onChange);
-  window.addEventListener(PREVIEW_LOAD_QUALITY_EVENT, onChange);
-  return () => {
-    window.removeEventListener("storage", onChange);
-    window.removeEventListener(PREVIEW_LOAD_QUALITY_EVENT, onChange);
-  };
-}
-
 function StudioAssetPreview({ entry }) {
   const convex = useConvex();
-  const previewLoadQuality = useSyncExternalStore(
-    subscribePreviewLoadQuality,
-    readPreviewLoadQuality,
-    () => DEFAULT_PREVIEW_LOAD_QUALITY,
-  );
   const kind = inferAttachmentKind(entry);
   const [previewExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   const needsFullSignedRead =
     Boolean(entry.studioId) &&
     (!entry.mediaUrl || isBunnyOptimizedUrl(entry.mediaUrl));
+  // Full-view image tabs/lightboxes always load Bunny quality=100.
+  // Editor timeline proxy quality (40–100%) is separate and must not affect this.
   const needsImagePreviewSign = Boolean(entry.studioId) && kind === "image";
   const signedMediaUrl = useQuery(
     api.assets.signedReadUrl,
@@ -32732,7 +32712,7 @@ function StudioAssetPreview({ entry }) {
       ? {
           assetId: entry.studioId,
           expiresUnix: previewExpiresUnix,
-          quality: previewLoadQuality,
+          quality: 100,
         }
       : needsFullSignedRead
         ? { assetId: entry.studioId, expiresUnix: previewExpiresUnix }

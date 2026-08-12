@@ -141,6 +141,36 @@
   object-fit: cover;
 }
 
+.studio-gen-tile-img-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.studio-gen-tile-img-wrap img,
+.studio-gen-tile-img-wrap video {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
+.studio-gen-tile-img-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  pointer-events: none;
+}
+
+.studio-gen-tile-img-wrap:not(.is-ready) img,
+.studio-gen-tile-img-wrap:not(.is-ready) video {
+  opacity: 0;
+}
+
 .studio-gen-tile-media.is-square,
 .studio-gen-tile-media.is-audio,
 .studio-gen-tile.is-audio-ready .studio-gen-tile-media {

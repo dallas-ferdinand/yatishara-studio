@@ -13,6 +13,7 @@ import {
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { orbSeedForVoice } from "./StudioOrbPlayButton";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
+import { fullQualityUrl, thumbnailDisplayUrl } from "@/studio/lib/mediaUrls";
 import "./studio-create-library.css";
 
 const ImageZoomViewer = dynamic(
@@ -118,6 +119,31 @@ export function StudioCreateLibrary({
       : "skip",
   );
 
+  const lightboxAssetId = useMemo((): Id<"assets"> | null => {
+    if (!lightboxJobId) return null;
+    if (lightboxDetail?.assetId) return lightboxDetail.assetId as Id<"assets">;
+    const tile = (firstPage?.tiles ?? []).find((row) => row.jobId === lightboxJobId);
+    return (tile?.assetId as Id<"assets"> | undefined) ?? null;
+  }, [firstPage?.tiles, lightboxDetail?.assetId, lightboxJobId]);
+
+  const lightboxKindHint =
+    lightboxDetail?.kind ||
+    (firstPage?.tiles ?? []).find((row) => row.jobId === lightboxJobId)?.kind;
+
+  // Full-view Create lightbox: always Bunny quality=100 (never grid thumb transform).
+  const lightboxFullUrl = useQuery(
+    api.assets.signedReadUrl,
+    lightboxJobId &&
+      lightboxAssetId &&
+      lightboxKindHint === "image"
+      ? {
+          assetId: lightboxAssetId,
+          expiresUnix,
+          quality: 100,
+        }
+      : "skip",
+  );
+
   useEffect(() => {
     if (!firstPage) return;
     if (moreTiles.length === 0) {
@@ -193,11 +219,20 @@ export function StudioCreateLibrary({
     const stage = detailReady?.stage || tile?.stage;
     if (stage && stage !== "done") return null;
 
-    const thumbUrl = detailReady?.thumbnailUrl || tile?.thumbnailUrl;
-    const url =
+    const thumbUrl =
+      thumbnailDisplayUrl(detailReady?.thumbnailUrl, tile?.thumbnailUrl) ||
+      detailReady?.thumbnailUrl ||
+      tile?.thumbnailUrl;
+    const playable =
+      fullQualityUrl(
+        lightboxKindHint === "image" ? lightboxFullUrl : undefined,
+        detailReady?.playableUrl,
+        tile ? previewUrl(tile) : undefined,
+      ) ||
+      (lightboxKindHint === "image" ? lightboxFullUrl : undefined) ||
       detailReady?.playableUrl ||
-      (tile ? previewUrl(tile) : undefined) ||
-      thumbUrl;
+      (tile ? previewUrl(tile) : undefined);
+    const url = playable || thumbUrl;
 
     if (!kind) {
       return { jobId: lightboxJobId, name, kind: "image", loading: true };
@@ -215,7 +250,7 @@ export function StudioCreateLibrary({
       name,
       ...(durationSeconds != null ? { durationSeconds } : {}),
     };
-  }, [lightboxJobId, tiles, lightboxDetail]);
+  }, [lightboxJobId, tiles, lightboxDetail, lightboxFullUrl, lightboxKindHint]);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -327,8 +362,16 @@ export function StudioCreateLibrary({
             </div>
           ) : (
             <ImageZoomViewer
-              thumbUrl={lightbox.thumbUrl || lightbox.url}
-              fullUrl={lightbox.url || lightbox.thumbUrl}
+              thumbUrl={
+                thumbnailDisplayUrl(lightbox.thumbUrl, lightbox.url) ||
+                lightbox.thumbUrl ||
+                lightbox.url
+              }
+              fullUrl={
+                fullQualityUrl(lightbox.url) ||
+                lightbox.url ||
+                lightbox.thumbUrl
+              }
               onDownload={downloadLightbox}
             />
           )}

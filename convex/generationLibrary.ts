@@ -176,6 +176,12 @@ async function signTileMedia(
   expiresUnix: number | undefined,
 ): Promise<{ thumbnailUrl?: string; playableUrl?: string }> {
   if (!asset || expiresUnix === undefined) return {};
+  // Bunny path exists before the PUT finishes (storageStatus=pending). Signing
+  // early makes the Create grid <img> 404 once; React keeps the same URL after
+  // ready, so the thumb stays blank until remount/tab switch.
+  if (asset.storageStatus !== undefined && asset.storageStatus !== "ready") {
+    return {};
+  }
   const thumbPath = assetThumbnailPath(asset);
   // Real image poster only — never treat a video file URL as an <img> thumb.
   const thumbnailUrl = thumbPath

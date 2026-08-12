@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -20,6 +26,128 @@ import {
 } from "./StudioChatAudioPlayer";
 import { orbSeedForVoice } from "./StudioOrbPlayButton";
 import { MediaLoadWave } from "./media-load-frame";
+
+/** Fresh uploads often 404 once before Bunny catches up — retry instead of blank. */
+function GenTileImg({ src }: { src: string }) {
+  const [retryTick, setRetryTick] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const attemptRef = useRef(0);
+  const retryTimerRef = useRef(0);
+
+  useEffect(() => {
+    attemptRef.current = 0;
+    window.clearTimeout(retryTimerRef.current);
+    setLoaded(false);
+    setFailed(false);
+    return () => window.clearTimeout(retryTimerRef.current);
+  }, [src]);
+
+  if (failed) return null;
+
+  return (
+    <span className={`studio-gen-tile-img-wrap${loaded ? " is-ready" : ""}`}>
+      {!loaded ? (
+        <span className="studio-gen-tile-img-skeleton" aria-hidden="true">
+          <MediaLoadWave
+            className="studio-gen-tile-ghost-loader"
+            size="lg"
+            appearance="light"
+            ring
+          />
+        </span>
+      ) : null}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        key={`${src}::${retryTick}`}
+        src={src}
+        alt=""
+        draggable={false}
+        decoding="async"
+        onLoad={() => {
+          attemptRef.current = 0;
+          queueMicrotask(() => setLoaded(true));
+        }}
+        onError={() => {
+          const attempt = attemptRef.current + 1;
+          attemptRef.current = attempt;
+          if (attempt > 5) {
+            queueMicrotask(() => {
+              setFailed(true);
+              setLoaded(false);
+            });
+            return;
+          }
+          window.clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = window.setTimeout(
+            () => setRetryTick((tick) => tick + 1),
+            Math.min(4000, 350 * 2 ** (attempt - 1)),
+          );
+        }}
+      />
+    </span>
+  );
+}
+
+function GenTileVideo({ src }: { src: string }) {
+  const [retryTick, setRetryTick] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const attemptRef = useRef(0);
+  const retryTimerRef = useRef(0);
+
+  useEffect(() => {
+    attemptRef.current = 0;
+    window.clearTimeout(retryTimerRef.current);
+    setLoaded(false);
+    setFailed(false);
+    return () => window.clearTimeout(retryTimerRef.current);
+  }, [src]);
+
+  if (failed) return null;
+
+  return (
+    <span className={`studio-gen-tile-img-wrap${loaded ? " is-ready" : ""}`}>
+      {!loaded ? (
+        <span className="studio-gen-tile-img-skeleton" aria-hidden="true">
+          <MediaLoadWave
+            className="studio-gen-tile-ghost-loader"
+            size="lg"
+            appearance="light"
+            ring
+          />
+        </span>
+      ) : null}
+      <video
+        key={`${src}::${retryTick}`}
+        src={src}
+        muted
+        playsInline
+        preload="metadata"
+        onLoadedData={() => {
+          attemptRef.current = 0;
+          queueMicrotask(() => setLoaded(true));
+        }}
+        onError={() => {
+          const attempt = attemptRef.current + 1;
+          attemptRef.current = attempt;
+          if (attempt > 5) {
+            queueMicrotask(() => {
+              setFailed(true);
+              setLoaded(false);
+            });
+            return;
+          }
+          window.clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = window.setTimeout(
+            () => setRetryTick((tick) => tick + 1),
+            Math.min(4000, 350 * 2 ** (attempt - 1)),
+          );
+        }}
+      />
+    </span>
+  );
+}
 
 export type GenerationLibraryTile = {
   jobId: string;
@@ -111,15 +239,17 @@ export function StudioGenerationTile({
     tile.kind === "image"
       ? posterUrl || tile.playableUrl || tile.thumbnailUrl
       : posterUrl;
+  const hasDeliveredMedia =
+    tile.kind === "audio"
+      ? Boolean(tile.playableUrl)
+      : tile.kind === "video"
+        ? Boolean(videoSrc || posterUrl)
+        : Boolean(imageSrc);
+  // Job can flip to done before Bunny storageStatus=ready (no signed URLs yet).
+  const awaitingMedia = tile.stage === "done" && !failed && !hasDeliveredMedia;
+  const showBusyChrome = busy || awaitingMedia;
   const canPreview =
-    tile.stage === "done" &&
-    Boolean(
-      tile.kind === "audio"
-        ? tile.playableUrl
-        : tile.kind === "video"
-          ? videoSrc || posterUrl
-          : imageSrc,
-    );
+    tile.stage === "done" && hasDeliveredMedia;
   const canUpscale = tile.kind === "image" && tile.stage === "done" && Boolean(tile.assetId);
   const canVideo = tile.kind === "image" && tile.stage === "done" && Boolean(tile.assetId);
 
@@ -171,7 +301,7 @@ export function StudioGenerationTile({
     squareFrame ? "is-square" : "",
     tile.kind === "audio" ? "is-audio" : "",
     doneAudio ? "is-audio-player" : "",
-    busy ? "is-busy" : "",
+    showBusyChrome ? "is-busy" : "",
     failed ? "is-failed" : "",
   ]
     .filter(Boolean)
@@ -195,30 +325,16 @@ export function StudioGenerationTile({
         />
       </div>
     );
-  } else if (tile.kind === "audio" && busy) {
+  } else if (tile.kind === "audio" && (busy || awaitingMedia)) {
     mediaBody = (
       <div className="studio-gen-tile-audio is-loading">
         <StudioChatAudioPlayerLoading
-          label={tile.stage}
-          ariaLabel={`generating audio (${tile.stage})`}
+          label={awaitingMedia ? "saving" : tile.stage}
+          ariaLabel={`generating audio (${awaitingMedia ? "saving" : tile.stage})`}
         />
       </div>
     );
-  } else if (tile.kind === "video" && !failed && (videoSrc || posterUrl)) {
-    mediaBody = videoSrc && !posterUrl ? (
-      <video src={videoSrc} muted playsInline preload="metadata" />
-    ) : posterUrl ? (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={posterUrl} alt="" draggable={false} />
-    ) : (
-      <video src={videoSrc} muted playsInline preload="metadata" />
-    );
-  } else if (tile.kind === "image" && !failed && imageSrc) {
-    mediaBody = (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={imageSrc} alt="" draggable={false} />
-    );
-  } else if (busy) {
+  } else if (busy || awaitingMedia) {
     mediaBody = (
       <div className="studio-gen-tile-progress">
         <MediaLoadWave
@@ -227,9 +343,21 @@ export function StudioGenerationTile({
           appearance="light"
           ring
         />
-        <span className="studio-gen-tile-progress-label">{tile.stage}</span>
+        <span className="studio-gen-tile-progress-label">
+          {awaitingMedia ? "saving" : tile.stage}
+        </span>
       </div>
     );
+  } else if (tile.kind === "video" && !failed && (videoSrc || posterUrl)) {
+    mediaBody = videoSrc && !posterUrl ? (
+      <GenTileVideo src={videoSrc} />
+    ) : posterUrl ? (
+      <GenTileImg src={posterUrl} />
+    ) : videoSrc ? (
+      <GenTileVideo src={videoSrc} />
+    ) : null;
+  } else if (tile.kind === "image" && !failed && imageSrc) {
+    mediaBody = <GenTileImg src={imageSrc} />;
   }
 
   return (
@@ -237,7 +365,7 @@ export function StudioGenerationTile({
       ref={rootRef}
       className={`studio-gen-tile${selected ? " is-selected" : ""}${
         overlayOpen ? " is-overlay-open" : ""
-      }${failed ? " is-failed" : ""}${busy ? " is-busy" : ""}${
+      }${failed ? " is-failed" : ""}${showBusyChrome ? " is-busy" : ""}${
         doneAudio ? " is-audio-ready" : ""
       }`}
       data-studio-no-press="1"
