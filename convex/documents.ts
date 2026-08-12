@@ -74,13 +74,8 @@ export const create = authedMutation({
     await requireFolderOwnerOrEditShare(ctx, args.folderId);
     const now = Date.now();
     const title = args.title.trim();
-    const content = String(args.contentMarkdown ?? "").trim();
-    // Scripts/prompts must not land as empty shells — agent + Files New both use this path.
-    if ((!content || content.length < 20) && /prompt|script/i.test(title)) {
-      throw new Error(
-        "Script content is empty. Pass contentMarkdown with the full prompt/script body.",
-      );
-    }
+    // Empty shells are OK for Files UI (New Script → rename → edit).
+    // Agent empty Prompt/Script creates are blocked in studioApiInternal + agentSchemas.
     return await ctx.db.insert("documents", {
       ownerId: ctx.user._id,
       folderId: args.folderId,

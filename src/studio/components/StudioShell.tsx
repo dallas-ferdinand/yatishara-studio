@@ -1501,6 +1501,8 @@ export function StudioShell({
   /** New create-menu items stay pinned at top until named or dismissed. */
   const [inlineRenameStudioId, setInlineRenameStudioId] = useState(null);
   const [inlineRenamePinToTop, setInlineRenamePinToTop] = useState(false);
+  /** Optimistic row so rename UI shows before Convex list catches up. */
+  const [pendingInlineEntry, setPendingInlineEntry] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [activeAgentThreadId, setActiveAgentThreadId] = useState(null);
   const [mobileAppMenuOpen, setMobileAppMenuOpen] = useState(false);
@@ -4047,6 +4049,12 @@ export function StudioShell({
   const explorerCurrentEntries = useMemo(() => {
     const base = filteredCurrentEntries;
     let entries = [...(base.entries ?? [])];
+    if (
+      pendingInlineEntry?.studioId &&
+      !entries.some((entry) => entry.studioId === pendingInlineEntry.studioId)
+    ) {
+      entries = [pendingInlineEntry, ...entries];
+    }
     if (inlineRenameStudioId && inlineRenamePinToTop) {
       const idx = entries.findIndex((entry) => entry.studioId === inlineRenameStudioId);
       if (idx > 0) {
@@ -4066,10 +4074,19 @@ export function StudioShell({
     return { ...base, entries };
   }, [
     filteredCurrentEntries,
+    pendingInlineEntry,
     inlineRenameStudioId,
     inlineRenamePinToTop,
     outgoingShareKeySet,
   ]);
+
+  useEffect(() => {
+    if (!pendingInlineEntry?.studioId) return;
+    const appears = (displayCurrentEntries.entries ?? []).some(
+      (entry) => entry.studioId === pendingInlineEntry.studioId,
+    );
+    if (appears) setPendingInlineEntry(null);
+  }, [displayCurrentEntries.entries, pendingInlineEntry]);
 
   const searchState = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
@@ -4641,6 +4658,7 @@ export function StudioShell({
   function clearInlineRename() {
     setInlineRenameStudioId(null);
     setInlineRenamePinToTop(false);
+    setPendingInlineEntry(null);
   }
 
   function startInlineRename(entry) {
@@ -4664,7 +4682,27 @@ export function StudioShell({
   }
 
   async function createInlineStudioItem(kind) {
-    if (!activeFolder || isTrashNav) return;
+    if (isTrashNav) {
+      toast.error("Can't create items in Trash.");
+      return;
+    }
+    if (isRecentsView) {
+      toast.error("Open a folder first — Recents is a view, not a place to create.");
+      return;
+    }
+    if (
+      !activeFolder ||
+      !activeFolder._id ||
+      activeFolder._id === TRASH_FOLDER_ID ||
+      activeFolder._id === RECENTS_FOLDER_ID
+    ) {
+      toast.error("Open a folder first.");
+      return;
+    }
+    if (selectedFolder === undefined && activeFolderId && !folderByIdRef.current.get(activeFolderId)) {
+      toast.message("Still loading this folder…");
+      return;
+    }
     ensureFilesViewForInlineCreate();
     const exists = entryNamesSet(displayCurrentEntries.entries);
     try {
@@ -4676,18 +4714,16 @@ export function StudioShell({
           icon: "Folder",
           color: "#22c55e",
         });
+        const entry = {
+          type: "dir",
+          studioKind: "folder",
+          studioId: id,
+          name,
+          path: `${studioPathForFolder(activeFolder)}/${name}`,
+        };
+        setPendingInlineEntry(entry);
         setRecentFileRows(
-          recordRecentItem(
-            {
-              type: "dir",
-              studioKind: "folder",
-              studioId: id,
-              name,
-              path: `${studioPathForFolder(activeFolder)}/${name}`,
-            },
-            explorerUserId,
-            RECENT_ACTIVITY.created,
-          ),
+          recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
         );
         beginInlineRename(id, { pinToTop: true });
         return;
@@ -4700,18 +4736,16 @@ export function StudioShell({
           title,
           contentMarkdown: "",
         });
+        const entry = {
+          type: "file",
+          studioKind: "document",
+          studioId: id,
+          name: fileName,
+          path: `/Studio/scripts/${id}.md`,
+        };
+        setPendingInlineEntry(entry);
         setRecentFileRows(
-          recordRecentItem(
-            {
-              type: "file",
-              studioKind: "document",
-              studioId: id,
-              name: fileName,
-              path: `/Studio/scripts/${id}.md`,
-            },
-            explorerUserId,
-            RECENT_ACTIVITY.created,
-          ),
+          recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
         );
         beginInlineRename(id, { pinToTop: true });
         return;
@@ -4730,6 +4764,7 @@ export function StudioShell({
           folderId: activeFolder._id,
           updatedAt: wallClockMs(),
         });
+        setPendingInlineEntry(entry);
         setTabEntrySnapshots((snapshots) => ({
           ...snapshots,
           [`videoEdit:${result.projectId}`]: entry,
@@ -4748,23 +4783,22 @@ export function StudioShell({
           type: "character",
           name,
         });
+        const entry = {
+          type: "file",
+          studioKind: "element",
+          studioId: id,
+          name: displayName,
+          path: `/Studio/elements/${id}.element`,
+        };
+        setPendingInlineEntry(entry);
         setRecentFileRows(
-          recordRecentItem(
-            {
-              type: "file",
-              studioKind: "element",
-              studioId: id,
-              name: displayName,
-              path: `/Studio/elements/${id}.element`,
-            },
-            explorerUserId,
-            RECENT_ACTIVITY.created,
-          ),
+          recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
         );
         beginInlineRename(id, { pinToTop: true });
         return;
       }
     } catch (error) {
+      setPendingInlineEntry(null);
       toast.error(friendlyConvexError(error, "Could not create item"));
     }
   }
@@ -6195,52 +6229,68 @@ export function StudioShell({
   }
 
   async function createStudioItem(values) {
-    if (!activeFolder || !values?.name?.trim()) return;
-    if (values.kind === "folder") {
-      const id = await createFolder({
-        parentId: activeFolder._id,
-        name: values.name.trim(),
-        icon: "Folder",
-        color: "#22c55e",
-      });
-      setRecentFileRows(
-        recordRecentItem(
-          {
-            type: "dir",
-            studioKind: "folder",
-            studioId: id,
-            name: values.name.trim(),
-            path: `${studioPathForFolder(activeFolder)}/${values.name.trim()}`,
-          },
-          explorerUserId,
-          RECENT_ACTIVITY.created,
-        ),
-      );
-      setActiveFolderId(id);
-      setNavTrail((trail) => [...trail, { id, name: values.name.trim() }]);
+    if (!activeFolder || !values?.name?.trim()) {
+      toast.error("Open a folder and enter a name.");
       return;
     }
-    if (values.kind === "script") {
-      const id = await createDocument({
-        folderId: activeFolder._id,
-        title: values.name.trim(),
-        contentMarkdown: "",
-      });
-      setRecentFileRows(
-        recordRecentItem(
-          {
-            type: "file",
-            studioKind: "document",
-            studioId: id,
-            name: `${values.name.trim()}.md`,
-            path: `/Studio/scripts/${id}.md`,
-          },
-          explorerUserId,
-          RECENT_ACTIVITY.created,
-        ),
-      );
-      openTab(`document:${id}`);
+    if (
+      activeFolder._id === TRASH_FOLDER_ID ||
+      activeFolder._id === RECENTS_FOLDER_ID ||
+      isRecentsView ||
+      isTrashNav
+    ) {
+      toast.error("Open a normal folder to create here.");
       return;
+    }
+    try {
+      if (values.kind === "folder") {
+        const id = await createFolder({
+          parentId: activeFolder._id,
+          name: values.name.trim(),
+          icon: "Folder",
+          color: "#22c55e",
+        });
+        setRecentFileRows(
+          recordRecentItem(
+            {
+              type: "dir",
+              studioKind: "folder",
+              studioId: id,
+              name: values.name.trim(),
+              path: `${studioPathForFolder(activeFolder)}/${values.name.trim()}`,
+            },
+            explorerUserId,
+            RECENT_ACTIVITY.created,
+          ),
+        );
+        setActiveFolderId(id);
+        setNavTrail((trail) => [...trail, { id, name: values.name.trim() }]);
+        return;
+      }
+      if (values.kind === "script") {
+        const id = await createDocument({
+          folderId: activeFolder._id,
+          title: values.name.trim(),
+          contentMarkdown: "",
+        });
+        setRecentFileRows(
+          recordRecentItem(
+            {
+              type: "file",
+              studioKind: "document",
+              studioId: id,
+              name: `${values.name.trim()}.md`,
+              path: `/Studio/scripts/${id}.md`,
+            },
+            explorerUserId,
+            RECENT_ACTIVITY.created,
+          ),
+        );
+        openTab(`document:${id}`);
+        return;
+      }
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not create item"));
     }
   }
 
