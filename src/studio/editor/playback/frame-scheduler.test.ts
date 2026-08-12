@@ -140,4 +140,43 @@ describe("FrameScheduler", () => {
     expect(clock.playing).toBe(true);
     scheduler.stop();
   });
+
+  it("loops to the start instead of stopping at the end", async () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.duration = 2;
+    const plan = compileTimeline(project);
+    let nowSeconds = 0;
+    const clock = new TransportClock(2, () => nowSeconds);
+    clock.seek(1.999);
+    clock.play();
+    const callbacks: FrameRequestCallback[] = [];
+    const times: number[] = [];
+    const scheduler = new FrameScheduler(
+      plan,
+      clock,
+      {
+        prepare: async () => true,
+        render: () => undefined,
+      },
+      {
+        loop: true,
+        requestFrame: (next) => {
+          callbacks.push(next);
+          return callbacks.length;
+        },
+        cancelFrame: () => undefined,
+        onTime: (time) => times.push(time),
+      },
+    );
+
+    scheduler.start();
+    nowSeconds = 0.02;
+    const first = callbacks.shift();
+    first!(0);
+    await settle();
+    expect(clock.playing).toBe(true);
+    expect(clock.currentTime()).toBeCloseTo(0, 3);
+    expect(times.at(-1)).toBeCloseTo(0, 3);
+    scheduler.stop();
+  });
 });

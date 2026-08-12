@@ -26,6 +26,7 @@ import {
 import { transitionJointsOnTrack, visibleTracks } from "./editorTimelineUtils";
 import { computeRippleLayout, isMainStoryTrack, collapsePlacementsForTrack } from "./editorRipple";
 import { clipDuration, formatTimecodeFull, formatTimecodeRuler } from "./editorState";
+import { MIN_CLIP_SEC, quantizeToFrame } from "./projectContract";
 import {
   collectSnapTimes,
   snapClipMove,
@@ -207,8 +208,12 @@ function fadeHandleCentersPx(fadeInSec, fadeOutSec, widthPx, pps) {
   return { inX, outX };
 }
 
+function clipLaneWidthPx(durationSec, pps) {
+  return Math.max(1, durationSec * pps);
+}
+
 function RippleGhostClip({ clip, startTime, pps, media, isDragged }) {
-  const width = Math.max(clipDuration(clip) * pps, 28);
+  const width = clipLaneWidthPx(clipDuration(clip), pps);
   const isVideo = clip.kind === "video" || clip.kind === "image";
   const isText = clip.kind === "text";
   return (
@@ -333,7 +338,7 @@ function SlotDropGhost({ kind, startTime, widthPx, pps }) {
 
 function DropGhost({ preview, pps, mediaById }) {
   if (!preview) return null;
-  const width = Math.max(preview.duration * pps, 28);
+  const width = clipLaneWidthPx(preview.duration, pps);
   const media = preview.assetId ? mediaById?.get(preview.assetId) : null;
   const kind = media?.kind === "audio" ? "audio" : "video";
   return (
@@ -383,7 +388,7 @@ function TimelineClipBlock({
   isPickedUp,
 }) {
   const durationSec = clipDuration(clip);
-  const width = durationSec * pps;
+  const width = clipLaneWidthPx(durationSec, pps);
   const left = (rippleStartTime != null ? rippleStartTime : clip.startTime) * pps;
   const [dragging, setDragging] = useState(null);
   const [lifted, setLifted] = useState(false);
@@ -392,7 +397,7 @@ function TimelineClipBlock({
   /** Timeline diamonds edit picture fades only — audio fades are inspector-only. */
   const supportsPictureFade = clip.kind === "video" || clip.kind === "image";
   const thresholdSec = snapThresholdSec(pps);
-  const widthPx = Math.max(width, 28);
+  const widthPx = width;
   const pictureFadePair = clampAudioFadePair(
     clip.effects?.fadeIn ?? 0,
     clip.effects?.fadeOut ?? 0,
@@ -588,7 +593,7 @@ function TimelineClipBlock({
         });
       } else if (mode === "trim-left") {
         const disableSnap = moveEvent.altKey;
-        const rawTrimIn = Math.min(originTrimOut - 0.05, Math.max(0, originTrimIn + deltaSec));
+        const rawTrimIn = Math.min(originTrimOut - MIN_CLIP_SEC, Math.max(0, originTrimIn + deltaSec));
         const trimDelta = rawTrimIn - originTrimIn;
         const rawStart = Math.max(0, originStart + trimDelta);
         const snapped = snapTrimLeft(clip, rawTrimIn, rawStart, snapTimes, thresholdSec, disableSnap);
@@ -598,7 +603,7 @@ function TimelineClipBlock({
         onTrim(clip.id, snapped.trimIn, originTrimOut, snapped.startTime, true);
       } else if (mode === "trim-right") {
         const disableSnap = moveEvent.altKey;
-        const rawTrimOut = Math.max(originTrimIn + 0.05, originTrimOut + deltaSec);
+        const rawTrimOut = Math.max(originTrimIn + MIN_CLIP_SEC, originTrimOut + deltaSec);
         const snapped = snapTrimRight(clip, rawTrimOut, snapTimes, thresholdSec, disableSnap);
         lastTrimOut = snapped.trimOut;
         onSnapGuide?.(snapped.guide);
@@ -766,7 +771,7 @@ function TimelineClipBlock({
               onPointerDown(event, "trim-right");
             }}
           />
-          {supportsPictureFade && !isPickedUp ? (
+          {supportsPictureFade && !isPickedUp && widthPx >= FADE_HANDLE_HIT_PX * 2 ? (
             <>
               <span
                 className={`studio-editor-clip-fade-handle is-in${fadeInSec > 0 ? " is-active" : ""}`}
@@ -852,7 +857,7 @@ function TransitionJointMarker({
 }) {
   const hasTransition = leftClip?.transitionOut?.type && leftClip.transitionOut.type !== "none";
   const duration = Number(leftClip?.transitionOut?.duration) || 0.5;
-  const widthPx = hasTransition ? Math.max(28, duration * pps) : 18;
+  const widthPx = hasTransition ? Math.max(8, duration * pps) : 4;
   const left = joint.time * pps - widthPx / 2;
 
   const onHandlePointerDown = (event, side) => {
@@ -1068,10 +1073,10 @@ export function EditorTransportBar({
       </div>
       <div className="studio-editor-transport-right">
         <div className="studio-editor-zoom">
-          <button type="button" aria-label="Zoom out" onClick={() => onZoom(Math.max(MIN_PPS, pixelsPerSecond - 12))}>
+          <button type="button" aria-label="Zoom out" onClick={() => onZoom(Math.max(MIN_PPS, Math.round(pixelsPerSecond * 0.9)))}>
             <ZoomOut size={ICON} aria-hidden="true" />
           </button>
-          <button type="button" aria-label="Zoom in" onClick={() => onZoom(Math.min(MAX_PPS, pixelsPerSecond + 12))}>
+          <button type="button" aria-label="Zoom in" onClick={() => onZoom(Math.min(MAX_PPS, Math.round(pixelsPerSecond * 1.12)))}>
             <ZoomIn size={ICON} aria-hidden="true" />
           </button>
         </div>
@@ -1407,11 +1412,13 @@ export function EditorTimeline({
 
       const el = event.currentTarget;
       const apply = (clientX) => {
+        const clamp = (time) =>
+          quantizeToFrame(Math.max(0, Math.min(project.duration, time)));
         if (source === "ruler") {
           // Ruler is scrolled content (marginLeft = rail); rect already includes scroll.
           const rect = el.getBoundingClientRect();
           const x = clientX - rect.left;
-          onSetPlayhead(Math.max(0, Math.min(project.duration, x / pixelsPerSecond)));
+          onSetPlayhead(clamp(x / pixelsPerSecond));
           return;
         }
         if (source === "playhead") {
@@ -1419,10 +1426,10 @@ export function EditorTimeline({
           if (!canvas) return;
           const canvasRect = canvas.getBoundingClientRect();
           const x = clientX - canvasRect.left - TRACK_RAIL_WIDTH;
-          onSetPlayhead(Math.max(0, Math.min(project.duration, x / pixelsPerSecond)));
+          onSetPlayhead(clamp(x / pixelsPerSecond));
           return;
         }
-        onSetPlayhead(timeFromClientX(clientX, el));
+        onSetPlayhead(clamp(timeFromClientX(clientX, el)));
       };
 
       apply(event.clientX);

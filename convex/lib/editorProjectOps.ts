@@ -10,7 +10,7 @@ import {
 } from "./editorEffectContract";
 export const DEFAULT_IMAGE_CLIP_SEC = 3;
 export const DEFAULT_MEDIA_CLIP_SEC = 5;
-export const MIN_CLIP_SEC = 0.05;
+export const MIN_CLIP_SEC = 1 / 30;
 
 export type FrameRatio = "16:9" | "9:16" | "1:1";
 
@@ -520,7 +520,9 @@ export function splitClipAtTime(
   if (clip.kind === "text") throw new Error("Cannot split text clips.");
 
   const clipEnd = clip.startTime + clipDurationSec(clip);
-  if (timeSec <= clip.startTime + MIN_CLIP_SEC || timeSec >= clipEnd - MIN_CLIP_SEC) {
+  const leftDur = timeSec - clip.startTime;
+  const rightDur = clipEnd - timeSec;
+  if (leftDur < MIN_CLIP_SEC - 1e-6 || rightDur < MIN_CLIP_SEC - 1e-6) {
     throw new Error("Split time must be inside the clip (with margin).");
   }
 

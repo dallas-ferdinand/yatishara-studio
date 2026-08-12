@@ -193,7 +193,8 @@ export const TRACK_INSERT_HEIGHT = 1;
 export const TRACK_INSERT_HIT_PX = 16;
 
 export const MIN_PPS = 24;
-export const MAX_PPS = 240;
+/** ~48px per frame at 30fps — enough to land a 1-frame cut. */
+export const MAX_PPS = 1440;
 export const DEFAULT_PPS = 72;
 export const VIDEO_TRACK_HEIGHT = 50;
 export const TEXT_TRACK_HEIGHT = 28;

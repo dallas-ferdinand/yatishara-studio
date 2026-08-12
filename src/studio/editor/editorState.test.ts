@@ -398,3 +398,83 @@ describe("detach_audio", () => {
     );
   });
 });
+
+describe("split_at_playhead one-frame cuts", () => {
+  it("splits one frame from the start of a clip", () => {
+    let state = createInitialState(
+      createEmptyProject({ name: "Test", folderId: "folder1" }),
+    );
+    state = reducer(state, {
+      type: "add_clip",
+      clip: {
+        assetId: "a1",
+        trackId: "track-v1",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 4,
+        sourceDuration: 10,
+        label: "clip",
+        kind: "video",
+      },
+    });
+    const clipId = state.project.clips[0]!.id;
+    state = reducer(state, { type: "select_clip", clipId });
+    state = reducer(state, { type: "set_playhead", time: 1 / 30 });
+    state = reducer(state, { type: "split_at_playhead" });
+
+    const clips = [...state.project.clips].sort((a, b) => a.startTime - b.startTime);
+    expect(clips).toHaveLength(2);
+    expect(clipDuration(clips[0]!)).toBeCloseTo(1 / 30, 5);
+    expect(clips[1]!.startTime).toBeCloseTo(1 / 30, 5);
+  });
+
+  it("does not split shorter than one frame from an edge", () => {
+    let state = createInitialState(
+      createEmptyProject({ name: "Test", folderId: "folder1" }),
+    );
+    state = reducer(state, {
+      type: "add_clip",
+      clip: {
+        assetId: "a1",
+        trackId: "track-v1",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 4,
+        sourceDuration: 10,
+        label: "clip",
+        kind: "video",
+      },
+    });
+    const clipId = state.project.clips[0]!.id;
+    state = reducer(state, { type: "select_clip", clipId });
+    state = reducer(state, { type: "set_playhead", time: 0.01 });
+    state = reducer(state, { type: "split_at_playhead" });
+    expect(state.project.clips).toHaveLength(1);
+  });
+});
+
+describe("contentEndTime", () => {
+  it("is the last clip edge, not the 8s canvas floor", async () => {
+    const { contentEndTime, playbackEndTime } = await import("./editorState");
+    let state = createInitialState(
+      createEmptyProject({ name: "Test", folderId: "folder1" }),
+    );
+    expect(contentEndTime(state.project)).toBe(0);
+    state = reducer(state, {
+      type: "add_clip",
+      clip: {
+        assetId: "a1",
+        trackId: "track-v1",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 3.2,
+        sourceDuration: 10,
+        label: "clip",
+        kind: "video",
+      },
+    });
+    expect(contentEndTime(state.project)).toBeCloseTo(3.2, 5);
+    expect(playbackEndTime(state.project)).toBeCloseTo(3.2, 5);
+    expect(state.project.duration).toBeGreaterThan(3.2);
+  });
+});

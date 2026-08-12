@@ -1034,7 +1034,7 @@
   border: none;
   background: var(--mos-panel, #f5f5f7);
   color: var(--mos-text, #111314);
-  z-index: 6;
+  z-index: 3;
   display: grid;
   place-items: center;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -1048,7 +1048,8 @@
 .studio-editor-joint.is-adder::before {
   content: "";
   position: absolute;
-  inset: -14px -10px;
+  /* Grow the hover target vertically only — horizontal grow ate tiny cuts. */
+  inset: -14px 0;
   border-radius: 8px;
 }
 
@@ -2916,7 +2917,8 @@ body.is-drag-cursor .studio-editor-clip {
   overflow: visible;
   border: none;
   box-shadow: none;
-  /* No isolation/z-index here — selection chrome must stack above transition overlays. */
+  /* Above adder joints so 1-frame cuts stay clickable. */
+  z-index: 4;
 }
 
 .studio-editor-clip-body {
@@ -3178,6 +3180,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
 
 .studio-editor-clip.is-selected {
   background: transparent !important;
+  z-index: 8;
 }
 
 .studio-editor-clip.is-selected .studio-editor-clip-body {
@@ -3537,7 +3540,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   /* Below transition until selected — then above dark overlay. */
   z-index: 2;
   opacity: 0;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .studio-editor-clip.is-selected .studio-editor-clip-handle {
@@ -3551,6 +3554,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   box-sizing: border-box;
   box-shadow: none;
   z-index: 11;
+  pointer-events: auto;
 }
 
 .studio-editor-clip.is-selected .studio-editor-clip-handle::before,

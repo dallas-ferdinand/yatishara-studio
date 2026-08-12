@@ -25,6 +25,8 @@ export type SchedulerOptions = {
   onTime?: (time: number) => void;
   onBuffering?: (buffering: boolean) => void;
   onEnded?: () => void;
+  onLoop?: () => void;
+  loop?: boolean;
   onError?: (error: Error) => void;
   uiIntervalMs?: number;
 };
@@ -135,6 +137,13 @@ export class FrameScheduler {
     }
 
     if (this.clock.ended()) {
+      if (this.options.loop && this.plan.duration > 0) {
+        this.clock.seek(0);
+        this.options.onTime?.(0);
+        this.options.onLoop?.();
+        this.queueFrame();
+        return;
+      }
       this.clock.pause();
       this.options.onTime?.(this.plan.duration);
       this.options.onEnded?.();

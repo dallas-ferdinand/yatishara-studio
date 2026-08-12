@@ -36,6 +36,7 @@ import {
   projectEndTime,
 } from "./editorState";
 import type { EditorClip, EditorMediaItem, EditorProject } from "./types";
+import { MIN_CLIP_SEC } from "./projectContract";
 import {
   isSoftDecodeFailure,
   usePlaybackEngine,
@@ -552,7 +553,7 @@ export function EditorPreview({
                 className="studio-editor-preview-fs-scrub-input"
                 min={0}
                 max={timelineDuration}
-                step={0.05}
+                step={MIN_CLIP_SEC}
                 value={Math.min(playhead, timelineDuration)}
                 aria-label="Seek"
                 aria-valuemin={0}

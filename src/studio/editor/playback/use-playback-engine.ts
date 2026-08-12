@@ -22,6 +22,7 @@ import type { PlaybackPlan, RenderSlice } from "./timeline-compiler";
 import { TransportClock } from "./transport-clock";
 import { isLegacySystemFont, loadGoogleFont } from "../loadGoogleFont";
 import { clipSpeed } from "../projectContract";
+import { playbackEndTime } from "../editorState";
 import {
   DEFAULT_PREVIEW_LOAD_QUALITY,
   playbackUrlForMedia,
@@ -34,6 +35,14 @@ export function isSoftDecodeFailure(reason: unknown): boolean {
     /frame decode timeout/i.test(message) ||
     /no video sample at requested time/i.test(message)
   );
+}
+
+function clockDuration(project: EditorProject, playing: boolean): number {
+  if (playing) {
+    const end = playbackEndTime(project);
+    if (end > 0) return end;
+  }
+  return compileTimeline(project).duration;
 }
 
 /** Kick the continuous decode pump for video assets in/near the playhead. */
@@ -583,9 +592,33 @@ export function usePlaybackEngine(args: {
       });
       const plan = compileTimeline(projectRef.current);
       const scheduler = new FrameScheduler(plan, clock, consumer, {
+        loop: true,
         onTime: (time) => {
           emittedTimeRef.current = time;
           callbacksRef.current.onPlayheadChange(time);
+        },
+        onLoop: () => {
+          const runtime = runtimeRef.current;
+          if (!runtime || !playingRef.current) return;
+          const time = runtime.clock.currentTime();
+          runtime.decoder.stopPlayback();
+          startDecodePumps(
+            runtime.decoder,
+            runtime.plan,
+            mediaRef.current,
+            time,
+            runtime.clock.generation,
+            previewLoadQualityRef.current,
+          );
+          void runtime.audio.prepare(sliceAt(runtime.plan, time), mediaRef.current).then(() => {
+            if (!playingRef.current || runtimeRef.current !== runtime) return;
+            runtime.audio.sync(
+              sliceAt(runtime.plan, runtime.clock.currentTime()),
+              runtime.clock.generation,
+              mediaRef.current,
+              true,
+            );
+          });
         },
         onBuffering: (value) => {
           if (value) {
@@ -703,7 +736,7 @@ export function usePlaybackEngine(args: {
     const plan = compileTimeline(project);
     runtime.plan = plan;
     runtime.scheduler.setPlan(plan);
-    runtime.clock.setDuration(plan.duration);
+    runtime.clock.setDuration(clockDuration(projectRef.current, playingRef.current));
     runtime.audio.stopAll();
     const time = runtime.clock.currentTime();
     const slice = sliceAt(plan, time);
@@ -775,6 +808,11 @@ export function usePlaybackEngine(args: {
           // Paint the primed frame, then let the clock run (pump keeps filling).
           await runtime.scheduler.renderNow(time);
           if (!playingRef.current) return;
+          const end = clockDuration(projectRef.current, true);
+          runtime.clock.setDuration(end);
+          if (end > 0 && runtime.clock.currentTime() >= end - 0.0005) {
+            runtime.clock.seek(0);
+          }
           runtime.clock.play();
           runtime.scheduler.start();
         })
@@ -786,6 +824,7 @@ export function usePlaybackEngine(args: {
     } else {
       runtime.decoder.stopPlayback();
       runtime.clock.pause();
+      runtime.clock.setDuration(clockDuration(projectRef.current, false));
       runtime.scheduler.stop();
       runtime.audio.stopAll();
       void runtime.scheduler.renderNow(runtime.clock.currentTime()).catch(() => undefined);

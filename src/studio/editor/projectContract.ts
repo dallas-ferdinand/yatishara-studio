@@ -21,6 +21,13 @@ export {
 export const EDITOR_PROJECT_VERSION = 2;
 
 export const EXPORT_FPS = 30;
+/** Smallest timeline unit — one frame at export fps. */
+export const MIN_CLIP_SEC = 1 / EXPORT_FPS;
+
+export function quantizeToFrame(time: number, fps = EXPORT_FPS): number {
+  if (!Number.isFinite(time)) return 0;
+  return Math.round(Math.max(0, time) * fps) / fps;
+}
 
 export const DEFAULT_FRAME_RATIO: FrameRatio = "16:9";
 
@@ -58,7 +65,7 @@ export function exportSizeForRatio(ratio: FrameRatio | undefined): {
 }
 
 export function sourceTrimSec(clip: { trimIn: number; trimOut: number }): number {
-  return Math.max(0.05, clip.trimOut - clip.trimIn);
+  return Math.max(MIN_CLIP_SEC, clip.trimOut - clip.trimIn);
 }
 
 /**
@@ -79,7 +86,7 @@ export function pendingSpeedDurationSec(
   clip: { trimIn: number; trimOut: number },
   speed: number,
 ): number {
-  return Math.max(0.05, sourceTrimSec(clip) / clampClipSpeed(speed));
+  return Math.max(MIN_CLIP_SEC, sourceTrimSec(clip) / clampClipSpeed(speed));
 }
 
 export function sortedClipsOnTrack<T extends { trackId: string; startTime: number }>(

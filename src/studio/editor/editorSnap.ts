@@ -1,7 +1,7 @@
 import type { EditorClip, EditorProject } from "./types";
 import { clipDuration } from "./editorState";
 
-export const SNAP_THRESHOLD_PX = 10;
+export const SNAP_THRESHOLD_PX = 6;
 
 export function snapThresholdSec(pixelsPerSecond: number): number {
   return SNAP_THRESHOLD_PX / Math.max(pixelsPerSecond, 1);

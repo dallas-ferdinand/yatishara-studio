@@ -19,7 +19,12 @@ import {
 } from "./editorTimelineUtils";
 import { computeRippleInsertForNewClip, arrangeTrackForDrop, resolveTrackOverlaps, collapseTrackLeft, isMainStoryTrack } from "./editorRipple";
 import { labelsForSplit } from "./clipNaming";
-import { clipDurationSec, normalizeFrameRatio } from "./projectContract";
+import {
+  clipDurationSec,
+  MIN_CLIP_SEC,
+  normalizeFrameRatio,
+  quantizeToFrame,
+} from "./projectContract";
 import { DEFAULT_TEXT_EFFECTS, DEFAULT_TEXT_STYLE } from "./editorEffects";
 
 export function newClipId(): string {
@@ -80,6 +85,21 @@ export function projectEndTime(project: EditorProject): number {
     end = Math.max(end, clip.startTime + clipDuration(clip));
   }
   return end;
+}
+
+/** Last clip edge — 0 when the timeline is empty. Not the 8s canvas floor. */
+export function contentEndTime(project: EditorProject): number {
+  let end = 0;
+  for (const clip of project.clips) {
+    end = Math.max(end, clip.startTime + clipDuration(clip));
+  }
+  return end;
+}
+
+/** Clock length while playing: last clip, not padded empty duration. */
+export function playbackEndTime(project: EditorProject): number {
+  const end = contentEndTime(project);
+  return end > 0 ? end : Math.max(project.duration ?? 0, 0);
 }
 
 export function createEmptyProject(args: {
@@ -520,9 +540,11 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
     case "split_at_playhead": {
       const clip = state.project.clips.find((item) => item.id === state.ui.selectedClipId);
       if (!clip || clip.kind === "text") return state;
-      const t = state.ui.playhead;
+      const t = quantizeToFrame(state.ui.playhead);
       const clipEnd = clip.startTime + clipDuration(clip);
-      if (t <= clip.startTime + 0.05 || t >= clipEnd - 0.05) return state;
+      const leftDur = t - clip.startTime;
+      const rightDur = clipEnd - t;
+      if (leftDur < MIN_CLIP_SEC - 1e-6 || rightDur < MIN_CLIP_SEC - 1e-6) return state;
       const offset = t - clip.startTime;
       const splitPoint = clip.trimIn + offset;
       const [leftLabel, rightLabel] = labelsForSplit(clip.label);
@@ -777,9 +799,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           clip.sourceDuration != null && clip.sourceDuration > 0
             ? clip.sourceDuration
             : Number.POSITIVE_INFINITY;
-        const nextTrimIn = Math.max(0, Math.min(action.trimIn, sourceMax - 0.05));
+        const nextTrimIn = Math.max(0, Math.min(action.trimIn, sourceMax - MIN_CLIP_SEC));
         const nextTrimOut = Math.max(
-          nextTrimIn + 0.05,
+          nextTrimIn + MIN_CLIP_SEC,
           Math.min(action.trimOut, sourceMax),
         );
         const next: EditorClip = {

@@ -26,6 +26,7 @@ import {
   projectEndTime,
   reducer,
 } from "./editorState";
+import { MIN_CLIP_SEC, quantizeToFrame } from "./projectContract";
 import { useEditorHotkeys } from "./useEditorHotkeys";
 import { jointByKey } from "./editorTimelineUtils";
 import {
@@ -515,11 +516,12 @@ export function StudioVideoEditor({
     }
   }, [selectedJoint, state.ui.editorMode]);
 
+  const splitAt = quantizeToFrame(state.ui.playhead);
   const canSplit =
     Boolean(selectedClip) &&
     selectedClip.kind !== "text" &&
-    state.ui.playhead > selectedClip.startTime + 0.05 &&
-    state.ui.playhead < selectedClip.startTime + clipDuration(selectedClip) - 0.05;
+    splitAt - selectedClip.startTime >= MIN_CLIP_SEC - 1e-6 &&
+    selectedClip.startTime + clipDuration(selectedClip) - splitAt >= MIN_CLIP_SEC - 1e-6;
 
   const menuClip = clipMenu
     ? state.project.clips.find((clip) => clip.id === clipMenu.clipId) ?? null
@@ -528,8 +530,8 @@ export function StudioVideoEditor({
   const menuCanSplit =
     Boolean(menuClip) &&
     menuClip.kind !== "text" &&
-    state.ui.playhead > menuClip.startTime + 0.05 &&
-    state.ui.playhead < menuClip.startTime + clipDuration(menuClip) - 0.05;
+    splitAt - menuClip.startTime >= MIN_CLIP_SEC - 1e-6 &&
+    menuClip.startTime + clipDuration(menuClip) - splitAt >= MIN_CLIP_SEC - 1e-6;
 
   const resolveClipDownloadUrl = useCallback(
     async (clip) => {
@@ -837,7 +839,15 @@ export function StudioVideoEditor({
     onZoom: (delta) =>
       dispatch({
         type: "set_zoom",
-        pixelsPerSecond: Math.max(MIN_PPS, Math.min(MAX_PPS, state.ui.pixelsPerSecond + delta)),
+        pixelsPerSecond: Math.max(
+          MIN_PPS,
+          Math.min(
+            MAX_PPS,
+            Math.round(
+              delta > 0 ? state.ui.pixelsPerSecond * 1.12 : state.ui.pixelsPerSecond * 0.9,
+            ),
+          ),
+        ),
       }),
     onDeselect: () => {
       dispatch({ type: "select_clip", clipId: null });
