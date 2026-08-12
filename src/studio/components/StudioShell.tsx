@@ -1959,7 +1959,17 @@ export function StudioShell({
             folderByIdRef.current.get(activeFolderId) ??
             trashedFolders?.find((folder) => folder._id === activeFolderId) ??
             topFolders?.find((folder) => folder._id === activeFolderId) ??
-            null)
+            // Loading folders.get: keep a stub so Files create/rename still
+            // resolve against the open folder id (incl. workspace root).
+            (selectedFolder === undefined
+              ? {
+                  _id: activeFolderId,
+                  name:
+                    navTrail.find((crumb) => crumb.id === activeFolderId)?.name ||
+                    topFolders?.[0]?.name ||
+                    "Files",
+                }
+              : null))
       : (topFolders?.[0] ?? null);
 
   useEffect(() => {
@@ -4690,26 +4700,48 @@ export function StudioShell({
       toast.error("Open a folder first — Recents is a view, not a place to create.");
       return;
     }
-    if (
-      !activeFolder ||
-      !activeFolder._id ||
-      activeFolder._id === TRASH_FOLDER_ID ||
-      activeFolder._id === RECENTS_FOLDER_ID
-    ) {
-      toast.error("Open a folder first.");
-      return;
+
+    const isCreateParentId = (id) =>
+      Boolean(id) && id !== TRASH_FOLDER_ID && id !== RECENTS_FOLDER_ID;
+
+    // Prefer live activeFolder; if Convex get is still loading / cache miss, fall
+    // back to activeFolderId → nav trail tip → workspace home so root create works.
+    let parentFolder =
+      activeFolder && isCreateParentId(activeFolder._id) ? activeFolder : null;
+    if (!parentFolder) {
+      const candidateId =
+        (isCreateParentId(activeFolderId) && activeFolderId) ||
+        (isCreateParentId(navTrail[navTrail.length - 1]?.id) &&
+          navTrail[navTrail.length - 1].id) ||
+        topFolders?.[0]?._id ||
+        null;
+      if (!candidateId) {
+        if (topFolders === undefined || selectedFolder === undefined) {
+          toast.message("Still loading Files…");
+          return;
+        }
+        toast.error("Open a folder first.");
+        return;
+      }
+      parentFolder =
+        topFolders?.find((folder) => folder._id === candidateId) ||
+        folderByIdRef.current.get(candidateId) ||
+        {
+          _id: candidateId,
+          name:
+            navTrail.find((crumb) => crumb.id === candidateId)?.name ||
+            topFolders?.[0]?.name ||
+            "Files",
+        };
     }
-    if (selectedFolder === undefined && activeFolderId && !folderByIdRef.current.get(activeFolderId)) {
-      toast.message("Still loading this folder…");
-      return;
-    }
+
     ensureFilesViewForInlineCreate();
     const exists = entryNamesSet(displayCurrentEntries.entries);
     try {
       if (kind === "folder") {
         const name = uniqueName("New folder", exists);
         const id = await createFolder({
-          parentId: activeFolder._id,
+          parentId: parentFolder._id,
           name,
           icon: "Folder",
           color: "#22c55e",
@@ -4719,7 +4751,7 @@ export function StudioShell({
           studioKind: "folder",
           studioId: id,
           name,
-          path: `${studioPathForFolder(activeFolder)}/${name}`,
+          path: `${studioPathForFolder(parentFolder)}/${name}`,
         };
         setPendingInlineEntry(entry);
         setRecentFileRows(
@@ -4732,7 +4764,7 @@ export function StudioShell({
         const fileName = uniqueName("Untitled.md", exists);
         const title = fileName.replace(/\.md$/i, "");
         const id = await createDocument({
-          folderId: activeFolder._id,
+          folderId: parentFolder._id,
           title,
           contentMarkdown: "",
         });
@@ -4755,13 +4787,13 @@ export function StudioShell({
         const fileName = uniqueName(withStudioProjectExt("Untitled"), exists);
         const name = stripStudioProjectExt(fileName);
         const result = await createVideoEdit({
-          folderId: activeFolder._id,
+          folderId: parentFolder._id,
           name,
         });
         const entry = videoEditToEntry({
           _id: result.projectId,
           name,
-          folderId: activeFolder._id,
+          folderId: parentFolder._id,
           updatedAt: wallClockMs(),
         });
         setPendingInlineEntry(entry);
@@ -4779,7 +4811,7 @@ export function StudioShell({
         const displayName = uniqueName("@Untitled", exists);
         const name = displayName.replace(/^@/, "");
         const id = await createElement({
-          folderId: activeFolder._id,
+          folderId: parentFolder._id,
           type: "character",
           name,
         });
@@ -6229,23 +6261,48 @@ export function StudioShell({
   }
 
   async function createStudioItem(values) {
-    if (!activeFolder || !values?.name?.trim()) {
-      toast.error("Open a folder and enter a name.");
+    if (!values?.name?.trim()) {
+      toast.error("Enter a name.");
       return;
     }
-    if (
-      activeFolder._id === TRASH_FOLDER_ID ||
-      activeFolder._id === RECENTS_FOLDER_ID ||
-      isRecentsView ||
-      isTrashNav
-    ) {
+    if (isRecentsView || isTrashNav || isTrashView) {
       toast.error("Open a normal folder to create here.");
       return;
+    }
+    const isCreateParentId = (id) =>
+      Boolean(id) && id !== TRASH_FOLDER_ID && id !== RECENTS_FOLDER_ID;
+    let parentFolder =
+      activeFolder && isCreateParentId(activeFolder._id) ? activeFolder : null;
+    if (!parentFolder) {
+      const candidateId =
+        (isCreateParentId(activeFolderId) && activeFolderId) ||
+        (isCreateParentId(navTrail[navTrail.length - 1]?.id) &&
+          navTrail[navTrail.length - 1].id) ||
+        topFolders?.[0]?._id ||
+        null;
+      if (!candidateId) {
+        if (topFolders === undefined || selectedFolder === undefined) {
+          toast.message("Still loading Files…");
+          return;
+        }
+        toast.error("Open a folder and enter a name.");
+        return;
+      }
+      parentFolder =
+        topFolders?.find((folder) => folder._id === candidateId) ||
+        folderByIdRef.current.get(candidateId) ||
+        {
+          _id: candidateId,
+          name:
+            navTrail.find((crumb) => crumb.id === candidateId)?.name ||
+            topFolders?.[0]?.name ||
+            "Files",
+        };
     }
     try {
       if (values.kind === "folder") {
         const id = await createFolder({
-          parentId: activeFolder._id,
+          parentId: parentFolder._id,
           name: values.name.trim(),
           icon: "Folder",
           color: "#22c55e",
@@ -6257,7 +6314,7 @@ export function StudioShell({
               studioKind: "folder",
               studioId: id,
               name: values.name.trim(),
-              path: `${studioPathForFolder(activeFolder)}/${values.name.trim()}`,
+              path: `${studioPathForFolder(parentFolder)}/${values.name.trim()}`,
             },
             explorerUserId,
             RECENT_ACTIVITY.created,
@@ -6269,7 +6326,7 @@ export function StudioShell({
       }
       if (values.kind === "script") {
         const id = await createDocument({
-          folderId: activeFolder._id,
+          folderId: parentFolder._id,
           title: values.name.trim(),
           contentMarkdown: "",
         });
