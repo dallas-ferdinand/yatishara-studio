@@ -31,6 +31,7 @@ import { compactElementPromptLine } from "./lib/klingGatewayPrompt";
 import { applyStorageBytesDelta, assertUploadsAllowed } from "./lib/storageBilling";
 import { normalizeScopes } from "./lib/studioApi/crypto";
 import { validateVideoModelCapabilities } from "./lib/videoModels";
+import { sanitizeScriptMarkdown } from "./lib/scriptMarkdown";
 import { nextCreditBalanceHigh } from "./lib/creditBalanceHigh";
 
 /** Admin/CLI helper: grant scopes on an API key (e.g. add messages for MCP DMs). */
@@ -1124,7 +1125,7 @@ export const createDocumentForApi = internalMutation({
     await requireFolderForUser(ctx, args.userId, args.folderId, args.sandboxFolderId);
     const now = Date.now();
     const title = args.title.trim();
-    const content = String(args.contentMarkdown ?? "").trim();
+    const content = sanitizeScriptMarkdown(args.contentMarkdown ?? "").trim();
     // Same gate as documents.create — agent HTTP must not land empty Scripts/Prompts.
     if ((!content || content.length < 20) && /prompt|script/i.test(title)) {
       throw new Error(
@@ -1135,7 +1136,7 @@ export const createDocumentForApi = internalMutation({
       ownerId: args.userId,
       folderId: args.folderId,
       title,
-      contentMarkdown: args.contentMarkdown ?? "",
+      contentMarkdown: content,
       createdAt: now,
       updatedAt: now,
     });
@@ -1164,7 +1165,7 @@ export const updateDocumentForApi = internalMutation({
       await requireFolderForUser(ctx, args.userId, args.folderId, args.sandboxFolderId);
     }
     if (args.contentMarkdown !== undefined) {
-      const next = String(args.contentMarkdown).trim();
+      const next = sanitizeScriptMarkdown(args.contentMarkdown).trim();
       const title = String(args.title ?? doc.title).trim();
       const prev = String(doc.contentMarkdown ?? "").trim();
       if (prev.length >= 20 && next.length < 20 && /prompt|script/i.test(title)) {
@@ -1176,7 +1177,7 @@ export const updateDocumentForApi = internalMutation({
     await ctx.db.patch(doc._id, {
       ...(args.title !== undefined ? { title: args.title.trim() } : {}),
       ...(args.contentMarkdown !== undefined
-        ? { contentMarkdown: args.contentMarkdown }
+        ? { contentMarkdown: sanitizeScriptMarkdown(args.contentMarkdown) }
         : {}),
       ...(args.folderId !== undefined ? { folderId: args.folderId } : {}),
       updatedAt: Date.now(),
@@ -1241,7 +1242,7 @@ export const patchDocumentForApi = internalMutation({
       }
     }
     await ctx.db.patch(doc._id, {
-      contentMarkdown: next,
+      contentMarkdown: sanitizeScriptMarkdown(next),
       updatedAt: Date.now(),
     });
     return { applied: args.edits.length, replacements };

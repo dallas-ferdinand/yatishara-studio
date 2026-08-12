@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { sanitizeScriptMarkdown } from "./lib/scriptMarkdown";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
 import {
   requireFolderOwnerOrEditShare,
@@ -81,11 +82,12 @@ export const create = authedMutation({
     const title = args.title.trim();
     // Empty shells are OK for Files UI (New Script → rename → edit).
     // Agent empty Prompt/Script creates are blocked in studioApiInternal + agentSchemas.
+    const contentMarkdown = sanitizeScriptMarkdown(args.contentMarkdown ?? "");
     return await ctx.db.insert("documents", {
       ownerId: ctx.user._id,
       folderId: args.folderId,
       title,
-      contentMarkdown: args.contentMarkdown ?? "",
+      contentMarkdown,
       createdAt: now,
       updatedAt: now,
     });
@@ -112,7 +114,7 @@ export const update = authedMutation({
       await requireFolderOwner(ctx, args.folderId);
     }
     if (args.contentMarkdown !== undefined) {
-      const next = String(args.contentMarkdown).trim();
+      const next = sanitizeScriptMarkdown(args.contentMarkdown).trim();
       const title = String(args.title ?? doc.title).trim();
       const prev = String(doc.contentMarkdown ?? "").trim();
       if (prev.length >= 20 && next.length < 20 && /prompt|script/i.test(title)) {
@@ -124,7 +126,7 @@ export const update = authedMutation({
     await ctx.db.patch(doc._id, {
       ...(args.title !== undefined ? { title: args.title.trim() } : {}),
       ...(args.contentMarkdown !== undefined
-        ? { contentMarkdown: args.contentMarkdown }
+        ? { contentMarkdown: sanitizeScriptMarkdown(args.contentMarkdown) }
         : {}),
       ...(args.folderId !== undefined ? { folderId: args.folderId } : {}),
       updatedAt: Date.now(),
@@ -215,7 +217,7 @@ export const internalSetContent = internalMutation({
     const doc = await ctx.db.get("documents", args.documentId);
     if (!doc) return null;
     await ctx.db.patch(args.documentId, {
-      contentMarkdown: args.contentMarkdown,
+      contentMarkdown: sanitizeScriptMarkdown(args.contentMarkdown),
       ...(args.title !== undefined ? { title: args.title.trim() } : {}),
       updatedAt: Date.now(),
     });

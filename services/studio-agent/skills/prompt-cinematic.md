@@ -58,16 +58,20 @@ Enough concrete nouns and verbs that a stranger could block the shot. Prefer one
 
 1. Write the full sealed prompt above — never a short vibe line.
 2. **Always** `studio_create_document` into **CWD** (Script `.md`). Never `remember` the script body — only a short pointer to the file after create.
+3. `contentMarkdown` = **clean markdown only**. Studio decides how to render.
 
 ~~~
+# Prompt — <short>
+
 ```text
 <sealed prompt>
 ```
 
-References:
-- @Label | kind: image | path: /Studio/assets/{assetId} | studio: {assetId}
+## References
+
+- [Label](asset://{assetId}) — optional note
 ~~~
 
-Asset ids only (attached/generated). No elements. Paste/Run in Studio hydrates chips from `References:`.
-3. Paste in chat only if they asked to see/copy it; otherwise tell them the Script is in Files.
-4. If they also want a generate: `studio_get_document` if needed → parse refs → estimate → storyboard still (people) → `studio_generate_video` with `folderId` = CWD and `referenceAssetIds` / `startFrameAssetId`. Quote cost as $ / TTD only.
+Asset ids only (attached/generated). No elements. No pipe-meta (`| kind: | path: | studio:`). No HTML. No unclosed fences.
+4. Paste in chat only if they asked to see/copy it; otherwise tell them the Script is in Files.
+5. If they also want a generate: `studio_get_document` if needed → parse refs → estimate → storyboard still (people) → `studio_generate_video` with `folderId` = CWD and `referenceAssetIds` / `startFrameAssetId`. Quote cost as $ / TTD only.

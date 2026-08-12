@@ -2,6 +2,8 @@
  * Strict-ish arg checks for high-value Studio tools (agent surface).
  */
 
+import { sanitizeScriptMarkdown } from "./scriptMarkdown.mjs";
+
 /** @type {Record<string, { required: string[], oneOfGroups?: string[][], enums?: Record<string, string[]> }>} */
 export const HOT_SCHEMAS = {
   studio_share_asset_post: { required: ["assetId"] },
@@ -123,7 +125,6 @@ export function validateHotToolArgs(toolName, args) {
       input.contentMarkdown = input.markdown;
       delete input.markdown;
     }
-    const body = String(input.contentMarkdown ?? "").trim();
     const title = String(input.title ?? "").trim();
     if (!title) {
       return {
@@ -132,6 +133,9 @@ export function validateHotToolArgs(toolName, args) {
         example: exampleFor(toolName),
       };
     }
+    input.title = title;
+    input.contentMarkdown = sanitizeScriptMarkdown(input.contentMarkdown);
+    const body = String(input.contentMarkdown ?? "").trim();
     if (!body || body.length < 20) {
       return {
         ok: false,
@@ -140,8 +144,10 @@ export function validateHotToolArgs(toolName, args) {
         example: exampleFor(toolName),
       };
     }
-    input.title = title;
-    input.contentMarkdown = String(input.contentMarkdown ?? "");
+  }
+
+  if (toolName === "studio_update_document" && input.contentMarkdown != null) {
+    input.contentMarkdown = sanitizeScriptMarkdown(input.contentMarkdown);
   }
 
   return { ok: true, args: input };
@@ -155,7 +161,8 @@ function exampleFor(toolName) {
     studio_create_document: {
       folderId: "<CWD>",
       title: "Prompt — short name",
-      contentMarkdown: "```text\n…sealed prompt…\n```\n\nReferences:\n- asset:…",
+      contentMarkdown:
+        "# Prompt — short name\n\n```text\n…sealed prompt…\n```\n\n## References\n\n- [Label](asset://{assetId}) — optional note\n",
     },
     studio_bulk_move: {
       targetFolderId: "<folderId>",

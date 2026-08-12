@@ -42,7 +42,7 @@ A [who/what] [doing what] in [place]. [Time of day / light]. Shot as [medium / c
 1. Load this skill, write a **full** sealed prompt (subject + action + setting + light + lens + materials + keep-outs) — never a one-line vibe dump.
 2. **Always** `studio_create_document` into **CWD** (Files → Script `.md`). Never put the prompt body in `remember`/memory — memory may only note *where* the Script lives after create.
 3. Title: `Prompt — <short subject>` (or `Script — <short>`).
-4. `contentMarkdown`: sealed prompt (optionally in a text fence) **plus** a trailing References block so Create/Agent can hydrate chips on paste/Run:
+4. `contentMarkdown` must be **clean markdown only** (CommonMark). Rendering is Studio’s job — never invent custom pipe-meta formats.
 
 Example `contentMarkdown`:
 
@@ -53,12 +53,18 @@ Example `contentMarkdown`:
 <full sealed prompt; may mention @Label visually>
 ```
 
-References:
-- @Label | kind: image | path: /Studio/assets/{assetId} | file: name.png | studio: {assetId}
+## References
+
+- [Label](asset://{assetId}) — optional note
 ~~~
 
-5. Only **asset** ids from attached chips / generated stills. Never invent element ids. Never use `/Studio/elements/…`.
-6. Chat: point them at the Script file. Paste in chat **only** if they asked to see / copy it.
-7. Generate only if they also asked to generate — then pass `referenceAssetIds` from the References lines (and `folderId` = CWD).
+**Hard rules for Script files**
+- Plain markdown only: headings, ```text fences, lists, links.
+- References = `## References` + markdown links `asset://{id}` only.
+- **Forbidden:** pipe-meta rows (`| kind: | path: | studio:`), HTML, null bytes, unclosed fences, inventing element paths.
+- Only **asset** ids from attached chips / generated stills. Never invent element ids. Never use `/Studio/elements/…`.
+
+5. Chat: point them at the Script file. Paste in chat **only** if they asked to see / copy it.
+6. Generate only if they also asked to generate — then pass `referenceAssetIds` from the References lines (and `folderId` = CWD).
 
 Estimate first if spend is unclear. After ok, optionally `studio_view_media`.
