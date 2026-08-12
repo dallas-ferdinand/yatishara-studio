@@ -251,7 +251,7 @@ describe("arrangeTrackForDrop", () => {
     expect(next.find((c) => c.id === "main")!.startTime).toBe(0);
   });
 
-  it("parks the dropped overlay clip at a touch — neighbors do not move", () => {
+  it("docks after an overlay clip when dropped on its second half", () => {
     const project = projectWith(
       [
         {
@@ -286,6 +286,91 @@ describe("arrangeTrackForDrop", () => {
     });
     expect(next.find((c) => c.id === "a")!.startTime).toBe(0);
     expect(next.find((c) => c.id === "b")!.startTime).toBe(4);
+  });
+
+  it("inserts at overlay lane start and pushes the first clip forward", () => {
+    const project = projectWith(
+      [
+        {
+          id: "a",
+          assetId: "1",
+          trackId: "track-v2",
+          startTime: 0,
+          trimIn: 0,
+          trimOut: 4,
+          label: "A",
+          kind: "video",
+        },
+        {
+          id: "b",
+          assetId: "2",
+          trackId: "track-v2",
+          startTime: 8,
+          trimIn: 0,
+          trimOut: 2,
+          label: "B",
+          kind: "video",
+        },
+      ],
+      [{ id: "track-v2", kind: "video", label: "V2" }],
+    );
+    const focus = project.clips.find((c) => c.id === "b")!;
+    const next = arrangeTrackForDrop({
+      project,
+      trackId: "track-v2",
+      focusClip: focus,
+      preferredStart: 0.2,
+    });
+    expect(next.find((c) => c.id === "b")!.startTime).toBe(0);
+    expect(next.find((c) => c.id === "a")!.startTime).toBe(2);
+  });
+
+  it("keeps the drop in a tight overlay gap and shoves the later clip", () => {
+    const project = projectWith(
+      [
+        {
+          id: "a",
+          assetId: "1",
+          trackId: "track-v2",
+          startTime: 0,
+          trimIn: 0,
+          trimOut: 4,
+          label: "A",
+          kind: "video",
+        },
+        {
+          id: "c",
+          assetId: "3",
+          trackId: "track-v2",
+          startTime: 5,
+          trimIn: 0,
+          trimOut: 2,
+          label: "C",
+          kind: "video",
+        },
+        {
+          id: "b",
+          assetId: "2",
+          trackId: "track-v2",
+          startTime: 12,
+          trimIn: 0,
+          trimOut: 2,
+          label: "B",
+          kind: "video",
+        },
+      ],
+      [{ id: "track-v2", kind: "video", label: "V2" }],
+    );
+    const focus = project.clips.find((c) => c.id === "b")!;
+    const next = arrangeTrackForDrop({
+      project,
+      trackId: "track-v2",
+      focusClip: focus,
+      preferredStart: 4.2,
+    });
+    expect(next.find((c) => c.id === "a")!.startTime).toBe(0);
+    expect(next.find((c) => c.id === "b")!.startTime).toBeCloseTo(4.2, 5);
+    expect(next.find((c) => c.id === "c")!.startTime).toBeCloseTo(6.2, 5);
   });
 });
 
@@ -333,7 +418,7 @@ describe("computeRippleLayout", () => {
     expect(placements.map((p) => p.startTime)).toEqual([0, 2, 4]);
   });
 
-  it("places freely on an overlay lane", () => {
+  it("places freely on an overlay lane when the gap fits", () => {
     const project = projectWith(
       [
         {
@@ -367,5 +452,41 @@ describe("computeRippleLayout", () => {
     });
     expect(placements.find((p) => p.clipId === "a")!.startTime).toBe(0);
     expect(placements.find((p) => p.clipId === "b")!.startTime).toBe(5);
+  });
+
+  it("live-previews overlay insert at start by shoving the first clip", () => {
+    const project = projectWith(
+      [
+        {
+          id: "a",
+          assetId: "1",
+          trackId: "track-v2",
+          startTime: 0,
+          trimIn: 0,
+          trimOut: 4,
+          label: "A",
+          kind: "video",
+        },
+        {
+          id: "b",
+          assetId: "2",
+          trackId: "track-v2",
+          startTime: 8,
+          trimIn: 0,
+          trimOut: 2,
+          label: "B",
+          kind: "video",
+        },
+      ],
+      [{ id: "track-v2", kind: "video", label: "V2" }],
+    );
+    const placements = computeRippleLayout({
+      project,
+      trackId: "track-v2",
+      draggedClip: project.clips.find((c) => c.id === "b")!,
+      centerTime: 0.2,
+    });
+    expect(placements.find((p) => p.clipId === "b")!.startTime).toBe(0);
+    expect(placements.find((p) => p.clipId === "a")!.startTime).toBe(2);
   });
 });

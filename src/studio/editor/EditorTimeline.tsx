@@ -30,7 +30,6 @@ import { clipCanSplitAt, clipDuration, formatTimecodeFull, formatTimecodeRuler }
 import { MIN_CLIP_SEC, quantizeToFrame } from "./projectContract";
 import {
   collectSnapTimes,
-  resolveSecondaryDropStart,
   snapClipMove,
   snapThresholdSec,
   snapTrimLeft,
@@ -461,8 +460,6 @@ function TimelineClipBlock({
     let lastArrangeProbe = originStart;
     let moved = mode !== "move";
     let pickedUp = false;
-    let overlaySticky = null;
-    let overlayStickyTrackId = null;
     setDragging(mode);
 
     const targetEl = event.currentTarget;
@@ -517,37 +514,30 @@ function TimelineClipBlock({
         );
 
         if (allowedTrackId && !destIsMain) {
-          if (overlayStickyTrackId !== allowedTrackId) {
-            overlaySticky = null;
-            overlayStickyTrackId = allowedTrackId;
+          const disableSnap =
+            moveEvent.altKey || !lastViable || !overlaySnapEnabled;
+          if (!disableSnap) {
+            const overlaySnapTimes = collectSnapTimes(
+              project,
+              allowedTrackId,
+              clip.id,
+              playhead,
+              { includeTimelineStart: true },
+            );
+            const { startTime, guide } = snapClipMove(
+              clip,
+              rawStart,
+              overlaySnapTimes,
+              thresholdSec,
+              false,
+            );
+            lastStart = startTime;
+            onSnapGuide?.(guide);
+          } else {
+            lastStart = Math.max(0, rawStart);
+            onSnapGuide?.(null);
           }
-          const overlaySnapTimes = collectSnapTimes(
-            project,
-            allowedTrackId,
-            clip.id,
-            playhead,
-            { includeTimelineStart: true },
-          );
-          const resolved = resolveSecondaryDropStart({
-            preferredStart: Math.max(0, rawStart),
-            durationSec,
-            others: project.clips
-              .filter((item) => item.trackId === allowedTrackId && item.id !== clip.id)
-              .map((item) => ({
-                startTime: item.startTime,
-                durationSec: clipDuration(item),
-              })),
-            snapEnabled: Boolean(overlaySnapEnabled) && !moveEvent.altKey && lastViable,
-            snapTimes: overlaySnapTimes,
-            thresholdSec,
-            sticky: overlaySticky,
-          });
-          overlaySticky = resolved.sticky;
-          lastStart = resolved.startTime;
-          onSnapGuide?.(resolved.guide);
         } else {
-          overlaySticky = null;
-          overlayStickyTrackId = null;
           // Magnetic snap by default on the main line (vertical guides); Alt disables.
           const disableSnap = moveEvent.altKey || !lastViable;
           if (!disableSnap) {
@@ -575,7 +565,7 @@ function TimelineClipBlock({
         lastTrackId = allowedTrackId;
 
         // Main line: probe insert with the pointer (aim between clips).
-        // Overlay lanes: probe with the parked left edge (free place / touch dock).
+        // Overlay: left edge — gap fits stays put; too small / start shoves later clips.
         const arrangeProbe = destIsMain ? pointerTime : lastStart;
         lastArrangeProbe = arrangeProbe;
 
@@ -591,10 +581,8 @@ function TimelineClipBlock({
               })
             : [];
           if (destTrackId) {
-            // Free lanes: ghost stays at the pointer left-edge. Main: packed slot.
-            lastDropStart = isMainStoryTrack(project, destTrackId)
-              ? (placements.find((p) => p.clipId === clip.id)?.startTime ?? lastStart)
-              : lastStart;
+            lastDropStart =
+              placements.find((p) => p.clipId === clip.id)?.startTime ?? lastStart;
           }
 
           // Leaving the main storyline — live-collapse the gap it leaves behind.

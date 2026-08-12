@@ -1,6 +1,5 @@
 import type { EditorClip, EditorProject } from "./types";
 import { clipDuration } from "./editorState";
-import { resolveSecondaryDropStart } from "./editorSnap";
 
 export type RipplePlacement = {
   clipId: string;
@@ -92,24 +91,8 @@ function computePackedLayout(args: {
   return packPlacements(ordered, trackId);
 }
 
-/**
- * Overlay / audio / text: place at preferredStart; keep gaps; never move neighbors.
- * If the drop would overlap, park the focus clip at the touching dock instead.
- */
-function computeFreeformLayout(args: {
-  project: EditorProject;
-  trackId: string;
-  draggedClip: EditorClip;
-  preferredStart: number;
-}): RipplePlacement[] {
-  const { project, trackId, draggedClip, preferredStart } = args;
-  const start = Math.max(0, preferredStart);
-  const dragged = { ...draggedClip, startTime: start, trackId };
-  const provisional = project.clips.map((clip) =>
-    clip.id === draggedClip.id ? dragged : clip,
-  );
-  const resolved = resolveFreeformDrop(provisional, trackId, draggedClip.id);
-  return resolved
+function placementsOnTrack(clips: EditorClip[], trackId: string): RipplePlacement[] {
+  return clips
     .filter((clip) => clip.trackId === trackId)
     .sort((a, b) => a.startTime - b.startTime || a.id.localeCompare(b.id))
     .map((clip) => ({
@@ -119,8 +102,58 @@ function computeFreeformLayout(args: {
     }));
 }
 
+function overlapsOnTrack(start: number, duration: number, others: EditorClip[]): boolean {
+  const end = start + duration;
+  return others.some((clip) => {
+    const clipEnd = clip.startTime + clipDuration(clip);
+    return start < clipEnd - 1e-9 && end > clip.startTime + 1e-9;
+  });
+}
+
+function applyPlacements(clips: EditorClip[], placements: RipplePlacement[]): EditorClip[] {
+  const byId = new Map(placements.map((placement) => [placement.clipId, placement]));
+  return clips.map((clip) => {
+    const placement = byId.get(clip.id);
+    if (!placement) return clip;
+    return {
+      ...clip,
+      startTime: placement.startTime,
+      trackId: placement.trackId,
+    };
+  });
+}
+
 /**
- * Live drop layout. Main video line packs tight; every other lane is freeform.
+ * Overlay / audio / text: keep gaps when the drop fits. If the slot is too
+ * small or occupied, stay there and shove later clips right (live hover too).
+ * Dropping on the first half of the first clip inserts at the lane start.
+ */
+function computeOverlayLayout(args: {
+  project: EditorProject;
+  trackId: string;
+  draggedClip: EditorClip;
+  preferredStart: number;
+}): RipplePlacement[] {
+  const { project, trackId, draggedClip, preferredStart } = args;
+  const others = trackClipsSorted(project, trackId, draggedClip.id);
+  const duration = clipDuration(draggedClip);
+  const start = Math.max(0, preferredStart);
+  let draggedStart = start;
+  if (overlapsOnTrack(start, duration, others)) {
+    const insertIndex = insertIndexForTime(others, start);
+    if (insertIndex === 0 && others[0]) {
+      draggedStart = Math.max(0, Math.min(start, others[0].startTime));
+    }
+  }
+  const dragged = { ...draggedClip, startTime: draggedStart, trackId };
+  const provisional = project.clips.some((clip) => clip.id === dragged.id)
+    ? project.clips.map((clip) => (clip.id === dragged.id ? dragged : clip))
+    : [...project.clips, dragged];
+  return placementsOnTrack(resolveTrackOverlaps(provisional, trackId, dragged.id), trackId);
+}
+
+/**
+ * Live drop layout. Main video line packs tight; overlay lanes keep gaps or shove.
  */
 export function computeRippleLayout(args: {
   project: EditorProject;
@@ -133,7 +166,7 @@ export function computeRippleLayout(args: {
   if (isMainStoryTrack(args.project, args.trackId)) {
     return computePackedLayout({ ...args, preferredStart });
   }
-  return computeFreeformLayout({ ...args, preferredStart });
+  return computeOverlayLayout({ ...args, preferredStart });
 }
 
 export function placementMap(preview: RipplePreview | null): Map<string, RipplePlacement> {
@@ -161,16 +194,12 @@ export function computeRippleInsertForNewClip(args: {
     return packPlacements(ordered, args.trackId);
   }
 
-  const provisional = [...args.project.clips, clip];
-  const resolved = resolveFreeformDrop(provisional, args.trackId, clip.id);
-  return resolved
-    .filter((item) => item.trackId === args.trackId)
-    .sort((a, b) => a.startTime - b.startTime || a.id.localeCompare(b.id))
-    .map((item) => ({
-      clipId: item.id,
-      startTime: item.startTime,
-      trackId: item.trackId,
-    }));
+  return computeOverlayLayout({
+    project: args.project,
+    trackId: args.trackId,
+    draggedClip: clip,
+    preferredStart,
+  });
 }
 
 /**
@@ -240,40 +269,9 @@ export function resolveTrackOverlaps(
 }
 
 /**
- * Free-lane drop: neighbors stay put. Focus keeps preferredStart when the gap
- * fits; otherwise it parks against the nearest touching edge (no gap-fill).
- */
-export function resolveFreeformDrop(
-  clips: EditorClip[],
-  trackId: string,
-  focusClipId: string,
-): EditorClip[] {
-  const focus = clips.find((clip) => clip.id === focusClipId && clip.trackId === trackId);
-  if (!focus) return clips;
-
-  const others = clips.filter((clip) => clip.trackId === trackId && clip.id !== focusClipId);
-  const { startTime } = resolveSecondaryDropStart({
-    preferredStart: Math.max(0, focus.startTime),
-    durationSec: clipDuration(focus),
-    others: others.map((clip) => ({
-      startTime: clip.startTime,
-      durationSec: clipDuration(clip),
-    })),
-    snapEnabled: false,
-    sticky: null,
-  });
-
-  if (Math.abs(startTime - focus.startTime) < 1e-9) return clips;
-  return clips.map((clip) =>
-    clip.id === focusClipId ? { ...clip, startTime } : clip,
-  );
-}
-
-/**
  * Drop a focus clip onto a track.
  * Main storyline: pack end-to-end from 0.
- * Above / overlay lanes: free place at preferredStart (gaps ok; neighbors stay).
- * Overlap parks the dropped clip at the touching edge — never pushes others.
+ * Overlay lanes: keep gaps when the drop fits; otherwise shove later clips right.
  */
 export function arrangeTrackForDrop(args: {
   project: EditorProject;
@@ -285,30 +283,21 @@ export function arrangeTrackForDrop(args: {
   const start = Math.max(0, preferredStart);
   const dragged = { ...focusClip, startTime: start, trackId };
 
-  if (isMainStoryTrack(project, trackId)) {
-    const placements = computePackedLayout({
-      project: {
-        ...project,
-        clips: project.clips.map((clip) => (clip.id === focusClip.id ? dragged : clip)),
-      },
-      trackId,
-      draggedClip: dragged,
-      preferredStart: start,
-    });
-    const byId = new Map(placements.map((placement) => [placement.clipId, placement]));
-    return project.clips.map((clip) => {
-      const placement = byId.get(clip.id);
-      if (!placement) return clip;
-      return {
-        ...clip,
-        startTime: placement.startTime,
-        trackId: placement.trackId,
-      };
-    });
-  }
-
-  const provisional = project.clips.map((clip) =>
-    clip.id === focusClip.id ? dragged : clip,
-  );
-  return resolveFreeformDrop(provisional, trackId, focusClip.id);
+  const placements = isMainStoryTrack(project, trackId)
+    ? computePackedLayout({
+        project: {
+          ...project,
+          clips: project.clips.map((clip) => (clip.id === focusClip.id ? dragged : clip)),
+        },
+        trackId,
+        draggedClip: dragged,
+        preferredStart: start,
+      })
+    : computeOverlayLayout({
+        project,
+        trackId,
+        draggedClip: dragged,
+        preferredStart: start,
+      });
+  return applyPlacements(project.clips, placements);
 }
