@@ -151,7 +151,7 @@ export const sendOtpEmail = internalAction({
     if (!apiKey) throw new Error("Resend API key is not configured");
     const resend = new ResendAPI(apiKey);
     const from =
-      process.env.AUTH_RESEND_FROM ?? "Yatishara Studio <noreply@yatishara.com>";
+      process.env.AUTH_RESEND_FROM ?? "Yatishara Studio <hello@yatishara.com>";
     const message = buildSignInCodeEmail({
       code: args.code,
       email: args.email,

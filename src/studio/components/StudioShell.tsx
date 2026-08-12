@@ -1284,6 +1284,7 @@ export function StudioShell({
 
   const tabSessionReadyRef = useRef(false);
   const skipNextTabPersistRef = useRef(false);
+  const lastPersistedTabSessionRef = useRef("");
 
   // Restore open tabs from localStorage before paint. SSR / HMR used to seed a
   // default tab list, then the persist effect wrote that over the real session.
@@ -1325,13 +1326,19 @@ export function StudioShell({
       skipNextTabPersistRef.current = false;
       return;
     }
-    writePersistedTabSession({
+    // Script hydrate fills tabEntrySnapshots with full bodies; slim + skip
+    // identical writes so opening an MD doesn't spam localStorage / re-render churn.
+    const slimmed = {
       openTabs,
       activeTab,
       activeFolderId,
       navTrail,
-      snapshots: tabEntrySnapshots,
-    });
+      snapshots: slimTabEntrySnapshots(tabEntrySnapshots),
+    };
+    const serialized = JSON.stringify(slimmed);
+    if (serialized === lastPersistedTabSessionRef.current) return;
+    lastPersistedTabSessionRef.current = serialized;
+    writePersistedTabSession(slimmed);
   }, [openTabs, activeTab, activeFolderId, navTrail, tabEntrySnapshots]);
 
   const [aspectRatio, setAspectRatio] = useState(() => initialComposerCtx.aspectRatio ?? "16:9");
