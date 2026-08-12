@@ -251,7 +251,7 @@ describe("arrangeTrackForDrop", () => {
     expect(next.find((c) => c.id === "main")!.startTime).toBe(0);
   });
 
-  it("keeps the free-drop position on overlay even when it overlaps a neighbor", () => {
+  it("parks the dropped overlay clip at a touch — neighbors do not move", () => {
     const project = projectWith(
       [
         {
@@ -284,9 +284,8 @@ describe("arrangeTrackForDrop", () => {
       focusClip: focus,
       preferredStart: 2,
     });
-    // Drop stays at 2; A is pushed past it (not: B shoved to 4).
-    expect(next.find((c) => c.id === "b")!.startTime).toBe(2);
-    expect(next.find((c) => c.id === "a")!.startTime).toBe(4);
+    expect(next.find((c) => c.id === "a")!.startTime).toBe(0);
+    expect(next.find((c) => c.id === "b")!.startTime).toBe(4);
   });
 });
 

@@ -2589,7 +2589,8 @@
 }
 
 .studio-editor-transport-left button,
-.studio-editor-transport-right .studio-editor-zoom button {
+.studio-editor-transport-right .studio-editor-zoom button,
+.studio-editor-overlay-snap {
   width: 28px;
   height: 28px;
   border-radius: 6px;
@@ -2601,8 +2602,14 @@
 }
 
 .studio-editor-transport-left button:hover:not(:disabled),
-.studio-editor-transport-right .studio-editor-zoom button:hover {
+.studio-editor-transport-right .studio-editor-zoom button:hover,
+.studio-editor-overlay-snap:hover {
   background: var(--mos-hover);
+  color: var(--mos-text);
+}
+
+.studio-editor-overlay-snap.is-active {
+  background: var(--mos-plate-strong);
   color: var(--mos-text);
 }
 

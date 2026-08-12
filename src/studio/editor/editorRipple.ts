@@ -1,5 +1,6 @@
 import type { EditorClip, EditorProject } from "./types";
 import { clipDuration } from "./editorState";
+import { resolveSecondaryDropStart } from "./editorSnap";
 
 export type RipplePlacement = {
   clipId: string;
@@ -91,7 +92,10 @@ function computePackedLayout(args: {
   return packPlacements(ordered, trackId);
 }
 
-/** Overlay / audio / text: place at preferredStart; keep gaps; push only on overlap. */
+/**
+ * Overlay / audio / text: place at preferredStart; keep gaps; never move neighbors.
+ * If the drop would overlap, park the focus clip at the touching dock instead.
+ */
 function computeFreeformLayout(args: {
   project: EditorProject;
   trackId: string;
@@ -236,8 +240,8 @@ export function resolveTrackOverlaps(
 }
 
 /**
- * Free-lane drop: the focus clip keeps preferredStart exactly.
- * Neighbors that collide are pushed right (gaps elsewhere stay).
+ * Free-lane drop: neighbors stay put. Focus keeps preferredStart when the gap
+ * fits; otherwise it parks against the nearest touching edge (no gap-fill).
  */
 export function resolveFreeformDrop(
   clips: EditorClip[],
@@ -245,58 +249,31 @@ export function resolveFreeformDrop(
   focusClipId: string,
 ): EditorClip[] {
   const focus = clips.find((clip) => clip.id === focusClipId && clip.trackId === trackId);
-  if (!focus) return resolveTrackOverlaps(clips, trackId, focusClipId);
+  if (!focus) return clips;
 
-  const focusStart = Math.max(0, focus.startTime);
-  const focusEnd = focusStart + clipDuration(focus);
-  const nextStart = new Map<string, number>([[focusClipId, focusStart]]);
-
-  const others = clips
-    .filter((clip) => clip.trackId === trackId && clip.id !== focusClipId)
-    .sort((a, b) => a.startTime - b.startTime || a.id.localeCompare(b.id));
-
-  let cursor = 0;
-  for (const clip of others) {
-    let start = Math.max(0, clip.startTime);
-    const dur = clipDuration(clip);
-    let end = start + dur;
-
-    // Jump past the focused drop if we would overlap it.
-    if (start < focusEnd && end > focusStart) {
-      start = focusEnd;
-      end = start + dur;
-    }
-    // Keep order among non-focus clips (still preserve intentional gaps when clear).
-    if (start < cursor) {
-      start = cursor;
-      end = start + dur;
-      if (start < focusEnd && end > focusStart) {
-        start = focusEnd;
-        end = start + dur;
-      }
-    }
-
-    nextStart.set(clip.id, start);
-    cursor = start + dur;
-    if (cursor > focusStart && cursor < focusEnd) {
-      cursor = focusEnd;
-    }
-  }
-
-  let changed = false;
-  const next = clips.map((clip) => {
-    const start = nextStart.get(clip.id);
-    if (start === undefined || start === clip.startTime) return clip;
-    changed = true;
-    return { ...clip, startTime: start };
+  const others = clips.filter((clip) => clip.trackId === trackId && clip.id !== focusClipId);
+  const { startTime } = resolveSecondaryDropStart({
+    preferredStart: Math.max(0, focus.startTime),
+    durationSec: clipDuration(focus),
+    others: others.map((clip) => ({
+      startTime: clip.startTime,
+      durationSec: clipDuration(clip),
+    })),
+    snapEnabled: false,
+    sticky: null,
   });
-  return changed ? next : clips;
+
+  if (Math.abs(startTime - focus.startTime) < 1e-9) return clips;
+  return clips.map((clip) =>
+    clip.id === focusClipId ? { ...clip, startTime } : clip,
+  );
 }
 
 /**
  * Drop a focus clip onto a track.
  * Main storyline: pack end-to-end from 0.
- * Above / overlay lanes: free place at preferredStart (gaps ok; drop stays put).
+ * Above / overlay lanes: free place at preferredStart (gaps ok; neighbors stay).
+ * Overlap parks the dropped clip at the touching edge — never pushes others.
  */
 export function arrangeTrackForDrop(args: {
   project: EditorProject;

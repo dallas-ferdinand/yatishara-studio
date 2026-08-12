@@ -1,5 +1,5 @@
 import type { EditorClip, EditorProject } from "./types";
-import { clipDuration } from "./editorState";
+import { clipDurationSec } from "./projectContract";
 
 export const SNAP_THRESHOLD_PX = 6;
 
@@ -21,7 +21,7 @@ export function collectSnapTimes(
   for (const clip of project.clips) {
     if (clip.id === excludeClipId) continue;
     times.add(clip.startTime);
-    times.add(clip.startTime + clipDuration(clip));
+    times.add(clip.startTime + clipDurationSec(clip));
   }
   return [...times].sort((a, b) => a - b);
 }
@@ -80,7 +80,7 @@ export function snapClipMove(
   thresholdSec: number,
   disableSnap = false,
 ): { startTime: number; guide: number | null } {
-  return snapClipStart(proposedStart, clipDuration(clip), snapTimes, thresholdSec, disableSnap);
+  return snapClipStart(proposedStart, clipDurationSec(clip), snapTimes, thresholdSec, disableSnap);
 }
 
 export function snapTrimLeft(
@@ -127,9 +127,133 @@ export function snapTrimRight(
 
 export function snapDropStart(
   proposedStart: number,
-  clipDurationSec: number,
+  durationSec: number,
   snapTimes: number[],
   thresholdSec: number,
 ): { startTime: number; guide: number | null } {
-  return snapClipStart(proposedStart, clipDurationSec, snapTimes, thresholdSec);
+  return snapClipStart(proposedStart, durationSec, snapTimes, thresholdSec);
+}
+
+export const OVERLAY_SNAP_STORAGE_KEY = "studio-editor-overlay-snap";
+
+export function readOverlaySnapEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(OVERLAY_SNAP_STORAGE_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function writeOverlaySnapEnabled(enabled: boolean) {
+  try {
+    window.localStorage.setItem(OVERLAY_SNAP_STORAGE_KEY, enabled ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+export type OverlayDropSticky = {
+  side: "before" | "after";
+  leftDock: number;
+  rightDock: number;
+};
+
+/**
+ * Overlay / secondary lanes: never move neighbors, never pack gaps.
+ * Valid gap → keep preferredStart (optional magnet to edges).
+ * Overlap / too-small gap → park at the touching dock; stay there until the
+ * pointer crosses the midpoint toward the other dock.
+ */
+export function resolveSecondaryDropStart(args: {
+  preferredStart: number;
+  durationSec: number;
+  others: Array<{ startTime: number; durationSec: number }>;
+  snapEnabled?: boolean;
+  snapTimes?: number[];
+  thresholdSec?: number;
+  sticky?: OverlayDropSticky | null;
+}): { startTime: number; guide: number | null; sticky: OverlayDropSticky | null } {
+  const duration = Math.max(0, args.durationSec);
+  const raw = Math.max(0, args.preferredStart);
+  const intervals = args.others
+    .map((clip) => ({ start: clip.startTime, end: clip.startTime + clip.durationSec }))
+    .filter((span) => span.end > span.start)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const overlaps = (start: number) => {
+    const end = start + duration;
+    return intervals.some((span) => start < span.end - 1e-9 && end > span.start + 1e-9);
+  };
+
+  const gaps: Array<{ start: number; end: number }> = [];
+  let cursor = 0;
+  for (const span of intervals) {
+    if (span.start > cursor + 1e-9) gaps.push({ start: cursor, end: span.start });
+    cursor = Math.max(cursor, span.end);
+  }
+  gaps.push({ start: cursor, end: Number.POSITIVE_INFINITY });
+  const usable = gaps.filter((gap) => gap.end - gap.start >= duration - 1e-9);
+
+  let candidate = raw;
+  let guide: number | null = null;
+  if (args.snapEnabled && args.snapTimes?.length && (args.thresholdSec ?? 0) > 0) {
+    const snapped = snapClipStart(raw, duration, args.snapTimes, args.thresholdSec ?? 0);
+    if (!overlaps(snapped.startTime)) {
+      candidate = snapped.startTime;
+      guide = snapped.guide;
+    }
+  }
+
+  if (!overlaps(candidate)) {
+    return { startTime: candidate, guide, sticky: null };
+  }
+
+  let leftDock: number | null = null;
+  let rightDock: number | null = null;
+  for (const gap of usable) {
+    const minStart = Math.max(0, gap.start);
+    const maxStart = Number.isFinite(gap.end) ? gap.end - duration : Number.POSITIVE_INFINITY;
+    if (maxStart < minStart - 1e-9) continue;
+    if (maxStart <= candidate + 1e-9) leftDock = maxStart;
+    if (rightDock === null && minStart >= candidate - 1e-9) rightDock = minStart;
+  }
+
+  if (leftDock === null && rightDock === null) {
+    const lastEnd = intervals.length ? intervals[intervals.length - 1]!.end : 0;
+    return { startTime: Math.max(0, lastEnd), guide: lastEnd, sticky: null };
+  }
+  if (leftDock === null) {
+    return {
+      startTime: rightDock!,
+      guide: rightDock,
+      sticky: { side: "after", leftDock: rightDock!, rightDock: rightDock! },
+    };
+  }
+  if (rightDock === null) {
+    return {
+      startTime: leftDock,
+      guide: leftDock,
+      sticky: { side: "before", leftDock, rightDock: leftDock },
+    };
+  }
+
+  const sameDocks =
+    args.sticky &&
+    Math.abs(args.sticky.leftDock - leftDock) < 1e-6 &&
+    Math.abs(args.sticky.rightDock - rightDock) < 1e-6;
+  let side: "before" | "after";
+  if (sameDocks && args.sticky) {
+    // Stay pressed against the first touch until the pointer is in a new gap.
+    side = args.sticky.side;
+  } else {
+    side = Math.abs(candidate - leftDock) <= Math.abs(candidate - rightDock) ? "before" : "after";
+  }
+
+  const startTime = side === "before" ? leftDock : rightDock;
+  return {
+    startTime,
+    guide: startTime,
+    sticky: { side, leftDock, rightDock },
+  };
 }

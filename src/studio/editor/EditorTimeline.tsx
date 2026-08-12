@@ -16,6 +16,7 @@ import {
   ZoomIn,
   ZoomOut,
   Sparkles,
+  Magnet,
 } from "lucide-react";
 import {
   transitionLabel,
@@ -29,6 +30,7 @@ import { clipDuration, formatTimecodeFull, formatTimecodeRuler } from "./editorS
 import { MIN_CLIP_SEC, quantizeToFrame } from "./projectContract";
 import {
   collectSnapTimes,
+  resolveSecondaryDropStart,
   snapClipMove,
   snapThresholdSec,
   snapTrimLeft,
@@ -386,6 +388,7 @@ function TimelineClipBlock({
   rippleActive,
   rippleStartTime,
   isPickedUp,
+  overlaySnapEnabled = true,
 }) {
   const durationSec = clipDuration(clip);
   const width = clipLaneWidthPx(durationSec, pps);
@@ -457,6 +460,8 @@ function TimelineClipBlock({
     let lastArrangeProbe = originStart;
     let moved = mode !== "move";
     let pickedUp = false;
+    let overlaySticky = null;
+    let overlayStickyTrackId = null;
     setDragging(mode);
 
     const targetEl = event.currentTarget;
@@ -506,36 +511,69 @@ function TimelineClipBlock({
           ? Math.max(0, timeFromPointerX(moveEvent.clientX))
           : Math.max(0, originStart + deltaSec);
 
-        // Magnetic snap by default (vertical guides); Alt disables — same as trim.
-        const disableSnap = moveEvent.altKey || !lastViable;
-        if (!disableSnap) {
-          const moveSnapTimes = collectSnapTimes(
+        const destIsMain = Boolean(
+          allowedTrackId && isMainStoryTrack(project, allowedTrackId),
+        );
+
+        if (allowedTrackId && !destIsMain) {
+          if (overlayStickyTrackId !== allowedTrackId) {
+            overlaySticky = null;
+            overlayStickyTrackId = allowedTrackId;
+          }
+          const overlaySnapTimes = collectSnapTimes(
             project,
-            allowedTrackId ?? clip.trackId,
+            allowedTrackId,
             clip.id,
             playhead,
           );
-          const { startTime, guide } = snapClipMove(
-            clip,
-            rawStart,
-            moveSnapTimes,
+          const resolved = resolveSecondaryDropStart({
+            preferredStart: Math.max(0, rawStart),
+            durationSec,
+            others: project.clips
+              .filter((item) => item.trackId === allowedTrackId && item.id !== clip.id)
+              .map((item) => ({
+                startTime: item.startTime,
+                durationSec: clipDuration(item),
+              })),
+            snapEnabled: Boolean(overlaySnapEnabled) && !moveEvent.altKey && lastViable,
+            snapTimes: overlaySnapTimes,
             thresholdSec,
-            false,
-          );
-          lastStart = startTime;
-          onSnapGuide?.(guide);
+            sticky: overlaySticky,
+          });
+          overlaySticky = resolved.sticky;
+          lastStart = resolved.startTime;
+          onSnapGuide?.(resolved.guide);
         } else {
-          lastStart = Math.max(0, rawStart);
-          onSnapGuide?.(null);
+          overlaySticky = null;
+          overlayStickyTrackId = null;
+          // Magnetic snap by default on the main line (vertical guides); Alt disables.
+          const disableSnap = moveEvent.altKey || !lastViable;
+          if (!disableSnap) {
+            const moveSnapTimes = collectSnapTimes(
+              project,
+              allowedTrackId ?? clip.trackId,
+              clip.id,
+              playhead,
+            );
+            const { startTime, guide } = snapClipMove(
+              clip,
+              rawStart,
+              moveSnapTimes,
+              thresholdSec,
+              false,
+            );
+            lastStart = startTime;
+            onSnapGuide?.(guide);
+          } else {
+            lastStart = Math.max(0, rawStart);
+            onSnapGuide?.(null);
+          }
         }
         lastTrackId = allowedTrackId;
 
         // Main line: probe insert with the pointer (aim between clips).
-        // Overlay lanes: probe with the clip left edge (free placement).
-        const arrangeProbe =
-          allowedTrackId && isMainStoryTrack(project, allowedTrackId)
-            ? pointerTime
-            : lastStart;
+        // Overlay lanes: probe with the parked left edge (free place / touch dock).
+        const arrangeProbe = destIsMain ? pointerTime : lastStart;
         lastArrangeProbe = arrangeProbe;
 
         lastDropStart = lastStart;
@@ -1033,6 +1071,8 @@ export function EditorTransportBar({
   onSplit,
   onDelete,
   onZoom,
+  overlaySnapEnabled = true,
+  onOverlaySnapChange,
 }) {
   return (
     <div className="studio-editor-transport">
@@ -1072,6 +1112,24 @@ export function EditorTransportBar({
         </span>
       </div>
       <div className="studio-editor-transport-right">
+        <button
+          type="button"
+          className={`studio-editor-overlay-snap${overlaySnapEnabled ? " is-active" : ""}`}
+          aria-pressed={overlaySnapEnabled}
+          aria-label={
+            overlaySnapEnabled
+              ? "Overlay snap on — edges magnet when close"
+              : "Overlay snap off — free place on secondary lanes"
+          }
+          title={
+            overlaySnapEnabled
+              ? "Overlay snap on. Secondary clips magnet to nearby starts/ends. Click to place freely."
+              : "Overlay snap off. Secondary clips stay free; they still stop at a touch instead of overlapping. Click to magnet to edges."
+          }
+          onClick={() => onOverlaySnapChange?.(!overlaySnapEnabled)}
+        >
+          <Magnet size={ICON} aria-hidden="true" />
+        </button>
         <div className="studio-editor-zoom">
           <button type="button" aria-label="Zoom out" onClick={() => onZoom(Math.max(MIN_PPS, Math.round(pixelsPerSecond * 0.9)))}>
             <ZoomOut size={ICON} aria-hidden="true" />
@@ -1111,6 +1169,7 @@ export function EditorTimeline({
   onZoom,
   onSetJointTransition,
   onAddTextClip: _onAddTextClip,
+  overlaySnapEnabled = true,
 }) {
   const scrollRef = useRef(null);
   const trackRowRefs = useRef(new Map());
@@ -1567,7 +1626,7 @@ export function EditorTimeline({
         sourceDuration: payload.duration,
         label: payload.name,
         kind,
-        // Left edge — freeform place (gaps ok); overlaps push neighbors right.
+        // Left edge — freeform place (gaps ok); overlap parks at a touch, neighbors stay.
         centerTime: Math.max(0, rawStart),
         insertTrackAt: index,
       });
@@ -1783,6 +1842,7 @@ export function EditorTimeline({
                               : undefined
                           }
                           isPickedUp={pickup?.clipId === clip.id}
+                          overlaySnapEnabled={overlaySnapEnabled}
                           renameToken={
                             renameRequest?.clipId === clip.id ? renameRequest.token : undefined
                           }

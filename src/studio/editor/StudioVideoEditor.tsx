@@ -27,6 +27,7 @@ import {
   reducer,
 } from "./editorState";
 import { MIN_CLIP_SEC, quantizeToFrame } from "./projectContract";
+import { readOverlaySnapEnabled, writeOverlaySnapEnabled } from "./editorSnap";
 import { useEditorHotkeys } from "./useEditorHotkeys";
 import { jointByKey } from "./editorTimelineUtils";
 import {
@@ -206,6 +207,7 @@ export function StudioVideoEditor({
   const [localProjectId, setLocalProjectId] = useState(projectId ?? null);
   const [clipMenu, setClipMenu] = useState(null);
   const [renameRequest, setRenameRequest] = useState(null);
+  const [overlaySnapEnabled, setOverlaySnapEnabled] = useState(readOverlaySnapEnabled);
 
   const exportJob = useQuery(
     api.exportJobs.get,
@@ -963,6 +965,11 @@ export function StudioVideoEditor({
                   onSplit={() => dispatch({ type: "split_at_playhead" })}
                   onDelete={() => dispatch({ type: "delete_selected" })}
                   onZoom={(pixelsPerSecond) => dispatch({ type: "set_zoom", pixelsPerSecond })}
+                  overlaySnapEnabled={overlaySnapEnabled}
+                  onOverlaySnapChange={(enabled) => {
+                    setOverlaySnapEnabled(enabled);
+                    writeOverlaySnapEnabled(enabled);
+                  }}
                 />
                 <EditorTimeline
                   project={state.project}
@@ -972,6 +979,7 @@ export function StudioVideoEditor({
                   selectedJointKey={state.ui.selectedJointKey}
                   editorMode={state.ui.editorMode}
                   mediaById={mediaById}
+                  overlaySnapEnabled={overlaySnapEnabled}
                   onSelectClip={(clipId) => dispatch({ type: "select_clip", clipId })}
                   onSelectJoint={(jointKey) => dispatch({ type: "select_joint", jointKey })}
                   onSetPlayhead={(time) => {
