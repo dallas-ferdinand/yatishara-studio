@@ -129,7 +129,9 @@ export function getDeskBuildGuardInlineScript() {
     // A tab left open across a deploy still asks for its old lazy chunks
     // (markdown editor, viewers). Those 404 on the new build, which used to
     // surface as a dead pane / crash wall. Reload once instead.
-    var CHUNK_FAIL = /ChunkLoadError|Loading chunk|dynamically imported module|Importing a module script failed/i;
+    // Invalid array length / RangeError often = stale or half-evaluated chunk
+    // after a docker swap (same class as ChunkLoadError for Script panes).
+    var CHUNK_FAIL = /ChunkLoadError|Loading chunk|dynamically imported module|Importing a module script failed|Invalid array length|RangeError/i;
     var reloadForStaleChunk = () => {
       try {
         const last = Number(sessionStorage.getItem("yatishara-studio-chunk-reload") || "0");

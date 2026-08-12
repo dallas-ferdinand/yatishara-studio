@@ -55,6 +55,8 @@ function formatPipeRow(cells) {
 function isTableLine(line) {
   const t = String(line ?? "").trim();
   if (!t.includes("|")) return false;
+  // Script References meta rows (`- file | kind: image | …`) are not tables.
+  if (/^[-*+]\s+/.test(t) || /^\d+\.\s+/.test(t)) return false;
   if (t.startsWith("|")) return true;
   const cells = splitPipeRow(t);
   if (!cells || cells.length < 2) return false;

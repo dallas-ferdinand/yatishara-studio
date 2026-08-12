@@ -56,13 +56,17 @@ class StudioShellErrorBoundary extends Component<
     const message = error?.message
       ? String(error.message).slice(0, 280)
       : "Studio crashed while loading.";
+    const blob = `${error?.name ?? ""} ${message}`;
     // A tab held open across a deploy still asks for its old lazy chunks
     // (editors, viewers). Those 404 on the new build — reload, don't wall.
+    // Stale/corrupt chunks can also throw RangeError ("Invalid array length")
+    // while evaluating — same recovery; drop sticky Script tabs first.
     const autoReload =
       /timed out|timeout|out_of_retention|try again later/i.test(message) ||
       /ChunkLoadError|Loading chunk|dynamically imported module|Importing a module script failed/i.test(
-        `${error?.name ?? ""} ${message}`,
-      );
+        blob,
+      ) ||
+      /Invalid array length|RangeError/i.test(blob);
     return { failed: true, message, autoReload };
   }
 
@@ -90,13 +94,44 @@ class StudioShellErrorBoundary extends Component<
       keepalive: true,
     }).catch(() => {});
 
-    // Transient Convex isolate timeouts should not leave a sticky recovery wall.
+    // Transient Convex isolate timeouts / stale chunks / bad Script render
+    // should not leave a sticky recovery wall.
     if (this.state.autoReload) {
       try {
         const key = "ys-shell-timeout-reload";
         const last = Number(sessionStorage.getItem(key) || "0");
         if (Date.now() - last > 20_000) {
           sessionStorage.setItem(key, String(Date.now()));
+          if (/Invalid array length|RangeError/i.test(String(error?.message ?? ""))) {
+            try {
+              const raw = window.localStorage.getItem("yatishara-studio-open-tabs-v1");
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                const openTabs = Array.isArray(parsed?.openTabs)
+                  ? parsed.openTabs.filter(
+                      (tab: unknown) =>
+                        typeof tab === "string" && !tab.startsWith("document:"),
+                    )
+                  : [];
+                const activeTab =
+                  typeof parsed?.activeTab === "string" &&
+                  !String(parsed.activeTab).startsWith("document:")
+                    ? parsed.activeTab
+                    : openTabs[0] || "composer";
+                window.localStorage.setItem(
+                  "yatishara-studio-open-tabs-v1",
+                  JSON.stringify({
+                    ...parsed,
+                    openTabs,
+                    activeTab,
+                    snapshots: {},
+                  }),
+                );
+              }
+            } catch {
+              /* ignore */
+            }
+          }
           this.reloadTimer = setTimeout(() => {
             window.location.reload();
           }, 900);

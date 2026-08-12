@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
@@ -181,6 +182,41 @@ export const moveToTrash = authedMutation({
     const doc = await requireDocumentOwner(ctx, args.documentId);
     await ctx.db.patch(doc._id, {
       deletedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** Ops: soft-delete by id without owner session (admin key / internal only). */
+export const internalSoftDelete = internalMutation({
+  args: { documentId: v.id("documents") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get("documents", args.documentId);
+    if (!doc) return null;
+    await ctx.db.patch(args.documentId, {
+      deletedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** Ops: rewrite Script body (sanitize bad agent markdown without owner session). */
+export const internalSetContent = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    contentMarkdown: v.string(),
+    title: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get("documents", args.documentId);
+    if (!doc) return null;
+    await ctx.db.patch(args.documentId, {
+      contentMarkdown: args.contentMarkdown,
+      ...(args.title !== undefined ? { title: args.title.trim() } : {}),
       updatedAt: Date.now(),
     });
     return null;

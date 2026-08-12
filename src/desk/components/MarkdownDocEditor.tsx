@@ -24,7 +24,12 @@ function ToolbarButton({ title, icon, onClick, active = false }) {
 
 function decorateDocShells(root) {
   if (!root) return;
-  enhanceCodeBlocks(root);
+  try {
+    enhanceCodeBlocks(root);
+  } catch (error) {
+    // Mermaid/katex/enhance must never wall the whole Studio shell.
+    console.warn("[MarkdownDocEditor] enhanceCodeBlocks failed", error);
+  }
   root
     .querySelectorAll(
       ".mos-code, .code-shell, .mos-code-bar, .code-shell-head, .mos-code-copy",
@@ -42,6 +47,15 @@ function decorateDocShells(root) {
   });
 }
 
+function fallbackDocHtml(markdown) {
+  const raw = String(markdown ?? "");
+  const esc = raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return `<pre class="cursor-doc-fallback" style="white-space:pre-wrap;font:inherit;margin:0">${esc || "<br>"}</pre>`;
+}
+
 export function MarkdownDocEditor({ value, onChange, onSave, name }) {
   const editorRef = useRef(null);
   const lastMarkdownRef = useRef(value ?? "");
@@ -53,8 +67,14 @@ export function MarkdownDocEditor({ value, onChange, onSave, name }) {
     const el = editorRef.current;
     if (!el) return;
     lastMarkdownRef.current = md ?? "";
-    el.innerHTML = markdownToDocHtml(md);
-    decorateDocShells(el);
+    try {
+      el.innerHTML = markdownToDocHtml(md);
+      decorateDocShells(el);
+    } catch (error) {
+      // Bad/agent MD or stale enhance must stay in the pane — never throw into the shell.
+      console.warn("[MarkdownDocEditor] render failed; plain fallback", error);
+      el.innerHTML = fallbackDocHtml(md);
+    }
     dirtyRef.current = false;
     userEditedRef.current = false;
   }, []);

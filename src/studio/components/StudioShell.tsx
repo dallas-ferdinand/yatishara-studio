@@ -117,6 +117,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AttachmentPreviewSheet } from "@/desk/components/AttachmentPreviewSheet";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
+import { MarkdownDocEditor } from "@/desk/components/MarkdownDocEditor";
 import { FileReactionPicker } from "@/studio/components/FileReactionPicker";
 import {
   StudioSharePeoplePanel,
@@ -430,10 +431,6 @@ const ImageZoomViewer = dynamic(
   () => import("@/desk/components/ImageZoomViewer").then((m) => m.ImageZoomViewer),
   { ssr: false },
 );
-const MarkdownDocEditor = dynamic(
-  () => import("@/desk/components/MarkdownDocEditor").then((m) => m.MarkdownDocEditor),
-  { ssr: false },
-);
 const AssistantMessage = dynamic(
   () => import("./guided-video/AssistantMessage").then((m) => m.AssistantMessage),
   { ssr: false },
@@ -456,6 +453,7 @@ function preloadStudioHotPanes() {
   void import("./PostComposeTab");
   void import("./StudioRenameDialog");
   void import("./StudioListAssetPane");
+  // MarkdownDocEditor is statically imported — no lazy chunk for Scripts.
 }
 
 /** Intent mark now; chunk warm after paint so taps aren't blocked. */

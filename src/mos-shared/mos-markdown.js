@@ -36,6 +36,11 @@ function isSeparatorRow(line) {
 function isTableLine(line) {
   const t = String(line ?? "").trim();
   if (!t.includes("|")) return false;
+  // Prompt References lines look like:
+  // `- headphones.jpeg | kind: image | path: /Studio/... | studio: jd7...`
+  // Those are list/meta rows, not markdown tables — treating them as tables
+  // blew up Script editors (Invalid array length / bad DOM) on open.
+  if (/^[-*+]\s+/.test(t) || /^\d+\.\s+/.test(t)) return false;
   if (t.startsWith("|")) return true;
   const cells = splitPipeRow(t);
   if (!cells || cells.length < 2) return false;
