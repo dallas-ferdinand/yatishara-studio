@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent,
@@ -27,21 +29,59 @@ import {
 import { orbSeedForVoice } from "./StudioOrbPlayButton";
 import { MediaLoadWave } from "./media-load-frame";
 
-/** Fresh uploads often 404 once before Bunny catches up — retry instead of blank. */
+/**
+ * Create-grid thumb. Cached CDN images often finish before onLoad attaches
+ * (masonry remounts every time a new job lands) — settle via img.complete.
+ */
 function GenTileImg({ src }: { src: string }) {
   const [retryTick, setRetryTick] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const loadedSrcRef = useRef("");
   const attemptRef = useRef(0);
   const retryTimerRef = useRef(0);
 
-  useEffect(() => {
+  const markLoaded = useCallback((url: string) => {
+    if (!url) return;
+    loadedSrcRef.current = url;
+    attemptRef.current = 0;
+    queueMicrotask(() => {
+      setLoaded(true);
+      setFailed(false);
+    });
+  }, []);
+
+  useLayoutEffect(() => {
     attemptRef.current = 0;
     window.clearTimeout(retryTimerRef.current);
-    setLoaded(false);
+
+    if (!src) {
+      loadedSrcRef.current = "";
+      setLoaded(false);
+      setFailed(false);
+      return;
+    }
+
+    // Same URL already painted — keep it (Convex re-query / column reshuffle).
+    if (loadedSrcRef.current === src) {
+      setFailed(false);
+      setLoaded(true);
+      return;
+    }
+
     setFailed(false);
+    setLoaded(false);
+
+    const img = imgRef.current;
+    if (img?.complete && img.naturalWidth > 0) {
+      markLoaded(src);
+    }
+  }, [src, retryTick, markLoaded]);
+
+  useEffect(() => {
     return () => window.clearTimeout(retryTimerRef.current);
-  }, [src]);
+  }, []);
 
   if (failed) return null;
 
@@ -60,18 +100,17 @@ function GenTileImg({ src }: { src: string }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         key={`${src}::${retryTick}`}
+        ref={imgRef}
         src={src}
         alt=""
         draggable={false}
         decoding="async"
-        onLoad={() => {
-          attemptRef.current = 0;
-          queueMicrotask(() => setLoaded(true));
-        }}
+        onLoad={() => markLoaded(src)}
         onError={() => {
           const attempt = attemptRef.current + 1;
           attemptRef.current = attempt;
           if (attempt > 5) {
+            loadedSrcRef.current = "";
             queueMicrotask(() => {
               setFailed(true);
               setLoaded(false);
@@ -93,16 +132,50 @@ function GenTileVideo({ src }: { src: string }) {
   const [retryTick, setRetryTick] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const loadedSrcRef = useRef("");
   const attemptRef = useRef(0);
   const retryTimerRef = useRef(0);
 
-  useEffect(() => {
+  const markLoaded = useCallback((url: string) => {
+    if (!url) return;
+    loadedSrcRef.current = url;
+    attemptRef.current = 0;
+    queueMicrotask(() => {
+      setLoaded(true);
+      setFailed(false);
+    });
+  }, []);
+
+  useLayoutEffect(() => {
     attemptRef.current = 0;
     window.clearTimeout(retryTimerRef.current);
-    setLoaded(false);
+
+    if (!src) {
+      loadedSrcRef.current = "";
+      setLoaded(false);
+      setFailed(false);
+      return;
+    }
+
+    if (loadedSrcRef.current === src) {
+      setFailed(false);
+      setLoaded(true);
+      return;
+    }
+
     setFailed(false);
+    setLoaded(false);
+
+    const video = videoRef.current;
+    if (video && video.readyState >= 1) {
+      markLoaded(src);
+    }
+  }, [src, retryTick, markLoaded]);
+
+  useEffect(() => {
     return () => window.clearTimeout(retryTimerRef.current);
-  }, [src]);
+  }, []);
 
   if (failed) return null;
 
@@ -120,18 +193,17 @@ function GenTileVideo({ src }: { src: string }) {
       ) : null}
       <video
         key={`${src}::${retryTick}`}
+        ref={videoRef}
         src={src}
         muted
         playsInline
         preload="metadata"
-        onLoadedData={() => {
-          attemptRef.current = 0;
-          queueMicrotask(() => setLoaded(true));
-        }}
+        onLoadedData={() => markLoaded(src)}
         onError={() => {
           const attempt = attemptRef.current + 1;
           attemptRef.current = attempt;
           if (attempt > 5) {
+            loadedSrcRef.current = "";
             queueMicrotask(() => {
               setFailed(true);
               setLoaded(false);
