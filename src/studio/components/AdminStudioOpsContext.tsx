@@ -54,6 +54,7 @@ export type SessionRow = {
   updated_at?: string | null;
   preview?: string | null;
   avatar_url?: string | null;
+  avatar_cached?: boolean;
   badges?: string[];
   working?: { sophie?: boolean; csr?: boolean };
   status?: string | null;
@@ -70,6 +71,9 @@ export type SessionRow = {
   } | null;
   babysit_enabled?: number;
   context_reset_at?: string | null;
+  reply_jid?: string | null;
+  /** Server gate: Dallas test WA (+1 868 476-2078), including LID-keyed rows. */
+  ops_reset_allowed?: boolean;
 };
 
 export function sessionTitle(s: SessionRow | null | undefined) {
@@ -81,7 +85,8 @@ export function sessionTitle(s: SessionRow | null | undefined) {
   );
 }
 
-export function sessionAvatarSrc(phone: string) {
+export function sessionAvatarSrc(phone: string, cached?: boolean) {
+  if (cached === false) return null;
   const p = String(phone || "").replace(/\D/g, "");
   return p ? `/api/studio-ops/avatar/${encodeURIComponent(p)}` : null;
 }
@@ -368,29 +373,16 @@ export function AdminStudioOpsProvider({
     const quiet = Boolean(opts?.quiet);
     if (!quiet) setBusy("refresh");
     try {
-      const [d, s, p, st] = await Promise.all([
+      const sessionsP = listSessions({});
+      const restP = Promise.all([
         deviceStatus({}),
-        listSessions({}),
         listPayments({ pending: true }),
         serviceStatus({}).catch(() => null),
       ]);
-      const next = d as DeviceStatus;
-      setDevice(next);
-      if (next.open) setQrSrc(null);
+      const s = await sessionsP;
       const nextSessions = ((s as { sessions?: SessionRow[] })?.sessions ||
         []) as SessionRow[];
       setSessions(nextSessions);
-      setPendingPayments(
-        ((p as { payments?: PaymentRow[] })?.payments || []) as PaymentRow[],
-      );
-      const statuses = (st as { statuses?: StatusOpt[]; enabled?: boolean } | null)
-        ?.statuses;
-      if (Array.isArray(statuses) && statuses.length) {
-        setStatusCatalog(statuses);
-      }
-      if (st && typeof st === "object" && "enabled" in st) {
-        setServiceEnabled((st as { enabled?: boolean }).enabled !== false);
-      }
       const sel = selectedPhoneRef.current;
       if (sel) {
         const row = nextSessions.find((x) => x.phone === sel);
@@ -404,7 +396,26 @@ export function AdminStudioOpsProvider({
                 }
               : prev,
           );
+        } else {
+          setSelectedPhone(null);
+          setDetail(null);
         }
+      }
+      if (!quiet) setBusy(null);
+      const [d, p, st] = await restP;
+      const next = d as DeviceStatus;
+      setDevice(next);
+      if (next.open) setQrSrc(null);
+      setPendingPayments(
+        ((p as { payments?: PaymentRow[] })?.payments || []) as PaymentRow[],
+      );
+      const statuses = (st as { statuses?: StatusOpt[]; enabled?: boolean } | null)
+        ?.statuses;
+      if (Array.isArray(statuses) && statuses.length) {
+        setStatusCatalog(statuses);
+      }
+      if (st && typeof st === "object" && "enabled" in st) {
+        setServiceEnabled((st as { enabled?: boolean }).enabled !== false);
       }
       if (!bootedRef.current) {
         bootedRef.current = true;
@@ -423,12 +434,21 @@ export function AdminStudioOpsProvider({
       if (!quiet) setBusy(`detail:${phone}`);
       try {
         const raw = (await getSession({ phone })) as {
-          session?: SessionRow;
+          ok?: boolean;
+          error?: string;
+          session?: SessionRow | null;
           statuses?: string[];
           activity?: ActivityRow[];
           payments?: PaymentRow[];
           media?: MediaRow[];
         };
+        if (raw?.ok === false || raw?.error === "not_found" || !raw?.session) {
+          if (selectedPhoneRef.current === phone) {
+            setSelectedPhone(null);
+            setDetail(null);
+          }
+          return;
+        }
         setDetail({
           session: raw.session || null,
           statuses: raw.statuses || [],
@@ -437,6 +457,18 @@ export function AdminStudioOpsProvider({
           media: raw.media || [],
         });
       } catch (err) {
+        const msg = String(
+          err && typeof err === "object" && "message" in err
+            ? (err as { message?: unknown }).message
+            : err || "",
+        );
+        if (/not_found/i.test(msg)) {
+          if (selectedPhoneRef.current === phone) {
+            setSelectedPhone(null);
+            setDetail(null);
+          }
+          return;
+        }
         if (!quiet) {
           toast.error(friendlyConvexError(err, "Could not open chat"));
         }
@@ -668,9 +700,11 @@ export function AdminStudioOpsProvider({
 
   const afterMutate = useCallback(async () => {
     await refresh();
-    if (selectedPhone) await loadDetail(selectedPhone);
+    // Use ref — callers like Reset clear selection before awaiting this.
+    const sel = selectedPhoneRef.current;
+    if (sel) await loadDetail(sel);
     if (opsTab === "followups") await loadFollowups();
-  }, [refresh, loadDetail, selectedPhone, opsTab, loadFollowups]);
+  }, [refresh, loadDetail, opsTab, loadFollowups]);
 
   const linkPhone = useCallback(async () => {
     setBusy("link");
@@ -717,10 +751,7 @@ export function AdminStudioOpsProvider({
     async ({ phone }: { phone: string }) => {
       const p = String(phone || "").replace(/\D/g, "");
       if (!p) throw new Error("phone required");
-      if (p !== "18684762078") {
-        toast.error("Reset is only available for your test number");
-        throw new Error("reset_not_allowed");
-      }
+      // Allow LID session keys; :8795 enforces Dallas test-number / reply_jid gate.
       setBusy(`reset:${p}`);
       try {
         const res = (await resetChatAction({ phone: p })) as {
@@ -730,11 +761,23 @@ export function AdminStudioOpsProvider({
         if (res?.ok === false) {
           throw new Error(res.error || "Reset failed");
         }
-        setSelectedPhone(null);
-        setDetail(null);
         setThreadEpoch((n) => n + 1);
-        await afterMutate();
-        toast.success("Customer deleted from Ops");
+        await refresh({ quiet: true });
+        if (selectedPhoneRef.current === p) {
+          await loadDetail(p, { quiet: true });
+        }
+        const purged = Array.isArray(
+          (res as { studio_purge?: { purged?: unknown[] } })?.studio_purge
+            ?.purged,
+        )
+          ? (res as { studio_purge: { purged: unknown[] } }).studio_purge.purged
+              .length
+          : 0;
+        toast.success(
+          purged > 0
+            ? `Ops reset — chat kept, ${purged} test Studio account deleted`
+            : "Ops reset — chat kept",
+        );
         return res;
       } catch (err) {
         toast.error(friendlyConvexError(err, "Could not reset chat"));
@@ -743,7 +786,7 @@ export function AdminStudioOpsProvider({
         setBusy(null);
       }
     },
-    [resetChatAction, afterMutate],
+    [resetChatAction, refresh, loadDetail],
   );
 
   const value = useMemo<OpsContextValue>(

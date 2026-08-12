@@ -120,7 +120,7 @@ function OpsConversationRow({
 }) {
   const title = sessionTitle(session);
   const preview = String(session.preview || "").trim() || "Tap to open";
-  const avatarSrc = sessionAvatarSrc(session.phone);
+  const avatarSrc = sessionAvatarSrc(session.phone, session.avatar_cached);
   const running = Boolean(
     session.working?.sophie ||
       session.working?.csr ||

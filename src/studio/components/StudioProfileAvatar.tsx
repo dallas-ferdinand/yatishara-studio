@@ -102,11 +102,13 @@ export function StudioProfileAvatar(props: StudioProfileAvatarProps) {
     <>
       {hasImage ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
+          <img
           src={trimmedSrc}
           alt={alt}
           className="studio-profile-avatar-media"
           draggable={false}
+          loading="lazy"
+          decoding="async"
           onError={() => setBroken(true)}
         />
       ) : placeholder ? (
