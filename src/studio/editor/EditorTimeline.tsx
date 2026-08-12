@@ -389,6 +389,8 @@ function TimelineClipBlock({
   isPickedUp,
   overlaySnapEnabled = true,
   onSplit,
+  onPlayheadScrub,
+  onPlayheadScrubbing,
 }) {
   const durationSec = clipDuration(clip);
   const width = clipLaneWidthPx(durationSec, pps);
@@ -845,14 +847,46 @@ function TimelineClipBlock({
           title="Split here (S)"
           aria-label="Split clip at playhead"
           onPointerDown={(event) => {
+            if (event.button === 1 || event.altKey) return;
+            if (event.button !== 0) return;
             event.preventDefault();
             event.stopPropagation();
-          }}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onSelect(clip.id);
-            onSplit(clip.id);
+            const startX = event.clientX;
+            const startY = event.clientY;
+            let dragged = false;
+
+            const applyScrub = (clientX) => {
+              const time = timeFromPointerX ? timeFromPointerX(clientX) : playhead;
+              onPlayheadScrub?.(quantizeToFrame(Math.max(0, time)));
+            };
+
+            const onMove = (moveEvent) => {
+              if (
+                !dragged &&
+                Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 4
+              ) {
+                return;
+              }
+              if (!dragged) {
+                dragged = true;
+                onPlayheadScrubbing?.(true);
+              }
+              applyScrub(moveEvent.clientX);
+            };
+            const onUp = () => {
+              window.removeEventListener("pointermove", onMove);
+              window.removeEventListener("pointerup", onUp);
+              window.removeEventListener("pointercancel", onUp);
+              if (dragged) {
+                onPlayheadScrubbing?.(false);
+                return;
+              }
+              onSelect(clip.id);
+              onSplit(clip.id);
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
+            window.addEventListener("pointercancel", onUp);
           }}
         >
           <span className="studio-editor-clip-snip-icon" aria-hidden="true" />
@@ -1860,6 +1894,8 @@ export function EditorTimeline({
                           isPickedUp={pickup?.clipId === clip.id}
                           overlaySnapEnabled={overlaySnapEnabled}
                           onSplit={playing ? undefined : onSplitClip}
+                          onPlayheadScrub={onSetPlayhead}
+                          onPlayheadScrubbing={setScrubbing}
                           renameToken={
                             renameRequest?.clipId === clip.id ? renameRequest.token : undefined
                           }

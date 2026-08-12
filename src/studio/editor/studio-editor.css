@@ -3609,7 +3609,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   padding: 0;
   border: none;
   background: transparent;
-  cursor: pointer;
+  cursor: var(--studio-cursor-resize-x, ew-resize);
   pointer-events: auto;
 }
 
@@ -3620,7 +3620,8 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   width: 12px;
   height: 16px;
   transform: translate(-50%, -50%);
-  color: var(--studio-clip-accent, #00c2c7);
+  color: #fff;
+  opacity: 0.82;
   pointer-events: none;
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
 }
@@ -3648,6 +3649,8 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
 }
 
 .studio-editor-clip-snip:hover .studio-editor-clip-snip-icon {
+  color: var(--studio-clip-accent, #00c2c7);
+  opacity: 1;
   transform: translate(-50%, -50%) scale(1.08);
 }
 
