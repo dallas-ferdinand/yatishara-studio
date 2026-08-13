@@ -34,10 +34,10 @@ async function seedActivePlan(
     const planId = await ctx.db.insert("subscriptionPlans", {
       name: "Plus",
       slug: "plus",
-      monthlyPriceCents: 28_500,
+      monthlyPriceCents: 29_100,
       originalMonthlyPriceCents: 30_000,
-      discountPercent: 5,
-      annualDiscountPercent: 15,
+      discountPercent: 3,
+      annualDiscountPercent: 8,
       includedMonthlyCredits: 600,
       topUpCreditPriceCents: 50,
       enabled: true,
@@ -261,7 +261,7 @@ describe("PayWise billing invariants", () => {
     const first = await t.mutation(internal.billing.preparePaywiseCheckout, args);
     const replay = await t.mutation(internal.billing.preparePaywiseCheckout, args);
     expect(replay.paymentId).toBe(first.paymentId);
-    expect(first.amountCents).toBe(4_750);
+    expect(first.amountCents).toBe(4_850);
 
     await expect(
       t.mutation(internal.billing.preparePaywiseCheckout, {

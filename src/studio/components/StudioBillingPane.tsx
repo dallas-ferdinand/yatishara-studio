@@ -5,12 +5,11 @@ import { ArrowRight, Check } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
+import { STUDIO_PLAN_CATALOG, STUDIO_PLAN_SLUGS } from "../../../convex/lib/studioPlans";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents, formatTtdShort } from "@/studio/lib/money";
 import { StudioConfirmOverlay } from "./StudioConfirmOverlay";
 import "./studio-billing.css";
-
-const STUDIO_PLAN_SLUGS = ["core", "plus", "pro"] as const;
 
 type BillingInterval = "month" | "year";
 type InvoiceKind = "all" | "subscription" | "topup" | "academy";
@@ -173,10 +172,18 @@ export function StudioBillingPane({
 
   useEffect(() => {
     if (!catalog) return;
-    const slugs = new Set(catalog.map((plan) => plan.slug));
-    const missing = STUDIO_PLAN_SLUGS.some((slug) => !slugs.has(slug));
-    const stale = catalog.some((plan) => !STUDIO_PLAN_SLUGS.includes(plan.slug as (typeof STUDIO_PLAN_SLUGS)[number]));
-    if (!missing && !stale) return;
+    const bySlug = new Map(catalog.map((plan) => [plan.slug, plan]));
+    const ratesStale = STUDIO_PLAN_CATALOG.some((want) => {
+      const have = bySlug.get(want.slug);
+      if (!have) return true;
+      return (
+        Number(have.discountPercent ?? 0) !== want.monthlyDiscountPercent ||
+        Number(have.annualDiscountPercent ?? 0) !== want.annualDiscountPercent ||
+        Number(have.originalMonthlyPriceCents ?? have.monthlyPriceCents) !== want.faceMonthlyCents
+      );
+    });
+    const extraPlans = catalog.some((plan) => !STUDIO_PLAN_SLUGS.includes(plan.slug as (typeof STUDIO_PLAN_SLUGS)[number]));
+    if (!ratesStale && !extraPlans) return;
     void ensureStudioPlans({}).catch(() => {});
   }, [catalog, ensureStudioPlans]);
 
@@ -187,6 +194,9 @@ export function StudioBillingPane({
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .slice(0, 3),
     [catalog],
+  );
+  const maxAnnualSave = Math.max(
+    ...STUDIO_PLAN_CATALOG.map((plan) => plan.annualDiscountPercent),
   );
 
   const filteredInvoices = useMemo(
@@ -369,7 +379,7 @@ export function StudioBillingPane({
                 onClick={() => setInterval("year")}
               >
                 Annual
-                <span>Save up to 20%</span>
+                <span>Save up to {maxAnnualSave}%</span>
               </button>
             </div>
 
