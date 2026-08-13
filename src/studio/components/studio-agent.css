@@ -738,6 +738,7 @@
   background: var(--mos-panel, #f5f5f7);
 }
 
+.studio-agent-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle,
 .studio-agent-chat-head .studio-composer-circle-btn.studio-dm-peer-toggle {
   width: var(--studio-dm-chrome-circle, 28px) !important;
   min-width: var(--studio-dm-chrome-circle, 28px) !important;
@@ -748,6 +749,45 @@
   flex: 0 0 auto;
   box-sizing: border-box !important;
   border-radius: 999px !important;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7)) !important;
+  color: var(--color-cursor-muted, var(--mos-muted)) !important;
+  box-shadow: none !important;
+}
+
+.studio-agent-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle:hover,
+.studio-agent-chat-head .studio-composer-circle-btn.studio-dm-peer-toggle:hover {
+  border-color: var(--color-cursor-border, var(--mos-border)) !important;
+  background: var(--mos-hover, var(--color-cursor-hover)) !important;
+  color: var(--color-cursor-text-bright, var(--mos-text)) !important;
+}
+
+.studio-agent-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle.is-on,
+.studio-agent-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle.is-on:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 48%,
+    var(--color-cursor-border-soft, var(--mos-border))
+  ) !important;
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 16%,
+    var(--mos-page, var(--color-cursor-panel, #f5f5f7))
+  ) !important;
+  color: var(--color-cursor-text-bright, var(--mos-text)) !important;
+}
+
+.studio-agent-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle.is-on:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 62%,
+    var(--color-cursor-border-soft, var(--mos-border))
+  ) !important;
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 24%,
+    var(--studio-composer-glass-muted, var(--mos-plate-strong, var(--mos-raised)))
+  ) !important;
 }
 
 .studio-agent-chat-head-main {
@@ -816,10 +856,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.studio-agent-chat-head-tools .studio-composer-circle-btn.is-on {
-  color: var(--mos-accent, #e85d04);
 }
 
 .studio-agent-chat-sidebar {

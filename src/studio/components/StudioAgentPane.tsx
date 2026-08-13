@@ -1344,47 +1344,15 @@ export function StudioAgentPane({
   );
 
   const infoSidebar = infoOpen ? (
-    activeThreadId ? (
-      <AgentChatSidebar
-        threadId={activeThreadId}
-        open={infoOpen}
-        onClose={() => setInfoOpen(false)}
-        creditPriceCents={pricing?.creditPriceCents}
-        agentBusy={busy}
-        variant={isMobile ? "sheet" : "docked"}
-        expiresUnix={expiresUnix}
-      />
-    ) : (
-      <aside
-        className={`studio-agent-chat-sidebar${isMobile ? " is-sheet" : ""}`}
-        aria-label="Agent chat info"
-      >
-        {isMobile ? (
-          <div className="cursor-panel-head cursor-sidebar-head studio-agent-chat-sidebar-head shrink-0">
-            <strong>Chat</strong>
-            <div className="cursor-panel-head-tools">
-              <button
-                type="button"
-                className="studio-composer-circle-btn studio-agent-sidebar-close"
-                aria-label="Close"
-                onClick={() => setInfoOpen(false)}
-              >
-                <X size={13} strokeWidth={2.25} aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-        ) : (
-          <nav className="studio-admin-head-tabs" aria-label="Chat panels">
-            <span className="studio-admin-head-tab is-active">Info</span>
-          </nav>
-        )}
-        <div className="studio-agent-chat-sidebar-body">
-          <p className="studio-settings-empty">
-            Send a message to start this chat — cost, media, and to-dos will show here.
-          </p>
-        </div>
-      </aside>
-    )
+    <AgentChatSidebar
+      threadId={activeThreadId}
+      open={infoOpen}
+      onClose={() => setInfoOpen(false)}
+      creditPriceCents={pricing?.creditPriceCents}
+      agentBusy={busy}
+      variant={isMobile ? "sheet" : "docked"}
+      expiresUnix={expiresUnix}
+    />
   ) : null;
 
   if (isMobile || !infoOpen) {

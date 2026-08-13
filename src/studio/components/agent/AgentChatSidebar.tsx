@@ -21,7 +21,7 @@ import { formatTtdFromCredits } from "@/studio/lib/money";
 import { parseBoard } from "./todoBoard";
 
 type AgentChatSidebarProps = {
-  threadId: Id<"agentThreads">;
+  threadId?: Id<"agentThreads"> | null;
   open: boolean;
   onClose: () => void;
   creditPriceCents?: number | null;
@@ -183,7 +183,9 @@ export function AgentChatSidebar({
 
   const insight = useQuery(
     api.agentThreads.threadInsight,
-    open ? { threadId, search: searching ? searchNeedle : undefined } : "skip",
+    open && threadId
+      ? { threadId, search: searching ? searchNeedle : undefined }
+      : "skip",
   );
 
   const board = useMemo(
@@ -297,6 +299,7 @@ export function AgentChatSidebar({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search messages, to-dos, media…"
             aria-label="Search this chat"
+            disabled={!threadId}
           />
           {searching ? (
             <button
@@ -314,7 +317,9 @@ export function AgentChatSidebar({
       <div className="studio-agent-chat-sidebar-body">
         {searching ? (
           <div className="studio-agent-sidebar-stack">
-            {insight === undefined ? (
+            {!threadId ? (
+              <p className="studio-settings-empty">Nothing yet.</p>
+            ) : insight === undefined ? (
               <p className="studio-settings-empty">Searching…</p>
             ) : searchEmpty ? (
               <p className="studio-settings-empty">
