@@ -114,7 +114,7 @@ export function StudioBalanceChip({
           className="studio-balance-chip-topup"
           onClick={() => onUpgrade?.()}
         >
-          Top up
+          Manage
         </button>
       </div>
       <div className="studio-balance-chip-rows">

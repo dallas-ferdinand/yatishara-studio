@@ -29551,7 +29551,10 @@ function StudioMobileAppMenu({
       onClose?.();
       onOpenBilling?.();
     } },
-    { label: "Credits", Icon: Zap, onClick: onOpenCredits },
+    { label: "Credits", Icon: Zap, onClick: () => {
+      onClose?.();
+      onOpenBilling?.();
+    } },
     { label: "Activity", Icon: Clock3, onClick: () => onOpenSettings?.("activity") },
     { label: "API", ariaLabel: "API keys", Icon: KeyRound, onClick: () => onOpenSettings?.("api-keys") },
     ...(desktop
@@ -29592,7 +29595,7 @@ function StudioMobileAppMenu({
           creditBalance={creditBalance}
           creditBalanceHigh={creditBalanceHigh}
           creditPriceCents={creditPriceCents}
-          onUpgrade={onOpenCredits}
+          onUpgrade={onOpenBilling}
         />
         <nav
           className="studio-mobile-app-menu-body is-app-grid"
