@@ -4,9 +4,9 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 crons.interval(
-  "reconcile paywise pending payments",
+  "reconcile wam pending payments",
   { minutes: 2 },
-  internal.paywiseActions.reconcilePendingPayments,
+  internal.wamActions.reconcilePendingPayments,
 );
 
 crons.interval(

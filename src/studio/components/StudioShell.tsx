@@ -1233,7 +1233,7 @@ export function StudioShell({
   const generateElementSheet = useAction(api.elementActions.generateSheet);
   const submitAssistedTurn = useAction(api.guidedVideoActions.submitAssistedTurn);
   const approveAndGenerate = useAction(api.guidedVideoActions.approveAndGenerate);
-  const syncPaywisePayment = useAction(api.paywiseActions.syncMyPayment);
+  const syncWamPayment = useAction(api.wamActions.syncMyPayment);
   const cancelAssistanceTurn = useMutation(api.guidedVideo.cancelAssistanceTurn);
   const truncateAssistanceEventsAfterPrompt = useMutation(
     api.guidedVideo.truncateAssistanceEventsAfterPrompt,
@@ -1468,10 +1468,10 @@ export function StudioShell({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("general");
   const [billingTopUpPrefillCents, setBillingTopUpPrefillCents] = useState(null);
-  /** PayWise return celebration — full-screen above all chrome. */
+  /** Wam return celebration — full-screen above all chrome. */
   const [paymentCelebration, setPaymentCelebration] = useState(null);
-  /** Full-screen handoff while creating checkout + leaving for PayWise. */
-  const [paywiseHandoff, setPaywiseHandoff] = useState(null);
+  /** Full-screen handoff while creating checkout + leaving for Wam. */
+  const [wamHandoff, setWamHandoff] = useState(null);
   const academyPaymentReturnHandledRef = useRef(false);
   /** Full-screen ask to enable browser push (gens / DMs / followed posts). */
   const [pushPromptOpen, setPushPromptOpen] = useState(false);
@@ -4992,7 +4992,7 @@ export function StudioShell({
   useEffect(() => {
     if (!currentUser?._id) return;
     if (typeof window === "undefined") return;
-    if (paymentCelebration || paywiseHandoff) return;
+    if (paymentCelebration || wamHandoff) return;
     if (!isStudioWebPushAvailable()) return;
     if (window.localStorage.getItem(STUDIO_PUSH_PROMPT_KEY) === "dismissed") return;
     if (getNotificationPermission() === "denied") return;
@@ -5012,7 +5012,7 @@ export function StudioShell({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [currentUser?._id, paymentCelebration, paywiseHandoff]);
+  }, [currentUser?._id, paymentCelebration, wamHandoff]);
 
   const applyStudioOpenParams = useCallback(
     (search) => {
@@ -5150,7 +5150,7 @@ export function StudioShell({
     customCursorEnabled,
     onCustomCursorChange: setCustomCursorEnabled,
     onPaymentCelebration: setPaymentCelebration,
-    onPaywiseHandoff: setPaywiseHandoff,
+    onWamHandoff: setWamHandoff,
     onActivityOpenMessages: (conversationId) => {
       openMessages();
       if (conversationId) setActiveDmConversationId(conversationId);
@@ -5303,11 +5303,11 @@ export function StudioShell({
           }
           let result;
           try {
-            result = await syncPaywisePayment({ paymentId, force: true });
+            result = await syncWamPayment({ paymentId, force: true });
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error ?? "");
-            // Auth can hydrate a beat late after the PayWise return redirect.
+            // Auth can hydrate a beat late after the Wam return redirect.
             if (/sign in|not authenticated|unauthorized/i.test(message)) {
               continue;
             }
@@ -5352,8 +5352,8 @@ export function StudioShell({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot PayWise academy return after auth
-  }, [currentUser?._id, syncPaywisePayment]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot Wam academy return after auth
+  }, [currentUser?._id, syncWamPayment]);
 
   /** @deprecated Use openNetworkTab — kept for call-site compatibility. */
   function openOffersTab(_section = "home") {
@@ -13694,7 +13694,7 @@ export function StudioShell({
           color: var(--cursor-accent);
           filter: drop-shadow(0 8px 24px color-mix(in srgb, var(--cursor-accent) 28%, transparent));
         }
-        .studio-paywise-handoff-kicker {
+        .studio-wam-handoff-kicker {
           margin: 0;
           color: var(--color-cursor-muted, var(--mos-muted));
           font-size: 12px;
@@ -13702,7 +13702,7 @@ export function StudioShell({
           letter-spacing: 0.04em;
           text-transform: uppercase;
         }
-        .studio-paywise-handoff-amount {
+        .studio-wam-handoff-amount {
           margin: 0;
           color: var(--color-cursor-text-bright, var(--mos-text));
           font-size: 18px;
@@ -25592,7 +25592,7 @@ export function StudioShell({
             payments={payments}
             onOpenSettings={() => openSettingsTab("general")}
             onOpenCredits={openCreditsPane}
-            onPaywiseHandoff={setPaywiseHandoff}
+            onWamHandoff={setWamHandoff}
             onPaymentCelebration={setPaymentCelebration}
             onOpenAdminTab={openAdminTab}
             onSeedStylePresets={() => seedStylePresets()}
@@ -26452,7 +26452,7 @@ export function StudioShell({
         : null}
       {pushPromptOpen &&
       !paymentCelebration &&
-      !paywiseHandoff &&
+      !wamHandoff &&
       typeof document !== "undefined"
         ? createPortal(
             <PushNotificationsPromptOverlay
@@ -26461,9 +26461,9 @@ export function StudioShell({
             document.body,
           )
         : null}
-      {paywiseHandoff && typeof document !== "undefined"
+      {wamHandoff && typeof document !== "undefined"
         ? createPortal(
-            <PaywiseCheckoutHandoffOverlay handoff={paywiseHandoff} />,
+            <WamCheckoutHandoffOverlay handoff={wamHandoff} />,
             document.body,
           )
         : null}
@@ -31838,7 +31838,7 @@ function ActivePane({
   payments,
   onOpenSettings,
   onOpenCredits,
-  onPaywiseHandoff,
+  onWamHandoff,
   onPaymentCelebration,
   onOpenAdminTab,
   onSeedStylePresets,
@@ -32309,7 +32309,7 @@ function ActivePane({
     return wrapPane(
       <StudioAcademyPane
         onOpenCredits={onOpenCredits ?? onOpenSettings}
-        onPaywiseHandoff={onPaywiseHandoff}
+        onWamHandoff={onWamHandoff}
         onPaymentCelebration={onPaymentCelebration}
         creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
         creditBalance={billingAccount?.creditBalance}
@@ -32820,7 +32820,7 @@ function BillingWorkspacePane({ tab: _tab, billingAccount, pricing, payments }) 
             <h2>Balance & top up</h2>
             <p>{formatTtdFromCredits(billingAccount?.creditBalance ?? 0, pricing?.creditPriceCents)} available, {formatTtdFromCredits(billingAccount?.reservedCredits ?? 0, pricing?.creditPriceCents)} set aside for content in progress.</p>
           </div>
-          <span className="studio-admin-chip">PayWise</span>
+          <span className="studio-admin-chip">Wam</span>
         </section>
         <section className="studio-admin-grid-large">
           <article className="studio-admin-card">
@@ -32840,7 +32840,7 @@ function BillingWorkspacePane({ tab: _tab, billingAccount, pricing, payments }) 
               <span className="studio-plan-badge">{plan.badge}</span>
               <h4>{plan.name}</h4>
               <p className="studio-plan-price">{plan.price}</p>
-              <p className="studio-plan-sub">PayWise checkout</p>
+              <p className="studio-plan-sub">Wam checkout</p>
               <ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
             </article>
           ))}
@@ -32886,7 +32886,7 @@ function AdminWorkspacePane({
   const [focusMarketplaceJobId, setFocusMarketplaceJobId] = useState(null);
   const adminReviewPayment = useMutation(api.billing.adminReviewPayment);
   const adminAdjustCredits = useMutation(api.billing.adminAdjustCredits);
-  const adminRefreshPaywise = useAction(api.paywiseActions.adminRefreshPaywisePayment);
+  const adminRefreshWam = useAction(api.wamActions.adminRefreshWamPayment);
   const seedLaunchPricing = useMutation(api.billing.adminSeedLaunchPricing);
   const [reviewStatus, setReviewStatus] = useState("");
   const visiblePayments = safePayments
@@ -32932,17 +32932,17 @@ function AdminWorkspacePane({
     await reviewPayment(paymentId, status);
   }
 
-  async function refreshPaywisePayment(paymentId) {
-    setReviewStatus("Refreshing from PayWise...");
+  async function refreshWamPayment(paymentId) {
+    setReviewStatus("Refreshing from Wam...");
     try {
-      const result = await adminRefreshPaywise({ paymentId });
+      const result = await adminRefreshWam({ paymentId });
       setReviewStatus(
         result.granted
-          ? "PayWise payment confirmed and credits granted."
-          : `PayWise status: ${humanizeAdminPaymentStatus(result.status)}`,
+          ? "Wam payment confirmed and credits granted."
+          : `Wam status: ${humanizeAdminPaymentStatus(result.status)}`,
       );
     } catch (error) {
-      setReviewStatus(friendlyConvexError(error, "PayWise refresh failed."));
+      setReviewStatus(friendlyConvexError(error, "Wam refresh failed."));
     }
   }
 
@@ -33029,7 +33029,7 @@ function AdminWorkspacePane({
               <AdminMetricCard
                 label="Pending"
                 value={formatMoney(pendingCents)}
-                body={`${pendingPayments.length} payments · awaiting PayWise or bank receipt review.`}
+                body={`${pendingPayments.length} payments · awaiting Wam confirmation.`}
               />
               <AdminMetricCard
                 label="Paid"
@@ -33088,7 +33088,7 @@ function AdminWorkspacePane({
                         <strong>{paymentCustomerName(payment)}</strong>
                         <span>{payment.customer?.email ?? payment.customer?.phone ?? payment.userId}</span>
                       </td>
-                      <td>{payment.method === "paywise" ? "PayWise" : payment.method === "bank" ? "Bank transfer" : payment.method}</td>
+                      <td>{payment.method === "wam" || payment.method === "paywise" ? "Wam" : payment.method === "bank" ? "Bank transfer" : payment.method}</td>
                       <td>{formatMoney(payment.amountCents)}</td>
                       <td><PaymentStatusPill status={payment.status} admin /></td>
                       <td>{formatDate(payment.createdAt)}</td>
@@ -33103,7 +33103,7 @@ function AdminWorkspacePane({
                 payment={selectedPayment}
                 onClose={() => setSelectedPaymentId(null)}
                 onStatusChange={(paymentId, status) => void handleAdminPaymentStatusChange(paymentId, status)}
-                onRefreshPaywise={(paymentId) => void refreshPaywisePayment(paymentId)}
+                onRefreshWam={(paymentId) => void refreshWamPayment(paymentId)}
               />
             ) : null}
           </div>
@@ -33272,7 +33272,7 @@ function AdminWorkspacePane({
                     <span className="studio-plan-badge">{plan.badge}</span>
                     <h4>{plan.name}</h4>
                     <p className="studio-plan-price">{plan.price}</p>
-                    <p className="studio-plan-sub">PayWise checkout</p>
+                    <p className="studio-plan-sub">Wam checkout</p>
                     <ul>
                       {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
                     </ul>
@@ -33354,8 +33354,8 @@ function AdminAuditSection() {
   );
 }
 
-function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywise }) {
-  const isPaywise = payment.method === "paywise";
+function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshWam }) {
+  const isWam = payment.method === "wam" || payment.method === "paywise";
   const isBankTransfer = payment.method === "bank";
   const receiptIsImage = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(payment.receiptUrl ?? "");
   const bankReviewOptions = [
@@ -33382,7 +33382,7 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
         <div className="studio-admin-detail-list">
           <BankLine label="Customer" value={paymentCustomerName(payment)} />
           <BankLine label="Contact" value={payment.customer?.email ?? payment.customer?.phone ?? "Unknown"} />
-          <BankLine label="Method" value={isPaywise ? "PayWise" : isBankTransfer ? "Bank transfer" : payment.method} />
+          <BankLine label="Method" value={isWam ? "Wam" : isBankTransfer ? "Bank transfer" : payment.method} />
           <BankLine label="Type" value={payment.subscriptionPlanId ? "Subscription" : "Top up"} />
           <BankLine
             label="Balance added"
@@ -33394,7 +33394,7 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
                   : "—"
             }
           />
-          {payment.externalPaymentId ? <BankLine label="PayWise id" value={payment.externalPaymentId} /> : null}
+          {payment.externalPaymentId ? <BankLine label="Wam id" value={payment.externalPaymentId} /> : null}
           {payment.providerStatus ? <BankLine label="Provider status" value={payment.providerStatus} /> : null}
           <BankLine label="Status" value={humanizeAdminPaymentStatus(payment.status)} />
           <BankLine label="Created" value={formatDate(payment.createdAt)} />
@@ -33403,13 +33403,13 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
         {isBankTransfer ? (
           <p className="studio-settings-empty">Older bank-transfer checkout — review the receipt, then mark paid or reject.</p>
         ) : null}
-        {isPaywise ? (
+        {isWam ? (
           <button
             type="button"
             className="cursor-settings-action"
-            onClick={() => onRefreshPaywise?.(payment._id)}
+            onClick={() => onRefreshWam?.(payment._id)}
           >
-            Refresh from PayWise
+            Refresh from Wam
           </button>
         ) : null}
         {isBankTransfer ? (
@@ -33429,7 +33429,7 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
           </label>
         ) : (
           <p className="studio-settings-empty">
-            PayWise payments settle automatically from provider status. Manual approval is disabled.
+            Wam payments settle automatically from provider status. Manual approval is disabled.
           </p>
         )}
         {payment.rejectionReason ? <p className="studio-admin-rejection-note">{payment.rejectionReason}</p> : null}
@@ -33638,8 +33638,8 @@ function AdminCustomerSidebar({ customer, payments, onClose, onAdjustCredits, on
                     <span>
                       {humanizeAdminPaymentStatus(payment.status)}
                       {" · "}
-                      {payment.method === "paywise"
-                        ? "PayWise"
+                      {payment.method === "wam" || payment.method === "paywise"
+                        ? "Wam"
                         : payment.method === "bank"
                           ? "Bank transfer"
                           : payment.method}
@@ -34804,7 +34804,7 @@ function SettingsSidePanel({
   customCursorEnabled,
   onCustomCursorChange,
   onPaymentCelebration,
-  onPaywiseHandoff,
+  onWamHandoff,
   onActivityOpenMessages,
   onActivityOpenPost,
   onActivityOpenBilling,
@@ -34835,7 +34835,7 @@ function SettingsSidePanel({
       customCursorEnabled={customCursorEnabled}
       onCustomCursorChange={onCustomCursorChange}
       onPaymentCelebration={onPaymentCelebration}
-      onPaywiseHandoff={onPaywiseHandoff}
+      onWamHandoff={onWamHandoff}
       onActivityOpenMessages={onActivityOpenMessages}
       onActivityOpenPost={onActivityOpenPost}
       onActivityOpenBilling={onActivityOpenBilling}
@@ -35003,8 +35003,8 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
           {phase === "success"
             ? successCopy
             : isAcademy
-              ? "Hang tight — we’re verifying PayWise and unlocking your course."
-              : "Hang tight — we’re verifying your PayWise payment."}
+              ? "Hang tight — we’re verifying Wam and unlocking your course."
+              : "Hang tight — we’re verifying your Wam payment."}
         </p>
         {phase === "success" ? (
           <button type="button" className="studio-payment-celebration-btn" onClick={onClose}>
@@ -35105,7 +35105,7 @@ function PushNotificationsPromptOverlay({ onClose }) {
   );
 }
 
-function PaywiseCheckoutHandoffOverlay({ handoff }) {
+function WamCheckoutHandoffOverlay({ handoff }) {
   const phase = handoff?.phase ?? "preparing";
   const checkoutUrl = typeof handoff?.checkoutUrl === "string" ? handoff.checkoutUrl : "";
   const amountLabel =
@@ -35124,21 +35124,21 @@ function PaywiseCheckoutHandoffOverlay({ handoff }) {
       className="studio-payment-celebration"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="studio-paywise-handoff-title"
+      aria-labelledby="studio-wam-handoff-title"
       aria-busy="true"
     >
       <div className="studio-payment-celebration-inner">
         <Loader2 className="studio-payment-celebration-spin" aria-hidden="true" />
-        <p className="studio-paywise-handoff-kicker">PayWise</p>
-        <h2 id="studio-paywise-handoff-title" className="studio-payment-celebration-title">
-          {phase === "redirect" ? "Continuing to PayWise" : "Preparing checkout"}
+        <p className="studio-wam-handoff-kicker">Wam</p>
+        <h2 id="studio-wam-handoff-title" className="studio-payment-celebration-title">
+          {phase === "redirect" ? "Continuing to Wam" : "Preparing checkout"}
         </h2>
         {amountLabel ? (
-          <p className="studio-paywise-handoff-amount">{amountLabel}</p>
+          <p className="studio-wam-handoff-amount">{amountLabel}</p>
         ) : null}
         <p className="studio-payment-celebration-copy">
           {phase === "redirect"
-            ? "Finish card payment securely on PayWise — we’ll bring you back here after."
+            ? "Finish card payment securely on Wam — we’ll bring you back here after."
             : "One moment while we open a secure checkout."}
         </p>
       </div>
@@ -35159,7 +35159,7 @@ function SettingsWorkspacePane({
   customCursorEnabled,
   onCustomCursorChange,
   onPaymentCelebration,
-  onPaywiseHandoff,
+  onWamHandoff,
   onActivityOpenMessages,
   onActivityOpenPost,
   onActivityOpenBilling,
@@ -35178,8 +35178,8 @@ function SettingsWorkspacePane({
   const settingsMenuScrollRef = useRef(null);
   useHorizontalWheelScroll(settingsMenuScrollRef);
   useHorizontalScrollFade(settingsMenuScrollRef);
-  const startPaywiseCheckout = useAction(api.paywiseActions.startCheckout);
-  const syncPaywisePayment = useAction(api.paywiseActions.syncMyPayment);
+  const startWamCheckout = useAction(api.wamActions.startCheckout);
+  const syncWamPayment = useAction(api.wamActions.syncMyPayment);
   const sellerPayout = useQuery(api.marketplace.getMyPayoutAccount);
   const creditPriceCents = pricing?.creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
   const plans = pricingPlans(pricing);
@@ -35259,7 +35259,7 @@ function SettingsWorkspacePane({
           if (attempt > 0) {
             await sleep(Math.min(6_000, 1_200 * 2 ** Math.min(attempt - 1, 2)));
           }
-          const result = await syncPaywisePayment({ paymentId, force: true });
+          const result = await syncWamPayment({ paymentId, force: true });
           if (cancelled) return;
           if (result.status === "payment_completed") {
             onPaymentCelebration?.({
@@ -35291,7 +35291,7 @@ function SettingsWorkspacePane({
     return () => {
       cancelled = true;
     };
-  }, [onPaymentCelebration, syncPaywisePayment]);
+  }, [onPaymentCelebration, syncWamPayment]);
 
   function amountInputFromCents(amountCents) {
     const dollars = Number(amountCents) / 100;
@@ -35316,7 +35316,7 @@ function SettingsWorkspacePane({
     clientRequestIdRef.current = null;
   }
 
-  async function handlePaywiseCheckout() {
+  async function handleWamCheckout() {
     if (checkoutStarting) return;
     if (!Number.isFinite(customAmountCents) || customAmountCents < minAmountCents) {
       setCustomAmountError(`Enter an amount of at least ${minAmountLabel}.`);
@@ -35333,26 +35333,26 @@ function SettingsWorkspacePane({
     }
     setCheckoutStarting(true);
     setPaymentStatus("Please wait…");
-    onPaywiseHandoff?.({
+    onWamHandoff?.({
       phase: "preparing",
       amountCents: checkoutPlan.amountCents,
     });
     try {
-      const result = await startPaywiseCheckout({
+      const result = await startWamCheckout({
         clientRequestId: clientRequestIdRef.current,
         amountCents: checkoutPlan.amountCents,
         creditsRequested: checkoutPlan.credits,
         reference: `Top up: ${checkoutPlan.name}`,
       });
       setPaymentStatus("Redirecting…");
-      onPaywiseHandoff?.({
+      onWamHandoff?.({
         phase: "redirect",
         amountCents: checkoutPlan.amountCents,
         checkoutUrl: result.checkoutUrl,
       });
     } catch (error) {
-      onPaywiseHandoff?.(null);
-      setPaymentStatus(friendlyConvexError(error, "PayWise checkout failed."));
+      onWamHandoff?.(null);
+      setPaymentStatus(friendlyConvexError(error, "Wam checkout failed."));
       setCheckoutStarting(false);
       clientRequestIdRef.current = null;
     }
@@ -35450,7 +35450,7 @@ function SettingsWorkspacePane({
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
-                          void handlePaywiseCheckout();
+                          void handleWamCheckout();
                         }
                       }}
                     />
@@ -35478,7 +35478,7 @@ function SettingsWorkspacePane({
                       </div>
                       {paywiseFeeCents > 0 ? (
                         <div className="studio-academy-checkout-row is-muted">
-                          <dt>PayWise fee</dt>
+                          <dt>Card fee</dt>
                           <dd>{formatTtdShort(paywiseFeeCents)}</dd>
                         </div>
                       ) : null}
@@ -35505,7 +35505,7 @@ function SettingsWorkspacePane({
                       checkoutStarting
                     }
                     aria-busy={checkoutStarting}
-                    onClick={() => void handlePaywiseCheckout()}
+                    onClick={() => void handleWamCheckout()}
                   >
                     {checkoutStarting ? (
                       <Loader2 className="studio-settings-topup-pay-spin" aria-hidden="true" />
@@ -35517,8 +35517,8 @@ function SettingsWorkspacePane({
                           ? customAmountError
                           : paymentStatus ||
                             (paywiseTotalCents > 0
-                              ? `Pay ${formatTtdShort(paywiseTotalCents)} with PayWise`
-                              : "Pay with PayWise")}
+                              ? `Pay ${formatTtdShort(paywiseTotalCents)} with Wam`
+                              : "Pay with Wam")}
                     </span>
                   </button>
                   <p className="studio-settings-topup-secure">
@@ -36002,7 +36002,7 @@ function AccountDetailsCard({ currentUser, onSave }) {
               type="tel"
               required
             />
-            <span className="studio-settings-field-hint">Used for PayWise checkout — no verification</span>
+            <span className="studio-settings-field-hint">Used for Wam checkout — no verification</span>
           </label>
         </div>
         <div className="studio-account-actions">
@@ -36196,10 +36196,10 @@ function newClientRequestId() {
 function pricingPlans(pricing) {
   const creditPriceCents = pricing?.creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
   const featuresByTier = [
-    ["Quick top up", "PayWise card checkout"],
-    ["Creator balance", "PayWise card checkout"],
-    ["Production balance", "PayWise card checkout"],
-    ["Scale balance", "PayWise card checkout"],
+    ["Quick top up", "Wam card checkout"],
+    ["Creator balance", "Wam card checkout"],
+    ["Production balance", "Wam card checkout"],
+    ["Scale balance", "Wam card checkout"],
   ];
   return TOP_UP_TIER_CREDITS.map((credits, index) => {
     const amountCents = Math.round(credits * creditPriceCents);
@@ -36211,7 +36211,7 @@ function pricingPlans(pricing) {
       credits,
       price,
       amountCents,
-      features: featuresByTier[index] ?? ["PayWise card checkout"],
+      features: featuresByTier[index] ?? ["Wam card checkout"],
       featured: index === 1,
     };
   });
@@ -36341,10 +36341,10 @@ function activityToneForKind(kind, status) {
 }
 
 function paymentInvoiceTitle(payment) {
-  if (payment?.method === "paywise") return "Card top-up (PayWise)";
+  if(payment?.method === "wam" || payment?.method === "paywise") return "Card top-up (Wam)";
   if (payment?.subscriptionPlanId) return "Legacy subscription";
-  if (payment?.method === "bank") return "Legacy bank top-up";
-  if (payment?.method === "card") return "Legacy card top-up";
+  if(payment?.method === "bank") return "Legacy bank top-up";
+  if(payment?.method === "card") return "Legacy card top-up";
   return "Legacy top-up";
 }
 
@@ -36352,14 +36352,14 @@ function paymentInvoiceStatusLine(payment) {
   const base = humanizePaymentStatus(payment?.status, payment?.method);
   const provider = String(payment?.providerStatus ?? "").trim();
   if (
-    payment?.method === "paywise" &&
+    (payment?.method === "wam" || payment?.method === "paywise") &&
     provider &&
     payment.status !== "payment_completed" &&
     payment.status !== "checkout_failed"
   ) {
     return `${base} · ${provider}`;
   }
-  if (payment?.method === "paywise" && payment?.rejectionReason && payment.status === "checkout_failed") {
+  if ((payment?.method === "wam" || payment?.method === "paywise") && payment?.rejectionReason && payment.status === "checkout_failed") {
     return `${base} · ${String(payment.rejectionReason).slice(0, 80)}`;
   }
   return base;
@@ -36368,7 +36368,7 @@ function paymentInvoiceStatusLine(payment) {
 function humanizePaymentStatus(status, method) {
   const key = String(status ?? "");
   const labels = {
-    pending: method === "paywise" ? "Pending" : "Pending",
+    pending: "Pending",
     needs_review: "Needs review",
     checkout_failed: "Checkout failed",
     payment_completed: "Paid",
@@ -36386,7 +36386,7 @@ function humanizePaymentStatus(status, method) {
   );
 }
 
-/** Admin glossary — always Pending for open PayWise, never “(legacy)”. */
+/** Admin glossary — always Pending for open Wam, never “(legacy)”. */
 function humanizeAdminPaymentStatus(status) {
   const key = String(status ?? "");
   const labels = {

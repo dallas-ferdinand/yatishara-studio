@@ -41,20 +41,26 @@ export function creditsFromAmountCents(
 }
 
 /**
- * PayWise published card fee when the payer covers 100%: 3.5% + TT$3.00.
+ * Wam published card fee when the payer covers 100%: 3% + TT$1.50.
  * Used for checkout disclosure; live charged total may round a few cents differently.
- * @see https://paywise.co/fees/
+ * @see https://docs.wam.money/docs/help-center/fees
  */
-export function paywiseCardFeeCents(amountCents: number): number {
+export function wamCardFeeCents(amountCents: number): number {
   const base = Math.max(0, Math.round(Number(amountCents) || 0));
-  return Math.round(base * 0.035) + 300;
+  return Math.round(base * 0.03) + 150;
 }
 
-/** Top-up amount + PayWise card fee (what the payer is charged). */
-export function paywiseCheckoutTotalCents(amountCents: number): number {
+/** @deprecated Use wamCardFeeCents */
+export const paywiseCardFeeCents = wamCardFeeCents;
+
+/** Top-up amount + Wam card fee (what the payer is charged). */
+export function wamCheckoutTotalCents(amountCents: number): number {
   const base = Math.max(0, Math.round(Number(amountCents) || 0));
-  return base + paywiseCardFeeCents(base);
+  return base + wamCardFeeCents(base);
 }
+
+/** @deprecated Use wamCheckoutTotalCents */
+export const paywiseCheckoutTotalCents = wamCheckoutTotalCents;
 
 /** Short money label for buttons: `$50` / `$54.75` (no TTD suffix). */
 export function formatTtdShort(amountCents: number | null | undefined): string {

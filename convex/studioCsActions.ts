@@ -7,12 +7,11 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { buildSignInCodeEmail } from "./lib/authEmail";
 import {
-  createPaymentRequest,
-  getPaymentStatus,
-  splitDisplayName,
-  toPaywiseMobile,
-  PaywiseError,
-} from "./lib/paywise";
+  WAM_CURRENCY,
+  normalizeWamIntentStatus,
+  wamErrorMessage,
+} from "./lib/wam";
+import { getWamSDK } from "./lib/wamSdk";
 import type { Id } from "./_generated/dataModel";
 
 function siteUrl(): string {
@@ -114,6 +113,17 @@ const attachPaywiseCheckoutRef = makeFunctionReference<
   null
 >;
 
+const ensurePublicPayCodeRef = makeFunctionReference<
+  "mutation",
+  { paymentId: Id<"payments"> },
+  { publicPayCode: string; shortUrl: string; checkoutUrl?: string }
+>("billing:ensurePublicPayCode") as unknown as FunctionReference<
+  "mutation",
+  "internal",
+  { paymentId: Id<"payments"> },
+  { publicPayCode: string; shortUrl: string; checkoutUrl?: string }
+>;
+
 const applyPaywiseStatusCheckRef = makeFunctionReference<
   "mutation",
   {
@@ -179,11 +189,15 @@ export const internalStartPaywiseForCs = internalAction({
   returns: v.object({
     paymentId: v.string(),
     checkoutUrl: v.optional(v.string()),
+    shortUrl: v.optional(v.string()),
+    publicPayCode: v.optional(v.string()),
     amountCents: v.number(),
   }),
   handler: async (ctx, args): Promise<{
     paymentId: string;
     checkoutUrl?: string;
+    shortUrl?: string;
+    publicPayCode?: string;
     amountCents: number;
   }> => {
     const phone = args.phone.replace(/\D/g, "");
@@ -193,17 +207,17 @@ export const internalStartPaywiseForCs = internalAction({
     );
     if (!user) {
       throw new Error(
-        "No Studio account yet. Collect name + email, create account, verify OTP, then PayWise.",
+        "No Studio account yet. Collect name + email, create account, verify OTP, then pay with Wam.",
       );
     }
     if (!user.emailVerified) {
       throw new Error(
-        "Email not verified yet. Verify OTP in WhatsApp before PayWise.",
+        "Email not verified yet. Verify OTP in WhatsApp before Wam checkout.",
       );
     }
     if (!user.email || !user.firstName || !user.lastName) {
       throw new Error(
-        "Account needs email and first/last name before PayWise.",
+        "Account needs email and first/last name before Wam checkout.",
       );
     }
     const clientRequestId = `studio-cs-${phone}-${Date.now()}`;
@@ -221,72 +235,66 @@ export const internalStartPaywiseForCs = internalAction({
       },
     );
     if (prepared.alreadyReady && prepared.checkoutUrl) {
+      const short = await ctx.runMutation(ensurePublicPayCodeRef, {
+        paymentId: prepared.paymentId,
+      });
       return {
         paymentId: String(prepared.paymentId),
         checkoutUrl: prepared.checkoutUrl,
+        shortUrl: short.shortUrl,
+        publicPayCode: short.publicPayCode,
         amountCents: prepared.amountCents,
       };
     }
-    const token = prepared.callbackToken;
-    if (!token) throw new Error("Checkout preparation failed");
+    if (!prepared.callbackToken) throw new Error("Checkout preparation failed");
     const appBase = requirePublicUrl("SITE_URL", siteUrl());
-    const apiBase = requirePublicUrl("CONVEX_SITE_URL", convexSiteUrl());
     const academyCourseId = prepared.academyCourseId ?? args.courseId;
-    const notifyUrl = `${apiBase}/paywise/notify?paymentId=${prepared.paymentId}&token=${token}`;
-    const callbackUrl = `${apiBase}/paywise/callback?paymentId=${prepared.paymentId}&token=${token}`;
-    const successUrl = academyCourseId
+    const returnUrl = academyCourseId
       ? `${appBase}/?payment=success&paymentId=${prepared.paymentId}&academyCourse=${academyCourseId}`
       : `${appBase}/?payment=success&paymentId=${prepared.paymentId}`;
-    const errorUrl = academyCourseId
-      ? `${appBase}/?payment=error&paymentId=${prepared.paymentId}&academyCourse=${academyCourseId}`
-      : `${appBase}/?payment=error&paymentId=${prepared.paymentId}`;
-    const names = splitDisplayName(
-      [user.firstName, user.lastName].filter(Boolean).join(" ") || user.name,
-    );
-    const firstName = names.firstName || user.firstName || "Studio";
-    const lastName = names.lastName || user.lastName || "Customer";
     try {
-      const created = await createPaymentRequest({
-        transactionId: prepared.paymentId,
+      const wam = getWamSDK();
+      const intent = await wam.createPaymentIntent({
         amountCents: prepared.amountCents,
+        currency: WAM_CURRENCY,
+        orderReference: String(prepared.paymentId),
         description:
           args.kind === "wallet"
             ? "Studio CS wallet top-up"
             : "Studio CS Academy course",
-        payer: {
-          mobileNumber: toPaywiseMobile(phone),
-          firstName,
-          lastName,
-          email: user.email.trim(),
+        returnUrl,
+        metadata: {
+          paymentId: String(prepared.paymentId),
+          phone,
+          source: "studio-cs",
         },
-        urls: {
-          success: successUrl,
-          error: errorUrl,
-          notify: notifyUrl,
-          callback: callbackUrl,
-        },
-        idempotencyKey: `paywise:studio-cs:${prepared.paymentId}`,
-        requestId: `studio-cs-${prepared.paymentId}`,
+        idempotencyKey: `wam:studio-cs:${prepared.paymentId}`,
       });
       await ctx.runMutation(attachPaywiseCheckoutRef, {
         paymentId: prepared.paymentId,
-        checkoutUrl: created.checkoutUrl,
-        externalPaymentId: created.paymentDetailsId,
-        providerRequestId: created.providerRequestId,
-        providerStatus: created.providerStatus,
+        checkoutUrl: intent.checkoutUrl,
+        externalPaymentId: intent.paymentId,
+        providerRequestId: intent.invoiceId,
+        providerStatus: intent.status,
+      });
+      const short = await ctx.runMutation(ensurePublicPayCodeRef, {
+        paymentId: prepared.paymentId,
       });
       return {
         paymentId: String(prepared.paymentId),
-        checkoutUrl: created.checkoutUrl,
+        checkoutUrl: intent.checkoutUrl,
+        shortUrl: short.shortUrl,
+        publicPayCode: short.publicPayCode,
         amountCents: prepared.amountCents,
       };
     } catch (err) {
-      const message =
-        err instanceof PaywiseError ? err.message : "PayWise checkout failed";
-      throw new Error(message);
+      throw new Error(wamErrorMessage(err));
     }
   },
 });
+
+/** Alias for Sophie MCP / callers. */
+export const internalStartWamForCs = internalStartPaywiseForCs;
 
 export const internalCheckPaywisePayment = internalAction({
   args: { paymentId: v.string() },
@@ -311,25 +319,24 @@ export const internalCheckPaywisePayment = internalAction({
       return { status: payment.status, providerStatus: payment.providerStatus };
     }
     try {
-      const provider = await getPaymentStatus(payment.externalPaymentId, {
-        requestId: `studio-cs-${args.paymentId}-${Date.now()}`,
-      });
+      const wam = getWamSDK();
+      const provider = await wam.getPaymentIntentStatus(payment.externalPaymentId);
       const applied: StatusApplyResult = await ctx.runMutation(
         applyPaywiseStatusCheckRef,
         {
           paymentId: payment._id,
           expectedExternalPaymentId: payment.externalPaymentId,
-          providerPaymentDetailsId: provider.paymentDetailsId,
-          providerStatus: provider.providerStatus,
-          normalizedStatus: provider.normalizedStatus,
+          providerPaymentDetailsId: provider.paymentId,
+          providerStatus: provider.status,
+          normalizedStatus: normalizeWamIntentStatus(provider.status),
           providerAmountCents: provider.amountCents,
-          providerCurrency: provider.currency,
-          providerRequestId: provider.providerRequestId,
+          providerCurrency: provider.currency || WAM_CURRENCY,
+          providerRequestId: provider.providerTransactionId ?? undefined,
         },
       );
       return {
         status: applied.status,
-        providerStatus: provider.providerStatus,
+        providerStatus: provider.status,
         granted: applied.granted,
         academyUnlocked: applied.academyUnlocked,
       };
@@ -341,3 +348,5 @@ export const internalCheckPaywisePayment = internalAction({
     }
   },
 });
+
+export const internalCheckWamPayment = internalCheckPaywisePayment;

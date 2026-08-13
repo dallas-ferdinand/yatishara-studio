@@ -87,9 +87,9 @@ Set Convex-side env where Convex functions need it:
 - Gateway model ID vars (`GATEWAY_*`)
 - Bunny vars
 - web push vars
-- PayWise vars: `PAYWISE_API_BASE`, `PAYWISE_ENVIRONMENT`, `PAYWISE_SUBSCRIPTION_KEY`,
-  `PAYWISE_API_KEY`, `PAYWISE_PAYEE_MOBILE`, `PAYWISE_ORIGIN_COUNTRY`,
-  `PAYWISE_IP_ADDRESS`, and sandbox-verified `PAYWISE_PAID_STATUSES`
+- Wam vars: `WAM_BUSINESS_ID`, `WAM_API_KEY`, `WAM_ENVIRONMENT` (`staging`|`production`),
+  `WAM_WEBHOOK_SECRET` (from Business Portal webhook endpoint). Register
+  `POST https://<CONVEX_SITE_URL>/wam/webhooks` in the matching portal.
 
 ## Preview Hot Reload
 
@@ -148,7 +148,7 @@ Live smoke after deploy:
 - Confirm root folder and billing account exist.
 - Upload a small asset and preview signed media.
 - Create/edit a document.
-- Complete a PayWise top-up and confirm credits grant after status verification.
+- Complete a Wam top-up and confirm credits grant after status verification.
 - Run image/video generation only after BytePlus ModelArk model IDs are configured.
 - Confirm notifications and generated assets are saved.
 

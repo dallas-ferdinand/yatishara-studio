@@ -121,6 +121,7 @@ export const paymentMethod = v.union(
   v.literal("bank"),
   v.literal("card"),
   v.literal("paywise"),
+  v.literal("wam"),
 );
 
 export const paymentStatus = v.union(

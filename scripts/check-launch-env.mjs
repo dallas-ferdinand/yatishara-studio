@@ -31,14 +31,9 @@ const required = [
 ];
 
 const paywiseRequired = [
-  "PAYWISE_API_BASE",
-  "PAYWISE_SUBSCRIPTION_KEY",
-  "PAYWISE_API_KEY",
-  "PAYWISE_PAYEE_MOBILE",
-  "PAYWISE_ORIGIN_COUNTRY",
-  "PAYWISE_IP_ADDRESS",
-  "PAYWISE_ENVIRONMENT",
-  "PAYWISE_PAID_STATUSES",
+  "WAM_BUSINESS_ID",
+  "WAM_API_KEY",
+  "WAM_ENVIRONMENT",
 ];
 
 const env = {
@@ -65,21 +60,6 @@ if (missingPaywise.length) {
   process.exitCode = 1;
 } else {
   console.log("PayWise env complete.");
-  const sandboxBase = String(env.PAYWISE_API_BASE).toLowerCase().includes("sandbox");
-  const sandboxEnvironment = String(env.PAYWISE_ENVIRONMENT).toLowerCase() === "sandbox";
-  if (sandboxBase !== sandboxEnvironment) {
-    console.log("PayWise environment does not match PAYWISE_API_BASE.");
-    process.exitCode = 1;
-  }
-  const paywiseIp = String(env.PAYWISE_IP_ADDRESS).toLowerCase();
-  const invalidIp =
-    ["0.0.0.0", "localhost"].includes(paywiseIp) ||
-    (String(env.PAYWISE_ENVIRONMENT).toLowerCase() === "production" &&
-      ["127.0.0.1", "::1"].includes(paywiseIp));
-  if (invalidIp) {
-    console.log("PAYWISE_IP_ADDRESS is invalid for the selected environment.");
-    process.exitCode = 1;
-  }
 }
 
 if (process.argv.includes("--convex")) {

@@ -137,6 +137,8 @@ import type * as lib_videoDurationPlan from "../lib/videoDurationPlan.js";
 import type * as lib_videoGeneration from "../lib/videoGeneration.js";
 import type * as lib_videoModels from "../lib/videoModels.js";
 import type * as lib_voiceExploreFilters from "../lib/voiceExploreFilters.js";
+import type * as lib_wam from "../lib/wam.js";
+import type * as lib_wamSdk from "../lib/wamSdk.js";
 import type * as magicLoginAuth from "../magicLoginAuth.js";
 import type * as marketplace from "../marketplace.js";
 import type * as marketplaceActions from "../marketplaceActions.js";
@@ -177,6 +179,8 @@ import type * as videoEditInternal from "../videoEditInternal.js";
 import type * as videoEdits from "../videoEdits.js";
 import type * as videoModels from "../videoModels.js";
 import type * as voiceActions from "../voiceActions.js";
+import type * as wamActions from "../wamActions.js";
+import type * as wamHttp from "../wamHttp.js";
 import type * as whatsappAuth from "../whatsappAuth.js";
 
 import type {
@@ -315,6 +319,8 @@ declare const fullApi: ApiFromModules<{
   "lib/videoGeneration": typeof lib_videoGeneration;
   "lib/videoModels": typeof lib_videoModels;
   "lib/voiceExploreFilters": typeof lib_voiceExploreFilters;
+  "lib/wam": typeof lib_wam;
+  "lib/wamSdk": typeof lib_wamSdk;
   magicLoginAuth: typeof magicLoginAuth;
   marketplace: typeof marketplace;
   marketplaceActions: typeof marketplaceActions;
@@ -355,6 +361,8 @@ declare const fullApi: ApiFromModules<{
   videoEdits: typeof videoEdits;
   videoModels: typeof videoModels;
   voiceActions: typeof voiceActions;
+  wamActions: typeof wamActions;
+  wamHttp: typeof wamHttp;
   whatsappAuth: typeof whatsappAuth;
 }>;
 

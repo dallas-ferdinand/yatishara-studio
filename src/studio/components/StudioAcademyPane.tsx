@@ -225,7 +225,7 @@ function newClientRequestId() {
 function CheckoutDock({
   showHead,
   onBuyClick,
-  onPaywiseClick,
+  onWamClick,
   onWhatsAppBalanceClick,
   busy,
   owned,
@@ -245,7 +245,7 @@ function CheckoutDock({
 }: {
   showHead: boolean;
   onBuyClick: () => void;
-  onPaywiseClick?: () => void;
+  onWamClick?: () => void;
   onWhatsAppBalanceClick?: () => void;
   busy: boolean;
   owned: boolean;
@@ -357,7 +357,7 @@ function CheckoutDock({
               </div>
               {feeCents > 0 ? (
                 <div className="studio-academy-checkout-row is-muted">
-                  <dt>PayWise fee</dt>
+                  <dt>Wam fee</dt>
                   <dd>{feeLabel}</dd>
                 </div>
               ) : null}
@@ -366,17 +366,17 @@ function CheckoutDock({
                 <dd>{totalDueLabel}</dd>
               </div>
             </dl>
-            <div className="studio-academy-checkout-paywise">
+            <div className="studio-academy-checkout-wam">
               <button
                 type="button"
                 className={`studio-settings-topup-pay${busy ? " is-loading" : ""}`}
                 disabled={busy}
-                onClick={onPaywiseClick}
+                onClick={onWamClick}
                 aria-busy={busy}
                 aria-label={
                   busy
-                    ? "Opening PayWise"
-                    : `Pay ${paywiseTotalShort} with PayWise to unlock course`
+                    ? "Opening Wam"
+                    : `Pay ${paywiseTotalShort} with Wam to unlock course`
                 }
               >
                 {busy ? (
@@ -387,8 +387,8 @@ function CheckoutDock({
                 ) : null}
                 <span className="studio-settings-topup-pay-label">
                   {busy
-                    ? "Opening PayWise…"
-                    : `Pay ${paywiseTotalShort} with PayWise`}
+                    ? "Opening Wam…"
+                    : `Pay ${paywiseTotalShort} with Wam`}
                 </span>
               </button>
               <p className="studio-settings-topup-secure">
@@ -400,7 +400,7 @@ function CheckoutDock({
         ) : (
           <>
             {countdown}
-            <div className="studio-academy-checkout-paywise">
+            <div className="studio-academy-checkout-wam">
               <button
                 type="button"
                 className={`studio-settings-topup-pay is-theme${busy ? " is-loading" : ""}`}
@@ -542,13 +542,13 @@ function BannerStage({
 
 export function StudioAcademyPane({
   onOpenCredits,
-  onPaywiseHandoff,
+  onWamHandoff,
   onPaymentCelebration,
   creditPriceCents,
   creditBalance,
 }: {
   onOpenCredits?: (opts?: { amountCents?: number }) => void;
-  onPaywiseHandoff?: (handoff: {
+  onWamHandoff?: (handoff: {
     phase: "preparing" | "redirect";
     amountCents: number;
     checkoutUrl?: string;
@@ -571,7 +571,7 @@ export function StudioAcademyPane({
   const catalog = useQuery(api.academy.listPublishedCourses, {});
   const mine = useQuery(api.academy.listMyCourses, {});
   const purchase = useMutation(api.academy.purchaseCourse);
-  const startPaywiseCheckout = useAction(api.paywiseActions.startCheckout);
+  const startWamCheckout = useAction(api.wamActions.startCheckout);
   const getIntroPlayback = useAction(api.academyActions.getIntroPlayback);
   const getLessonPlayback = useAction(api.academyActions.getLessonPlayback);
 
@@ -742,7 +742,7 @@ export function StudioAcademyPane({
     setPurchaseConfirmOpen(true);
   }
 
-  async function handlePaywiseCheckout() {
+  async function handleWamCheckout() {
     if (
       !academy.courseId ||
       !detail ||
@@ -756,26 +756,26 @@ export function StudioAcademyPane({
       clientRequestIdRef.current = newClientRequestId();
     }
     setBusy(true);
-    onPaywiseHandoff?.({
+    onWamHandoff?.({
       phase: "preparing",
       amountCents: topUpAmountCents,
     });
     try {
-      const result = await startPaywiseCheckout({
+      const result = await startWamCheckout({
         clientRequestId: clientRequestIdRef.current,
         amountCents: topUpAmountCents,
         creditsRequested: topUpCredits,
         reference: `Academy: ${detail.title.slice(0, 60)}`,
         academyCourseId: academy.courseId,
       });
-      onPaywiseHandoff?.({
+      onWamHandoff?.({
         phase: "redirect",
         amountCents: topUpAmountCents,
         checkoutUrl: result.checkoutUrl,
       });
     } catch (error) {
-      onPaywiseHandoff?.(null);
-      const message = friendlyConvexError(error, "PayWise checkout failed");
+      onWamHandoff?.(null);
+      const message = friendlyConvexError(error, "Wam checkout failed");
       toast.error(message);
       if (/phone|email|first and last name|account details/i.test(message)) {
         onOpenCredits?.();
@@ -787,7 +787,7 @@ export function StudioAcademyPane({
 
   const checkoutDockProps = {
     onBuyClick: handleBuyClick,
-    onPaywiseClick: () => void handlePaywiseCheckout(),
+    onWamClick: () => void handleWamCheckout(),
     onWhatsAppBalanceClick: openDepositWhatsApp,
     busy,
     owned,
@@ -1281,7 +1281,7 @@ export function StudioAcademyPane({
                 {partiallyPaid
                   ? "Pay balance"
                   : needsTopUp
-                    ? "Pay with PayWise"
+                    ? "Pay with Wam"
                     : "Pay with wallet"}
               </button>
             ) : null}

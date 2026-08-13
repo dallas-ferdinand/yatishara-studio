@@ -51,7 +51,16 @@ async function lastGrantBalanceAfterForUser(
   return null;
 }
 
-const paymentMethod = v.union(v.literal("bank"), v.literal("card"), v.literal("paywise"));
+const paymentMethod = v.union(
+  v.literal("bank"),
+  v.literal("card"),
+  v.literal("paywise"),
+  v.literal("wam"),
+);
+
+function isHostedCardMethod(method: string): boolean {
+  return method === "wam" || method === "paywise";
+}
 
 const paymentStatus = v.union(
   v.literal("pending"),
@@ -84,7 +93,7 @@ const settlePaywiseCallbackRef = makeFunctionReference<
   "action",
   { paymentId: Id<"payments"> },
   { ok: boolean }
->("paywiseActions:settleFromCallback") as unknown as FunctionReference<
+>("wamActions:settleFromWebhook") as unknown as FunctionReference<
   "action",
   "internal",
   { paymentId: Id<"payments"> },
@@ -763,7 +772,7 @@ export const preparePaywiseCheckout = internalMutation({
     const callbackToken = randomCallbackToken();
     const paymentId = await ctx.db.insert("payments", {
       userId: args.userId,
-      method: "paywise",
+      method: "wam",
       status: "pending",
       amountCents,
       creditsGranted,
@@ -790,6 +799,9 @@ export const preparePaywiseCheckout = internalMutation({
   },
 });
 
+/** @deprecated Use preparePaywiseCheckout (now creates method=wam). */
+export const prepareWamCheckout = preparePaywiseCheckout;
+
 export const attachPaywiseCheckout = internalMutation({
   args: {
     paymentId: v.id("payments"),
@@ -801,7 +813,7 @@ export const attachPaywiseCheckout = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const payment = await ctx.db.get(args.paymentId);
-    if (!payment || payment.method !== "paywise") {
+    if (!payment || !isHostedCardMethod(payment.method)) {
       throw new Error("Payment not found");
     }
     if (payment.status !== "pending") {
@@ -812,7 +824,7 @@ export const attachPaywiseCheckout = internalMutation({
       .withIndex("by_external_payment", (q) => q.eq("externalPaymentId", args.externalPaymentId))
       .unique();
     if (linked && linked._id !== payment._id) {
-      throw new Error("PayWise payment id is already linked to another checkout");
+      throw new Error("Payment id is already linked to another checkout");
     }
     const now = Date.now();
     let publicPayCode = payment.publicPayCode
@@ -849,6 +861,8 @@ export const attachPaywiseCheckout = internalMutation({
   },
 });
 
+export const attachWamCheckout = attachPaywiseCheckout;
+
 /** Ensure an existing checkout has a short public pay code (idempotent). */
 export const ensurePublicPayCode = internalMutation({
   args: { paymentId: v.id("payments") },
@@ -859,7 +873,7 @@ export const ensurePublicPayCode = internalMutation({
   }),
   handler: async (ctx, args) => {
     const payment = await ctx.db.get(args.paymentId);
-    if (!payment || payment.method !== "paywise") {
+    if (!payment || !isHostedCardMethod(payment.method)) {
       throw new Error("Payment not found");
     }
     let code = payment.publicPayCode
@@ -930,7 +944,7 @@ export const markPaywiseCheckoutFailed = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const payment = await ctx.db.get(args.paymentId);
-    if (!payment || payment.method !== "paywise") {
+    if (!payment || !isHostedCardMethod(payment.method)) {
       throw new Error("Payment not found");
     }
     if (payment.status !== "pending" || payment.externalPaymentId) {
@@ -1041,24 +1055,27 @@ export const claimDuePaywisePayments = internalMutation({
   ),
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(args.limit, 50));
-    const pending = await ctx.db
-      .query("payments")
-      .withIndex("by_method_status_and_next_check", (q) =>
-        q.eq("method", "paywise").eq("status", "pending").lte("nextStatusCheckAt", args.now),
-      )
-      .take(limit);
-    const review =
-      pending.length < limit
-        ? await ctx.db
-            .query("payments")
-            .withIndex("by_method_status_and_next_check", (q) =>
-              q
-                .eq("method", "paywise")
-                .eq("status", "needs_review")
-                .lte("nextStatusCheckAt", args.now),
-            )
-            .take(limit - pending.length)
+    const takeByMethod = async (method: "wam" | "paywise", status: "pending" | "needs_review", n: number) => {
+      if (n <= 0) return [];
+      return await ctx.db
+        .query("payments")
+        .withIndex("by_method_status_and_next_check", (q) =>
+          q.eq("method", method).eq("status", status).lte("nextStatusCheckAt", args.now),
+        )
+        .take(n);
+    };
+    const pendingWam = await takeByMethod("wam", "pending", limit);
+    const pendingLegacy =
+      pendingWam.length < limit
+        ? await takeByMethod("paywise", "pending", limit - pendingWam.length)
         : [];
+    const pending = [...pendingWam, ...pendingLegacy];
+    let remaining = limit - pending.length;
+    const reviewWam = await takeByMethod("wam", "needs_review", remaining);
+    remaining = limit - pending.length - reviewWam.length;
+    const reviewLegacy =
+      remaining > 0 ? await takeByMethod("paywise", "needs_review", remaining) : [];
+    const review = [...reviewWam, ...reviewLegacy];
     const claimed = [...pending, ...review].filter(
       (payment) =>
         Boolean(payment.externalPaymentId) &&
@@ -1091,7 +1108,7 @@ export const recordPaywiseStatusCheckFailure = internalMutation({
     const payment = await ctx.db.get(args.paymentId);
     if (
       !payment ||
-      payment.method !== "paywise" ||
+      !isHostedCardMethod(payment.method) ||
       payment.externalPaymentId !== args.expectedExternalPaymentId ||
       (payment.status !== "pending" && payment.status !== "needs_review")
     ) {
@@ -1145,7 +1162,7 @@ export const enqueuePaywiseCallback = internalMutation({
     const paymentId = ctx.db.normalizeId("payments", args.paymentId);
     if (!paymentId) return { accepted: false };
     const payment = await ctx.db.get(paymentId);
-    if (!payment || payment.method !== "paywise") return { accepted: false };
+    if (!payment || !isHostedCardMethod(payment.method)) return { accepted: false };
     const accepted = Boolean(
       payment.callbackToken && callbackTokensMatch(payment.callbackToken, args.token),
     );
@@ -1212,7 +1229,7 @@ export const applyPaywiseStatusCheck = internalMutation({
     academyUnlocked?: boolean;
   }> => {
     const payment = await ctx.db.get(args.paymentId);
-    if (!payment || payment.method !== "paywise") {
+    if (!payment || !isHostedCardMethod(payment.method)) {
       throw new Error("Payment not found");
     }
     const now = Date.now();
@@ -1296,7 +1313,7 @@ export const applyPaywiseStatusCheck = internalMutation({
           userId: payment.userId,
           amount: payment.creditsGranted,
           paymentId: payment._id,
-          reason: "PayWise top-up completed",
+          reason: "Wam top-up completed",
         });
       }
       const academyUnlock = await maybeUnlockAcademyCourseAfterTopUp(ctx, payment);
@@ -2180,7 +2197,7 @@ export const finalizeAcademyAfterPaywise = internalMutation({
   }),
   handler: async (ctx, args) => {
     const payment = await ctx.db.get(args.paymentId);
-    if (!payment || payment.method !== "paywise") {
+    if (!payment || !isHostedCardMethod(payment.method)) {
       return { academyUnlocked: false };
     }
     if (payment.status !== "payment_completed") {

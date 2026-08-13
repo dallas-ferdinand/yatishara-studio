@@ -15,6 +15,7 @@ import {
   studioApiAccountExtraOptions,
 } from "./studioApiAccountExtra";
 import { paywiseCallback, paywiseNotify } from "./paywiseHttp";
+import { wamWebhook } from "./wamHttp";
 import {
   agentWorkerCallback,
   agentWorkerCallbackOptions,
@@ -26,6 +27,7 @@ auth.addHttpRoutes(http);
 
 http.route({ path: "/paywise/notify", method: "POST", handler: paywiseNotify });
 http.route({ path: "/paywise/callback", method: "POST", handler: paywiseCallback });
+http.route({ path: "/wam/webhooks", method: "POST", handler: wamWebhook });
 
 const exactGetPost = [
   "/api/v1",
