@@ -36,6 +36,8 @@ import {
   STUDIO_PLAN_SLUGS,
   creditsFromFaceCents,
   discountedChargeCents,
+  isFirstSubscribeInvoice,
+  isRenewalUnpaidInvoice,
   quoteStudioPlan,
 } from "./lib/studioPlans";
 import {
@@ -71,6 +73,32 @@ const paymentMethod = v.union(
 
 function isHostedCardMethod(method: string): boolean {
   return method === "wam" || method === "paywise";
+}
+
+async function expireAbandonedFirstSubscribeInvoices(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  keepPaymentId?: Id<"payments">,
+) {
+  const payments = await ctx.db
+    .query("payments")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .take(50);
+  const now = Date.now();
+  for (const payment of payments) {
+    if (keepPaymentId && payment._id === keepPaymentId) continue;
+    if (payment.status !== "pending" && payment.status !== "checkout_failed") continue;
+    if (!isHostedCardMethod(payment.method)) continue;
+    if (isRenewalUnpaidInvoice(payment)) continue;
+    await ctx.db.patch(payment._id, {
+      status: "cancelled",
+      rejectionReason: isFirstSubscribeInvoice(payment)
+        ? "Expired. Subscribe again from Plans."
+        : "Expired. Start a new checkout.",
+      nextStatusCheckAt: undefined,
+      updatedAt: now,
+    });
+  }
 }
 
 const paymentStatus = v.union(
@@ -362,6 +390,16 @@ export const listMyPayments = authedQuery({
       .order("desc")
       .take(50);
     return await withReceiptUrls(ctx, payments);
+  },
+});
+
+/** Abandoned first-subscribe checkouts are not payable. Renewal unpaid invoices keep Pay. */
+export const expireMyAbandonedSubscribeInvoices = authedMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    await expireAbandonedFirstSubscribeInvoices(ctx, ctx.user._id);
+    return null;
   },
 });
 
@@ -832,6 +870,7 @@ export const preparePaywiseCheckout = internalMutation({
       if (!existing.callbackToken) {
         throw new Error("Existing checkout is missing its callback token.");
       }
+      await expireAbandonedFirstSubscribeInvoices(ctx, args.userId, existing._id);
       return {
         paymentId: existing._id,
         amountCents: existing.amountCents,
@@ -845,6 +884,7 @@ export const preparePaywiseCheckout = internalMutation({
       };
     }
 
+    await expireAbandonedFirstSubscribeInvoices(ctx, args.userId);
     const now = Date.now();
     const callbackToken = randomCallbackToken();
     const paymentId = await ctx.db.insert("payments", {
@@ -957,6 +997,7 @@ export const prepareSubscribeCheckout = internalMutation({
       if (!existing.callbackToken) {
         throw new Error("Existing checkout is missing its callback token.");
       }
+      await expireAbandonedFirstSubscribeInvoices(ctx, args.userId, existing._id);
       return {
         paymentId: existing._id,
         amountCents: existing.amountCents,
@@ -968,6 +1009,7 @@ export const prepareSubscribeCheckout = internalMutation({
         alreadyReady: Boolean(existing.checkoutUrl && existing.externalPaymentId),
       };
     }
+    await expireAbandonedFirstSubscribeInvoices(ctx, args.userId);
     const now = Date.now();
     const paymentId = await ctx.db.insert("payments", {
       userId: args.userId,
@@ -1022,6 +1064,13 @@ export const prepareInvoicePay = internalMutation({
     }
     if (payment.status === "payment_completed") {
       throw new Error("This invoice is already paid.");
+    }
+    if (!isRenewalUnpaidInvoice(payment)) {
+      throw new Error(
+        isFirstSubscribeInvoice(payment)
+          ? "This checkout expired. Subscribe again from Plans."
+          : "This checkout expired. Start a new checkout.",
+      );
     }
     if (
       payment.status === "pending" &&

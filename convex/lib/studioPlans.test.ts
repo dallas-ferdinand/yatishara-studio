@@ -3,6 +3,8 @@ import {
   STUDIO_PLAN_CATALOG,
   creditsFromFaceCents,
   discountedChargeCents,
+  isFirstSubscribeInvoice,
+  isRenewalUnpaidInvoice,
   quoteStudioPlan,
 } from "./studioPlans";
 
@@ -28,5 +30,30 @@ describe("studio subscription catalog", () => {
     const core = STUDIO_PLAN_CATALOG.find((plan) => plan.slug === "core")!;
     expect(quoteStudioPlan(core, "month", 50).chargeCents).toBe(10_000);
     expect(quoteStudioPlan(core, "year", 50).chargeCents).toBe(116_400);
+  });
+
+  test("first subscribe invoices expire; renewal unpaid stays payable", () => {
+    expect(
+      isFirstSubscribeInvoice({
+        subscriptionPlanId: "plan",
+        billingInterval: "month",
+        clientRequestId: "sub-abc",
+        reference: "Plus monthly",
+      }),
+    ).toBe(true);
+    expect(
+      isRenewalUnpaidInvoice({
+        clientRequestId: "sub-fail:wam:123",
+        reference: "Plus renewal unpaid",
+      }),
+    ).toBe(true);
+    expect(
+      isFirstSubscribeInvoice({
+        subscriptionPlanId: "plan",
+        billingInterval: "month",
+        clientRequestId: "sub-fail:wam:123",
+        reference: "Plus renewal unpaid",
+      }),
+    ).toBe(false);
   });
 });

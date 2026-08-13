@@ -109,3 +109,25 @@ export function addCalendarMonths(ts: number, months: number): number {
   d.setUTCDate(Math.min(day, last));
   return d.getTime();
 }
+
+export function isRenewalUnpaidInvoice(payment: {
+  clientRequestId?: string | null;
+  reference?: string | null;
+}): boolean {
+  const requestId = String(payment.clientRequestId ?? "");
+  const reference = String(payment.reference ?? "");
+  return requestId.startsWith("sub-fail:") || /renewal unpaid/i.test(reference);
+}
+
+export function isFirstSubscribeInvoice(payment: {
+  subscriptionPlanId?: unknown;
+  billingInterval?: unknown;
+  academyCourseId?: unknown;
+  clientRequestId?: string | null;
+  reference?: string | null;
+}): boolean {
+  if (!payment.subscriptionPlanId || !payment.billingInterval) return false;
+  if (payment.academyCourseId) return false;
+  if (isRenewalUnpaidInvoice(payment)) return false;
+  return !String(payment.clientRequestId ?? "").startsWith("sub-paid:");
+}

@@ -13845,14 +13845,6 @@ export function StudioShell({
           color: var(--cursor-accent);
           filter: drop-shadow(0 8px 24px color-mix(in srgb, var(--cursor-accent) 28%, transparent));
         }
-        .studio-wam-handoff-kicker {
-          margin: 0;
-          color: var(--color-cursor-muted, var(--mos-muted));
-          font-size: 12px;
-          font-weight: 650;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-        }
         .studio-wam-handoff-amount {
           margin: 0;
           color: var(--color-cursor-text-bright, var(--mos-text));
@@ -35110,7 +35102,7 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
   const successCopy =
     isAcademy && celebration?.academyUnlocked !== false
       ? amountLabel
-        ? `${amountLabel} topped up — your course is unlocked.`
+        ? `${amountLabel} topped up. Your course is unlocked.`
         : "Your course is unlocked."
       : amountLabel
         ? `${amountLabel} was added to your account.`
@@ -35137,8 +35129,8 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
           {phase === "success"
             ? successCopy
             : isAcademy
-              ? "Hang tight — we’re verifying Wam and unlocking your course."
-              : "Hang tight — we’re verifying your Wam payment."}
+              ? "Hang tight. We're verifying Wam and unlocking your course."
+              : "Hang tight. We're verifying your payment."}
         </p>
         {phase === "success" ? (
           <button type="button" className="studio-payment-celebration-btn" onClick={onClose}>
@@ -35263,7 +35255,6 @@ function WamCheckoutHandoffOverlay({ handoff }) {
     >
       <div className="studio-payment-celebration-inner">
         <Loader2 className="studio-payment-celebration-spin" aria-hidden="true" />
-        <p className="studio-wam-handoff-kicker">Wam</p>
         <h2 id="studio-wam-handoff-title" className="studio-payment-celebration-title">
           {phase === "redirect" ? "Continuing to Wam" : "Preparing checkout"}
         </h2>
@@ -35272,8 +35263,8 @@ function WamCheckoutHandoffOverlay({ handoff }) {
         ) : null}
         <p className="studio-payment-celebration-copy">
           {phase === "redirect"
-            ? "Finish card payment securely on Wam — we’ll bring you back here after."
-            : "One moment while we open a secure checkout."}
+            ? "Finish card payment on Wam. We'll bring you back here after."
+            : "Opening a secure checkout."}
         </p>
       </div>
     </div>

@@ -5,7 +5,7 @@ import { ArrowRight, Check, Loader2, Lock } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
-import { STUDIO_PLAN_CATALOG, STUDIO_PLAN_SLUGS } from "../../../convex/lib/studioPlans";
+import { STUDIO_PLAN_CATALOG, STUDIO_PLAN_SLUGS, isRenewalUnpaidInvoice } from "../../../convex/lib/studioPlans";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
@@ -58,6 +58,7 @@ type InvoiceRow = {
   billingInterval?: BillingInterval;
   academyCourseId?: string;
   subscriptionPlanId?: string;
+  clientRequestId?: string;
   reference?: string;
   providerStatus?: string;
 };
@@ -110,7 +111,14 @@ function invoiceTitle(row: InvoiceRow) {
   return "Top-up";
 }
 
-function invoiceStatusLabel(status: string) {
+function invoiceStatusLabel(status: string, row?: InvoiceRow) {
+  if (
+    row &&
+    !isRenewalUnpaidInvoice(row) &&
+    (status === "cancelled" || status === "checkout_failed")
+  ) {
+    return "Expired";
+  }
   const labels: Record<string, string> = {
     pending: "Pending",
     needs_review: "Needs review",
@@ -125,7 +133,7 @@ function invoiceStatusLabel(status: string) {
 }
 
 function canPayInvoice(row: InvoiceRow) {
-  if (!row.subscriptionPlanId) return false;
+  if (!isRenewalUnpaidInvoice(row)) return false;
   return row.status === "pending" || row.status === "checkout_failed";
 }
 
@@ -450,6 +458,9 @@ export function StudioBillingPane({
 }: Props) {
   const catalog = useQuery(api.billing.listSubscriptionPlans, {});
   const ensureStudioPlans = useMutation(api.billing.ensureStudioPlans);
+  const expireAbandonedSubscribe = useMutation(
+    api.billing.expireMyAbandonedSubscribeInvoices,
+  );
   const startSubscribe = useAction(api.wamActions.startSubscribe);
   const startInvoicePay = useAction(api.wamActions.startInvoicePay);
   const stopRecurring = useAction(api.wamActions.stopRecurring);
@@ -481,6 +492,10 @@ export function StudioBillingPane({
     if (!ratesStale && !extraPlans) return;
     void ensureStudioPlans({}).catch(() => {});
   }, [catalog, ensureStudioPlans]);
+
+  useEffect(() => {
+    void expireAbandonedSubscribe({}).catch(() => {});
+  }, [expireAbandonedSubscribe]);
 
   const plans = useMemo(
     () =>
@@ -792,7 +807,7 @@ export function StudioBillingPane({
                   <div>
                     <strong>{invoiceTitle(row)}</strong>
                     <span>
-                      {invoiceKind(row)} · {invoiceStatusLabel(row.status)}
+                      {invoiceKind(row)} · {invoiceStatusLabel(row.status, row)}
                       {row.providerStatus && row.status !== "payment_completed"
                         ? ` · ${row.providerStatus}`
                         : ""}{" "}
