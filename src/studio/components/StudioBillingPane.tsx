@@ -335,7 +335,7 @@ export function StudioBillingPane({
             <div className="studio-billing-intro">
               <p className="studio-billing-kicker">Yatishara Studio</p>
               <h1>Pick the plan that funds your work</h1>
-              <p>Pay less than the face amount. You still get the full monthly dollars after each successful charge.</p>
+              <p className="studio-billing-sub">Pay less than the face amount. Full monthly dollars still land after every charge.</p>
             </div>
 
             {live ? (
