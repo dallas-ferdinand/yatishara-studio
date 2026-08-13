@@ -701,7 +701,12 @@ export function StudioBillingPane({
                   >
                     <div className="studio-billing-card-kicker">
                       <div>
-                        <h3>{plan.name}</h3>
+                        <div className="studio-billing-card-title-row">
+                          <h3>{plan.name}</h3>
+                          {quote.discountPercent > 0 ? (
+                            <span className="studio-billing-save">Save {quote.discountPercent}%</span>
+                          ) : null}
+                        </div>
                         <p className="studio-billing-pitch">{planPitch(plan.slug)}</p>
                       </div>
                       {featured ? <span className="studio-billing-badge">Most popular</span> : null}
@@ -717,21 +722,18 @@ export function StudioBillingPane({
                             {interval === "year" ? "/yr" : "/mo"}
                           </span>
                         </span>
-                        {quote.discountPercent > 0 ? (
-                          <span className="studio-billing-save">Save {quote.discountPercent}%</span>
-                        ) : null}
                       </p>
-                      {interval === "year" ? (
-                        <p className="studio-billing-equiv">
-                          {formatTtdShort(Math.round(quote.chargeCents / 12))}/mo billed yearly ·{" "}
-                          {formatTtdShort(quote.faceMonthlyCents)} still lands each month
-                        </p>
-                      ) : (
-                        <p className="studio-billing-equiv">
-                          {formatTtdShort(quote.faceMonthlyCents)} credited every month
-                        </p>
-                      )}
                     </div>
+                    {interval === "year" ? (
+                      <p className="studio-billing-equiv">
+                        {formatTtdShort(Math.round(quote.chargeCents / 12))}/mo billed yearly ·{" "}
+                        {formatTtdShort(quote.faceMonthlyCents)} still lands each month
+                      </p>
+                    ) : (
+                      <p className="studio-billing-equiv">
+                        {formatTtdShort(quote.faceMonthlyCents)} credited every month
+                      </p>
+                    )}
                     <ul>
                       {planCopy(plan.slug, formatTtdShort(quote.faceMonthlyCents), quote.discountPercent).map((line) => (
                         <li key={line}>

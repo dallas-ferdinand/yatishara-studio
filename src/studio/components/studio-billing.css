@@ -244,6 +244,13 @@
   gap: 10px;
 }
 
+.studio-billing-card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .studio-billing-card h3 {
   margin: 0;
   font-size: 20px;
@@ -272,7 +279,7 @@
 
 .studio-billing-price-block {
   display: grid;
-  gap: 6px;
+  gap: 0;
 }
 
 .studio-billing-price {
@@ -289,9 +296,10 @@
 }
 
 .studio-billing-price .studio-academy-card-compare {
-  font-size: 0.42em;
+  font-size: 0.62em;
   font-weight: 700;
   letter-spacing: -0.03em;
+  opacity: 0.72;
 }
 
 .studio-billing-price-now {
@@ -308,8 +316,8 @@
 }
 
 .studio-billing-save {
-  align-self: center;
-  padding: 2px 6px;
+  flex: 0 0 auto;
+  padding: 2px 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
   color: var(--cursor-accent);
@@ -323,10 +331,11 @@
   color: var(--color-cursor-text);
   font-size: 13px;
   line-height: 1.45;
+  opacity: 0.72;
 }
 
 .studio-billing-card ul {
-  margin: 4px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
