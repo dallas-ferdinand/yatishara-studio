@@ -404,29 +404,29 @@ export function StudioBillingPane({
                     </div>
                     <div className="studio-billing-price-block">
                       <p className="studio-billing-price">
-                        {formatTtdShort(quote.chargeCents)}
-                        <span>{interval === "year" ? "/yr" : "/mo"}</span>
+                        {quote.discountPercent > 0 ? (
+                          <s className="studio-academy-card-compare">{formatTtdShort(faceYearCents)}</s>
+                        ) : null}
+                        <span className="studio-billing-price-now">
+                          {formatTtdShort(quote.chargeCents)}
+                          <span className="studio-billing-price-unit">
+                            {interval === "year" ? "/yr" : "/mo"}
+                          </span>
+                        </span>
+                        {quote.discountPercent > 0 ? (
+                          <span className="studio-billing-save">Save {quote.discountPercent}%</span>
+                        ) : null}
                       </p>
-                      {quote.discountPercent > 0 ? (
-                        <p className="studio-billing-was">
-                          <s>{formatTtdShort(faceYearCents)}</s>
-                          <span>Save {quote.discountPercent}%</span>
-                        </p>
-                      ) : (
-                        <p className="studio-billing-was">
-                          {formatTtdShort(quote.faceMonthlyCents)} credited every month
-                        </p>
-                      )}
                       {interval === "year" ? (
                         <p className="studio-billing-equiv">
                           {formatTtdShort(Math.round(quote.chargeCents / 12))}/mo billed yearly ·{" "}
                           {formatTtdShort(quote.faceMonthlyCents)} still lands each month
                         </p>
-                      ) : quote.discountPercent > 0 ? (
+                      ) : (
                         <p className="studio-billing-equiv">
-                          {formatTtdShort(quote.faceMonthlyCents)} still lands each month
+                          {formatTtdShort(quote.faceMonthlyCents)} credited every month
                         </p>
-                      ) : null}
+                      )}
                     </div>
                     <ul>
                       {planCopy(plan.slug, formatTtdShort(quote.faceMonthlyCents), quote.discountPercent).map((line) => (

@@ -93,7 +93,7 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--color-cursor-muted);
+  color: var(--color-cursor-text);
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
@@ -257,7 +257,7 @@
 
 .studio-billing-pitch {
   margin: 4px 0 0;
-  color: var(--color-cursor-muted);
+  color: var(--color-cursor-text);
   font-size: 13px;
 }
 
@@ -279,6 +279,10 @@
 }
 
 .studio-billing-price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 10px;
   margin: 0;
   font-size: 40px;
   font-weight: 780;
@@ -287,38 +291,41 @@
   color: var(--color-cursor-text-bright);
 }
 
-.studio-billing-price span {
-  margin-left: 6px;
-  color: var(--color-cursor-muted);
+.studio-billing-price .studio-academy-card-compare {
+  font-size: 0.42em;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.studio-billing-price-now {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.studio-billing-price-unit {
+  color: var(--color-cursor-text);
   font-size: 15px;
   font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
-.studio-billing-was,
-.studio-billing-equiv {
-  margin: 0;
-  color: var(--color-cursor-muted);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.studio-billing-was {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.studio-billing-was s {
-  color: var(--color-cursor-faint, var(--color-cursor-muted));
-}
-
-.studio-billing-was span {
-  padding: 2px 7px;
+.studio-billing-save {
+  align-self: center;
+  padding: 3px 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
   color: var(--cursor-accent);
   font-size: 11px;
   font-weight: 750;
+  letter-spacing: 0;
+}
+
+.studio-billing-equiv {
+  margin: 0;
+  color: var(--color-cursor-text);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .studio-billing-card ul {
@@ -357,8 +364,8 @@
   padding: 0 16px;
   border: 0;
   border-radius: 14px;
-  background: var(--color-cursor-text-bright);
-  color: var(--mos-page, #fff);
+  background: var(--color-cursor-text);
+  color: var(--mos-page);
   font-size: 15px;
   font-weight: 760;
   letter-spacing: -0.02em;
@@ -368,6 +375,11 @@
     transform 160ms ease,
     box-shadow 160ms ease,
     filter 160ms ease;
+}
+
+[data-appearance="light"] .studio-billing-card-cta:not(.is-featured-cta):not(.is-ghost) {
+  background: var(--color-cursor-text);
+  color: #fff;
 }
 
 .studio-billing-card-cta svg {
