@@ -189,6 +189,30 @@ async function purgeOneCsTestUser(
     .collect()) {
     await ctx.db.delete(row._id);
   }
+  for (const row of await ctx.db
+    .query("academyCoursePaymentPlans")
+    .withIndex("by_user_and_status", (q) =>
+      q.eq("userId", userId).eq("status", "active"),
+    )
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+  for (const row of await ctx.db
+    .query("academyCoursePaymentPlans")
+    .withIndex("by_user_and_status", (q) =>
+      q.eq("userId", userId).eq("status", "completed"),
+    )
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+  for (const row of await ctx.db
+    .query("academyCoursePaymentPlans")
+    .withIndex("by_user_and_status", (q) =>
+      q.eq("userId", userId).eq("status", "expired"),
+    )
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
 
   if (email) {
     const otps = await ctx.db
@@ -293,20 +317,40 @@ export const internalFindUserByPhone = internalQuery({
   handler: async (ctx, args) => {
     const phone = normalizePhone(args.phone);
     if (phone.length < 8) return null;
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_phone", (q) => q.eq("phone", phone))
-      .unique();
-    if (!user) return null;
-    return {
+
+    const mapUser = (user: Doc<"users">, resolvedPhone: string) => ({
       userId: user._id,
-      phone,
+      phone: resolvedPhone,
       email: user.email,
       emailVerified: user.emailVerified,
       firstName: user.firstName,
       lastName: user.lastName,
       name: user.name,
-    };
+    });
+
+    const isCsStaffOrProtected = (user: Doc<"users">) =>
+      isStaffRole(user.role) ||
+      (user.email ? protectedPurgeEmails().has(normalizeEmail(user.email)) : false);
+
+    // Prefer the Sophie test customer key when the real WA digits belong to staff.
+    if (phone.length <= 14) {
+      const alt = await ctx.db
+        .query("users")
+        .withIndex("by_phone", (q) => q.eq("phone", `9${phone}`))
+        .unique();
+      if (alt && !isCsStaffOrProtected(alt)) {
+        return mapUser(alt, `9${phone}`);
+      }
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .unique();
+    if (!user) return null;
+    // Never treat Dallas/Shara staff accounts as Sophie CS customers.
+    if (isCsStaffOrProtected(user)) return null;
+    return mapUser(user, phone);
   },
 });
 
@@ -671,16 +715,34 @@ export const internalCreateMagicLoginLink = internalMutation({
   handler: async (ctx, args) => {
     const phone = normalizePhone(args.phone);
     if (phone.length < 8) throw new Error("Invalid phone");
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_phone", (q) => q.eq("phone", phone))
-      .unique();
-    if (!user) throw new Error("No Studio account for this phone — create user first");
+
+    const isCsStaffOrProtected = (user: Doc<"users">) =>
+      isStaffRole(user.role) ||
+      (user.email ? protectedPurgeEmails().has(normalizeEmail(user.email)) : false);
+
+    let user =
+      phone.length <= 14
+        ? await ctx.db
+            .query("users")
+            .withIndex("by_phone", (q) => q.eq("phone", `9${phone}`))
+            .unique()
+        : null;
+    if (user && isCsStaffOrProtected(user)) user = null;
+    if (!user) {
+      const direct = await ctx.db
+        .query("users")
+        .withIndex("by_phone", (q) => q.eq("phone", phone))
+        .unique();
+      if (direct && !isCsStaffOrProtected(direct)) user = direct;
+    }
+    if (!user) {
+      throw new Error("No Studio account for this phone — create user first");
+    }
 
     const pending = await ctx.db
       .query("magicLoginTokens")
       .withIndex("by_user_and_status", (q) =>
-        q.eq("userId", user._id).eq("status", "pending"),
+        q.eq("userId", user!._id).eq("status", "pending"),
       )
       .collect();
     const now = Date.now();
@@ -695,7 +757,7 @@ export const internalCreateMagicLoginLink = internalMutation({
     const expiresAt = now + MAGIC_LINK_TTL_MS;
     await ctx.db.insert("magicLoginTokens", {
       userId: user._id,
-      phone,
+      phone: String(user.phone || phone),
       tokenHash,
       status: "pending",
       expiresAt,
