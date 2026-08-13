@@ -77,13 +77,18 @@
   gap: 6px;
   min-height: 28px;
   padding: 0 12px;
-  border: 1px solid transparent;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   border-radius: 999px;
-  background: transparent;
-  color: var(--color-cursor-text);
+  background: var(--mos-plate, var(--cursor-surface));
+  color: var(--color-cursor-muted);
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
+}
+
+.studio-billing-period button:hover {
+  color: var(--color-cursor-text-bright);
+  border-color: var(--color-cursor-border, var(--mos-border));
 }
 
 .studio-billing-period button span {
@@ -100,6 +105,10 @@
   background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
   border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
   color: var(--color-cursor-text-bright);
+}
+
+.studio-billing-period button.is-active:hover {
+  border-color: color-mix(in srgb, var(--cursor-accent) 52%, var(--color-cursor-border-soft));
 }
 
 .studio-billing-period button.is-active span {
