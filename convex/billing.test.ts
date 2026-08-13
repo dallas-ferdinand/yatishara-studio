@@ -2,7 +2,7 @@
 
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
 const modules = import.meta.glob([
@@ -460,3 +460,49 @@ async function seedGenerationReservation(t: ReturnType<typeof convexTest>, amoun
     return { accountId, jobId, reservationId };
   });
 }
+
+describe("studio plan cancel and resume", () => {
+  test("cancels at period end while paid, then resume clears the flag", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await seedUser(t);
+    const seeded = await seedActivePlan(t, userId);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(seeded.subscriptionId, {
+        wamSubscriptionId: "wam_sub_test",
+      });
+    });
+    const asUser = t.withIdentity({ subject: userId });
+    const cancelled = await asUser.mutation(api.subscriptions.cancelMyPlan, {});
+    expect(cancelled.mode).toBe("period_end");
+    expect(cancelled.wamSubscriptionId).toBe("wam_sub_test");
+    await t.run(async (ctx) => {
+      const live = await ctx.db.get(seeded.subscriptionId);
+      expect(live?.status).toBe("active");
+      expect(live?.cancelAtPeriodEnd).toBe(true);
+      expect(live?.wamSubscriptionId).toBeUndefined();
+    });
+    const resumed = await asUser.mutation(api.subscriptions.resumeMyPlan, {});
+    expect(resumed.needsWamResume).toBe(true);
+    await t.run(async (ctx) => {
+      const live = await ctx.db.get(seeded.subscriptionId);
+      expect(live?.cancelAtPeriodEnd).toBe(false);
+    });
+  });
+
+  test("unpaid plan cancels immediately", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await seedUser(t);
+    const seeded = await seedActivePlan(t, userId);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(seeded.subscriptionId, { status: "past_due" });
+    });
+    const asUser = t.withIdentity({ subject: userId });
+    const cancelled = await asUser.mutation(api.subscriptions.cancelMyPlan, {});
+    expect(cancelled.mode).toBe("immediate");
+    await t.run(async (ctx) => {
+      const live = await ctx.db.get(seeded.subscriptionId);
+      expect(live?.status).toBe("cancelled");
+    });
+  });
+});
+

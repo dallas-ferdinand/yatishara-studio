@@ -5,6 +5,7 @@ import {
   internalQuery,
   type MutationCtx,
 } from "./_generated/server";
+import { authedMutation } from "./lib/customFunctions";
 import {
   activateSubscriptionFromPaidPayment,
   grantCredits,
@@ -74,6 +75,7 @@ export const getForWamEnsure = internalQuery({
       (row) => row.status === "active" || row.status === "past_due",
     );
     if (!live || live.wamSubscriptionId) return null;
+    if (live.cancelAtPeriodEnd) return null;
     if (!live.interval) return null;
     const plan = await ctx.db.get(live.planId);
     const user = await ctx.db.get(userId);
@@ -381,6 +383,140 @@ export const cancelUnpaidSubscriptions = internalMutation({
       }
       if (live.wamSubscriptionId) cancelled.push(live.wamSubscriptionId);
     }
+    const dueCancels = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_status_and_period_end", (q) =>
+        q.eq("status", "active").lte("currentPeriodEnd", now),
+      )
+      .take(80);
+    for (const live of dueCancels) {
+      if (!live.cancelAtPeriodEnd) continue;
+      await ctx.db.patch(live._id, {
+        status: "cancelled",
+        cancelAtPeriodEnd: false,
+        updatedAt: now,
+      });
+      const account = await ctx.db
+        .query("billingAccounts")
+        .withIndex("by_user", (q) => q.eq("userId", live.userId))
+        .unique();
+      if (account?.activeSubscriptionId === live._id) {
+        await ctx.db.patch(account._id, {
+          activeSubscriptionId: undefined,
+          updatedAt: now,
+        });
+      }
+    }
     return { cancelled };
+  },
+});
+
+async function liveSubscriptionForUser(ctx: MutationCtx, userId: Id<"users">) {
+  const account = await ctx.db
+    .query("billingAccounts")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .unique();
+  const byId = account?.activeSubscriptionId
+    ? await ctx.db.get(account.activeSubscriptionId)
+    : null;
+  if (byId && (byId.status === "active" || byId.status === "past_due")) {
+    return byId;
+  }
+  return (
+    (await ctx.db
+      .query("subscriptions")
+      .withIndex("by_user_and_status", (q) =>
+        q.eq("userId", userId).eq("status", "active"),
+      )
+      .first()) ??
+    (await ctx.db
+      .query("subscriptions")
+      .withIndex("by_user_and_status", (q) =>
+        q.eq("userId", userId).eq("status", "past_due"),
+      )
+      .first())
+  );
+}
+
+export const cancelMyPlan = authedMutation({
+  args: {},
+  returns: v.object({
+    mode: v.union(v.literal("immediate"), v.literal("period_end")),
+    wamSubscriptionId: v.optional(v.string()),
+    accessUntil: v.optional(v.number()),
+  }),
+  handler: async (ctx) => {
+    const live = await liveSubscriptionForUser(ctx, ctx.user._id);
+    if (!live) {
+      throw new Error("No plan to cancel.");
+    }
+    const now = Date.now();
+    const unpaid =
+      live.status === "past_due" || now >= live.currentPeriodEnd;
+    if (unpaid) {
+      await ctx.db.patch(live._id, {
+        status: "cancelled",
+        cancelAtPeriodEnd: false,
+        cancelScheduledAt: undefined,
+        pastDueSince: undefined,
+        wamSubscriptionId: undefined,
+        updatedAt: now,
+      });
+      const account = await ctx.db
+        .query("billingAccounts")
+        .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+        .unique();
+      if (account?.activeSubscriptionId === live._id) {
+        await ctx.db.patch(account._id, {
+          activeSubscriptionId: undefined,
+          updatedAt: now,
+        });
+      }
+      return {
+        mode: "immediate" as const,
+        wamSubscriptionId: live.wamSubscriptionId,
+      };
+    }
+    const wamSubscriptionId = live.wamSubscriptionId;
+    await ctx.db.patch(live._id, {
+      cancelAtPeriodEnd: true,
+      cancelScheduledAt: live.currentPeriodEnd,
+      wamSubscriptionId: undefined,
+      updatedAt: now,
+    });
+    return {
+      mode: "period_end" as const,
+      wamSubscriptionId,
+      accessUntil: live.currentPeriodEnd,
+    };
+  },
+});
+
+export const resumeMyPlan = authedMutation({
+  args: {},
+  returns: v.object({
+    wamSubscriptionId: v.optional(v.string()),
+    needsWamResume: v.boolean(),
+  }),
+  handler: async (ctx) => {
+    const live = await liveSubscriptionForUser(ctx, ctx.user._id);
+    if (!live) {
+      throw new Error("No plan to resume.");
+    }
+    if (!live.cancelAtPeriodEnd) {
+      throw new Error("This plan is not scheduled to cancel.");
+    }
+    if (Date.now() >= live.currentPeriodEnd) {
+      throw new Error("The plan already ended. Start a new subscription.");
+    }
+    await ctx.db.patch(live._id, {
+      cancelAtPeriodEnd: false,
+      cancelScheduledAt: undefined,
+      updatedAt: Date.now(),
+    });
+    return {
+      wamSubscriptionId: live.wamSubscriptionId,
+      needsWamResume: !live.wamSubscriptionId,
+    };
   },
 });

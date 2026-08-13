@@ -261,6 +261,43 @@ const prepareSubscribeRef = makeFunctionReference<
   }
 >;
 
+const prepareInvoicePayRef = makeFunctionReference<
+  "mutation",
+  {
+    userId: Id<"users">;
+    paymentId: Id<"payments">;
+    clientRequestId: string;
+  },
+  {
+    paymentId: Id<"payments">;
+    amountCents: number;
+    creditsGranted: number;
+    callbackToken: string;
+    checkoutUrl?: string;
+    externalPaymentId?: string;
+    status: string;
+    alreadyReady: boolean;
+  }
+>("billing:prepareInvoicePay") as unknown as FunctionReference<
+  "mutation",
+  "internal",
+  {
+    userId: Id<"users">;
+    paymentId: Id<"payments">;
+    clientRequestId: string;
+  },
+  {
+    paymentId: Id<"payments">;
+    amountCents: number;
+    creditsGranted: number;
+    callbackToken: string;
+    checkoutUrl?: string;
+    externalPaymentId?: string;
+    status: string;
+    alreadyReady: boolean;
+  }
+>;
+
 const getForWamEnsureRef = makeFunctionReference<
   "query",
   { customerReference: string },
@@ -842,7 +879,7 @@ export const startSubscribe = action({
     const appBase = requirePublicUrl("SITE_URL", siteUrl(), {
       allowHttpLocalhost: true,
     });
-    const returnUrl = `${appBase}/?payment=success&paymentId=${prepared.paymentId}`;
+    const returnUrl = `${appBase}/?payment=success&paymentId=${prepared.paymentId}&billing=plans`;
 
     let intent: Awaited<ReturnType<ReturnType<typeof getWamSDK>["createPaymentIntent"]>>;
     try {
@@ -947,6 +984,125 @@ export const enforceSubscriptionDunning = internalAction({
       }
     }
     return { granted: annual.granted, cancelled: unpaid.cancelled.length };
+  },
+});
+
+export const stopRecurring = action({
+  args: {
+    wamSubscriptionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Sign in to cancel billing.");
+    }
+    const wam = getWamSDK() as ReturnType<typeof getWamSDK> & {
+      cancelSubscription?: (
+        id: string,
+        args?: { reason?: string },
+      ) => Promise<unknown>;
+    };
+    if (typeof wam.cancelSubscription === "function") {
+      try {
+        await wam.cancelSubscription(args.wamSubscriptionId, {
+          reason: "Customer cancelled",
+        });
+      } catch (error) {
+        console.error("wam_stop_recurring_failed", {
+          message: error instanceof Error ? error.message : "unknown",
+        });
+      }
+    }
+    return null;
+  },
+});
+
+export const resumeWamRecurring = action({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Sign in to resume billing.");
+    }
+    await ensureWamRecurring(ctx, String(userId));
+    return null;
+  },
+});
+
+export const startInvoicePay = action({
+  args: {
+    paymentId: v.id("payments"),
+    clientRequestId: v.string(),
+  },
+  returns: v.object({
+    paymentId: v.id("payments"),
+    checkoutUrl: v.string(),
+    status: v.string(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ paymentId: Id<"payments">; checkoutUrl: string; status: string }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Sign in to pay.");
+    }
+    const prepared = await ctx.runMutation(prepareInvoicePayRef, {
+      userId: userId as Id<"users">,
+      paymentId: args.paymentId,
+      clientRequestId: args.clientRequestId,
+    });
+    if (prepared.alreadyReady && prepared.checkoutUrl) {
+      return {
+        paymentId: prepared.paymentId,
+        checkoutUrl: prepared.checkoutUrl,
+        status: prepared.status,
+      };
+    }
+    const user = await ctx.runQuery(getCheckoutUserRef, {
+      userId: userId as Id<"users">,
+    });
+    if (!user?.email?.trim() || !user.phone?.trim()) {
+      throw new Error("Add email and phone in Account details before paying.");
+    }
+    const appBase = requirePublicUrl("SITE_URL", siteUrl(), {
+      allowHttpLocalhost: true,
+    });
+    const returnUrl = `${appBase}/?payment=success&paymentId=${prepared.paymentId}&billing=invoices`;
+    let intent: Awaited<ReturnType<ReturnType<typeof getWamSDK>["createPaymentIntent"]>>;
+    try {
+      const wam = getWamSDK();
+      intent = await wam.createPaymentIntent({
+        amountCents: prepared.amountCents,
+        currency: WAM_CURRENCY,
+        orderReference: String(prepared.paymentId),
+        description: "Studio plan payment",
+        returnUrl,
+        metadata: {
+          paymentId: String(prepared.paymentId),
+          userId: String(userId),
+        },
+        idempotencyKey: `wam:invoice:${prepared.paymentId}`,
+        setupFutureUsage: "off_session",
+        customerReference: String(userId),
+      } as Parameters<ReturnType<typeof getWamSDK>["createPaymentIntent"]>[0]);
+    } catch (error) {
+      throw new Error(wamErrorMessage(error));
+    }
+    await ctx.runMutation(attachCheckoutRef, {
+      paymentId: prepared.paymentId,
+      externalPaymentId: intent.paymentId,
+      checkoutUrl: intent.checkoutUrl,
+      providerRequestId: intent.invoiceId,
+      providerStatus: intent.status,
+    });
+    return {
+      paymentId: prepared.paymentId,
+      checkoutUrl: intent.checkoutUrl,
+      status: "pending",
+    };
   },
 });
 

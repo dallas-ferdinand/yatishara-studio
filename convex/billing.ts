@@ -196,6 +196,7 @@ function serializeAccountSubscription(
     interval: subscription.interval,
     currentPeriodStart: subscription.currentPeriodStart,
     currentPeriodEnd: subscription.currentPeriodEnd,
+    planId: plan?._id,
     planName: plan?.name,
     planSlug: plan?.slug,
     includedMonthlyCredits: plan?.includedMonthlyCredits,
@@ -204,6 +205,8 @@ function serializeAccountSubscription(
     discountPercent: plan?.discountPercent,
     annualDiscountPercent: plan?.annualDiscountPercent,
     canTopUp: canTopUpOnSubscription(subscription.status),
+    cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+    cancelScheduledAt: subscription.cancelScheduledAt,
   };
 }
 
@@ -294,6 +297,7 @@ const accountSubscriptionReturn = v.union(
     interval: v.optional(v.union(v.literal("month"), v.literal("year"))),
     currentPeriodStart: v.number(),
     currentPeriodEnd: v.number(),
+    planId: v.optional(v.id("subscriptionPlans")),
     planName: v.optional(v.string()),
     planSlug: v.optional(v.string()),
     includedMonthlyCredits: v.optional(v.number()),
@@ -302,6 +306,8 @@ const accountSubscriptionReturn = v.union(
     discountPercent: v.optional(v.number()),
     annualDiscountPercent: v.optional(v.number()),
     canTopUp: v.boolean(),
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+    cancelScheduledAt: v.optional(v.number()),
   }),
   v.null(),
 );
@@ -908,10 +914,13 @@ export const prepareSubscribeCheckout = internalMutation({
       args.userId,
       account?.activeSubscriptionId,
     );
-    if (subscription && canTopUpOnSubscription(subscription.status)) {
-      throw new Error(
-        "You're already on a plan. Extra top-ups are on this same page.",
-      );
+    if (
+      subscription &&
+      canTopUpOnSubscription(subscription.status) &&
+      subscription.planId === args.planId &&
+      (subscription.interval ?? "month") === args.interval
+    ) {
+      throw new Error("You're already on this plan.");
     }
     const pricing = await ctx.db
       .query("pricingSettings")
@@ -971,6 +980,122 @@ export const prepareSubscribeCheckout = internalMutation({
       clientRequestId,
       callbackToken: randomCallbackToken(),
       reference: `${plan.name} ${args.interval === "year" ? "annual" : "monthly"}`,
+      statusCheckAttempts: 0,
+      nextStatusCheckAt: now + PAYWISE_INITIAL_CHECK_DELAY_MS,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const created = await ctx.db.get(paymentId);
+    return {
+      paymentId,
+      amountCents: quote.chargeCents,
+      creditsGranted: quote.monthlyCredits,
+      callbackToken: created?.callbackToken ?? "",
+      checkoutUrl: undefined,
+      externalPaymentId: undefined,
+      status: "pending" as const,
+      alreadyReady: false,
+    };
+  },
+});
+
+export const prepareInvoicePay = internalMutation({
+  args: {
+    userId: v.id("users"),
+    paymentId: v.id("payments"),
+    clientRequestId: v.string(),
+  },
+  returns: v.object({
+    paymentId: v.id("payments"),
+    amountCents: v.number(),
+    creditsGranted: v.number(),
+    callbackToken: v.string(),
+    checkoutUrl: v.optional(v.string()),
+    externalPaymentId: v.optional(v.string()),
+    status: paymentStatus,
+    alreadyReady: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment || payment.userId !== args.userId) {
+      throw new Error("Invoice not found");
+    }
+    if (payment.status === "payment_completed") {
+      throw new Error("This invoice is already paid.");
+    }
+    if (
+      payment.status === "pending" &&
+      payment.checkoutUrl &&
+      payment.externalPaymentId &&
+      payment.callbackToken
+    ) {
+      return {
+        paymentId: payment._id,
+        amountCents: payment.amountCents,
+        creditsGranted: payment.creditsGranted ?? 0,
+        callbackToken: payment.callbackToken,
+        checkoutUrl: payment.checkoutUrl,
+        externalPaymentId: payment.externalPaymentId,
+        status: payment.status,
+        alreadyReady: true,
+      };
+    }
+    if (!payment.subscriptionPlanId || !payment.billingInterval) {
+      throw new Error("This invoice cannot be paid from here.");
+    }
+    const plan = await ctx.db.get(payment.subscriptionPlanId);
+    if (!plan || !plan.enabled) {
+      throw new Error("That plan is not available");
+    }
+    const pricing = await ctx.db
+      .query("pricingSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    const unitPriceCents = pricing?.creditPriceCents ?? creditPriceCents;
+    const quote = quoteStudioPlan(
+      {
+        faceMonthlyCents: plan.originalMonthlyPriceCents ?? plan.monthlyPriceCents,
+        monthlyDiscountPercent: plan.discountPercent ?? 0,
+        annualDiscountPercent: plan.annualDiscountPercent ?? 0,
+      },
+      payment.billingInterval,
+      unitPriceCents,
+    );
+    const clientRequestId = args.clientRequestId.trim();
+    const existing = await ctx.db
+      .query("payments")
+      .withIndex("by_client_request", (q) => q.eq("clientRequestId", clientRequestId))
+      .unique();
+    if (existing) {
+      if (existing.userId !== args.userId) {
+        throw new Error("Checkout request already used");
+      }
+      if (!existing.callbackToken) {
+        throw new Error("Existing checkout is missing its callback token.");
+      }
+      return {
+        paymentId: existing._id,
+        amountCents: existing.amountCents,
+        creditsGranted: existing.creditsGranted ?? 0,
+        callbackToken: existing.callbackToken,
+        checkoutUrl: existing.checkoutUrl,
+        externalPaymentId: existing.externalPaymentId,
+        status: existing.status,
+        alreadyReady: Boolean(existing.checkoutUrl && existing.externalPaymentId),
+      };
+    }
+    const now = Date.now();
+    const paymentId = await ctx.db.insert("payments", {
+      userId: args.userId,
+      method: "wam",
+      status: "pending",
+      amountCents: quote.chargeCents,
+      creditsGranted: quote.monthlyCredits,
+      subscriptionPlanId: plan._id,
+      billingInterval: payment.billingInterval,
+      clientRequestId,
+      callbackToken: randomCallbackToken(),
+      reference: `${plan.name} ${payment.billingInterval === "year" ? "annual" : "monthly"}`,
       statusCheckAttempts: 0,
       nextStatusCheckAt: now + PAYWISE_INITIAL_CHECK_DELAY_MS,
       createdAt: now,

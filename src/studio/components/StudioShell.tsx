@@ -414,6 +414,10 @@ const StudioAcademyPane = dynamic(
   () => import("./StudioAcademyPane").then((m) => m.StudioAcademyPane),
   { ssr: false },
 );
+const StudioBillingPane = dynamic(
+  () => import("./StudioBillingPane").then((m) => m.StudioBillingPane),
+  { ssr: false },
+);
 const ThemeSettings = dynamic(
   () => import("@/desk/components/ThemeSettings").then((m) => m.ThemeSettings),
   { ssr: false },
@@ -1473,6 +1477,7 @@ export function StudioShell({
   /** Full-screen handoff while creating checkout + leaving for Wam. */
   const [wamHandoff, setWamHandoff] = useState(null);
   const academyPaymentReturnHandledRef = useRef(false);
+  const billingPaymentReturnHandledRef = useRef(false);
   /** Full-screen ask to enable browser push (gens / DMs / followed posts). */
   const [pushPromptOpen, setPushPromptOpen] = useState(false);
   const [mobileSection, setMobileSection] = useState("composer");
@@ -1777,6 +1782,7 @@ export function StudioShell({
         !activeTab.startsWith("network:") &&
         !activeTab.startsWith("offers:") &&
         !activeTab.startsWith("academy:") &&
+        !activeTab.startsWith("billing:") &&
         !activeTab.startsWith("admin:")));
   const needsComposerCatalog =
     isGenerateSurface || Boolean(activeTab?.startsWith("thread:"));
@@ -1883,7 +1889,8 @@ export function StudioShell({
   const needsBillingDetails =
     settingsOpen ||
     activeTab.startsWith("admin:") ||
-    openTabs.some((tab) => tab.startsWith("admin:"));
+    activeTab.startsWith("billing:") ||
+    openTabs.some((tab) => tab.startsWith("admin:") || tab.startsWith("billing:"));
   const needsProfileShares =
     settingsOpen ||
     settingsSection === "profile" ||
@@ -5161,6 +5168,7 @@ export function StudioShell({
     onActivityOpenBilling: () => {
       openSettingsTab("billing");
     },
+    onOpenPlans: () => openBillingTab("plans"),
     topUpPrefillCents: billingTopUpPrefillCents,
     onTopUpPrefillConsumed: () => setBillingTopUpPrefillCents(null),
   };
@@ -5272,6 +5280,24 @@ export function StudioShell({
     }
   }
 
+  function openBillingTab(section = "plans") {
+    void import("./StudioBillingPane");
+    const key = `billing:${section === "invoices" ? "invoices" : "plans"}`;
+    setSettingsOpen(false);
+    if (isMobile) setMobileSection("composer");
+    setOpenTabs((tabs) => {
+      const idx = tabs.findIndex((tab) => tab.startsWith("billing:"));
+      if (idx >= 0) {
+        if (tabs[idx] === key) return tabs;
+        const next = [...tabs];
+        next[idx] = key;
+        return next;
+      }
+      return [...tabs, key];
+    });
+    setActiveTab(key);
+  }
+
   useEffect(() => {
     if (typeof window === "undefined" || academyPaymentReturnHandledRef.current) return;
     if (!currentUser?._id) return;
@@ -5353,6 +5379,70 @@ export function StudioShell({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot Wam academy return after auth
+  }, [currentUser?._id, syncWamPayment]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || billingPaymentReturnHandledRef.current) return;
+    if (!currentUser?._id) return;
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("payment");
+    const paymentId = params.get("paymentId");
+    const billing = params.get("billing");
+    if (!outcome || !paymentId || (billing !== "plans" && billing !== "invoices")) return;
+    billingPaymentReturnHandledRef.current = true;
+    openBillingTab(billing);
+    setPaymentCelebration({ phase: "confirming" });
+    params.delete("payment");
+    params.delete("paymentId");
+    params.delete("billing");
+    const cleaned = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", cleaned);
+
+    let cancelled = false;
+    void (async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      try {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          if (cancelled) return;
+          if (attempt > 0) {
+            await sleep(Math.min(6_000, 1_200 * 2 ** Math.min(attempt - 1, 2)));
+          }
+          let result;
+          try {
+            result = await syncWamPayment({ paymentId, force: true });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error ?? "");
+            if (/sign in|not authenticated|unauthorized/i.test(message)) continue;
+            throw error;
+          }
+          if (cancelled) return;
+          if (result.status === "payment_completed") {
+            setPaymentCelebration({
+              phase: "success",
+              amountCents: result.amountCents ?? null,
+              creditsGranted: result.creditsGranted ?? null,
+            });
+            return;
+          }
+          if (
+            result.status === "cancelled" ||
+            result.status === "rejected" ||
+            result.status === "checkout_failed"
+          ) {
+            setPaymentCelebration(null);
+            toast.error(result.status === "cancelled" ? "Payment cancelled" : "Payment not completed");
+            return;
+          }
+        }
+        setPaymentCelebration(null);
+      } catch {
+        setPaymentCelebration(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot Wam billing return after auth
   }, [currentUser?._id, syncWamPayment]);
 
   /** @deprecated Use openNetworkTab — kept for call-site compatibility. */
@@ -12700,6 +12790,15 @@ export function StudioShell({
           color: var(--color-cursor-muted);
           font-size: 12px;
           line-height: 1.4;
+        }
+        .studio-settings-plan-link {
+          border: 0;
+          padding: 0;
+          background: none;
+          color: var(--cursor-accent);
+          font: inherit;
+          font-weight: 650;
+          cursor: pointer;
         }
         .studio-settings-workspace .studio-settings-plans .studio-settings-custom-amount {
           gap: 10px;
@@ -25664,6 +25763,7 @@ export function StudioShell({
             payments={payments}
             onOpenSettings={() => openSettingsTab("general")}
             onOpenCredits={openCreditsPane}
+            onOpenBillingTab={openBillingTab}
             onWamHandoff={setWamHandoff}
             onPaymentCelebration={setPaymentCelebration}
             onOpenAdminTab={openAdminTab}
@@ -26444,6 +26544,10 @@ export function StudioShell({
           onOpenAcademy={() => {
             setMobileAppMenuOpen(false);
             openAcademyTab();
+          }}
+          onOpenBilling={() => {
+            setMobileAppMenuOpen(false);
+            openBillingTab("plans");
           }}
           onOpenMessages={() => {
             setMobileAppMenuOpen(false);
@@ -29136,6 +29240,7 @@ function StudioMobileAppMenu({
   onEditProfile,
   onOpenOffers,
   onOpenAcademy,
+  onOpenBilling,
   onOpenMessages,
   onOpenSection,
   onOpenSettings,
@@ -29442,7 +29547,10 @@ function StudioMobileAppMenu({
       : []),
     { label: "Theme", ariaLabel: "Appearance", Icon: Palette, onClick: () => onOpenSettings?.("general") },
     { label: "Account", ariaLabel: "Account details", Icon: UserCog, onClick: () => onOpenSettings?.("account") },
-    { label: "Billing", Icon: CreditCard, onClick: () => onOpenSettings?.("billing") },
+    { label: "Billing", Icon: CreditCard, onClick: () => {
+      onClose?.();
+      onOpenBilling?.();
+    } },
     { label: "Credits", Icon: Zap, onClick: onOpenCredits },
     { label: "Activity", Icon: Clock3, onClick: () => onOpenSettings?.("activity") },
     { label: "API", ariaLabel: "API keys", Icon: KeyRound, onClick: () => onOpenSettings?.("api-keys") },
@@ -31910,6 +32018,7 @@ function ActivePane({
   payments,
   onOpenSettings,
   onOpenCredits,
+  onOpenBillingTab,
   onWamHandoff,
   onPaymentCelebration,
   onOpenAdminTab,
@@ -32390,11 +32499,12 @@ function ActivePane({
   }
   if (billingTab) {
     return wrapPane(
-      <BillingWorkspacePane
-        tab={billingTab}
+      <StudioBillingPane
+        section={billingTab === "invoices" ? "invoices" : "plans"}
+        onSection={(next) => onOpenBillingTab?.(next)}
         billingAccount={billingAccount}
-        pricing={pricing}
         payments={payments}
+        onWamHandoff={onWamHandoff}
       />,
     );
   }
@@ -32881,45 +32991,6 @@ function StudioAssetPreview({ entry }) {
   );
 }
 
-function BillingWorkspacePane({ tab: _tab, billingAccount, pricing, payments }) {
-  const plans = pricingPlans(pricing);
-  return (
-    <div className="h-full overflow-auto p-6">
-      <div className="studio-admin-workspace">
-        <section className="studio-admin-hero-card">
-          <div>
-            <p className="studio-section-kicker">Billing</p>
-            <h2>Balance & top up</h2>
-            <p>{formatTtdFromCredits(billingAccount?.creditBalance ?? 0, pricing?.creditPriceCents)} available, {formatTtdFromCredits(billingAccount?.reservedCredits ?? 0, pricing?.creditPriceCents)} set aside for content in progress.</p>
-          </div>
-          <span className="studio-admin-chip">Wam</span>
-        </section>
-        <section className="studio-admin-grid-large">
-          <article className="studio-admin-card">
-            <p className="studio-admin-card-kicker">Balance</p>
-            <h3>{formatTtdFromCredits(billingAccount?.creditBalance ?? 0, pricing?.creditPriceCents)}</h3>
-            <p>{formatTtdFromCredits(billingAccount?.reservedCredits ?? 0, pricing?.creditPriceCents)} set aside for content in progress.</p>
-          </article>
-          <article className="studio-admin-card">
-            <p className="studio-admin-card-kicker">Recent payments</p>
-            <h3>{payments?.length ?? 0}</h3>
-            <p>{(payments ?? [])[0] ? `Latest payment: ${humanizePaymentStatus((payments ?? [])[0].status)}` : "No payments yet."}</p>
-          </article>
-        </section>
-        <section className="studio-admin-grid-large">
-          {plans.map((plan) => (
-            <article key={plan.name} className={`studio-plan-card studio-plan-card-large${plan.featured ? " is-featured" : ""}`}>
-              <span className="studio-plan-badge">{plan.badge}</span>
-              <h4>{plan.name}</h4>
-              <p className="studio-plan-price">{plan.price}</p>
-              <p className="studio-plan-sub">Wam checkout</p>
-              <ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
-            </article>
-          ))}
-        </section>
-      </div>
-    </div>
-  );
 }
 
 function AdminWorkspacePane({
@@ -34880,6 +34951,7 @@ function SettingsSidePanel({
   onActivityOpenMessages,
   onActivityOpenPost,
   onActivityOpenBilling,
+  onOpenPlans,
   topUpPrefillCents,
   onTopUpPrefillConsumed,
   isMobile = false,
@@ -34911,6 +34983,7 @@ function SettingsSidePanel({
       onActivityOpenMessages={onActivityOpenMessages}
       onActivityOpenPost={onActivityOpenPost}
       onActivityOpenBilling={onActivityOpenBilling}
+      onOpenPlans={onOpenPlans}
       topUpPrefillCents={topUpPrefillCents}
       onTopUpPrefillConsumed={onTopUpPrefillConsumed}
     />
@@ -35235,6 +35308,7 @@ function SettingsWorkspacePane({
   onActivityOpenMessages,
   onActivityOpenPost,
   onActivityOpenBilling,
+  onOpenPlans,
   topUpPrefillCents,
   onTopUpPrefillConsumed,
 }) {
@@ -35245,18 +35319,13 @@ function SettingsWorkspacePane({
   const [paymentStatus, setPaymentStatus] = useState("");
   const [checkoutStarting, setCheckoutStarting] = useState(false);
   const [invoicesOpen, setInvoicesOpen] = useState(false);
-  const [billingInterval, setBillingInterval] = useState("month");
-  const subscribeRequestIdRef = useRef(null);
   const clientRequestIdRef = useRef(null);
   const paymentReturnHandledRef = useRef(false);
   const settingsMenuScrollRef = useRef(null);
   useHorizontalWheelScroll(settingsMenuScrollRef);
   useHorizontalScrollFade(settingsMenuScrollRef);
   const startWamCheckout = useAction(api.wamActions.startCheckout);
-  const startWamSubscribe = useAction(api.wamActions.startSubscribe);
   const syncWamPayment = useAction(api.wamActions.syncMyPayment);
-  const catalog = useQuery(api.billing.listSubscriptionPlans, {});
-  const ensureStudioPlans = useMutation(api.billing.ensureStudioPlans);
   const sellerPayout = useQuery(api.marketplace.getMyPayoutAccount);
   const creditPriceCents = pricing?.creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
   const plans = pricingPlans(pricing);
@@ -35320,13 +35389,18 @@ function SettingsWorkspacePane({
   }, [catalog, ensureStudioPlans]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || paymentReturnHandledRef.current) return;
+    if (!catalog || catalog.length > 0) return;
+    void ensureStudioPlans().catch(() => {});
+  }, [catalog, ensureStudioPlans]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const outcome = params.get("payment");
     const paymentId = params.get("paymentId");
     if (!outcome || !paymentId) return;
     // Academy shortfall returns are synced in StudioShell (course unlock path).
     if (params.get("academyCourse")) return;
+    if (params.get("billing") === "plans" || params.get("billing") === "invoices") return;
     paymentReturnHandledRef.current = true;
     setSection("billing");
     setInvoicesOpen(true);
@@ -35450,36 +35524,6 @@ function SettingsWorkspacePane({
     }
   }
 
-  async function handleSubscribe(plan) {
-    if (checkoutStarting || !plan?._id) return;
-    if (!subscribeRequestIdRef.current) {
-      subscribeRequestIdRef.current = `sub-${plan._id}-${billingInterval}-${newClientRequestId()}`;
-    }
-    setCheckoutStarting(true);
-    setPaymentStatus("Please wait…");
-    const quote = quoteCatalogPlan(plan, billingInterval);
-    onWamHandoff?.({
-      phase: "preparing",
-      amountCents: quote.chargeCents,
-    });
-    try {
-      const result = await startWamSubscribe({
-        clientRequestId: subscribeRequestIdRef.current,
-        planId: plan._id,
-        interval: billingInterval,
-      });
-      setPaymentStatus("Redirecting…");
-      onWamHandoff?.({
-        phase: "redirect",
-        amountCents: quote.chargeCents,
-        checkoutUrl: result.checkoutUrl,
-      });
-    } catch (error) {
-      onWamHandoff?.(null);
-      setPaymentStatus(friendlyConvexError(error, "Wam checkout failed."));
-      setCheckoutStarting(false);
-      subscribeRequestIdRef.current = null;
-    }
   }
 
   const items = [
@@ -35560,53 +35604,16 @@ function SettingsWorkspacePane({
                     . Extra balance uses the same plan discount.
                   </p>
                 ) : (
-                  <>
-                    <div className="studio-settings-plan-toggle" role="group" aria-label="Billing period">
-                      <button
-                        type="button"
-                        className={billingInterval === "month" ? "is-active" : ""}
-                        onClick={() => setBillingInterval("month")}
-                      >
-                        Monthly
-                      </button>
-                      <button
-                        type="button"
-                        className={billingInterval === "year" ? "is-active" : ""}
-                        onClick={() => setBillingInterval("year")}
-                      >
-                        Annual
-                      </button>
-                    </div>
-                    <div className="studio-settings-plan-grid">
-                      {(catalog ?? []).map((plan) => {
-                        const quote = quoteCatalogPlan(plan, billingInterval);
-                        return (
-                          <article
-                            key={plan._id}
-                            className={`studio-settings-plan-card${plan.slug === "plus" ? " is-featured" : ""}`}
-                          >
-                            <h4>{plan.name}</h4>
-                            <p className="studio-plan-price">{formatTtdCents(quote.chargeCents)}</p>
-                            <p>
-                              {quote.discountPercent > 0
-                                ? `Pay ${formatTtdShort(quote.chargeCents)}, get ${formatTtdShort(quote.faceMonthlyCents)}${billingInterval === "year" ? "/mo for the year" : " each month"}. ${quote.discountPercent}% off.`
-                                : `Pay ${formatTtdShort(quote.chargeCents)}, get ${formatTtdShort(quote.faceMonthlyCents)} each month.`}
-                            </p>
-                            <button
-                              type="button"
-                              disabled={checkoutStarting}
-                              onClick={() => void handleSubscribe(plan)}
-                            >
-                              Subscribe
-                            </button>
-                          </article>
-                        );
-                      })}
-                    </div>
-                    {paymentStatus ? (
-                      <p className="studio-settings-topup-locked">{paymentStatus}</p>
-                    ) : null}
-                  </>
+                  <p className="studio-settings-topup-locked">
+                    Extra top-up is available on a plan.{" "}
+                    <button
+                      type="button"
+                      className="studio-settings-plan-link"
+                      onClick={() => onOpenPlans?.()}
+                    >
+                      Choose a plan
+                    </button>
+                  </p>
                 )}
                 {canTopUp ? (
                 <div className="studio-settings-custom-amount">
@@ -36379,20 +36386,6 @@ function newClientRequestId() {
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
   return `topup-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-}
-
-function quoteCatalogPlan(plan, interval) {
-  const face = Number(plan?.originalMonthlyPriceCents ?? plan?.monthlyPriceCents ?? 0);
-  const discount =
-    interval === "year"
-      ? Number(plan?.annualDiscountPercent ?? 0)
-      : Number(plan?.discountPercent ?? 0);
-  const faceCharge = interval === "year" ? face * 12 : face;
-  return {
-    faceMonthlyCents: face,
-    discountPercent: discount,
-    chargeCents: Math.round((faceCharge * (100 - discount)) / 100),
-  };
 }
 
 function pricingPlans(pricing) {
@@ -37359,7 +37352,7 @@ function tabDescriptor({
   }
   if (key.startsWith("billing:")) {
     const kind = key.slice("billing:".length);
-    const title = kind === "top-up" ? "Credit top up" : "Billing";
+    const title = kind === "invoices" ? "Invoices" : "Plans";
     return { key, kind: "settings", title, status: "ready" };
   }
   if (key.startsWith("create:")) {

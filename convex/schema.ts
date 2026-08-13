@@ -900,6 +900,9 @@ export default defineSchema({
     monthsGrantedThisTerm: v.optional(v.number()),
     lastGrantAt: v.optional(v.number()),
     pastDueSince: v.optional(v.number()),
+    /** Stop the next charge; access stays until currentPeriodEnd. */
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+    cancelScheduledAt: v.optional(v.number()),
     sourcePaymentId: v.optional(v.id("payments")),
     createdAt: v.number(),
     updatedAt: v.number(),
