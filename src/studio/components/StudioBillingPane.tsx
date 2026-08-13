@@ -1,6 +1,7 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
+import { ArrowRight, Check } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
@@ -8,6 +9,8 @@ import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents, formatTtdShort } from "@/studio/lib/money";
 import { StudioConfirmOverlay } from "./StudioConfirmOverlay";
 import "./studio-billing.css";
+
+const STUDIO_PLAN_SLUGS = ["core", "plus", "pro"] as const;
 
 type BillingInterval = "month" | "year";
 type InvoiceKind = "all" | "subscription" | "topup" | "academy";
@@ -110,14 +113,32 @@ function canPayInvoice(row: InvoiceRow) {
   return row.status === "pending" || row.status === "checkout_failed";
 }
 
-function planCopy(slug: string) {
+function planPitch(slug: string) {
+  if (slug === "plus") return "For regular production";
+  if (slug === "pro") return "For heavy Studio work";
+  return "For getting started";
+}
+
+function planCopy(slug: string, grantLabel: string, discountPercent: number) {
   if (slug === "plus") {
-    return ["Full monthly grant after each paid charge", "Extra top-up at your plan discount", "Upgrade or downgrade anytime"];
+    return [
+      `${grantLabel} credited every month after payment`,
+      discountPercent > 0 ? `Extra top-up at ${discountPercent}% off` : "Extra top-up on this plan",
+      "Upgrade or downgrade anytime",
+    ];
   }
   if (slug === "pro") {
-    return ["Highest monthly grant", "Best annual savings", "For heavy Studio + Academy use"];
+    return [
+      `${grantLabel} credited every month after payment`,
+      discountPercent > 0 ? `Best savings at ${discountPercent}% off` : "Highest monthly grant",
+      "Built for Studio + Academy volume",
+    ];
   }
-  return ["Start generating in Studio", "Monthly grant after payment", "Upgrade anytime"];
+  return [
+    `${grantLabel} credited every month after payment`,
+    "Start generating in Studio",
+    "Upgrade anytime",
+  ];
 }
 
 function newRequestId(prefix: string) {
@@ -151,12 +172,20 @@ export function StudioBillingPane({
   const live = Boolean(sub && (sub.status === "active" || sub.status === "past_due"));
 
   useEffect(() => {
-    if (!catalog || catalog.length > 0) return;
+    if (!catalog) return;
+    const slugs = new Set(catalog.map((plan) => plan.slug));
+    const missing = STUDIO_PLAN_SLUGS.some((slug) => !slugs.has(slug));
+    const stale = catalog.some((plan) => !STUDIO_PLAN_SLUGS.includes(plan.slug as (typeof STUDIO_PLAN_SLUGS)[number]));
+    if (!missing && !stale) return;
     void ensureStudioPlans({}).catch(() => {});
   }, [catalog, ensureStudioPlans]);
 
   const plans = useMemo(
-    () => [...(catalog ?? [])].sort((a, b) => a.sortOrder - b.sortOrder).slice(0, 3),
+    () =>
+      [...(catalog ?? [])]
+        .filter((plan) => STUDIO_PLAN_SLUGS.includes(plan.slug as (typeof STUDIO_PLAN_SLUGS)[number]))
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .slice(0, 3),
     [catalog],
   );
 
@@ -295,8 +324,8 @@ export function StudioBillingPane({
           <div className="studio-billing-canvas">
             <div className="studio-billing-intro">
               <p className="studio-billing-kicker">Yatishara Studio</p>
-              <h1>Choose a plan</h1>
-              <p>Pay less, get the full monthly amount. Annual is prepaid; balance still lands each month.</p>
+              <h1>Pick the plan that funds your work</h1>
+              <p>Pay less than the face amount. You still get the full monthly dollars after each successful charge.</p>
             </div>
 
             {live ? (
@@ -340,6 +369,7 @@ export function StudioBillingPane({
                 onClick={() => setInterval("year")}
               >
                 Annual
+                <span>Save up to 20%</span>
               </button>
             </div>
 
@@ -349,36 +379,61 @@ export function StudioBillingPane({
                 const featured = plan.slug === "plus";
                 const current = live && plan._id === currentPlanId && (sub?.interval ?? "month") === interval;
                 const label = actionLabel(plan);
+                const faceYearCents = quote.faceMonthlyCents * (interval === "year" ? 12 : 1);
                 return (
                   <article
                     key={plan._id}
                     className={`studio-billing-card${featured ? " is-featured" : ""}${current ? " is-current" : ""}`}
                   >
                     <div className="studio-billing-card-kicker">
-                      <h3>{plan.name}</h3>
-                      {featured ? <span className="studio-billing-badge">Popular</span> : null}
+                      <div>
+                        <h3>{plan.name}</h3>
+                        <p className="studio-billing-pitch">{planPitch(plan.slug)}</p>
+                      </div>
+                      {featured ? <span className="studio-billing-badge">Most popular</span> : null}
                     </div>
-                    <p className="studio-billing-price">
-                      {formatTtdShort(quote.chargeCents)}
-                      <span>{interval === "year" ? "/yr" : "/mo"}</span>
-                    </p>
-                    <p>
-                      {quote.discountPercent > 0
-                        ? `Pay ${quote.discountPercent}% less, get ${formatTtdShort(quote.faceMonthlyCents)} every month.`
-                        : `Get ${formatTtdShort(quote.faceMonthlyCents)} every month.`}
-                    </p>
+                    <div className="studio-billing-price-block">
+                      <p className="studio-billing-price">
+                        {formatTtdShort(quote.chargeCents)}
+                        <span>{interval === "year" ? "/yr" : "/mo"}</span>
+                      </p>
+                      {quote.discountPercent > 0 ? (
+                        <p className="studio-billing-was">
+                          <s>{formatTtdShort(faceYearCents)}</s>
+                          <span>Save {quote.discountPercent}%</span>
+                        </p>
+                      ) : (
+                        <p className="studio-billing-was">
+                          {formatTtdShort(quote.faceMonthlyCents)} credited every month
+                        </p>
+                      )}
+                      {interval === "year" ? (
+                        <p className="studio-billing-equiv">
+                          {formatTtdShort(Math.round(quote.chargeCents / 12))}/mo billed yearly ·{" "}
+                          {formatTtdShort(quote.faceMonthlyCents)} still lands each month
+                        </p>
+                      ) : quote.discountPercent > 0 ? (
+                        <p className="studio-billing-equiv">
+                          {formatTtdShort(quote.faceMonthlyCents)} still lands each month
+                        </p>
+                      ) : null}
+                    </div>
                     <ul>
-                      {planCopy(plan.slug).map((line) => (
-                        <li key={line}>{line}</li>
+                      {planCopy(plan.slug, formatTtdShort(quote.faceMonthlyCents), quote.discountPercent).map((line) => (
+                        <li key={line}>
+                          <Check aria-hidden="true" />
+                          <span>{line}</span>
+                        </li>
                       ))}
                     </ul>
                     <button
                       type="button"
-                      className={current ? "is-ghost" : ""}
+                      className={`studio-billing-card-cta${current ? " is-ghost" : featured ? " is-featured-cta" : ""}`}
                       disabled={Boolean(busy) || current}
                       onClick={() => void checkout(plan)}
                     >
-                      {busy === plan._id ? "Opening checkout…" : label}
+                      <span>{busy === plan._id ? "Opening checkout…" : label}</span>
+                      {current || busy === plan._id ? null : <ArrowRight aria-hidden="true" />}
                     </button>
                   </article>
                 );
