@@ -504,7 +504,7 @@ export const startCheckout = action({
     const academyCourseId = prepared.academyCourseId ?? args.academyCourseId;
     const returnUrl = academyCourseId
       ? `${appBase}/?payment=success&paymentId=${prepared.paymentId}&academyCourse=${academyCourseId}`
-      : `${appBase}/?payment=success&paymentId=${prepared.paymentId}`;
+      : `${appBase}/?payment=success&paymentId=${prepared.paymentId}&billing=topup`;
 
     let intent: Awaited<ReturnType<ReturnType<typeof getWamSDK>["createPaymentIntent"]>>;
     try {

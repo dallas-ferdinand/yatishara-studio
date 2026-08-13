@@ -5169,6 +5169,7 @@ export function StudioShell({
       openSettingsTab("billing");
     },
     onOpenPlans: () => openBillingTab("plans"),
+    onOpenTopUp: () => openBillingTab("topup"),
     topUpPrefillCents: billingTopUpPrefillCents,
     onTopUpPrefillConsumed: () => setBillingTopUpPrefillCents(null),
   };
@@ -5181,29 +5182,8 @@ export function StudioShell({
     if (amountCents != null && amountCents > 0) {
       setBillingTopUpPrefillCents(amountCents);
     }
-    if (settingsOpen && settingsSection === "billing" && !isMobile && amountCents == null) {
-      setSettingsOpen(false);
-      return;
-    }
-    setSettingsSection("billing");
-    setOpenTabs((tabs) => tabs.filter((tab) => !tab.startsWith("settings:")));
-    setActiveTab((tab) => (tab.startsWith("settings:") ? COMPOSER_TAB : tab));
-    if (isMobile) {
-      setMobileAppMenuOpen(false);
-      setHistoryOpen(false);
-    }
-    setSettingsOpen(true);
-  }, [
-    isMobile,
-    settingsOpen,
-    settingsSection,
-    setSettingsOpen,
-    setSettingsSection,
-    setOpenTabs,
-    setActiveTab,
-    setMobileAppMenuOpen,
-    setHistoryOpen,
-  ]);
+    openBillingTab("topup");
+  }, []);
 
   const openPurchasedFolder = useCallback(
     async (buyerAssetId) => {
@@ -5282,7 +5262,7 @@ export function StudioShell({
 
   function openBillingTab(section = "plans") {
     void import("./StudioBillingPane");
-    const key = `billing:${section === "invoices" ? "invoices" : "plans"}`;
+    const key = `billing:${section === "invoices" ? "invoices" : section === "topup" ? "topup" : "plans"}`;
     setSettingsOpen(false);
     if (isMobile) setMobileSection("composer");
     setOpenTabs((tabs) => {
@@ -5388,7 +5368,7 @@ export function StudioShell({
     const outcome = params.get("payment");
     const paymentId = params.get("paymentId");
     const billing = params.get("billing");
-    if (!outcome || !paymentId || (billing !== "plans" && billing !== "invoices")) return;
+    if (!outcome || !paymentId || (billing !== "plans" && billing !== "invoices" && billing !== "topup")) return;
     billingPaymentReturnHandledRef.current = true;
     openBillingTab(billing);
     setPaymentCelebration({ phase: "confirming" });
@@ -25764,6 +25744,8 @@ export function StudioShell({
             onOpenSettings={() => openSettingsTab("general")}
             onOpenCredits={openCreditsPane}
             onOpenBillingTab={openBillingTab}
+            billingTopUpPrefillCents={billingTopUpPrefillCents}
+            onTopUpPrefillConsumed={() => setBillingTopUpPrefillCents(null)}
             onWamHandoff={setWamHandoff}
             onPaymentCelebration={setPaymentCelebration}
             onOpenAdminTab={openAdminTab}
@@ -29551,10 +29533,7 @@ function StudioMobileAppMenu({
       onClose?.();
       onOpenBilling?.();
     } },
-    { label: "Credits", Icon: Zap, onClick: () => {
-      onClose?.();
-      onOpenBilling?.();
-    } },
+    { label: "Credits", Icon: Zap, onClick: onOpenCredits },
     { label: "Activity", Icon: Clock3, onClick: () => onOpenSettings?.("activity") },
     { label: "API", ariaLabel: "API keys", Icon: KeyRound, onClick: () => onOpenSettings?.("api-keys") },
     ...(desktop
@@ -32022,6 +32001,8 @@ function ActivePane({
   onOpenSettings,
   onOpenCredits,
   onOpenBillingTab,
+  billingTopUpPrefillCents,
+  onTopUpPrefillConsumed,
   onWamHandoff,
   onPaymentCelebration,
   onOpenAdminTab,
@@ -32503,10 +32484,15 @@ function ActivePane({
   if (billingTab) {
     return wrapPane(
       <StudioBillingPane
-        section={billingTab === "invoices" ? "invoices" : "plans"}
+        section={
+          billingTab === "invoices" ? "invoices" : billingTab === "topup" ? "topup" : "plans"
+        }
         onSection={(next) => onOpenBillingTab?.(next)}
         billingAccount={billingAccount}
         payments={payments}
+        pricing={pricing}
+        topUpPrefillCents={billingTopUpPrefillCents}
+        onTopUpPrefillConsumed={onTopUpPrefillConsumed}
         onWamHandoff={onWamHandoff}
       />,
     );
@@ -34953,6 +34939,7 @@ function SettingsSidePanel({
   onActivityOpenPost,
   onActivityOpenBilling,
   onOpenPlans,
+  onOpenTopUp,
   topUpPrefillCents,
   onTopUpPrefillConsumed,
   isMobile = false,
@@ -34985,6 +34972,7 @@ function SettingsSidePanel({
       onActivityOpenPost={onActivityOpenPost}
       onActivityOpenBilling={onActivityOpenBilling}
       onOpenPlans={onOpenPlans}
+      onOpenTopUp={onOpenTopUp}
       topUpPrefillCents={topUpPrefillCents}
       onTopUpPrefillConsumed={onTopUpPrefillConsumed}
     />
@@ -35310,6 +35298,7 @@ function SettingsWorkspacePane({
   onActivityOpenPost,
   onActivityOpenBilling,
   onOpenPlans,
+  onOpenTopUp,
   topUpPrefillCents,
   onTopUpPrefillConsumed,
 }) {
@@ -35385,23 +35374,17 @@ function SettingsWorkspacePane({
   }, [topUpPrefillCents, minAmountCents]);
 
   useEffect(() => {
-    if (!catalog || catalog.length > 0) return;
-    void ensureStudioPlans().catch(() => {});
-  }, [catalog, ensureStudioPlans]);
-
-  useEffect(() => {
-    if (!catalog || catalog.length > 0) return;
-    void ensureStudioPlans().catch(() => {});
-  }, [catalog, ensureStudioPlans]);
-
-  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const outcome = params.get("payment");
     const paymentId = params.get("paymentId");
     if (!outcome || !paymentId) return;
     // Academy shortfall returns are synced in StudioShell (course unlock path).
     if (params.get("academyCourse")) return;
-    if (params.get("billing") === "plans" || params.get("billing") === "invoices") return;
+    if (
+      params.get("billing") === "plans" ||
+      params.get("billing") === "invoices" ||
+      params.get("billing") === "topup"
+    ) return;
     paymentReturnHandledRef.current = true;
     setSection("billing");
     setInvoicesOpen(true);
@@ -35767,7 +35750,7 @@ function SettingsWorkspacePane({
         {settingsSectionId === "storage" ? (
           <StorageSettingsCard
             creditPriceCents={creditPriceCents}
-            onTopUp={() => setSection("billing")}
+            onTopUp={() => onOpenTopUp?.()}
           />
         ) : null}
 
@@ -37351,7 +37334,7 @@ function tabDescriptor({
   }
   if (key.startsWith("billing:")) {
     const kind = key.slice("billing:".length);
-    const title = kind === "invoices" ? "Invoices" : "Plans";
+    const title = kind === "invoices" ? "Invoices" : kind === "topup" ? "Top-up" : "Plans";
     return { key, kind: "settings", title, status: "ready" };
   }
   if (key.startsWith("create:")) {

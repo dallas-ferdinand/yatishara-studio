@@ -472,6 +472,13 @@
   font-size: 13px;
 }
 
+.studio-billing-topup {
+  width: min(440px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 20px;
+}
+
 @media (max-width: 860px) {
   .studio-billing-plans {
     grid-template-columns: 1fr;

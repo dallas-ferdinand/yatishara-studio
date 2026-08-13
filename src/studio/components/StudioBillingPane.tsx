@@ -1,19 +1,29 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check, Loader2, Lock } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import { STUDIO_PLAN_CATALOG, STUDIO_PLAN_SLUGS } from "../../../convex/lib/studioPlans";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
-import { formatTtdCents, formatTtdShort } from "@/studio/lib/money";
+import {
+  DEFAULT_CREDIT_PRICE_CENTS,
+  TOP_UP_TIER_CREDITS,
+  creditsFromAmountCents,
+  formatTtdCents,
+  formatTtdFromCredits,
+  formatTtdShort,
+  paywiseCardFeeCents,
+  paywiseCheckoutTotalCents,
+  topUpMinAmountCents,
+} from "@/studio/lib/money";
 import { StudioConfirmOverlay } from "./StudioConfirmOverlay";
 import "./studio-billing.css";
 
 type BillingInterval = "month" | "year";
 type InvoiceKind = "all" | "subscription" | "topup" | "academy";
-type BillingSection = "plans" | "invoices";
+type BillingSection = "plans" | "invoices" | "topup";
 
 type CatalogPlan = {
   _id: string;
@@ -36,6 +46,8 @@ type AccountSub = {
   cancelAtPeriodEnd?: boolean;
   cancelScheduledAt?: number;
   canTopUp?: boolean;
+  discountPercent?: number;
+  annualDiscountPercent?: number;
 } | null;
 
 type InvoiceRow = {
@@ -58,6 +70,11 @@ type Props = {
     subscription?: AccountSub;
   } | null;
   payments: InvoiceRow[] | undefined;
+  pricing?: {
+    creditPriceCents?: number;
+  } | null;
+  topUpPrefillCents?: number | null;
+  onTopUpPrefillConsumed?: () => void;
   onWamHandoff: (handoff: {
     phase: "preparing" | "redirect";
     amountCents?: number;
@@ -146,11 +163,289 @@ function newRequestId(prefix: string) {
   return `${prefix}-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
+function amountInputFromCents(amountCents: number) {
+  const dollars = Number(amountCents) / 100;
+  if (!Number.isFinite(dollars) || dollars <= 0) return "";
+  return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
+}
+
+function chipAmountLabel(amountCents: number) {
+  const dollars = Number(amountCents) / 100;
+  if (!Number.isFinite(dollars)) return "—";
+  return `$${dollars.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(dollars) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function BillingTopUp({
+  billingAccount,
+  pricing,
+  topUpPrefillCents,
+  onTopUpPrefillConsumed,
+  onChoosePlan,
+  onWamHandoff,
+}: {
+  billingAccount: Props["billingAccount"];
+  pricing: Props["pricing"];
+  topUpPrefillCents?: number | null;
+  onTopUpPrefillConsumed?: () => void;
+  onChoosePlan: () => void;
+  onWamHandoff: Props["onWamHandoff"];
+}) {
+  const startWamCheckout = useAction(api.wamActions.startCheckout);
+  const creditPriceCents = pricing?.creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
+  const minAmountCents = topUpMinAmountCents(creditPriceCents);
+  const minAmountLabel = formatTtdCents(minAmountCents);
+  const tiers = TOP_UP_TIER_CREDITS.map((credits, index) => ({
+    key: `tier-${index}`,
+    credits,
+    amountCents: Math.round(credits * creditPriceCents),
+  }));
+  const liveSubscription = billingAccount?.subscription;
+  const canTopUp = Boolean(liveSubscription?.canTopUp);
+  const topUpDiscountPercent =
+    liveSubscription?.interval === "year"
+      ? Number(liveSubscription?.annualDiscountPercent ?? 0)
+      : Number(liveSubscription?.discountPercent ?? 0);
+  const [selectedPlanKey, setSelectedPlanKey] = useState("custom");
+  const [customAmountInput, setCustomAmountInput] = useState("");
+  const [customAmountError, setCustomAmountError] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("");
+  const [checkoutStarting, setCheckoutStarting] = useState(false);
+  const clientRequestIdRef = useRef<string | null>(null);
+  const customAmountCents = Math.round(Number.parseFloat(customAmountInput || "0") * 100);
+  const customCredits = creditsFromAmountCents(customAmountCents, creditPriceCents);
+  const checkoutPlan =
+    tiers.find((plan) => plan.amountCents === customAmountCents) ??
+    (customCredits > 0 && customAmountCents >= minAmountCents
+      ? {
+          key: "custom",
+          credits: customCredits,
+          amountCents: customAmountCents,
+        }
+      : null);
+  const topUpChargeCents =
+    Number.isFinite(customAmountCents) && customAmountCents >= minAmountCents
+      ? Math.round((customAmountCents * (100 - topUpDiscountPercent)) / 100)
+      : 0;
+  const paywiseFeeCents = topUpChargeCents > 0 ? paywiseCardFeeCents(topUpChargeCents) : 0;
+  const paywiseTotalCents = topUpChargeCents > 0 ? paywiseCheckoutTotalCents(topUpChargeCents) : 0;
+
+  useEffect(() => {
+    if (topUpPrefillCents == null) return;
+    const cents = Math.max(minAmountCents, Math.round(Number(topUpPrefillCents) || 0));
+    if (!Number.isFinite(cents) || cents <= 0) {
+      onTopUpPrefillConsumed?.();
+      return;
+    }
+    const matched = tiers.find((plan) => plan.amountCents === cents);
+    setSelectedPlanKey(matched?.key ?? "custom");
+    setCustomAmountInput(amountInputFromCents(cents));
+    setCustomAmountError("");
+    setPaymentStatus("");
+    clientRequestIdRef.current = null;
+    onTopUpPrefillConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once per prefill handoff
+  }, [topUpPrefillCents, minAmountCents]);
+
+  async function handleWamCheckout() {
+    if (checkoutStarting) return;
+    if (!canTopUp) {
+      setCustomAmountError("Subscribe to a plan before topping up.");
+      return;
+    }
+    if (!Number.isFinite(customAmountCents) || customAmountCents < minAmountCents) {
+      setCustomAmountError(`Enter an amount of at least ${minAmountLabel}.`);
+      return;
+    }
+    if (!checkoutPlan) {
+      setCustomAmountError("Amount is too low to add balance.");
+      return;
+    }
+    setCustomAmountError("");
+    setSelectedPlanKey(checkoutPlan.key);
+    if (!clientRequestIdRef.current) {
+      clientRequestIdRef.current = newRequestId("topup");
+    }
+    setCheckoutStarting(true);
+    setPaymentStatus("Please wait…");
+    onWamHandoff({
+      phase: "preparing",
+      amountCents: topUpChargeCents || checkoutPlan.amountCents,
+    });
+    try {
+      const result = await startWamCheckout({
+        clientRequestId: clientRequestIdRef.current,
+        amountCents: checkoutPlan.amountCents,
+        creditsRequested: checkoutPlan.credits,
+        reference: `Top up: ${formatTtdShort(checkoutPlan.amountCents)}`,
+      });
+      setPaymentStatus("Redirecting…");
+      onWamHandoff({
+        phase: "redirect",
+        amountCents: topUpChargeCents || checkoutPlan.amountCents,
+        checkoutUrl: result.checkoutUrl,
+      });
+    } catch (error) {
+      onWamHandoff(null);
+      setPaymentStatus(friendlyConvexError(error, "Wam checkout failed."));
+      setCheckoutStarting(false);
+      clientRequestIdRef.current = null;
+    }
+  }
+
+  return (
+    <div className="studio-billing-canvas">
+      <div className="studio-billing-intro">
+        <p className="studio-billing-kicker">Billing</p>
+        <h1>Add extra balance</h1>
+        <p>On a plan, extra top-up uses the same discount.</p>
+      </div>
+      <div className="studio-billing-topup">
+        <div className="studio-billing-current">
+          <div>
+            <h2>Current balance</h2>
+            <strong>
+              {formatTtdFromCredits(billingAccount?.creditBalance ?? 0, creditPriceCents)}
+            </strong>
+            <p>
+              {canTopUp
+                ? liveSubscription?.planName
+                  ? `${liveSubscription.planName} · ${liveSubscription.interval === "year" ? "annual" : "monthly"}${liveSubscription.status === "past_due" ? " · payment due" : ""}`
+                  : "Plan active"
+                : "Extra top-up is available on a plan."}
+            </p>
+          </div>
+          {canTopUp ? null : (
+            <div className="studio-billing-current-actions">
+              <button type="button" onClick={onChoosePlan}>
+                Choose a plan
+              </button>
+            </div>
+          )}
+        </div>
+        {canTopUp ? (
+          <div className="studio-settings-custom-amount">
+            <label className="studio-settings-custom-amount-input is-full is-emphasis">
+              {customAmountInput ? <span>$</span> : null}
+              <input
+                type="number"
+                min={minAmountCents / 100}
+                step="0.01"
+                inputMode="decimal"
+                placeholder="eg. $78"
+                value={customAmountInput}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setCustomAmountInput(value);
+                  setCustomAmountError("");
+                  setPaymentStatus("");
+                  const cents = Math.round(Number.parseFloat(value || "0") * 100);
+                  const matched = tiers.find((plan) => plan.amountCents === cents);
+                  setSelectedPlanKey(matched?.key ?? "custom");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void handleWamCheckout();
+                  }
+                }}
+              />
+              {customAmountInput ? <span>TTD</span> : null}
+            </label>
+            <div className="studio-settings-topup-chips" role="group" aria-label="Suggested amounts">
+              {tiers.map((plan) => (
+                <button
+                  key={plan.key}
+                  type="button"
+                  className={`studio-settings-topup-chip${selectedPlanKey === plan.key && customAmountCents === plan.amountCents ? " is-active" : ""}`}
+                  onClick={() => {
+                    setSelectedPlanKey(plan.key);
+                    setCustomAmountInput(amountInputFromCents(plan.amountCents));
+                    setCustomAmountError("");
+                    setPaymentStatus("");
+                    clientRequestIdRef.current = null;
+                  }}
+                >
+                  {chipAmountLabel(plan.amountCents)}
+                </button>
+              ))}
+            </div>
+            {Number.isFinite(customAmountCents) &&
+            customAmountCents >= minAmountCents &&
+            paywiseTotalCents > 0 ? (
+              <dl className="studio-academy-checkout-receipt studio-settings-billing-receipt">
+                <div className="studio-academy-checkout-row">
+                  <dt>Add to account</dt>
+                  <dd>{formatTtdCents(customAmountCents)}</dd>
+                </div>
+                {topUpDiscountPercent > 0 ? (
+                  <div className="studio-academy-checkout-row is-muted">
+                    <dt>Plan discount ({topUpDiscountPercent}%)</dt>
+                    <dd>{formatTtdCents(topUpChargeCents)}</dd>
+                  </div>
+                ) : null}
+                {paywiseFeeCents > 0 ? (
+                  <div className="studio-academy-checkout-row is-muted">
+                    <dt>Card fee</dt>
+                    <dd>{formatTtdShort(paywiseFeeCents)}</dd>
+                  </div>
+                ) : null}
+                <div className="studio-academy-checkout-row is-total">
+                  <dt>Total</dt>
+                  <dd>{formatTtdCents(paywiseTotalCents)}</dd>
+                </div>
+              </dl>
+            ) : null}
+            <button
+              type="button"
+              className={`studio-settings-topup-pay${
+                checkoutStarting ? " is-loading" : ""
+              }${
+                !checkoutStarting &&
+                (customAmountError ||
+                  /fail|error|not completed|cancelled|missing|could not/i.test(paymentStatus))
+                  ? " is-error"
+                  : ""
+              }`}
+              disabled={!checkoutPlan || customAmountCents < minAmountCents || checkoutStarting}
+              aria-busy={checkoutStarting}
+              onClick={() => void handleWamCheckout()}
+            >
+              {checkoutStarting ? (
+                <Loader2 className="studio-settings-topup-pay-spin" aria-hidden="true" />
+              ) : null}
+              <span className="studio-settings-topup-pay-label">
+                {checkoutStarting
+                  ? paymentStatus || "Please wait…"
+                  : customAmountError
+                    ? customAmountError
+                    : paymentStatus ||
+                      (paywiseTotalCents > 0
+                        ? `Pay ${formatTtdShort(paywiseTotalCents)} with Wam`
+                        : "Pay with Wam")}
+              </span>
+            </button>
+            <p className="studio-settings-topup-secure">
+              <Lock aria-hidden="true" />
+              <span>secure checkout</span>
+            </p>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function StudioBillingPane({
   section,
   onSection,
   billingAccount,
   payments,
+  pricing,
+  topUpPrefillCents,
+  onTopUpPrefillConsumed,
   onWamHandoff,
 }: Props) {
   const catalog = useQuery(api.billing.listSubscriptionPlans, {});
@@ -326,6 +621,15 @@ export function StudioBillingPane({
           >
             Invoices
           </button>
+          <button
+            type="button"
+            role="tab"
+            className={`studio-admin-head-tab${section === "topup" ? " is-active" : ""}`}
+            aria-selected={section === "topup"}
+            onClick={() => onSection("topup")}
+          >
+            Top-up
+          </button>
         </nav>
       </header>
 
@@ -450,6 +754,15 @@ export function StudioBillingPane({
               })}
             </div>
           </div>
+        ) : section === "topup" ? (
+          <BillingTopUp
+            billingAccount={billingAccount}
+            pricing={pricing}
+            topUpPrefillCents={topUpPrefillCents}
+            onTopUpPrefillConsumed={onTopUpPrefillConsumed}
+            onChoosePlan={() => onSection("plans")}
+            onWamHandoff={onWamHandoff}
+          />
         ) : (
           <div className="studio-billing-canvas">
             <div className="studio-billing-intro">
