@@ -638,7 +638,7 @@ export function StudioBillingPane({
           <div className="studio-billing-canvas">
             <div className="studio-billing-intro">
               <p className="studio-billing-kicker">Yatishara Studio</p>
-              <h1>Pick the plan that keeps you making</h1>
+              <h1>Pick the plan that funds your work</h1>
               <p>Subscribe to a community of creators and builders just like you.</p>
             </div>
 
