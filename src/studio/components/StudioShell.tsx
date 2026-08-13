@@ -32991,8 +32991,6 @@ function StudioAssetPreview({ entry }) {
   );
 }
 
-}
-
 function AdminWorkspacePane({
   tab,
   pricing,
@@ -35522,8 +35520,6 @@ function SettingsWorkspacePane({
       setCheckoutStarting(false);
       clientRequestIdRef.current = null;
     }
-  }
-
   }
 
   const items = [
