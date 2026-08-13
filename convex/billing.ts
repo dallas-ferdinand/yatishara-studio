@@ -13,7 +13,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { signBunnyCdnUrl } from "./lib/bunny";
-import { adminMutation, adminQuery, authedQuery } from "./lib/customFunctions";
+import { adminMutation, adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import {
   IMAGE_CREDITS_BY_RESOLUTION,
   IMAGE_REFERENCE_SURCHARGE,
@@ -25,13 +25,24 @@ import {
 } from "./lib/generationPricing";
 import { purchaseCourseForUser } from "./lib/academyPurchase";
 import { PAYWISE_CURRENCY } from "./lib/paywise";
-import { settleOutstandingStorage } from "./lib/storageBilling";
 import { createNotificationAndPush } from "./lib/notify";
 import {
   CREDIT_GRANT_KINDS,
   nextCreditBalanceHigh,
   resolveCreditBalanceHigh,
 } from "./lib/creditBalanceHigh";
+import {
+  STUDIO_PLAN_CATALOG,
+  STUDIO_PLAN_SLUGS,
+  creditsFromFaceCents,
+  discountedChargeCents,
+  quoteStudioPlan,
+} from "./lib/studioPlans";
+import {
+  activateSubscriptionFromPaidPayment,
+  grantCredits,
+  hasTopUpForPayment,
+} from "./lib/studioBillingCore";
 
 /** Last top-up / subscription / admin credit peak (balanceAfter). */
 async function lastGrantBalanceAfterForUser(
@@ -133,6 +144,7 @@ const paymentReturnFields = {
   amountCents: v.number(),
   creditsGranted: v.optional(v.number()),
   subscriptionPlanId: v.optional(v.id("subscriptionPlans")),
+  billingInterval: v.optional(v.union(v.literal("month"), v.literal("year"))),
   bankAccountId: v.optional(v.id("bankAccounts")),
   externalPaymentId: v.optional(v.string()),
   clientRequestId: v.optional(v.string()),
@@ -159,6 +171,7 @@ const subscriptionPlanReturn = v.object({
   monthlyPriceCents: v.number(),
   originalMonthlyPriceCents: v.optional(v.number()),
   discountPercent: v.optional(v.number()),
+  annualDiscountPercent: v.optional(v.number()),
   includedMonthlyCredits: v.number(),
   topUpCreditPriceCents: v.number(),
   enabled: v.boolean(),
@@ -166,6 +179,61 @@ const subscriptionPlanReturn = v.object({
   createdAt: v.number(),
   updatedAt: v.number(),
 });
+
+function canTopUpOnSubscription(
+  status: Doc<"subscriptions">["status"] | undefined,
+): boolean {
+  return status === "active" || status === "past_due";
+}
+
+function serializeAccountSubscription(
+  subscription: Doc<"subscriptions"> | null,
+  plan: Doc<"subscriptionPlans"> | null,
+) {
+  if (!subscription) return null;
+  return {
+    status: subscription.status,
+    interval: subscription.interval,
+    currentPeriodStart: subscription.currentPeriodStart,
+    currentPeriodEnd: subscription.currentPeriodEnd,
+    planName: plan?.name,
+    planSlug: plan?.slug,
+    includedMonthlyCredits: plan?.includedMonthlyCredits,
+    monthlyPriceCents: plan?.monthlyPriceCents,
+    originalMonthlyPriceCents: plan?.originalMonthlyPriceCents,
+    discountPercent: plan?.discountPercent,
+    annualDiscountPercent: plan?.annualDiscountPercent,
+    canTopUp: canTopUpOnSubscription(subscription.status),
+  };
+}
+
+async function loadUserSubscription(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  activeSubscriptionId?: Id<"subscriptions">,
+) {
+  const byId = activeSubscriptionId
+    ? await ctx.db.get(activeSubscriptionId)
+    : null;
+  const active =
+    byId ??
+    (await ctx.db
+      .query("subscriptions")
+      .withIndex("by_user_and_status", (q) =>
+        q.eq("userId", userId).eq("status", "active"),
+      )
+      .first());
+  const subscription =
+    active ??
+    (await ctx.db
+      .query("subscriptions")
+      .withIndex("by_user_and_status", (q) =>
+        q.eq("userId", userId).eq("status", "past_due"),
+      )
+      .first());
+  const plan = subscription ? await ctx.db.get(subscription.planId) : null;
+  return { subscription: subscription ?? null, plan };
+}
 
 export const getPricing = authedQuery({
   args: {},
@@ -215,41 +283,47 @@ export const getPricing = authedQuery({
   },
 });
 
+const accountSubscriptionReturn = v.union(
+  v.object({
+    status: v.union(
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("cancelled"),
+      v.literal("expired"),
+    ),
+    interval: v.optional(v.union(v.literal("month"), v.literal("year"))),
+    currentPeriodStart: v.number(),
+    currentPeriodEnd: v.number(),
+    planName: v.optional(v.string()),
+    planSlug: v.optional(v.string()),
+    includedMonthlyCredits: v.optional(v.number()),
+    monthlyPriceCents: v.optional(v.number()),
+    originalMonthlyPriceCents: v.optional(v.number()),
+    discountPercent: v.optional(v.number()),
+    annualDiscountPercent: v.optional(v.number()),
+    canTopUp: v.boolean(),
+  }),
+  v.null(),
+);
+
 export const currentAccount = authedQuery({
   args: {},
   returns: v.object({
     creditBalance: v.number(),
     creditBalanceHigh: v.number(),
     reservedCredits: v.number(),
-    subscription: v.union(
-      v.object({
-        status: v.union(
-          v.literal("active"),
-          v.literal("past_due"),
-          v.literal("cancelled"),
-          v.literal("expired"),
-        ),
-        currentPeriodStart: v.number(),
-        currentPeriodEnd: v.number(),
-        planName: v.optional(v.string()),
-        includedMonthlyCredits: v.optional(v.number()),
-        monthlyPriceCents: v.optional(v.number()),
-      }),
-      v.null(),
-    ),
+    subscription: accountSubscriptionReturn,
   }),
   handler: async (ctx) => {
     const account = await ctx.db
       .query("billingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
       .unique();
-    const subscription = account?.activeSubscriptionId
-      ? await ctx.db.get(account.activeSubscriptionId)
-      : await ctx.db
-          .query("subscriptions")
-          .withIndex("by_user_and_status", (q) => q.eq("userId", ctx.user._id).eq("status", "active"))
-          .first();
-    const plan = subscription ? await ctx.db.get(subscription.planId) : null;
+    const { subscription, plan } = await loadUserSubscription(
+      ctx,
+      ctx.user._id,
+      account?.activeSubscriptionId,
+    );
     const creditBalance = account?.creditBalance ?? 0;
     const lastGrantBalanceAfter = account
       ? await lastGrantBalanceAfterForUser(ctx, ctx.user._id)
@@ -262,16 +336,7 @@ export const currentAccount = authedQuery({
         lastGrantBalanceAfter,
       }),
       reservedCredits: account?.reservedCredits ?? 0,
-      subscription: subscription
-        ? {
-            status: subscription.status,
-            currentPeriodStart: subscription.currentPeriodStart,
-            currentPeriodEnd: subscription.currentPeriodEnd,
-            planName: plan?.name,
-            includedMonthlyCredits: plan?.includedMonthlyCredits,
-            monthlyPriceCents: plan?.monthlyPriceCents,
-          }
-        : null,
+      subscription: serializeAccountSubscription(subscription, plan),
     };
   },
 });
@@ -380,23 +445,6 @@ export const getMyPayment = authedQuery({
 // Subscription extras (optional enrichment of /account later):
 //   currentAccountForApi — same shape as currentAccount (includes subscription)
 
-const accountSubscriptionReturn = v.union(
-  v.object({
-    status: v.union(
-      v.literal("active"),
-      v.literal("past_due"),
-      v.literal("cancelled"),
-      v.literal("expired"),
-    ),
-    currentPeriodStart: v.number(),
-    currentPeriodEnd: v.number(),
-    planName: v.optional(v.string()),
-    includedMonthlyCredits: v.optional(v.number()),
-    monthlyPriceCents: v.optional(v.number()),
-  }),
-  v.null(),
-);
-
 const paymentWithReceiptReturn = v.object({
   ...paymentReturnFields,
   receiptUrl: v.optional(v.string()),
@@ -489,15 +537,11 @@ export const currentAccountForApi = internalQuery({
       .query("billingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .unique();
-    const subscription = account?.activeSubscriptionId
-      ? await ctx.db.get(account.activeSubscriptionId)
-      : await ctx.db
-          .query("subscriptions")
-          .withIndex("by_user_and_status", (q) =>
-            q.eq("userId", args.userId).eq("status", "active"),
-          )
-          .first();
-    const plan = subscription ? await ctx.db.get(subscription.planId) : null;
+    const { subscription, plan } = await loadUserSubscription(
+      ctx,
+      args.userId,
+      account?.activeSubscriptionId,
+    );
     const creditBalance = account?.creditBalance ?? 0;
     const lastGrantBalanceAfter = await lastGrantBalanceAfterForUser(
       ctx,
@@ -511,16 +555,7 @@ export const currentAccountForApi = internalQuery({
         lastGrantBalanceAfter,
       }),
       reservedCredits: account?.reservedCredits ?? 0,
-      subscription: subscription
-        ? {
-            status: subscription.status,
-            currentPeriodStart: subscription.currentPeriodStart,
-            currentPeriodEnd: subscription.currentPeriodEnd,
-            planName: plan?.name,
-            includedMonthlyCredits: plan?.includedMonthlyCredits,
-            monthlyPriceCents: plan?.monthlyPriceCents,
-          }
-        : null,
+      subscription: serializeAccountSubscription(subscription, plan),
     };
   },
 });
@@ -722,6 +757,53 @@ export const preparePaywiseCheckout = internalMutation({
         throw new Error("Course is not available");
       }
     }
+    const pricing = await ctx.db
+      .query("pricingSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    const unitPriceCents = pricing?.creditPriceCents ?? creditPriceCents;
+
+    let amountCents: number;
+    let creditsGranted: number;
+    if (args.academyCourseId) {
+      ({ amountCents, creditsGranted } = validateTopUpAmount(
+        args.amountCents,
+        args.creditsRequested,
+        unitPriceCents,
+      ));
+    } else {
+      const account = await ctx.db
+        .query("billingAccounts")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .unique();
+      const { subscription, plan } = await loadUserSubscription(
+        ctx,
+        args.userId,
+        account?.activeSubscriptionId,
+      );
+      if (!canTopUpOnSubscription(subscription?.status) || !plan) {
+        throw new Error("Subscribe to a plan before topping up.");
+      }
+      const faceCents = args.amountCents;
+      const minAmountCents = TOP_UP_MIN_CREDITS * unitPriceCents;
+      if (!Number.isSafeInteger(faceCents) || faceCents < minAmountCents) {
+        throw new Error(
+          `Top-up amount must be at least ${Math.round(minAmountCents / 100)} TTD`,
+        );
+      }
+      const discountPercent =
+        subscription?.interval === "year"
+          ? (plan.annualDiscountPercent ?? 0)
+          : (plan.discountPercent ?? 0);
+      amountCents = discountedChargeCents(faceCents, discountPercent);
+      creditsGranted = creditsFromFaceCents(faceCents, unitPriceCents);
+      if (creditsGranted < TOP_UP_MIN_CREDITS) {
+        throw new Error(
+          `Top-up amount must be at least ${Math.round(minAmountCents / 100)} TTD`,
+        );
+      }
+    }
+
     const existing = await ctx.db
       .query("payments")
       .withIndex("by_client_request", (q) => q.eq("clientRequestId", clientRequestId))
@@ -734,9 +816,8 @@ export const preparePaywiseCheckout = internalMutation({
         throw new Error("This checkout attempt failed. Start a new top-up.");
       }
       if (
-        existing.amountCents !== args.amountCents ||
-        (args.creditsRequested !== undefined &&
-          existing.creditsGranted !== args.creditsRequested) ||
+        existing.amountCents !== amountCents ||
+        existing.creditsGranted !== creditsGranted ||
         (args.academyCourseId &&
           existing.academyCourseId !== args.academyCourseId)
       ) {
@@ -758,16 +839,6 @@ export const preparePaywiseCheckout = internalMutation({
       };
     }
 
-    const pricing = await ctx.db
-      .query("pricingSettings")
-      .withIndex("by_key", (q) => q.eq("key", "default"))
-      .unique();
-    const unitPriceCents = pricing?.creditPriceCents ?? creditPriceCents;
-    const { amountCents, creditsGranted } = validateTopUpAmount(
-      args.amountCents,
-      args.creditsRequested,
-      unitPriceCents,
-    );
     const now = Date.now();
     const callbackToken = randomCallbackToken();
     const paymentId = await ctx.db.insert("payments", {
@@ -801,6 +872,123 @@ export const preparePaywiseCheckout = internalMutation({
 
 /** @deprecated Use preparePaywiseCheckout (now creates method=wam). */
 export const prepareWamCheckout = preparePaywiseCheckout;
+
+export const prepareSubscribeCheckout = internalMutation({
+  args: {
+    userId: v.id("users"),
+    clientRequestId: v.string(),
+    planId: v.id("subscriptionPlans"),
+    interval: v.union(v.literal("month"), v.literal("year")),
+  },
+  returns: v.object({
+    paymentId: v.id("payments"),
+    amountCents: v.number(),
+    creditsGranted: v.number(),
+    callbackToken: v.string(),
+    checkoutUrl: v.optional(v.string()),
+    externalPaymentId: v.optional(v.string()),
+    status: paymentStatus,
+    alreadyReady: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const clientRequestId = args.clientRequestId.trim();
+    if (!clientRequestId || clientRequestId.length > 128) {
+      throw new Error("Invalid checkout request id");
+    }
+    const plan = await ctx.db.get(args.planId);
+    if (!plan || !plan.enabled) {
+      throw new Error("That plan is not available");
+    }
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+    const { subscription } = await loadUserSubscription(
+      ctx,
+      args.userId,
+      account?.activeSubscriptionId,
+    );
+    if (subscription && canTopUpOnSubscription(subscription.status)) {
+      throw new Error(
+        "You're already on a plan. Extra top-ups are on this same page.",
+      );
+    }
+    const pricing = await ctx.db
+      .query("pricingSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    const unitPriceCents = pricing?.creditPriceCents ?? creditPriceCents;
+    const quote = quoteStudioPlan(
+      {
+        faceMonthlyCents: plan.originalMonthlyPriceCents ?? plan.monthlyPriceCents,
+        monthlyDiscountPercent: plan.discountPercent ?? 0,
+        annualDiscountPercent: plan.annualDiscountPercent ?? 0,
+      },
+      args.interval,
+      unitPriceCents,
+    );
+    const existing = await ctx.db
+      .query("payments")
+      .withIndex("by_client_request", (q) => q.eq("clientRequestId", clientRequestId))
+      .unique();
+    if (existing) {
+      if (existing.userId !== args.userId) {
+        throw new Error("Checkout request already used");
+      }
+      if (existing.status === "checkout_failed") {
+        throw new Error("This checkout attempt failed. Start a new checkout.");
+      }
+      if (
+        existing.subscriptionPlanId !== args.planId ||
+        existing.billingInterval !== args.interval ||
+        existing.amountCents !== quote.chargeCents
+      ) {
+        throw new Error("Checkout request id was already used for a different plan.");
+      }
+      if (!existing.callbackToken) {
+        throw new Error("Existing checkout is missing its callback token.");
+      }
+      return {
+        paymentId: existing._id,
+        amountCents: existing.amountCents,
+        creditsGranted: existing.creditsGranted ?? 0,
+        callbackToken: existing.callbackToken,
+        checkoutUrl: existing.checkoutUrl,
+        externalPaymentId: existing.externalPaymentId,
+        status: existing.status,
+        alreadyReady: Boolean(existing.checkoutUrl && existing.externalPaymentId),
+      };
+    }
+    const now = Date.now();
+    const paymentId = await ctx.db.insert("payments", {
+      userId: args.userId,
+      method: "wam",
+      status: "pending",
+      amountCents: quote.chargeCents,
+      creditsGranted: quote.monthlyCredits,
+      subscriptionPlanId: plan._id,
+      billingInterval: args.interval,
+      clientRequestId,
+      callbackToken: randomCallbackToken(),
+      reference: `${plan.name} ${args.interval === "year" ? "annual" : "monthly"}`,
+      statusCheckAttempts: 0,
+      nextStatusCheckAt: now + PAYWISE_INITIAL_CHECK_DELAY_MS,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const created = await ctx.db.get(paymentId);
+    return {
+      paymentId,
+      amountCents: quote.chargeCents,
+      creditsGranted: quote.monthlyCredits,
+      callbackToken: created?.callbackToken ?? "",
+      checkoutUrl: undefined,
+      externalPaymentId: undefined,
+      status: "pending" as const,
+      alreadyReady: false,
+    };
+  },
+});
 
 export const attachPaywiseCheckout = internalMutation({
   args: {
@@ -974,6 +1162,8 @@ export const getPaywisePaymentInternal = internalQuery({
       status: paymentStatus,
       amountCents: v.number(),
       creditsGranted: v.optional(v.number()),
+      subscriptionPlanId: v.optional(v.id("subscriptionPlans")),
+      billingInterval: v.optional(v.union(v.literal("month"), v.literal("year"))),
       externalPaymentId: v.optional(v.string()),
       checkoutUrl: v.optional(v.string()),
       providerStatus: v.optional(v.string()),
@@ -993,6 +1183,8 @@ export const getPaywisePaymentInternal = internalQuery({
       status: payment.status,
       amountCents: payment.amountCents,
       creditsGranted: payment.creditsGranted,
+      subscriptionPlanId: payment.subscriptionPlanId,
+      billingInterval: payment.billingInterval,
       externalPaymentId: payment.externalPaymentId,
       checkoutUrl: payment.checkoutUrl,
       providerStatus: payment.providerStatus,
@@ -1309,12 +1501,19 @@ export const applyPaywiseStatusCheck = internalMutation({
         return { status: "needs_review" as const, granted: false, reason: "invalid_credit_grant" };
       }
       if (!alreadyGranted && payment.creditsGranted) {
+        const isSubscribe = Boolean(payment.subscriptionPlanId && payment.billingInterval);
         await grantCredits(ctx, {
           userId: payment.userId,
           amount: payment.creditsGranted,
           paymentId: payment._id,
-          reason: "Wam top-up completed",
+          reason: isSubscribe
+            ? "Wam subscription paid"
+            : "Wam top-up completed",
+          kind: isSubscribe ? "subscription_grant" : "top_up",
         });
+        if (isSubscribe) {
+          await activateSubscriptionFromPaidPayment(ctx, payment, now);
+        }
       }
       const academyUnlock = await maybeUnlockAcademyCourseAfterTopUp(ctx, payment);
       await ctx.db.patch(payment._id, {
@@ -1581,8 +1780,17 @@ export const adminSeedLaunchPricing = adminMutation({
     } else {
       await ctx.db.insert("pricingSettings", data);
     }
+    await seedSubscriptionPlans(ctx);
     await audit(ctx, "pricing_seeded");
     return null;
+  },
+});
+
+export const ensureStudioPlans = authedMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    return await seedSubscriptionPlans(ctx);
   },
 });
 
@@ -2085,57 +2293,27 @@ async function seedSubscriptionPlans(ctx: MutationCtx): Promise<number> {
     .withIndex("by_key", (q) => q.eq("key", "default"))
     .unique();
   const planCreditPriceCents = pricing?.creditPriceCents ?? creditPriceCents;
-  const plans = [
-    {
-      name: "Starter",
-      slug: "starter",
-      includedMonthlyCredits: 500,
-      discountPercent: 0,
-      sortOrder: 0,
-    },
-    {
-      name: "Studio",
-      slug: "studio",
-      includedMonthlyCredits: 1000,
-      discountPercent: 0,
-      sortOrder: 1,
-    },
-    {
-      name: "Production",
-      slug: "production",
-      includedMonthlyCredits: 2000,
-      discountPercent: 3,
-      sortOrder: 2,
-    },
-    {
-      name: "Scale",
-      slug: "scale",
-      includedMonthlyCredits: 4000,
-      discountPercent: 5,
-      sortOrder: 3,
-    },
-    {
-      name: "Enterprise",
-      slug: "enterprise",
-      includedMonthlyCredits: 8000,
-      discountPercent: 8,
-      sortOrder: 4,
-    },
-  ];
-  for (const plan of plans) {
+  const keep = new Set<string>(STUDIO_PLAN_SLUGS);
+  const existingPlans = await ctx.db.query("subscriptionPlans").take(40);
+  for (const row of existingPlans) {
+    if (!keep.has(row.slug) && row.enabled) {
+      await ctx.db.patch(row._id, { enabled: false, updatedAt: now });
+    }
+  }
+  for (const plan of STUDIO_PLAN_CATALOG) {
+    const quote = quoteStudioPlan(plan, "month", planCreditPriceCents);
     const existing = await ctx.db
       .query("subscriptionPlans")
       .withIndex("by_slug", (q) => q.eq("slug", plan.slug))
       .unique();
-    const originalMonthlyPriceCents = Math.round(plan.includedMonthlyCredits * planCreditPriceCents);
-    const monthlyPriceCents = Math.round(originalMonthlyPriceCents * (100 - plan.discountPercent) / 100);
     const data = {
       name: plan.name,
       slug: plan.slug,
-      monthlyPriceCents,
-      originalMonthlyPriceCents,
-      discountPercent: plan.discountPercent,
-      includedMonthlyCredits: plan.includedMonthlyCredits,
+      monthlyPriceCents: quote.chargeCents,
+      originalMonthlyPriceCents: plan.faceMonthlyCents,
+      discountPercent: plan.monthlyDiscountPercent,
+      annualDiscountPercent: plan.annualDiscountPercent,
+      includedMonthlyCredits: quote.monthlyCredits,
       topUpCreditPriceCents: planCreditPriceCents,
       enabled: true,
       sortOrder: plan.sortOrder,
@@ -2150,15 +2328,7 @@ async function seedSubscriptionPlans(ctx: MutationCtx): Promise<number> {
       });
     }
   }
-  return plans.length;
-}
-
-async function hasTopUpForPayment(ctx: MutationCtx | QueryCtx, paymentId: Id<"payments">) {
-  const existingTx = await ctx.db
-    .query("creditTransactions")
-    .withIndex("by_payment", (q) => q.eq("paymentId", paymentId))
-    .collect();
-  return existingTx.some((tx) => tx.kind === "top_up" || tx.kind === "subscription_grant");
+  return STUDIO_PLAN_CATALOG.length;
 }
 
 async function maybeUnlockAcademyCourseAfterTopUp(
@@ -2251,85 +2421,6 @@ async function notifyPaymentStatus(
     body,
     paymentId: args.paymentId,
   });
-}
-
-async function grantCredits(
-  ctx: MutationCtx,
-  args: {
-    userId: Id<"users">;
-    amount: number;
-    paymentId?: Id<"payments">;
-    reason: string;
-    adminId?: Id<"users">;
-    kind?: "top_up" | "subscription_grant" | "admin_adjustment";
-  },
-) {
-  if (!Number.isSafeInteger(args.amount) || args.amount === 0) {
-    throw new Error("Credit amount must be a non-zero integer");
-  }
-  if (args.paymentId && args.amount < 0) {
-    throw new Error("Payment credit grants must be positive");
-  }
-  if (args.paymentId) {
-    const alreadyGranted = await hasTopUpForPayment(ctx, args.paymentId);
-    if (alreadyGranted) {
-      return;
-    }
-  }
-  const now = Date.now();
-  const existing = await ctx.db
-    .query("billingAccounts")
-    .withIndex("by_user", (q) => q.eq("userId", args.userId))
-    .unique();
-  const accountId =
-    existing?._id ??
-    (await ctx.db.insert("billingAccounts", {
-      userId: args.userId,
-      creditBalance: 0,
-      reservedCredits: 0,
-      createdAt: now,
-      updatedAt: now,
-    }));
-  const account = existing ?? (await ctx.db.get("billingAccounts", accountId));
-  if (!account) {
-    throw new Error("Billing account not found");
-  }
-  const balanceAfter = account.creditBalance + args.amount;
-  if (balanceAfter < 0) {
-    throw new Error("Credit adjustment cannot make the balance negative");
-  }
-  const patch: {
-    creditBalance: number;
-    updatedAt: number;
-    creditBalanceHigh?: number;
-  } = {
-    creditBalance: balanceAfter,
-    updatedAt: now,
-  };
-  // Positive grants reset the ring high to the new balance (ElevenLabs-style).
-  if (args.amount > 0) {
-    patch.creditBalanceHigh = nextCreditBalanceHigh({
-      previousHigh: account.creditBalanceHigh,
-      balanceAfter,
-      mode: "reset",
-    });
-  }
-  await ctx.db.patch(accountId, patch);
-  await ctx.db.insert("creditTransactions", {
-    userId: args.userId,
-    billingAccountId: accountId,
-    kind: args.kind ?? (args.paymentId ? "top_up" : "admin_adjustment"),
-    amount: args.amount,
-    balanceAfter,
-    paymentId: args.paymentId,
-    reason: args.reason,
-    adminId: args.adminId,
-    createdAt: now,
-  });
-  if (args.amount > 0) {
-    // Storage debt is settled before the customer can spend the new balance.
-    await settleOutstandingStorage(ctx, args.userId);
-  }
 }
 
 async function audit(

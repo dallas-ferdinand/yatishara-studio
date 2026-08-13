@@ -25,6 +25,48 @@ async function seedUser(t: ReturnType<typeof convexTest>) {
   });
 }
 
+async function seedActivePlan(
+  t: ReturnType<typeof convexTest>,
+  userId: Awaited<ReturnType<typeof seedUser>>,
+) {
+  return await t.run(async (ctx) => {
+    const now = Date.now();
+    const planId = await ctx.db.insert("subscriptionPlans", {
+      name: "Plus",
+      slug: "plus",
+      monthlyPriceCents: 28_500,
+      originalMonthlyPriceCents: 30_000,
+      discountPercent: 5,
+      annualDiscountPercent: 15,
+      includedMonthlyCredits: 600,
+      topUpCreditPriceCents: 50,
+      enabled: true,
+      sortOrder: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const subscriptionId = await ctx.db.insert("subscriptions", {
+      userId,
+      planId,
+      status: "active",
+      interval: "month",
+      currentPeriodStart: now,
+      currentPeriodEnd: now + 30 * 24 * 60 * 60 * 1000,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("billingAccounts", {
+      userId,
+      creditBalance: 0,
+      reservedCredits: 0,
+      activeSubscriptionId: subscriptionId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { planId, subscriptionId };
+  });
+}
+
 async function seedPaywisePayment(
   t: ReturnType<typeof convexTest>,
   options: { credits?: number; amountCents?: number } = {},
@@ -209,6 +251,7 @@ describe("PayWise billing invariants", () => {
   test("checkout idempotency preserves one local payment", async () => {
     const t = convexTest(schema, modules);
     const userId = await seedUser(t);
+    await seedActivePlan(t, userId);
     const args = {
       userId,
       clientRequestId: "stable-client-request",
@@ -218,6 +261,7 @@ describe("PayWise billing invariants", () => {
     const first = await t.mutation(internal.billing.preparePaywiseCheckout, args);
     const replay = await t.mutation(internal.billing.preparePaywiseCheckout, args);
     expect(replay.paymentId).toBe(first.paymentId);
+    expect(first.amountCents).toBe(4_750);
 
     await expect(
       t.mutation(internal.billing.preparePaywiseCheckout, {
@@ -231,6 +275,7 @@ describe("PayWise billing invariants", () => {
   test("one provider payment id cannot attach to two local payments", async () => {
     const t = convexTest(schema, modules);
     const userId = await seedUser(t);
+    await seedActivePlan(t, userId);
     const first = await t.mutation(internal.billing.preparePaywiseCheckout, {
       userId,
       clientRequestId: "request-one",

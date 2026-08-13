@@ -49,11 +49,7 @@ export const wamWebhook = httpAction(async (ctx, request) => {
   let event: {
     id?: string;
     type: string;
-    data: {
-      paymentId?: string;
-      merchantReference?: string | null;
-      status?: string;
-    };
+    data: Record<string, unknown>;
   };
   try {
     event = (await verifyWamWebhookPayload({
@@ -83,6 +79,60 @@ export const wamWebhook = httpAction(async (ctx, request) => {
       eventId: String(event.id || ""),
       type: event.type,
     });
+  }
+
+  if (event.type === "payment_method.attached") {
+    const customerReference = String(event.data.customerReference || "").trim();
+    const paymentMethodId = String(event.data.paymentMethodId || "").trim();
+    if (customerReference && paymentMethodId) {
+      try {
+        await ctx.runMutation(internal.subscriptions.recordPaymentMethod, {
+          customerReference,
+          paymentMethodId,
+        });
+        await ctx.runAction(internal.wamActions.ensureWamSubscription, {
+          customerReference,
+        });
+      } catch (err) {
+        console.error("wam_payment_method_attached_failed", {
+          message: err instanceof Error ? err.message : "unknown",
+        });
+      }
+    }
+  }
+
+  if (String(event.type || "").startsWith("subscription.")) {
+    const paymentAttempt =
+      event.data.paymentAttempt && typeof event.data.paymentAttempt === "object"
+        ? (event.data.paymentAttempt as Record<string, unknown>)
+        : {};
+    try {
+      await ctx.runMutation(internal.subscriptions.applyWamEvent, {
+        type: event.type,
+        subscriptionId: String(event.data.subscriptionId || ""),
+        customerReference: String(event.data.customerReference || ""),
+        amountCents: Number(event.data.amountCents || 0),
+        interval:
+          event.data.interval === "year" || event.data.interval === "month"
+            ? event.data.interval
+            : undefined,
+        nextBillingDate: event.data.nextBillingDate
+          ? String(event.data.nextBillingDate)
+          : undefined,
+        paymentAttemptId: paymentAttempt.cybersourcePaymentId
+          ? String(paymentAttempt.cybersourcePaymentId)
+          : undefined,
+        success:
+          typeof paymentAttempt.success === "boolean"
+            ? paymentAttempt.success
+            : undefined,
+      });
+    } catch (err) {
+      console.error("wam_subscription_event_failed", {
+        type: event.type,
+        message: err instanceof Error ? err.message : "unknown",
+      });
+    }
   }
 
   return jsonResponse({ received: true }, 200);

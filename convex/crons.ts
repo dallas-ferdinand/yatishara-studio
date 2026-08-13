@@ -62,4 +62,11 @@ crons.daily(
   {},
 );
 
+crons.daily(
+  "studio subscription grants and dunning",
+  { hourUTC: 8, minuteUTC: 0 },
+  internal.wamActions.enforceSubscriptionDunning,
+  {},
+);
+
 export default crons;

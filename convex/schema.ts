@@ -862,9 +862,14 @@ export default defineSchema({
   subscriptionPlans: defineTable({
     name: v.string(),
     slug: v.string(),
+    /** Discounted monthly charge (what they pay on a monthly plan). */
     monthlyPriceCents: v.number(),
+    /** Face monthly dollars in cents (what they receive each month). */
     originalMonthlyPriceCents: v.optional(v.number()),
+    /** Monthly-plan discount percent. */
     discountPercent: v.optional(v.number()),
+    /** Prepaid-year discount percent. Credits still grant monthly. */
+    annualDiscountPercent: v.optional(v.number()),
     includedMonthlyCredits: v.number(),
     topUpCreditPriceCents: v.number(),
     enabled: v.boolean(),
@@ -884,13 +889,26 @@ export default defineSchema({
       v.literal("cancelled"),
       v.literal("expired"),
     ),
+    interval: v.optional(v.union(v.literal("month"), v.literal("year"))),
+    wamSubscriptionId: v.optional(v.string()),
+    wamPaymentMethodId: v.optional(v.string()),
+    customerReference: v.optional(v.string()),
     currentPeriodStart: v.number(),
     currentPeriodEnd: v.number(),
+    /** Annual term end — yearly Wam charge is due here. */
+    termEnd: v.optional(v.number()),
+    monthsGrantedThisTerm: v.optional(v.number()),
+    lastGrantAt: v.optional(v.number()),
+    pastDueSince: v.optional(v.number()),
+    sourcePaymentId: v.optional(v.id("payments")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_and_status", ["userId", "status"]),
+    .index("by_user_and_status", ["userId", "status"])
+    .index("by_wam_subscription", ["wamSubscriptionId"])
+    .index("by_status_and_period_end", ["status", "currentPeriodEnd"])
+    .index("by_status_and_past_due", ["status", "pastDueSince"]),
 
   pricingSettings: defineTable({
     key: v.string(),
@@ -923,6 +941,7 @@ export default defineSchema({
     amountCents: v.number(),
     creditsGranted: v.optional(v.number()),
     subscriptionPlanId: v.optional(v.id("subscriptionPlans")),
+    billingInterval: v.optional(v.union(v.literal("month"), v.literal("year"))),
     bankAccountId: v.optional(v.id("bankAccounts")),
     externalPaymentId: v.optional(v.string()),
     clientRequestId: v.optional(v.string()),

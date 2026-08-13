@@ -129,8 +129,10 @@ import type * as lib_studioApi_httpHelpers from "../lib/studioApi/httpHelpers.js
 import type * as lib_studioApi_openapi from "../lib/studioApi/openapi.js";
 import type * as lib_studioApi_requestAuth from "../lib/studioApi/requestAuth.js";
 import type * as lib_studioApi_scopes from "../lib/studioApi/scopes.js";
+import type * as lib_studioBillingCore from "../lib/studioBillingCore.js";
 import type * as lib_studioPackageEnvelope from "../lib/studioPackageEnvelope.js";
 import type * as lib_studioPackageFormat from "../lib/studioPackageFormat.js";
+import type * as lib_studioPlans from "../lib/studioPlans.js";
 import type * as lib_studioShareAccess from "../lib/studioShareAccess.js";
 import type * as lib_styleSheetGuides from "../lib/styleSheetGuides.js";
 import type * as lib_videoDurationPlan from "../lib/videoDurationPlan.js";
@@ -170,6 +172,7 @@ import type * as studioShareActions from "../studioShareActions.js";
 import type * as studioShares from "../studioShares.js";
 import type * as stylePresetActions from "../stylePresetActions.js";
 import type * as stylePresets from "../stylePresets.js";
+import type * as subscriptions from "../subscriptions.js";
 import type * as userAgentKeys from "../userAgentKeys.js";
 import type * as userAgentKeysActions from "../userAgentKeysActions.js";
 import type * as userAgentKeysInternal from "../userAgentKeysInternal.js";
@@ -311,8 +314,10 @@ declare const fullApi: ApiFromModules<{
   "lib/studioApi/openapi": typeof lib_studioApi_openapi;
   "lib/studioApi/requestAuth": typeof lib_studioApi_requestAuth;
   "lib/studioApi/scopes": typeof lib_studioApi_scopes;
+  "lib/studioBillingCore": typeof lib_studioBillingCore;
   "lib/studioPackageEnvelope": typeof lib_studioPackageEnvelope;
   "lib/studioPackageFormat": typeof lib_studioPackageFormat;
+  "lib/studioPlans": typeof lib_studioPlans;
   "lib/studioShareAccess": typeof lib_studioShareAccess;
   "lib/styleSheetGuides": typeof lib_styleSheetGuides;
   "lib/videoDurationPlan": typeof lib_videoDurationPlan;
@@ -352,6 +357,7 @@ declare const fullApi: ApiFromModules<{
   studioShares: typeof studioShares;
   stylePresetActions: typeof stylePresetActions;
   stylePresets: typeof stylePresets;
+  subscriptions: typeof subscriptions;
   userAgentKeys: typeof userAgentKeys;
   userAgentKeysActions: typeof userAgentKeysActions;
   userAgentKeysInternal: typeof userAgentKeysInternal;

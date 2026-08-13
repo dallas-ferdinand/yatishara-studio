@@ -42,6 +42,8 @@ type HostedPaymentRow = {
   status: string;
   amountCents: number;
   creditsGranted?: number;
+  subscriptionPlanId?: Id<"subscriptionPlans">;
+  billingInterval?: "month" | "year";
   externalPaymentId?: string;
   checkoutUrl?: string;
   providerStatus?: string;
@@ -218,6 +220,121 @@ const applyStatusCheckRef = makeFunctionReference<
     providerRequestId?: string;
   },
   StatusApplyResult
+>;
+
+const prepareSubscribeRef = makeFunctionReference<
+  "mutation",
+  {
+    userId: Id<"users">;
+    clientRequestId: string;
+    planId: Id<"subscriptionPlans">;
+    interval: "month" | "year";
+  },
+  {
+    paymentId: Id<"payments">;
+    amountCents: number;
+    creditsGranted: number;
+    callbackToken: string;
+    checkoutUrl?: string;
+    externalPaymentId?: string;
+    status: string;
+    alreadyReady: boolean;
+  }
+>("billing:prepareSubscribeCheckout") as unknown as FunctionReference<
+  "mutation",
+  "internal",
+  {
+    userId: Id<"users">;
+    clientRequestId: string;
+    planId: Id<"subscriptionPlans">;
+    interval: "month" | "year";
+  },
+  {
+    paymentId: Id<"payments">;
+    amountCents: number;
+    creditsGranted: number;
+    callbackToken: string;
+    checkoutUrl?: string;
+    externalPaymentId?: string;
+    status: string;
+    alreadyReady: boolean;
+  }
+>;
+
+const getForWamEnsureRef = makeFunctionReference<
+  "query",
+  { customerReference: string },
+  {
+    subscriptionId: Id<"subscriptions">;
+    userId: Id<"users">;
+    planName: string;
+    interval: "month" | "year";
+    chargeCents: number;
+    wamSubscriptionId?: string;
+    wamPaymentMethodId?: string;
+    customerEmail?: string;
+    customerName: string;
+    currentPeriodEnd: number;
+    termEnd?: number;
+  } | null
+>("subscriptions:getForWamEnsure") as unknown as FunctionReference<
+  "query",
+  "internal",
+  { customerReference: string },
+  {
+    subscriptionId: Id<"subscriptions">;
+    userId: Id<"users">;
+    planName: string;
+    interval: "month" | "year";
+    chargeCents: number;
+    wamSubscriptionId?: string;
+    wamPaymentMethodId?: string;
+    customerEmail?: string;
+    customerName: string;
+    currentPeriodEnd: number;
+    termEnd?: number;
+  } | null
+>;
+
+const attachWamSubscriptionRef = makeFunctionReference<
+  "mutation",
+  {
+    subscriptionId: Id<"subscriptions">;
+    wamSubscriptionId: string;
+    wamPaymentMethodId?: string;
+  },
+  null
+>("subscriptions:attachWamSubscription") as unknown as FunctionReference<
+  "mutation",
+  "internal",
+  {
+    subscriptionId: Id<"subscriptions">;
+    wamSubscriptionId: string;
+    wamPaymentMethodId?: string;
+  },
+  null
+>;
+
+const grantDueAnnualRef = makeFunctionReference<
+  "mutation",
+  { now?: number },
+  { granted: number }
+>("subscriptions:grantDueAnnualCredits") as unknown as FunctionReference<
+  "mutation",
+  "internal",
+  { now?: number },
+  { granted: number }
+>;
+
+const cancelUnpaidRef = makeFunctionReference<
+  "mutation",
+  { now?: number },
+  { cancelled: string[] }
+>("subscriptions:cancelUnpaidSubscriptions") as unknown as FunctionReference<
+  "mutation",
+  "internal",
+  { now?: number },
+  { cancelled: string[] }
 >;
 
 const finalizeAcademyRef = makeFunctionReference<
@@ -585,10 +702,20 @@ export const settleFromWebhook = internalAction({
           paymentId: args.paymentId,
         });
       }
+      if (
+        payment.status === "payment_completed" &&
+        payment.subscriptionPlanId &&
+        payment.billingInterval
+      ) {
+        await ensureWamRecurring(ctx, String(payment.userId));
+      }
       return { ok: true };
     }
     try {
       await applyProviderStatus(ctx, args.paymentId, externalId);
+      if (payment.subscriptionPlanId && payment.billingInterval) {
+        await ensureWamRecurring(ctx, String(payment.userId));
+      }
       return { ok: true };
     } catch (error) {
       await ctx.runMutation(recordStatusCheckFailureRef, {
@@ -608,3 +735,218 @@ export const settleFromWebhook = internalAction({
 
 /** Legacy name used by enqueuePaywiseCallback scheduler. */
 export const settleFromCallback = settleFromWebhook;
+
+async function ensureWamRecurring(
+  ctx: { runQuery: Function; runMutation: Function },
+  customerReference: string,
+): Promise<void> {
+  const row = await ctx.runQuery(getForWamEnsureRef, { customerReference });
+  if (!row || row.wamSubscriptionId) return;
+  const wam = getWamSDK() as ReturnType<typeof getWamSDK> & {
+    listPaymentMethods?: (args: { customerReference: string }) => Promise<{
+      paymentMethods: Array<{ id: string }>;
+    }>;
+    createSubscription: (args: Record<string, unknown>) => Promise<{
+      subscription: { id: string; paymentMethodId?: string };
+    }>;
+  };
+  let paymentMethodId = row.wamPaymentMethodId;
+  if (!paymentMethodId && typeof wam.listPaymentMethods === "function") {
+    try {
+      const listed = await wam.listPaymentMethods({ customerReference });
+      paymentMethodId = listed.paymentMethods[0]?.id;
+    } catch (error) {
+      console.error("wam_list_payment_methods_failed", {
+        message: error instanceof Error ? error.message : "unknown",
+      });
+    }
+  }
+  if (!paymentMethodId) return;
+  const startTs = row.interval === "year" ? (row.termEnd ?? row.currentPeriodEnd) : row.currentPeriodEnd;
+  const created = await wam.createSubscription({
+    paymentMethodId,
+    customerReference,
+    customerEmail: row.customerEmail || "billing@yatishara.com",
+    customerName: row.customerName,
+    amountCents: row.chargeCents,
+    currency: WAM_CURRENCY,
+    interval: row.interval,
+    startDate: new Date(startTs).toISOString(),
+    metadata: {
+      studioSubscriptionId: String(row.subscriptionId),
+      planName: row.planName,
+    },
+  });
+  await ctx.runMutation(attachWamSubscriptionRef, {
+    subscriptionId: row.subscriptionId,
+    wamSubscriptionId: created.subscription.id,
+    wamPaymentMethodId: paymentMethodId,
+  });
+}
+
+export const startSubscribe = action({
+  args: {
+    clientRequestId: v.string(),
+    planId: v.id("subscriptionPlans"),
+    interval: v.union(v.literal("month"), v.literal("year")),
+  },
+  returns: v.object({
+    paymentId: v.id("payments"),
+    checkoutUrl: v.string(),
+    status: v.string(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ paymentId: Id<"payments">; checkoutUrl: string; status: string }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Sign in to subscribe.");
+    }
+    const user = await ctx.runQuery(getCheckoutUserRef, {
+      userId: userId as Id<"users">,
+    });
+    if (!user) {
+      throw new Error("User not found");
+    }
+    if (!user.phone?.trim()) {
+      throw new Error("Add a phone number in Account details before subscribing.");
+    }
+    if (!user.email?.trim()) {
+      throw new Error("Add an email address in Account details before subscribing.");
+    }
+    const payerNames =
+      user.firstName?.trim() && user.lastName?.trim()
+        ? { firstName: user.firstName.trim(), lastName: user.lastName.trim() }
+        : splitDisplayName(user.name);
+    if (!payerNames.firstName.trim() || !payerNames.lastName.trim()) {
+      throw new Error(
+        "Add your first and last name in Account details before subscribing.",
+      );
+    }
+
+    const prepared = await ctx.runMutation(prepareSubscribeRef, {
+      userId: userId as Id<"users">,
+      clientRequestId: args.clientRequestId,
+      planId: args.planId,
+      interval: args.interval,
+    });
+    if (prepared.alreadyReady && prepared.checkoutUrl) {
+      return {
+        paymentId: prepared.paymentId,
+        checkoutUrl: prepared.checkoutUrl,
+        status: prepared.status,
+      };
+    }
+
+    const appBase = requirePublicUrl("SITE_URL", siteUrl(), {
+      allowHttpLocalhost: true,
+    });
+    const returnUrl = `${appBase}/?payment=success&paymentId=${prepared.paymentId}`;
+
+    let intent: Awaited<ReturnType<ReturnType<typeof getWamSDK>["createPaymentIntent"]>>;
+    try {
+      const wam = getWamSDK();
+      intent = await wam.createPaymentIntent({
+        amountCents: prepared.amountCents,
+        currency: WAM_CURRENCY,
+        orderReference: String(prepared.paymentId),
+        description:
+          args.interval === "year"
+            ? "Studio annual plan"
+            : "Studio monthly plan",
+        returnUrl,
+        metadata: {
+          paymentId: String(prepared.paymentId),
+          userId: String(userId),
+          planId: String(args.planId),
+          interval: args.interval,
+        },
+        idempotencyKey: `wam:subscribe:${prepared.paymentId}`,
+        setupFutureUsage: "off_session",
+        customerReference: String(userId),
+      } as Parameters<ReturnType<typeof getWamSDK>["createPaymentIntent"]>[0]);
+    } catch (error) {
+      const message = wamErrorMessage(error);
+      const shouldMarkFailed =
+        !(error instanceof WamPaymentError) ||
+        !String(error.code || "").includes("RATE");
+      if (shouldMarkFailed) {
+        await ctx.runMutation(markCheckoutFailedRef, {
+          paymentId: prepared.paymentId,
+          reason: message,
+        });
+      }
+      throw new Error(message);
+    }
+
+    try {
+      await ctx.runMutation(attachCheckoutRef, {
+        paymentId: prepared.paymentId,
+        externalPaymentId: intent.paymentId,
+        checkoutUrl: intent.checkoutUrl,
+        providerRequestId: intent.invoiceId,
+        providerStatus: intent.status,
+      });
+    } catch {
+      throw new Error(
+        "Wam created the checkout but Studio could not save it. Retry this same checkout attempt.",
+      );
+    }
+
+    return {
+      paymentId: prepared.paymentId,
+      checkoutUrl: intent.checkoutUrl,
+      status: "pending",
+    };
+  },
+});
+
+export const ensureWamSubscription = internalAction({
+  args: { customerReference: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    try {
+      await ensureWamRecurring(ctx, args.customerReference);
+    } catch (error) {
+      console.error("wam_ensure_subscription_failed", {
+        message: error instanceof Error ? error.message : "unknown",
+      });
+    }
+    return null;
+  },
+});
+
+export const enforceSubscriptionDunning = internalAction({
+  args: {},
+  returns: v.object({
+    granted: v.number(),
+    cancelled: v.number(),
+  }),
+  handler: async (ctx) => {
+    const annual = await ctx.runMutation(grantDueAnnualRef, { now: Date.now() });
+    const unpaid = await ctx.runMutation(cancelUnpaidRef, { now: Date.now() });
+    const wam = getWamSDK() as ReturnType<typeof getWamSDK> & {
+      cancelSubscription?: (
+        id: string,
+        args?: { reason?: string },
+      ) => Promise<unknown>;
+    };
+    for (const wamSubscriptionId of unpaid.cancelled) {
+      try {
+        if (typeof wam.cancelSubscription === "function") {
+          await wam.cancelSubscription(wamSubscriptionId, {
+            reason: "Unpaid after 7 days",
+          });
+        }
+      } catch (error) {
+        console.error("wam_cancel_subscription_failed", {
+          wamSubscriptionId,
+          message: error instanceof Error ? error.message : "unknown",
+        });
+      }
+    }
+    return { granted: annual.granted, cancelled: unpaid.cancelled.length };
+  },
+});
+

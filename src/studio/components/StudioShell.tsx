@@ -12629,6 +12629,78 @@ export function StudioShell({
           letter-spacing: -0.03em;
           font-variant-numeric: tabular-nums;
         }
+        .studio-settings-plan-toggle {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 6px;
+          padding: 0 14px;
+        }
+        .studio-settings-plan-toggle button {
+          min-height: 34px;
+          border-radius: 8px;
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          background: transparent;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          font-weight: 650;
+        }
+        .studio-settings-plan-toggle button.is-active {
+          background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+          color: var(--color-cursor-text-bright);
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--mos-border-soft));
+        }
+        .studio-settings-plan-grid {
+          display: grid;
+          gap: 8px;
+          padding: 0 14px 12px;
+        }
+        .studio-settings-plan-card {
+          display: grid;
+          gap: 6px;
+          padding: 12px;
+          border-radius: 12px;
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          background: var(--mos-plate, var(--cursor-surface));
+        }
+        .studio-settings-plan-card.is-featured {
+          border-color: color-mix(in srgb, var(--cursor-accent) 45%, var(--mos-border-soft));
+        }
+        .studio-settings-plan-card h4 {
+          margin: 0;
+          font-size: 14px;
+          font-weight: 700;
+        }
+        .studio-settings-plan-card .studio-plan-price {
+          margin: 0;
+          font-size: 20px;
+          font-weight: 750;
+          letter-spacing: -0.03em;
+        }
+        .studio-settings-plan-card p {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.35;
+        }
+        .studio-settings-plan-card button {
+          min-height: 36px;
+          margin-top: 4px;
+          border-radius: 9px;
+          border: 0;
+          background: var(--cursor-accent);
+          color: var(--cursor-on-accent, #fff);
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .studio-settings-plan-card button:disabled {
+          opacity: 0.6;
+        }
+        .studio-settings-topup-locked {
+          padding: 0 14px 12px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.4;
+        }
         .studio-settings-workspace .studio-settings-plans .studio-settings-custom-amount {
           gap: 10px;
           padding: 12px 14px 12px;
@@ -35173,13 +35245,18 @@ function SettingsWorkspacePane({
   const [paymentStatus, setPaymentStatus] = useState("");
   const [checkoutStarting, setCheckoutStarting] = useState(false);
   const [invoicesOpen, setInvoicesOpen] = useState(false);
+  const [billingInterval, setBillingInterval] = useState("month");
+  const subscribeRequestIdRef = useRef(null);
   const clientRequestIdRef = useRef(null);
   const paymentReturnHandledRef = useRef(false);
   const settingsMenuScrollRef = useRef(null);
   useHorizontalWheelScroll(settingsMenuScrollRef);
   useHorizontalScrollFade(settingsMenuScrollRef);
   const startWamCheckout = useAction(api.wamActions.startCheckout);
+  const startWamSubscribe = useAction(api.wamActions.startSubscribe);
   const syncWamPayment = useAction(api.wamActions.syncMyPayment);
+  const catalog = useQuery(api.billing.listSubscriptionPlans, {});
+  const ensureStudioPlans = useMutation(api.billing.ensureStudioPlans);
   const sellerPayout = useQuery(api.marketplace.getMyPayoutAccount);
   const creditPriceCents = pricing?.creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
   const plans = pricingPlans(pricing);
@@ -35187,14 +35264,12 @@ function SettingsWorkspacePane({
   const minAmountLabel = formatTtdCents(minAmountCents);
   const customAmountCents = Math.round(Number.parseFloat(customAmountInput || "0") * 100);
   const customCredits = creditsFromAmountCents(customAmountCents, creditPriceCents);
-  const paywiseFeeCents =
-    Number.isFinite(customAmountCents) && customAmountCents >= minAmountCents
-      ? paywiseCardFeeCents(customAmountCents)
-      : 0;
-  const paywiseTotalCents =
-    Number.isFinite(customAmountCents) && customAmountCents >= minAmountCents
-      ? paywiseCheckoutTotalCents(customAmountCents)
-      : 0;
+  const liveSubscription = billingAccount?.subscription;
+  const canTopUp = Boolean(liveSubscription?.canTopUp);
+  const topUpDiscountPercent =
+    liveSubscription?.interval === "year"
+      ? Number(liveSubscription?.annualDiscountPercent ?? 0)
+      : Number(liveSubscription?.discountPercent ?? 0);
   const checkoutPlan =
     plans.find((plan) => plan.amountCents === customAmountCents) ??
     (customCredits > 0 && customAmountCents >= minAmountCents
@@ -35207,6 +35282,14 @@ function SettingsWorkspacePane({
           amountCents: customAmountCents,
         }
       : null);
+  const topUpChargeCents =
+    Number.isFinite(customAmountCents) && customAmountCents >= minAmountCents
+      ? Math.round((customAmountCents * (100 - topUpDiscountPercent)) / 100)
+      : 0;
+  const paywiseFeeCents =
+    topUpChargeCents > 0 ? paywiseCardFeeCents(topUpChargeCents) : 0;
+  const paywiseTotalCents =
+    topUpChargeCents > 0 ? paywiseCheckoutTotalCents(topUpChargeCents) : 0;
 
   useEffect(() => {
     const next = tab === "top-up" ? "billing" : tab || "general";
@@ -35230,6 +35313,11 @@ function SettingsWorkspacePane({
     onTopUpPrefillConsumed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once per prefill handoff
   }, [topUpPrefillCents, minAmountCents]);
+
+  useEffect(() => {
+    if (!catalog || catalog.length > 0) return;
+    void ensureStudioPlans().catch(() => {});
+  }, [catalog, ensureStudioPlans]);
 
   useEffect(() => {
     if (typeof window === "undefined" || paymentReturnHandledRef.current) return;
@@ -35318,6 +35406,10 @@ function SettingsWorkspacePane({
 
   async function handleWamCheckout() {
     if (checkoutStarting) return;
+    if (!canTopUp) {
+      setCustomAmountError("Subscribe to a plan before topping up.");
+      return;
+    }
     if (!Number.isFinite(customAmountCents) || customAmountCents < minAmountCents) {
       setCustomAmountError(`Enter an amount of at least ${minAmountLabel}.`);
       return;
@@ -35335,7 +35427,7 @@ function SettingsWorkspacePane({
     setPaymentStatus("Please wait…");
     onWamHandoff?.({
       phase: "preparing",
-      amountCents: checkoutPlan.amountCents,
+      amountCents: topUpChargeCents || checkoutPlan.amountCents,
     });
     try {
       const result = await startWamCheckout({
@@ -35347,7 +35439,7 @@ function SettingsWorkspacePane({
       setPaymentStatus("Redirecting…");
       onWamHandoff?.({
         phase: "redirect",
-        amountCents: checkoutPlan.amountCents,
+        amountCents: topUpChargeCents || checkoutPlan.amountCents,
         checkoutUrl: result.checkoutUrl,
       });
     } catch (error) {
@@ -35355,6 +35447,38 @@ function SettingsWorkspacePane({
       setPaymentStatus(friendlyConvexError(error, "Wam checkout failed."));
       setCheckoutStarting(false);
       clientRequestIdRef.current = null;
+    }
+  }
+
+  async function handleSubscribe(plan) {
+    if (checkoutStarting || !plan?._id) return;
+    if (!subscribeRequestIdRef.current) {
+      subscribeRequestIdRef.current = `sub-${plan._id}-${billingInterval}-${newClientRequestId()}`;
+    }
+    setCheckoutStarting(true);
+    setPaymentStatus("Please wait…");
+    const quote = quoteCatalogPlan(plan, billingInterval);
+    onWamHandoff?.({
+      phase: "preparing",
+      amountCents: quote.chargeCents,
+    });
+    try {
+      const result = await startWamSubscribe({
+        clientRequestId: subscribeRequestIdRef.current,
+        planId: plan._id,
+        interval: billingInterval,
+      });
+      setPaymentStatus("Redirecting…");
+      onWamHandoff?.({
+        phase: "redirect",
+        amountCents: quote.chargeCents,
+        checkoutUrl: result.checkoutUrl,
+      });
+    } catch (error) {
+      onWamHandoff?.(null);
+      setPaymentStatus(friendlyConvexError(error, "Wam checkout failed."));
+      setCheckoutStarting(false);
+      subscribeRequestIdRef.current = null;
     }
   }
 
@@ -35428,6 +35552,63 @@ function SettingsWorkspacePane({
                     </strong>
                   </div>
                 </header>
+                {canTopUp ? (
+                  <p className="studio-settings-topup-locked">
+                    {liveSubscription?.planName
+                      ? `${liveSubscription.planName} · ${liveSubscription.interval === "year" ? "annual" : "monthly"}${liveSubscription.status === "past_due" ? " · payment due" : ""}`
+                      : "Plan active"}
+                    . Extra balance uses the same plan discount.
+                  </p>
+                ) : (
+                  <>
+                    <div className="studio-settings-plan-toggle" role="group" aria-label="Billing period">
+                      <button
+                        type="button"
+                        className={billingInterval === "month" ? "is-active" : ""}
+                        onClick={() => setBillingInterval("month")}
+                      >
+                        Monthly
+                      </button>
+                      <button
+                        type="button"
+                        className={billingInterval === "year" ? "is-active" : ""}
+                        onClick={() => setBillingInterval("year")}
+                      >
+                        Annual
+                      </button>
+                    </div>
+                    <div className="studio-settings-plan-grid">
+                      {(catalog ?? []).map((plan) => {
+                        const quote = quoteCatalogPlan(plan, billingInterval);
+                        return (
+                          <article
+                            key={plan._id}
+                            className={`studio-settings-plan-card${plan.slug === "plus" ? " is-featured" : ""}`}
+                          >
+                            <h4>{plan.name}</h4>
+                            <p className="studio-plan-price">{formatTtdCents(quote.chargeCents)}</p>
+                            <p>
+                              {quote.discountPercent > 0
+                                ? `Pay ${formatTtdShort(quote.chargeCents)}, get ${formatTtdShort(quote.faceMonthlyCents)}${billingInterval === "year" ? "/mo for the year" : " each month"}. ${quote.discountPercent}% off.`
+                                : `Pay ${formatTtdShort(quote.chargeCents)}, get ${formatTtdShort(quote.faceMonthlyCents)} each month.`}
+                            </p>
+                            <button
+                              type="button"
+                              disabled={checkoutStarting}
+                              onClick={() => void handleSubscribe(plan)}
+                            >
+                              Subscribe
+                            </button>
+                          </article>
+                        );
+                      })}
+                    </div>
+                    {paymentStatus ? (
+                      <p className="studio-settings-topup-locked">{paymentStatus}</p>
+                    ) : null}
+                  </>
+                )}
+                {canTopUp ? (
                 <div className="studio-settings-custom-amount">
                   <label className="studio-settings-custom-amount-input is-full is-emphasis">
                     {customAmountInput ? <span>$</span> : null}
@@ -35473,9 +35654,15 @@ function SettingsWorkspacePane({
                   paywiseTotalCents > 0 ? (
                     <dl className="studio-academy-checkout-receipt studio-settings-billing-receipt">
                       <div className="studio-academy-checkout-row">
-                        <dt>Top up</dt>
+                        <dt>Add to account</dt>
                         <dd>{formatTtdCents(customAmountCents)}</dd>
                       </div>
+                      {topUpDiscountPercent > 0 ? (
+                        <div className="studio-academy-checkout-row is-muted">
+                          <dt>Plan discount ({topUpDiscountPercent}%)</dt>
+                          <dd>{formatTtdCents(topUpChargeCents)}</dd>
+                        </div>
+                      ) : null}
                       {paywiseFeeCents > 0 ? (
                         <div className="studio-academy-checkout-row is-muted">
                           <dt>Card fee</dt>
@@ -35526,6 +35713,7 @@ function SettingsWorkspacePane({
                     <span>secure checkout</span>
                   </p>
                 </div>
+                ) : null}
               </section>
               <section className="cursor-settings-section studio-settings-invoices-card">
                 <button
@@ -36193,6 +36381,20 @@ function newClientRequestId() {
   return `topup-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
+function quoteCatalogPlan(plan, interval) {
+  const face = Number(plan?.originalMonthlyPriceCents ?? plan?.monthlyPriceCents ?? 0);
+  const discount =
+    interval === "year"
+      ? Number(plan?.annualDiscountPercent ?? 0)
+      : Number(plan?.discountPercent ?? 0);
+  const faceCharge = interval === "year" ? face * 12 : face;
+  return {
+    faceMonthlyCents: face,
+    discountPercent: discount,
+    chargeCents: Math.round((faceCharge * (100 - discount)) / 100),
+  };
+}
+
 function pricingPlans(pricing) {
   const creditPriceCents = pricing?.creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
   const featuresByTier = [
@@ -36341,10 +36543,13 @@ function activityToneForKind(kind, status) {
 }
 
 function paymentInvoiceTitle(payment) {
-  if(payment?.method === "wam" || payment?.method === "paywise") return "Card top-up (Wam)";
-  if (payment?.subscriptionPlanId) return "Legacy subscription";
-  if(payment?.method === "bank") return "Legacy bank top-up";
-  if(payment?.method === "card") return "Legacy card top-up";
+  if (payment?.subscriptionPlanId && payment?.billingInterval) {
+    return payment.billingInterval === "year" ? "Annual plan" : "Monthly plan";
+  }
+  if (payment?.method === "wam" || payment?.method === "paywise") return "Card top-up (Wam)";
+  if (payment?.subscriptionPlanId) return "Studio plan";
+  if (payment?.method === "bank") return "Legacy bank top-up";
+  if (payment?.method === "card") return "Legacy card top-up";
   return "Legacy top-up";
 }
 
