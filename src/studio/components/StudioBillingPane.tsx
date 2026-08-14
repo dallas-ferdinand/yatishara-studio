@@ -189,7 +189,7 @@ function planCopy(slug: string, grantLabel: string, discountPercent: number) {
     return [
       `${grantLabel} credited every month after payment`,
       discountPercent > 0 ? `Best savings at ${discountPercent}% off` : "Highest monthly grant",
-      "Built for Studio + Academy volume",
+      "Upgrade or downgrade anytime",
     ];
   }
   return [
