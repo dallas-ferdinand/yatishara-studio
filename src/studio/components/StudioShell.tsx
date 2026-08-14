@@ -6830,16 +6830,18 @@ export function StudioShell({
     await updateElement({
       elementId: entry.studioId,
       name: tag,
-      description: values.description?.trim() || undefined,
+      description: typeof values.description === "string" ? values.description.trim() : undefined,
       styleRules: values.styleRules?.trim() || undefined,
       renderMode: values.renderMode,
       referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
     });
     const refs = values.referenceAssets ?? values.sourceAssets ?? entry.referenceAssets;
+    const nextDescription =
+      typeof values.description === "string" ? values.description.trim() : undefined;
     const nextEntry = {
       ...entry,
       name: elementFileName(tag),
-      description: values.description?.trim() || undefined,
+      description: nextDescription,
       styleRules: values.styleRules?.trim() || undefined,
       renderMode: values.renderMode ?? entry.renderMode,
       referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
@@ -21307,258 +21309,100 @@ export function StudioShell({
           border-top: 1px solid var(--color-cursor-border-soft);
         }
         .studio-element-detail {
-          display: flex;
-          flex-direction: column;
-          gap: 14px;
-          width: min(100%, 920px);
-          margin: 0 auto;
-          padding: 18px 18px 24px;
-        }
-        .studio-element-detail-hero {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 14px;
-          border-radius: 18px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border-soft));
-          background:
-            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent), transparent 44%),
-            color-mix(in srgb, var(--mos-surface) 72%, transparent);
-          padding: 18px;
-        }
-        .studio-element-detail-hero h2 {
-          margin-top: 6px;
-          color: var(--color-cursor-text-bright);
-          font-size: 24px;
-          font-weight: 700;
-        }
-        .studio-element-detail-hero p {
-          margin-top: 6px;
-          color: var(--color-cursor-muted);
-          font-size: 13px;
-          line-height: 1.45;
-        }
-        .studio-element-detail-status {
-          margin-top: 4px !important;
-          font-size: 11px !important;
-        }
-        .studio-element-detail-actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        .studio-element-detail-grid {
-          display: grid;
-          gap: 14px;
-        }
-        .studio-element-detail-card {
-          border-radius: 18px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
-          padding: 16px;
-        }
-        .studio-element-detail-card-head {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 10px;
-          margin-bottom: 12px;
-        }
-        .studio-element-detail-hint {
-          margin-top: 4px;
-          color: var(--color-cursor-muted);
-          font-size: 12px;
-          line-height: 1.4;
-        }
-        .studio-element-detail-fields {
-          display: grid;
-          gap: 12px;
-          margin-top: 12px;
-        }
-        .studio-element-detail-field {
-          display: grid;
-          gap: 6px;
-          color: var(--color-cursor-muted);
-          font-size: 11px;
-          font-weight: 600;
-        }
-        .studio-element-detail-input,
-        .studio-element-detail-textarea {
+          flex: 1 1 0;
           width: 100%;
-          border-radius: 12px;
-          border: 1px solid var(--color-cursor-border-soft);
-          background: color-mix(in srgb, var(--mos-bg) 36%, transparent);
-          color: var(--color-cursor-text);
-          outline: none;
-          transition: border-color var(--studio-motion-fast) var(--studio-motion-ease);
-        }
-        .studio-element-detail-input {
-          height: 40px;
-          padding: 0 12px;
-          font-size: 13px;
-          font-weight: 500;
-        }
-        .studio-element-detail-textarea {
-          min-height: 220px;
-          resize: vertical;
-          padding: 12px;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-          font-size: 12px;
-          line-height: 1.5;
-        }
-        .studio-element-detail-textarea.is-notes {
-          min-height: 96px;
-          font-family: inherit;
-          font-size: 13px;
-        }
-        .studio-element-detail-tag {
-          font-size: 12px;
-          font-weight: 600;
-          color: var(--cursor-accent);
-        }
-        .studio-element-detail-input:focus,
-        .studio-element-detail-textarea:focus {
-          border-color: color-mix(in srgb, var(--cursor-accent) 55%, var(--color-cursor-border-soft));
-        }
-        .studio-element-detail-media-stage {
-          position: relative;
+          height: 100%;
+          min-height: 0;
           display: flex;
           align-items: center;
           justify-content: center;
+          overflow: auto;
+          padding: 32px 20px;
+          background: var(--mos-page, var(--mos-panel, var(--color-cursor-bg, #05080f))) !important;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+          isolation: isolate;
+        }
+        [data-appearance="light"] .studio-element-detail {
+          background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
+        }
+        .studio-element-detail-form {
+          width: min(100%, 26rem);
+          display: grid;
+          gap: 12px;
+        }
+        .studio-element-detail-title,
+        .studio-element-detail-notes {
           width: 100%;
-          min-height: 220px;
-          margin-top: 12px;
-          padding: 12px;
-          border: 1px solid var(--color-cursor-border-soft);
-          border-radius: 14px;
+          margin: 0;
+          border: 0;
           background: transparent;
+          outline: none;
+          font: inherit;
+          resize: none;
         }
-        .studio-element-detail-media-stage.is-clickable {
-          cursor: pointer;
-          transition:
-            border-color var(--studio-motion-fast) var(--studio-motion-ease),
-            background var(--studio-motion-fast) var(--studio-motion-ease);
+        .studio-element-detail-title {
+          color: var(--color-cursor-text-bright);
+          font-size: 22px;
+          font-weight: 650;
+          letter-spacing: -0.02em;
+          line-height: 1.2;
         }
-        .studio-element-detail-media-stage.is-clickable:hover {
-          border-color: color-mix(in srgb, var(--cursor-accent) 44%, var(--color-cursor-border-soft));
-          background: var(--color-cursor-hover);
+        .studio-element-detail-notes {
+          min-height: 4.5rem;
+          color: var(--color-cursor-text);
+          font-size: 14px;
+          line-height: 1.45;
         }
-        .studio-element-detail-media-img {
-          display: block;
-          max-width: 100%;
-          max-height: min(52vh, 420px);
-          object-fit: contain;
-          border-radius: 8px;
-        }
-        .studio-element-detail-media-hint {
-          position: absolute;
-          right: 12px;
-          bottom: 12px;
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--mos-bg) 72%, transparent);
-          border: 1px solid var(--color-cursor-border-soft);
+        .studio-element-detail-title::placeholder,
+        .studio-element-detail-notes::placeholder {
           color: var(--color-cursor-muted);
-          padding: 4px 8px;
-          font-size: 10px;
-          font-weight: 600;
-          pointer-events: none;
+          opacity: 0.55;
+          font-weight: 500;
         }
-        .studio-element-detail-media-grid {
-          display: grid;
-          gap: 10px;
-          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        }
-        .studio-element-detail-media-item {
-          display: grid;
-          gap: 6px;
-        }
-        .studio-element-detail-media-item-open {
-          display: flex;
-          min-width: 0;
-          align-items: center;
-          gap: 10px;
-          width: 100%;
-          padding: 8px;
-          border: 1px solid var(--color-cursor-border-soft);
-          border-radius: 12px;
-          background: transparent;
-          color: inherit;
-          text-align: left;
-          transition:
-            border-color var(--studio-motion-fast) var(--studio-motion-ease),
-            background var(--studio-motion-fast) var(--studio-motion-ease);
-        }
-        .studio-element-detail-media-item-open:not(.is-static) {
-          cursor: pointer;
-        }
-        .studio-element-detail-media-item-open:not(.is-static):hover {
-          border-color: color-mix(in srgb, var(--cursor-accent) 44%, var(--color-cursor-border-soft));
-          background: var(--color-cursor-hover);
-        }
-        .studio-element-detail-media-thumb {
-          flex: 0 0 auto;
-          width: 56px;
-          height: 56px;
-          border-radius: 10px;
-          border: 1px solid var(--color-cursor-border-soft);
-          background: transparent center/cover no-repeat;
-        }
-        .studio-element-detail-media-thumb.is-empty {
+        .studio-element-detail-file {
+          position: relative;
           display: grid;
           place-items: center;
-          background: color-mix(in srgb, var(--mos-bg) 36%, transparent);
-        }
-        .studio-element-detail-media-copy {
-          display: grid;
-          gap: 2px;
-          min-width: 0;
-          flex: 1;
-        }
-        .studio-element-detail-media-name {
+          width: 100%;
+          aspect-ratio: 4 / 5;
+          max-height: 260px;
+          padding: 0;
+          border: 1px dashed color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
+          border-radius: 14px;
           overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          color: var(--color-cursor-text);
-          font-size: 12px;
-          font-weight: 600;
-        }
-        .studio-element-detail-media-kind {
-          color: var(--color-cursor-muted);
-          font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-        }
-        .studio-element-detail-media-remove {
-          justify-self: start;
-          border: none;
-          border-radius: 8px;
           background: transparent;
           color: var(--color-cursor-muted);
-          padding: 4px 8px;
-          font-size: 11px;
+          font-size: 13px;
           cursor: pointer;
         }
-        .studio-element-detail-media-remove:hover {
-          background: var(--color-cursor-hover);
-          color: var(--color-cursor-text);
+        .studio-element-detail-file:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
         }
-        .studio-element-detail-empty {
-          margin-top: 4px;
-          border: 1px dashed var(--color-cursor-border-soft);
-          border-radius: 12px;
-          padding: 14px;
-          color: var(--color-cursor-muted);
-          font-size: 12px;
+        .studio-element-detail-file img,
+        .studio-element-detail-file video {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
         }
-        .studio-element-detail-footer {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
+        .studio-element-detail-file-clear {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          display: grid;
+          place-items: center;
+          width: 24px;
+          height: 24px;
+          padding: 0;
+          border: 0;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-page, #000) 78%, transparent);
+          color: var(--color-cursor-text-bright);
+          cursor: pointer;
+        }
+        .studio-element-detail-error {
+          min-height: 1.1em;
           color: var(--color-cursor-muted);
           font-size: 12px;
         }
@@ -33126,14 +32970,8 @@ function ActivePane({
       <StudioElementDetailPane
         entry={activeEntry}
         assets={assets}
-        onAttach={onAttach}
-        onRename={onRename}
         onUpdate={onElementUpdate}
-        onBuildSheet={onBuildElementSheet}
-        stylePresets={stylePresets}
         onUploadElementFiles={onUploadElementFiles}
-        onOpenEntry={onOpenEntry}
-        onTrash={onTrash}
       />,
     );
   }
@@ -33159,16 +32997,6 @@ function ActivePane({
   );
 }
 
-function elementAssetOpenable(asset) {
-  if (!asset?.studioId) return false;
-  const kind = asset.kind ?? inferAttachmentKind(asset);
-  return kind === "image" || kind === "video" || kind === "audio";
-}
-
-function liveMediaReady(assets) {
-  return (assets ?? []).some((asset) => elementAssetOpenable(asset));
-}
-
 function displayElementStem(name) {
   const stem = elementStemFromDisplayName(name);
   return !stem || stem === "ref" ? "" : stem;
@@ -33183,367 +33011,261 @@ function slugElementTitleInput(raw) {
     .toLowerCase();
 }
 
-function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, onBuildSheet, stylePresets, onUploadElementFiles, onOpenEntry, onTrash }) {
+function elementEditorTitle(entry) {
+  if (entry?.elementType === "style_sheet") {
+    return String(entry.name ?? "").replace(/^@/, "").replace(/\.element$/i, "");
+  }
+  return displayElementStem(entry?.name);
+}
+
+function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles }) {
   const isStyleSheet = entry.elementType === "style_sheet";
-  const [name, setName] = useState(() =>
-    isStyleSheet ? String(entry.name ?? "").replace(/^@/, "").replace(/\.element$/i, "") : displayElementStem(entry.name),
-  );
+  const [name, setName] = useState(() => elementEditorTitle(entry));
   const [description, setDescription] = useState(entry.description ?? "");
-  const [styleRules, setStyleRules] = useState(entry.styleRules ?? "");
-  const [renderMode, setRenderMode] = useState(entry.renderMode ?? "mixed");
-  const [sourceAssets, setSourceAssets] = useState(entry.referenceAssets ?? entry.sourceAssets ?? []);
-  const [sheetPreview, setSheetPreview] = useState(entry.sheetAsset ?? null);
-  const [stylePresetSlug, setStylePresetSlug] = useState("unstyled");
-  const [saving, setSaving] = useState(false);
+  const [sourceAssets, setSourceAssets] = useState(() => {
+    const resolved = resolveElementReferenceAssets(entry, assets);
+    return resolved.length ? resolved : (entry.referenceAssets ?? entry.sourceAssets ?? []);
+  });
   const [uploading, setUploading] = useState(false);
-  const [buildingSheet, setBuildingSheet] = useState(false);
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const inputRef = useRef(null);
-  const sheetLabel = elementSheetLabel(entry.elementType);
-  const titleStem = isStyleSheet ? name.trim() : displayElementStem(name);
-  const promptTag = titleStem || "untitled";
+  const nameRef = useRef(name);
+  const descriptionRef = useRef(description);
+  const assetsRef = useRef(sourceAssets);
+  const entryRef = useRef(entry);
+  const onUpdateRef = useRef(onUpdate);
+  const saveTimerRef = useRef(0);
+  const lastSavedRef = useRef("");
+  const persistRef = useRef(async () => {});
 
-  useEffect(() => {
-    setName(
-      entry.elementType === "style_sheet"
-        ? String(entry.name ?? "").replace(/^@/, "").replace(/\.element$/i, "")
-        : displayElementStem(entry.name),
-    );
-    setDescription(entry.description ?? "");
-    setStyleRules(entry.styleRules ?? "");
-    setRenderMode(entry.renderMode ?? "mixed");
-    setSourceAssets(resolveElementReferenceAssets(entry, assets));
-    setSheetPreview(entry.sheetAsset ?? resolveElementSheetAsset(entry, assets));
-    setMessage("");
-  }, [assets, entry]);
+  nameRef.current = name;
+  descriptionRef.current = description;
+  assetsRef.current = sourceAssets;
+  onUpdateRef.current = onUpdate;
 
-  async function persist(nextAssets = sourceAssets, nextName = name, nextDescription = description) {
-    await onUpdate(entry, {
-      name: nextName,
-      description: nextDescription,
-      styleRules: isStyleSheet ? styleRules : undefined,
-      renderMode: isStyleSheet ? renderMode : undefined,
-      referenceAssetIds: nextAssets.map((asset) => asset.studioId).filter(Boolean),
-      referenceAssets: nextAssets,
-      sheetAsset: entry.sheetAsset,
+  function titleTag(current, nextName) {
+    return current?.elementType === "style_sheet"
+      ? String(nextName ?? "").trim()
+      : displayElementStem(nextName);
+  }
+
+  function snapshot(current, nextName, nextDescription, nextAssets) {
+    return JSON.stringify({
+      name: titleTag(current, nextName),
+      description: String(nextDescription ?? "").trim(),
+      ids: (nextAssets ?? []).map((asset) => asset.studioId).filter(Boolean),
     });
   }
 
-  async function save() {
-    if (!name.trim()) return;
-    setSaving(true);
-    setMessage("");
+  async function persistWith(current, nextName, nextDescription, nextAssets) {
+    if (!current?.studioId) return;
+    const tag = titleTag(current, nextName);
+    if (!tag || tag === "ref") return;
+    const snap = snapshot(current, nextName, nextDescription, nextAssets);
+    if (current.studioId === entryRef.current?.studioId && snap === lastSavedRef.current) return;
     try {
-      await persist();
-      setMessage("Saved.");
-    } catch (error) {
-      setMessage(friendlyConvexError(error, "Could not save element."));
-    } finally {
-      setSaving(false);
+      await onUpdateRef.current(current, {
+        name: tag,
+        description: nextDescription,
+        referenceAssetIds: nextAssets.map((asset) => asset.studioId).filter(Boolean),
+        referenceAssets: nextAssets,
+      });
+      if (entryRef.current?.studioId === current.studioId) {
+        lastSavedRef.current = snap;
+        setError("");
+      }
+    } catch (caught) {
+      if (entryRef.current?.studioId === current.studioId) {
+        setError(friendlyConvexError(caught, "Could not save."));
+      }
     }
   }
+
+  async function persist(nextAssets = assetsRef.current) {
+    await persistWith(entryRef.current, nameRef.current, descriptionRef.current, nextAssets);
+  }
+  persistRef.current = persist;
+
+  function queueSave() {
+    window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => void persist(), 500);
+  }
+
+  useEffect(() => {
+    window.clearTimeout(saveTimerRef.current);
+    const previous = entryRef.current;
+    if (previous?.studioId && previous.studioId !== entry.studioId) {
+      void persistWith(previous, nameRef.current, descriptionRef.current, assetsRef.current);
+    }
+    const nextName = elementEditorTitle(entry);
+    const nextDescription = entry.description ?? "";
+    const resolved = resolveElementReferenceAssets(entry, assets);
+    const nextAssets = resolved.length ? resolved : (entry.referenceAssets ?? entry.sourceAssets ?? []);
+    setName(nextName);
+    setDescription(nextDescription);
+    setSourceAssets(nextAssets);
+    setError("");
+    nameRef.current = nextName;
+    descriptionRef.current = nextDescription;
+    assetsRef.current = nextAssets;
+    entryRef.current = entry;
+    lastSavedRef.current = snapshot(entry, nextName, nextDescription, nextAssets);
+  }, [entry.studioId]);
+
+  useEffect(() => {
+    const resolved = resolveElementReferenceAssets(entry, assets);
+    if (!resolved.length) return;
+    setSourceAssets((current) => {
+      if (!current.length) return current;
+      return current.map((row) => {
+        const hit = resolved.find((item) => item.studioId === row.studioId);
+        return hit ? { ...row, ...hit } : row;
+      });
+    });
+  }, [assets, entry.studioId]);
+
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(saveTimerRef.current);
+      void persistRef.current();
+    };
+  }, []);
 
   async function upload(files) {
     const picked = isStyleSheet ? files : files?.[0] ? [files[0]] : [];
     if (!picked?.length) return;
     setUploading(true);
-    setMessage("");
+    setError("");
     try {
       const uploaded = await onUploadElementFiles(picked);
       const nextAssets = (uploaded ?? []).map(uploadedElementAssetToEntry);
-      const merged = isStyleSheet ? [...sourceAssets, ...nextAssets] : nextAssets;
+      const merged = isStyleSheet ? [...assetsRef.current, ...nextAssets] : nextAssets;
       setSourceAssets(merged);
-      if (!isStyleSheet) {
-        await persist(merged);
-        setMessage("Media saved.");
-      } else {
-        setMessage("Media added. Save to keep it on this element.");
-      }
-    } catch (error) {
-      setMessage(friendlyConvexError(error, "Upload failed."));
+      assetsRef.current = merged;
+      await persist(merged);
+    } catch (caught) {
+      setError(friendlyConvexError(caught, "Upload failed."));
     } finally {
       setUploading(false);
     }
   }
 
-  async function buildSheet() {
-    setBuildingSheet(true);
-    setMessage("");
+  async function removeMedia(studioId) {
+    const next = assetsRef.current.filter((item) => item.studioId !== studioId);
+    setSourceAssets(next);
+    assetsRef.current = next;
+    await persist(next);
+  }
+
+  function restoreTitleIfEmpty() {
+    const tag = isStyleSheet ? String(nameRef.current ?? "").trim() : displayElementStem(nameRef.current);
+    if (tag && tag !== "ref") return false;
     try {
-      const nextDescription = await onBuildSheet(draftEntry, sourceAssets, description, stylePresetSlug);
-      if (nextDescription?.description) {
-        setDescription(nextDescription.description);
+      const last = JSON.parse(lastSavedRef.current || "{}");
+      if (last.name) {
+        setName(last.name);
+        nameRef.current = last.name;
+        return true;
       }
-      if (nextDescription?.sheetAssetId && assets?.length) {
-        const built = assets.find((item) => item._id === nextDescription.sheetAssetId);
-        if (built) {
-          setSheetPreview(assetToEntry(built));
-        }
-      }
-      setMessage(`${sheetLabel.charAt(0).toUpperCase()}${sheetLabel.slice(1)} ready.`);
-    } catch (error) {
-      setMessage(friendlyConvexError(error, "Could not build sheet."));
-    } finally {
-      setBuildingSheet(false);
+    } catch {
+      /* keep empty */
     }
+    return true;
   }
 
-  const draftEntry = {
-    ...entry,
-    name: isStyleSheet ? name.trim() : elementFileName(promptTag),
-    description,
-    styleRules: isStyleSheet ? styleRules : undefined,
-    renderMode: isStyleSheet ? renderMode : undefined,
-    referenceAssetIds: sourceAssets.map((asset) => asset.studioId).filter(Boolean),
-    referenceAssets: sourceAssets,
-    sheetAsset: sheetPreview ?? resolveElementSheetAsset(entry, assets),
-    buildStatus: sheetPreview || entry.sheetAssetId ? "built" : liveMediaReady(sourceAssets) ? "ready" : "unbuilt",
-  };
-  const sheetAsset = draftEntry.sheetAsset;
-  const liveMedia =
-    sourceAssets.find(
-      (asset) => asset.kind === "image" || asset.kind === "video" || asset.kind === "audio",
-    ) ?? sheetAsset;
-
-  function openAssetEntry(asset) {
-    if (!elementAssetOpenable(asset) || !onOpenEntry) return;
-    onOpenEntry(asset);
-  }
+  const media = (isStyleSheet ? sourceAssets : sourceAssets.slice(0, 1))[0] ?? null;
+  const previewUrl = media?.thumbnailUrl ?? media?.mediaUrl;
+  const isVideo = media?.kind === "video";
 
   return (
-    <div className="h-full min-h-0 overflow-auto">
-      <div className="studio-element-detail">
-        <section className="studio-element-detail-hero">
-          <div className="studio-element-detail-hero-copy">
-            <p className="studio-section-kicker">{isStyleSheet ? entry.kindLabel : "Element"}</p>
-            <h2>{isStyleSheet ? name || entry.name : `${promptTag}.element`}</h2>
-            <p>
-              {isStyleSheet
-                ? "Style rules and mood refs for this look."
-                : `Unique id, no spaces. Type @${promptTag} in Create to attach it. Seedance gets this file, not a thumbnail.`}
-            </p>
-            <p className="studio-element-detail-status">
-              Status: {liveMedia || sheetAsset ? "Ready — media will be sent with @tag" : "Add an image or video"}
-            </p>
-          </div>
-          <div className="studio-element-detail-actions">
-            {isStyleSheet ? (
-              <button
-                type="button"
-                className={STYLE.iconButton}
-                disabled={buildingSheet || (!sourceAssets.length && !description.trim() && !styleRules.trim())}
-                onClick={() => void buildSheet()}
-              >
-                {buildingSheet ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                {buildingSheet ? "Building..." : `Build ${sheetLabel}`}
-              </button>
-            ) : null}
-            <button className={STYLE.iconButton} onClick={() => onAttach(draftEntry)}>
-              <Plus className="h-3.5 w-3.5" />
-              Use in request
-            </button>
-            <button className={STYLE.iconButton} onClick={() => void save()} disabled={saving || !name.trim()}>
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
-        </section>
-
-        <div className="studio-element-detail-grid">
-          {sheetAsset ? (
-            <section className="studio-element-detail-card">
-              <p className="studio-admin-card-kicker">Built sheet</p>
-              <p className="studio-element-detail-hint">This image is attached when you use this element in generation.</p>
-              {sheetAsset.mediaUrl || sheetAsset.thumbnailUrl ? (
-                elementAssetOpenable(sheetAsset) ? (
-                  <button
-                    type="button"
-                    className="studio-element-detail-media-stage is-clickable"
-                    title={`Open ${sheetAsset.name} in a new tab`}
-                    onClick={() => openAssetEntry(sheetAsset)}
-                  >
-                    <img
-                      src={sheetAsset.mediaUrl ?? sheetAsset.thumbnailUrl}
-                      alt={`${entry.name} sheet`}
-                      className="studio-element-detail-media-img"
-                    />
-                    <span className="studio-element-detail-media-hint">Click to open</span>
-                  </button>
-                ) : (
-                  <div className="studio-element-detail-media-stage">
-                    <img
-                      src={sheetAsset.mediaUrl ?? sheetAsset.thumbnailUrl}
-                      alt={`${entry.name} sheet`}
-                      className="studio-element-detail-media-img"
-                    />
-                  </div>
-                )
-              ) : null}
-            </section>
-          ) : null}
-
-          <section className="studio-element-detail-card">
-            <p className="studio-admin-card-kicker">Details</p>
-            <div className="studio-element-detail-fields">
-              {isStyleSheet ? (
-                <label className="studio-element-detail-field">
-                  Render mode
-                  <select
-                    className="studio-element-detail-input"
-                    value={renderMode}
-                    onChange={(event) => setRenderMode(event.target.value)}
-                  >
-                    <option value="photoreal">Photoreal</option>
-                    <option value="illustrated_2d">Illustrated 2D</option>
-                    <option value="illustrated_3d">Illustrated 3D</option>
-                    <option value="mixed">Mixed</option>
-                  </select>
-                </label>
-              ) : null}
-              <label className="studio-element-detail-field">
-                Title
-                <input
-                  className="studio-element-detail-input"
-                  value={name}
-                  onChange={(event) =>
-                    setName(isStyleSheet ? event.target.value : slugElementTitleInput(event.target.value))
-                  }
-                  placeholder="product-shot"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                />
-                {!isStyleSheet ? (
-                  <span className="studio-element-detail-tag">@{promptTag}</span>
-                ) : null}
-              </label>
-              {isStyleSheet ? (
-                <label className="studio-element-detail-field">
-                  Style rules
-                  <textarea
-                    className="studio-element-detail-textarea"
-                    value={styleRules}
-                    onChange={(event) => setStyleRules(event.target.value)}
-                    placeholder="Palette, line weight, forbidden drift, render notes…"
-                  />
-                </label>
-              ) : null}
-              <label className="studio-element-detail-field">
-                Description (optional)
-                <textarea
-                  className={`studio-element-detail-textarea${isStyleSheet ? "" : " is-notes"}`}
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder={
-                    isStyleSheet
-                      ? "Optional notes — style rules above drive the visual board."
-                      : "What this is"
-                  }
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className="studio-element-detail-card">
-            <div className="studio-element-detail-card-head">
-              <div>
-                <p className="studio-admin-card-kicker">{isStyleSheet ? "Reference media" : "Image or video"}</p>
-                <p className="studio-element-detail-hint">
-                  {isStyleSheet
-                    ? "Images, clips, or audio that define this look."
-                    : "One file. Swap replaces it. Sent with @tag on generate."}
-                </p>
-              </div>
-              <button className={STYLE.iconButton} type="button" disabled={uploading} onClick={() => inputRef.current?.click()}>
-                <Upload className="h-3.5 w-3.5" />
-                {uploading ? "Uploading..." : isStyleSheet ? "Upload media" : sourceAssets.length ? "Swap file" : "Choose file"}
-              </button>
-              <input
-                ref={inputRef}
-                className="hidden"
-                type="file"
-                accept={isStyleSheet ? undefined : "image/*,video/*"}
-                multiple={isStyleSheet}
-                onChange={(event) => {
-                  void upload(event.currentTarget.files);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </div>
-            {sourceAssets.length ? (
-              <div className="studio-element-detail-media-grid">
-                {(isStyleSheet ? sourceAssets : sourceAssets.slice(0, 1)).map((asset) => {
-                  const previewUrl = asset.thumbnailUrl ?? asset.mediaUrl;
-                  const openable = elementAssetOpenable(asset);
-                  const tileBody = (
-                    <>
-                      {previewUrl ? (
-                        <span
-                          className="studio-element-detail-media-thumb"
-                          style={{ backgroundImage: `url(${previewUrl})` }}
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <span className="studio-element-detail-media-thumb is-empty">
-                          <Upload className="h-4 w-4 text-cursor-muted" aria-hidden="true" />
-                        </span>
-                      )}
-                      <span className="studio-element-detail-media-copy">
-                        <span className="studio-element-detail-media-name">{asset.name}</span>
-                        <span className="studio-element-detail-media-kind">{asset.kindLabel ?? asset.kind}</span>
-                      </span>
-                    </>
-                  );
-                  return (
-                    <div key={asset.studioId} className="studio-element-detail-media-item">
-                      {openable ? (
-                        <button
-                          type="button"
-                          className="studio-element-detail-media-item-open"
-                          title={`Open ${asset.name} in a new tab`}
-                          onClick={() => openAssetEntry(asset)}
-                        >
-                          {tileBody}
-                        </button>
-                      ) : (
-                        <div className="studio-element-detail-media-item-open is-static">{tileBody}</div>
-                      )}
-                      <button
-                        type="button"
-                        className="studio-element-detail-media-remove"
-                        onClick={() => {
-                          const next = sourceAssets.filter((item) => item.studioId !== asset.studioId);
-                          setSourceAssets(next);
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+    <div className="studio-element-detail">
+      <div className="studio-element-detail-form">
+        <input
+          className="studio-element-detail-title"
+          value={name}
+          onChange={(event) => {
+            const next = isStyleSheet ? event.target.value : slugElementTitleInput(event.target.value);
+            setName(next);
+            nameRef.current = next;
+            queueSave();
+          }}
+          onBlur={() => {
+            window.clearTimeout(saveTimerRef.current);
+            if (!restoreTitleIfEmpty()) void persist();
+          }}
+          placeholder="Title"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          aria-label="Title"
+        />
+        <textarea
+          className="studio-element-detail-notes"
+          value={description}
+          onChange={(event) => {
+            const next = event.target.value;
+            setDescription(next);
+            descriptionRef.current = next;
+            queueSave();
+          }}
+          onBlur={() => {
+            window.clearTimeout(saveTimerRef.current);
+            void persist();
+          }}
+          placeholder="Description"
+          aria-label="Description"
+        />
+        <div
+          className="studio-element-detail-file"
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            if (!uploading) inputRef.current?.click();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              if (!uploading) inputRef.current?.click();
+            }
+          }}
+        >
+          {media ? (
+            isVideo ? (
+              <video src={media.mediaUrl} poster={isVideoFileUrl(previewUrl) ? undefined : previewUrl} muted playsInline />
+            ) : previewUrl ? (
+              <img src={previewUrl} alt="" />
             ) : (
-              <button
-                type="button"
-                className="studio-element-detail-media-stage is-clickable"
-                onClick={() => inputRef.current?.click()}
-              >
-                <span className="studio-element-detail-empty">
-                  {isStyleSheet ? "No media yet." : "Click to add an image or video."}
-                </span>
-              </button>
-            )}
-          </section>
+              <span>{uploading ? "Uploading…" : "Image or video"}</span>
+            )
+          ) : (
+            <span>{uploading ? "Uploading…" : "Image or video"}</span>
+          )}
+          {media ? (
+            <button
+              type="button"
+              className="studio-element-detail-file-clear"
+              aria-label="Remove"
+              onClick={(event) => {
+                event.stopPropagation();
+                void removeMedia(media.studioId);
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
         </div>
-
-        <footer className="studio-element-detail-footer">
-          <p>{message}</p>
-          <div className="studio-element-detail-actions">
-            {isStyleSheet ? (
-              <button className={STYLE.iconButton} onClick={() => onRename(entry)}>Rename quick</button>
-            ) : null}
-            <button className={STYLE.iconButton} onClick={() => onTrash(entry)}>Remove</button>
-          </div>
-        </footer>
+        <input
+          ref={inputRef}
+          className="hidden"
+          type="file"
+          accept={isStyleSheet ? undefined : "image/*,video/*"}
+          multiple={isStyleSheet}
+          onChange={(event) => {
+            void upload(event.currentTarget.files);
+            event.currentTarget.value = "";
+          }}
+        />
+        {error ? <p className="studio-element-detail-error">{error}</p> : null}
       </div>
     </div>
   );
