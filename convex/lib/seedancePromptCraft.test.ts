@@ -30,7 +30,8 @@ describe("seedancePromptCraft", () => {
       "Natural diegetic kitchen ambience. Subtitle-free, no logo, no morphing.",
     ].join(" ");
     const result = assessFinalPromptForReview({ mode: "video", finalPrompt: prompt });
-    expect(result).toMatchObject({ ok: true });
+    expect(result.ok).toBe(true);
+    expect(result.warnings?.join(" ")).toMatch(/SCENE CONTEXT|failure locks/i);
   });
 
   it("rejects I2V prompts that redescribe the start frame at length", () => {
@@ -58,7 +59,8 @@ describe("seedancePromptCraft", () => {
   it("exposes I2V-aware craft guidance", () => {
     const withFrame = seedancePromptCraftGuidance({ hasStartFrame: true });
     expect(withFrame).toMatch(/do NOT redescribe/i);
-    expect(withFrame).toMatch(/60–100 words/);
+    expect(withFrame).toMatch(/SCENE CONTEXT/);
+    expect(withFrame).not.toMatch(/60–100 words/);
     const t2v = seedancePromptCraftGuidance({ hasStartFrame: false });
     expect(t2v).toMatch(/No start frame/i);
   });

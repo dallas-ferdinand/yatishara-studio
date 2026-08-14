@@ -47,11 +47,11 @@ export function seedancePromptCraftGuidance(args?: {
     i2v && hyper
       ? "Start frame + Hypermotion: use the frame as the opening visual anchor; do NOT redescribe its appearance. Preserve product identity and existing text pixels, then write the duration plan's full timed multi-beat edit with motion, camera, transitions, and audio. A start frame does not force a single continuous shot."
       : i2v
-        ? "Start frame + Standard: do NOT redescribe appearance, wardrobe, or set dressing already in the image. Prompt the visible motion, one restrained camera move, audio, and constraints; a single continuous moment is usually strongest. Keep roughly 60–100 words."
-      : "No start frame: lock subject with 2–3 stable traits, then scene/light, then timed action + camera.",
+        ? "Start frame + Standard: do NOT redescribe appearance, wardrobe, or set dressing already in the image. Keep full production density: SCENE CONTEXT, first-frame occupancy, camera start→end, acting/voice if people speak, ⛔ failure locks and ✅ must-succeed locks. Length is not the enemy — swap-thinning is."
+        : "No start frame: lock subject with 2–3 stable traits, then SCENE CONTEXT, first-frame occupancy, timed action + camera, ⛔ and ✅ locks.",
     "Structure multi-beat clips as Shot 1 / Shot 2 / … sized to the duration plan. One primary action and one camera move per shot — do not stack push+pan+orbit in the same beat.",
     "For every timed Hypermotion beat specify: start–end time, subject action, one camera move, speed behavior, transition out, visual match anchor when relevant, and the music/SFX or voiceover cue it supports.",
-    "Prefer slow, continuous, body-specific motion (slowly raises a hand, gentle turn) over abstract mood words. Emotions → visible physical cues.",
+    "Prefer slow, continuous, body-specific motion (slowly raises a hand, gentle turn) over abstract mood words. Emotions → visible physical cues (jaw, breath, hands) plus an unspoken inner line — never 'sad/angry' as the acting instruction.",
     hyper
       ? [
           "Hypermotion edit grammar: choose a coherent rhythm from these techniques instead of stacking all of them.",
@@ -64,8 +64,8 @@ export function seedancePromptCraftGuidance(args?: {
           "Hook hard in the first second, vary velocity so the whole clip is not uniformly frantic, synchronize cut impacts to music/SFX and voiceover emphasis, then decelerate into a stable 1.5–2s hero/CTA lock.",
         ].join(" ")
       : "Standard register: let moments breathe; sparse beats over montage life-stories.",
-    "End with style/quality and constraints (subtitle-free, no logo/watermark, no morphing) when useful. Put duration/aspect/resolution in settings, not as the whole prompt.",
-    "Map attached references by number/role in the prompt text.",
+    "End with style/quality and ⛔/✅ locks (subtitle-free, no logo/watermark, no morphing) when useful. Put duration/aspect/resolution in settings, not as the whole prompt.",
+    "Map attached references by @Label once in ACTIVE REFERENCES (location = materials only, never framing). Voice strings paste verbatim — never synonym. After spoken lines: ~1s closed-mouth silence.",
   ].join(" ");
 }
 
@@ -147,18 +147,21 @@ export function assessFinalPromptForReview(args: {
         ok: false,
         error: "final_prompt_redescribes_start_frame",
         hint:
-          "Start frame already holds look. Drop appearance/wardrobe prose; keep motion, camera, audio, and constraints (~60–100 words).",
+          "Start frame already holds look. Drop appearance/wardrobe prose; keep motion, camera, audio, acting, and ⛔/✅ locks.",
       };
     }
-    if (words > 130) {
+  }
+
+  const hyper = args.videoType === "hypermotion_ad";
+  if (!hyper) {
+    if (!/SCENE CONTEXT/i.test(prompt)) {
       warnings.push(
-        "I2V prompts work best around 60–100 words; longer text often dilutes camera/action obedience.",
+        "Cinematic prompts need a SCENE CONTEXT block plus first-frame occupancy — not a vibe paragraph.",
       );
     }
-  } else if (words > 220) {
-    warnings.push(
-      "Very long prompts can dilute obedience — prefer a tight shot list over essay prose.",
-    );
+    if (!/[⛔✅]/.test(prompt) && !/MUST-SUCCEED|FAILURE LOCK/i.test(prompt)) {
+      warnings.push("Add ⛔ failure locks and ✅ must-succeed locks on the shot edges.");
+    }
   }
 
   if (args.videoType === "hypermotion_ad" && !/\b(?:hook|macro|product|cut|whip|orbit|lock)\b/i.test(prompt)) {

@@ -244,9 +244,11 @@ test("verify hints + auto-verify wiring", () => {
 });
 
 test("skills pack surface", () => {
-  assert.equal(listSkills().length, 11);
+  assert.equal(listSkills().length, 12);
   assert.ok(getSkill("post-feed"));
   assert.ok(getSkill("prompt-cinematic"));
+  assert.ok(getSkill("prompt-cinematic")?.body?.includes("SCENE CONTEXT"));
+  assert.ok(getSkill("prompt-cinematic")?.body?.includes("⛔"));
   assert.ok(getSkill("prompt-hypermotion")?.body?.includes("seedance"));
   assert.ok(!/higgs|cinedance|hell\s*grind/i.test(getSkill("prompt-cinematic")?.body || ""));
   assert.ok(matchSkills("image").some((s) => s.id === "generate-image"));

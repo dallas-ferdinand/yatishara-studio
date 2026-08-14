@@ -174,7 +174,7 @@ export function scriptTypeSystemPrompt(slug: ComposerScriptTypeSlug): string {
         "Write a production-ready video prompt pack in Markdown.",
         "Use timed beats when duration is known. One primary camera move per beat.",
         "Observable action, environment, cel-motivated light, SFX — no emotion labels.",
-        `End with exactly "${GEN_PROMPT_HEADING}" — distilled motion prompt (60–100 words when start-frame workflow applies).`,
+        `End with exactly "${GEN_PROMPT_HEADING}" — full sealed motion prompt (SCENE CONTEXT, camera start→end, acting/voice if people, ⛔/✅ locks). Do not thin to a 60–100 word stub.`,
       ].join(" ");
     case "scene_split":
       return [

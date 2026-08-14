@@ -16,8 +16,11 @@ Hypermotion = **severe spatial kinetic** with a readable story — not micro-str
 |---|---|---|
 | Energy | held, observational | whip / smash / FPV / hard track |
 | Cuts | few or continuous | hard / whip / smash unless fades asked |
-| Prompt length | medium, precise | longer, denser action + camera verbs |
+| Prompt length | full lock skeleton | longer, denser timed beats + camera verbs |
 | Beat | one lifestyle hold | 2–3s readable story beats |
+| Locks | ⛔ + ✅ required | ⛔ + ✅ required |
+
+## Model
 
 ## Model
 
@@ -34,6 +37,9 @@ Hypermotion = **severe spatial kinetic** with a readable story — not micro-str
 ## Multi-beat pattern (15s-style)
 
 ```text
+⛔ NEVER empty first frame. NEVER invent a celebrity face. NEVER a music bed unless asked.
+✅ Trigger before reaction. ✅ Product identity continuous. ✅ End lock readable.
+
 Shot 1 (~2–3s): [size] on [subject]. Camera [whip/track/FPV] from [A] to [B]. Action [trigger]. Audio <sfx>.
 Shot 2 (~2–3s): Reaction — [who] responds. Camera [smash into / track with] [target]. Audio <sfx>.
 Shot 3 (~2–3s): Product/logo readable in motion, not a static sticker. Camera settles or smash-ends.
