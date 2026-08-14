@@ -290,6 +290,7 @@ async function runPiTurn(body, abortSignal) {
       seedBoard,
       cwdFolderId: currentFolderId || cwdFolderId || null,
       cwdIndex,
+      abortSignal,
       getBearerToken: async () => capabilityToken,
       onPlanChange: (snap) => {
         if (!callbackBase) return;

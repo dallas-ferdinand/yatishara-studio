@@ -13,6 +13,7 @@ import { authorizeTool } from "../../packages/studio-tools/src/policy.js";
 import {
   invokeStudioTool,
   resolveStudioToolAlias,
+  normalizeAgentGenerationArgs,
 } from "../../packages/studio-tools/src/http.js";
 import {
   STARTER_TOOL_NAMES,
@@ -268,6 +269,15 @@ export function createStudioPiTools(opts) {
     planStore.setOnChange(opts.onPlanChange);
   }
   const trajectory = opts.trajectory || createTrajectory();
+  const invokeOpts = () => ({
+    signal: opts.abortSignal,
+    // Leave headroom under STUDIO_AGENT_TURN_TIMEOUT_MS (default 10m).
+    pollTimeoutMs: opts.generationPollTimeoutMs ?? 480_000,
+  });
+
+  function prepareInvokeArgs(toolName, args) {
+    return normalizeAgentGenerationArgs(toolName, args || {});
+  }
 
   function attachTodo(payload) {
     const todo = planStore.formatBlock();
@@ -496,7 +506,7 @@ export function createStudioPiTools(opts) {
       }
 
       // Prefetched CWD index: fix invented/stale ids before tool-start hits the UI.
-      let invokeArgs = validated.args;
+      let invokeArgs = prepareInvokeArgs(toolName, validated.args);
       let preRewroteId = null;
       if (DOC_TOOLS.has(toolName) || ASSET_TOOLS.has(toolName)) {
         const fixed = rewriteStaleIdsWithCwdIndex(
@@ -505,7 +515,7 @@ export function createStudioPiTools(opts) {
           opts.cwdIndex,
         );
         if (fixed.rewritten) {
-          invokeArgs = fixed.args;
+          invokeArgs = prepareInvokeArgs(toolName, fixed.args);
           preRewroteId = fixed.recoveredId || null;
         }
       }
@@ -602,6 +612,7 @@ export function createStudioPiTools(opts) {
             token,
             toolName,
             invokeArgs,
+            invokeOpts(),
           );
         }
         result = salvageGenerationResult(toolName, result);

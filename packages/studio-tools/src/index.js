@@ -18,7 +18,10 @@ export {
   buildStudioRequest,
   invokeStudioTool,
   normalizeStudioToolArgs,
+  normalizeAgentGenerationArgs,
   resolveStudioToolAlias,
+  shouldPollGeneration,
+  pollGenerationJob,
   STUDIO_TOOL_ALIASES,
 } from './http.js';
 export { createPiStudioTools } from './piAdapter.js';

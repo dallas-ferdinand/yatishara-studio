@@ -26,6 +26,9 @@ export const VERIFY_MAP = {
   studio_generate_video: {
     hint: (_args, result) => {
       const assetId = result?.data?.assetId || result?.assetId;
+      if (result?.data?.stillRendering) {
+        return "VERIFY: video still rendering in Files — do not claim finished; tell user to watch the folder.";
+      }
       return assetId
         ? `VERIFY: video assetId=${assetId}. Poll/status ok before claiming done.`
         : "VERIFY: confirm video generation status/assetId before claiming done.";

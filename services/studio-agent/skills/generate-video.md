@@ -25,8 +25,8 @@ Vague “make a video / animate this” → **assume defaults and run tools**. D
 1. Optional: `studio_list_video_models` only if you need real caps — never invent features (no “motion intensity”, no fake duration ranges).
 2. `studio_estimate_generation` with the assumed args + prompt.
 3. People without a locked still: `studio_generate_image` storyboard → then video with `startFrameAssetId`.
-4. `studio_generate_video` (approval card handles spend).
-5. One short line disclosing assumptions + estimate; stop on pendingApproval.
+4. `studio_generate_video` (approval card handles spend). Host queues with `wait:false` and polls — does not hold the chat turn open on a sync Seedance wait.
+5. One short line disclosing assumptions + estimate; stop on pendingApproval. If result says `stillRendering`, tell them it's finishing in Files — do not claim done.
 
 ## Forbidden
 

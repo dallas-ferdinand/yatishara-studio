@@ -465,7 +465,8 @@ export const sendTurn = action({
 
     const callbackBase = apiBase;
     const controller = new AbortController();
-    const timeoutMs = Number(process.env.STUDIO_AGENT_TURN_TIMEOUT_MS || 180000);
+    // Video/image gens now queue+poll; keep headroom for multi-step turns.
+    const timeoutMs = Number(process.env.STUDIO_AGENT_TURN_TIMEOUT_MS || 600000);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {

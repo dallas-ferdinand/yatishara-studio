@@ -14,6 +14,12 @@ const COLLECTION_TO_KIND = {
   elements: "element",
 };
 
+const GENERATION_MODE_BY_TOOL = {
+  studio_generate_image: "image",
+  studio_generate_video: "video",
+  studio_generate_audio: "audio",
+};
+
 /** Agent/MCP aliases that are not real catalog tools. */
 export const STUDIO_TOOL_ALIASES = {
   studio_delete_document: { tool: "studio_trash", kind: "document" },
@@ -23,14 +29,35 @@ export const STUDIO_TOOL_ALIASES = {
 };
 
 /**
+ * Agent generate tools must queue (wait:false) + set mode.
+ * Sync wait blocks the Pi turn past STUDIO_AGENT_TURN_TIMEOUT_MS while Seedance runs.
+ * @param {string} toolName
+ * @param {Record<string, unknown>} args
+ */
+export function normalizeAgentGenerationArgs(toolName, args = {}) {
+  const name = String(toolName || "");
+  const input =
+    args && typeof args === "object" && !Array.isArray(args) ? { ...args } : {};
+  const mode = GENERATION_MODE_BY_TOOL[name];
+  if (!mode && name !== "studio_generate_batch") return input;
+  if (mode) {
+    input.mode = mode;
+    input.wait = false;
+  }
+  if (name === "studio_generate_batch") {
+    input.wait = false;
+  }
+  return input;
+}
+
+/**
  * Map kind↔collection and id aliases so Agent can pass {kind,id}
  * while the HTTP catalog uses /{collection}/{id}.
  * @param {string} toolName
  * @param {Record<string, unknown>} args
  */
 export function normalizeStudioToolArgs(toolName, args = {}) {
-  const input =
-    args && typeof args === "object" && !Array.isArray(args) ? { ...args } : {};
+  const input = normalizeAgentGenerationArgs(toolName, args);
   const name = String(toolName || "");
 
   if (name === "studio_trash" || name === "studio_restore") {
@@ -169,13 +196,124 @@ export function buildStudioRequest(toolName, args = {}) {
   };
 }
 
+const GENERATION_TERMINAL = new Set(["done", "failed"]);
+
+/**
+ * @param {unknown} data
+ */
+function generationJobId(data) {
+  if (!data || typeof data !== "object") return "";
+  const row = /** @type {Record<string, unknown>} */ (data);
+  const id = row.id || row.jobId || row._id;
+  return typeof id === "string" && id.trim() ? id.trim() : "";
+}
+
+/**
+ * @param {string} toolName
+ * @param {unknown} data
+ * @param {number} [httpStatus]
+ */
+export function shouldPollGeneration(toolName, data, httpStatus) {
+  if (!/^studio_generate_(image|video|audio)$/.test(String(toolName || ""))) {
+    return false;
+  }
+  if (!generationJobId(data)) return false;
+  if (httpStatus === 202) return true;
+  const status = String(
+    data && typeof data === "object"
+      ? /** @type {Record<string, unknown>} */ (data).status || ""
+      : "",
+  ).toLowerCase();
+  return status === "queued" || status === "running" || status === "pending";
+}
+
+/**
+ * Poll GET /generations/:id until terminal or timeout.
+ * @param {string} apiBase
+ * @param {string} bearerToken
+ * @param {string} jobId
+ * @param {{ intervalMs?: number, timeoutMs?: number, signal?: AbortSignal }} [options]
+ */
+export async function pollGenerationJob(
+  apiBase,
+  bearerToken,
+  jobId,
+  options = {},
+) {
+  const intervalMs = options.intervalMs ?? 3000;
+  const timeoutMs = options.timeoutMs ?? 540_000;
+  const started = Date.now();
+  let last = /** @type {Record<string, unknown> | null} */ (null);
+
+  while (Date.now() - started < timeoutMs) {
+    if (options.signal?.aborted) {
+      const err = new Error("Generation poll aborted");
+      err.name = "AbortError";
+      throw err;
+    }
+    const url = `${apiBase.replace(/\/$/, "")}/api/v1/generations/${encodeURIComponent(jobId)}`;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { authorization: `Bearer ${bearerToken}` },
+      signal: options.signal,
+    });
+    const text = await res.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { raw: text.slice(0, 2000) };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        error:
+          typeof data.error === "string" ? data.error : `HTTP ${res.status}`,
+        data,
+      };
+    }
+    last = data && typeof data === "object" ? data : { raw: data };
+    const status = String(last.status || "").toLowerCase();
+    if (GENERATION_TERMINAL.has(status)) {
+      if (status === "failed") {
+        return {
+          ok: false,
+          status: res.status,
+          error:
+            typeof last.error === "string" && last.error
+              ? last.error
+              : "Generation failed",
+          data: last,
+        };
+      }
+      return { ok: true, status: res.status, data: last };
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return {
+    ok: true,
+    status: 202,
+    data: {
+      ...(last || { id: jobId }),
+      id: generationJobId(last) || jobId,
+      status: String(last?.status || "queued"),
+      stillRendering: true,
+      message:
+        "Generation still rendering in Files — turn returned early so chat does not time out.",
+    },
+  };
+}
+
 /**
  * @param {string} apiBase e.g. https://host (no trailing slash) — calls `${apiBase}/api/v1${path}`
  * @param {string} bearerToken
  * @param {string} toolName
  * @param {Record<string, unknown>} args
+ * @param {{ awaitGeneration?: boolean, pollTimeoutMs?: number, pollIntervalMs?: number, signal?: AbortSignal }} [options]
  */
-export async function invokeStudioTool(apiBase, bearerToken, toolName, args = {}) {
+export async function invokeStudioTool(apiBase, bearerToken, toolName, args = {}, options = {}) {
   const req = buildStudioRequest(toolName, args);
   if (req.local) {
     return {
@@ -193,6 +331,7 @@ export async function invokeStudioTool(apiBase, bearerToken, toolName, args = {}
       'content-type': 'application/json',
     },
     body: req.method === 'GET' ? undefined : JSON.stringify(req.body ?? {}),
+    signal: options.signal,
   });
   const text = await res.text();
   let data;
@@ -209,5 +348,19 @@ export async function invokeStudioTool(apiBase, bearerToken, toolName, args = {}
       data,
     };
   }
-  return { ok: true, status: res.status, data };
+
+  const result = { ok: true, status: res.status, data };
+  if (
+    options.awaitGeneration === false ||
+    !shouldPollGeneration(req.toolName || toolName, data, res.status)
+  ) {
+    return result;
+  }
+
+  const jobId = generationJobId(data);
+  return pollGenerationJob(apiBase, bearerToken, jobId, {
+    intervalMs: options.pollIntervalMs,
+    timeoutMs: options.pollTimeoutMs ?? 540_000,
+    signal: options.signal,
+  });
 }

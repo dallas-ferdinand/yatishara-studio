@@ -8,9 +8,9 @@ export const INTENT_BLURBS = {
   studio_share_asset_post:
     "Post owned image/video to public profile. Args:{assetId,caption?}. For post/share/publish — invoke, don't advise.",
   studio_generate_image:
-    "Create image from prompt into a folder. Args:{prompt,folderId?}. Default folderId=CWD. Paid+approval. Estimate first if cost matters. Quote cost as $ / TTD only.",
+    "Create image from prompt into a folder. Args:{prompt,folderId?}. Default folderId=CWD. Queues wait:false then polls. Paid+approval. Estimate first if cost matters. Quote cost as $ / TTD only.",
   studio_generate_video:
-    "Create video (paid+approval). Default folderId=CWD. People scenes: storyboard still via studio_generate_image first, then video. Quote cost as $ / TTD only.",
+    "Create video (paid+approval). Queues wait:false then polls (does not block Pi turn on Seedance sync). Default folderId=CWD. People scenes: storyboard still via studio_generate_image first, then video. Quote cost as $ / TTD only.",
   studio_create_document:
     "Create a Script (.md) in a folder. Args:{folderId,title,contentMarkdown}. contentMarkdown REQUIRED and non-empty for prompts/scripts. Never remember script bodies. Include References: asset lines. Default folderId=CWD.",
   studio_patch_document:

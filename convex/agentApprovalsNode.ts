@@ -2,6 +2,7 @@
 
 /**
  * Exactly-once approval execution against Studio /api/v1.
+ * Generations queue with wait:false then poll so Pi chat turns are not held open.
  */
 import { randomBytes } from "crypto";
 import { v } from "convex/values";
@@ -19,6 +20,92 @@ function studioApiBase(): string {
   ).replace(/\/$/, "");
 }
 
+const GENERATION_MODE_BY_TOOL: Record<string, string> = {
+  studio_generate_image: "image",
+  studio_generate_video: "video",
+  studio_generate_audio: "audio",
+};
+
+function normalizeGenerationPayload(
+  toolName: string,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...payload };
+  const mode = GENERATION_MODE_BY_TOOL[toolName];
+  if (mode) {
+    next.mode = mode;
+    next.wait = false;
+  }
+  if (toolName === "studio_generate_batch") {
+    next.wait = false;
+  }
+  return next;
+}
+
+function generationJobId(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
+  const row = data as Record<string, unknown>;
+  const id = row.id || row.jobId || row._id;
+  return typeof id === "string" && id.trim() ? id.trim() : "";
+}
+
+async function pollGenerationJob(
+  apiBase: string,
+  bearerToken: string,
+  jobId: string,
+  timeoutMs = 540_000,
+): Promise<{ ok: boolean; data: unknown; error?: string }> {
+  const started = Date.now();
+  let last: Record<string, unknown> | null = null;
+  while (Date.now() - started < timeoutMs) {
+    const url = `${apiBase}/api/v1/generations/${encodeURIComponent(jobId)}`;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { authorization: `Bearer ${bearerToken}` },
+    });
+    const text = await res.text();
+    let data: Record<string, unknown> = {};
+    try {
+      data = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    } catch {
+      data = { raw: text.slice(0, 2000) };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error:
+          typeof data.error === "string" ? data.error : `HTTP ${res.status}`,
+        data,
+      };
+    }
+    last = data;
+    const status = String(data.status || "").toLowerCase();
+    if (status === "done") return { ok: true, data };
+    if (status === "failed") {
+      return {
+        ok: false,
+        error:
+          typeof data.error === "string" && data.error
+            ? data.error
+            : "Generation failed",
+        data,
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+  return {
+    ok: true,
+    data: {
+      ...(last || { id: jobId }),
+      id: generationJobId(last) || jobId,
+      status: String(last?.status || "queued"),
+      stillRendering: true,
+      message:
+        "Generation still rendering in Files — approval finished without blocking forever.",
+    },
+  };
+}
+
 export const execute = internalAction({
   args: { approvalId: v.id("agentApprovals") },
   returns: v.null(),
@@ -30,10 +117,11 @@ export const execute = internalAction({
 
     try {
       const toolName = claimed.toolName || claimed.action;
-      const payload = JSON.parse(claimed.payloadJson || "{}") as Record<
+      const rawPayload = JSON.parse(claimed.payloadJson || "{}") as Record<
         string,
         unknown
       >;
+      const payload = normalizeGenerationPayload(toolName, rawPayload);
 
       // Revalidate ownership / tool / args before execution
       const auth = authorizeTool(toolName, {
@@ -97,9 +185,36 @@ export const execute = internalAction({
         throw new Error(err);
       }
 
+      let finalData = data;
+      const jobId = generationJobId(data);
+      const status = String(
+        data && typeof data === "object"
+          ? (data as { status?: string }).status || ""
+          : "",
+      ).toLowerCase();
+      if (
+        jobId &&
+        /^studio_generate_(image|video|audio)$/.test(toolName) &&
+        (res.status === 202 ||
+          status === "queued" ||
+          status === "running" ||
+          status === "pending")
+      ) {
+        const polled = await pollGenerationJob(
+          apiBase,
+          capabilityToken,
+          jobId,
+          540_000,
+        );
+        if (!polled.ok) {
+          throw new Error(polled.error || "Generation failed");
+        }
+        finalData = polled.data;
+      }
+
       await ctx.runMutation(internal.agentApprovals.markCompleted, {
         approvalId: args.approvalId,
-        resultJson: JSON.stringify({ ok: true, data }),
+        resultJson: JSON.stringify({ ok: true, data: finalData }),
       });
     } catch (error) {
       await ctx.runMutation(internal.agentApprovals.markFailed, {
@@ -110,5 +225,3 @@ export const execute = internalAction({
     return null;
   },
 });
-
-

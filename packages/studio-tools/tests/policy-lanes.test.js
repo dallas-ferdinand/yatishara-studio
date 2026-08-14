@@ -67,6 +67,16 @@ test("http mapping for generation + trash", async () => {
   assert.equal(gen.local, false);
   assert.equal(gen.method, "POST");
   assert.match(String(gen.path), /generations/);
+  assert.equal(gen.body?.wait, false);
+  assert.equal(gen.body?.mode, "image");
+
+  const video = buildStudioRequest("studio_generate_video", {
+    folderId: "f1",
+    prompt: "test clip",
+  });
+  assert.equal(video.body?.wait, false);
+  assert.equal(video.body?.mode, "video");
+
   const tool = (await import("../src/catalog.js")).getTool("studio_trash");
   assert.ok(tool?.http?.pathTemplate);
   const trash = buildStudioRequest("studio_trash", {
