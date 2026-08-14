@@ -21327,57 +21327,51 @@ export function StudioShell({
           background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
         }
         .studio-element-detail-form {
-          width: min(100%, 26rem);
+          width: min(100%, 22rem);
           display: grid;
-          gap: 12px;
+          gap: 10px;
+          padding: 14px;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: 16px;
+          background: var(--mos-plate, var(--mos-panel, var(--color-cursor-panel)));
         }
-        .studio-element-detail-title,
-        .studio-element-detail-notes {
-          width: 100%;
-          margin: 0;
-          border: 0;
-          background: transparent;
-          outline: none;
-          font: inherit;
+        .studio-element-detail-title.cursor-input {
+          font-weight: 600;
+        }
+        .studio-element-detail-notes.cursor-input {
+          min-height: 88px;
           resize: none;
-        }
-        .studio-element-detail-title {
-          color: var(--color-cursor-text-bright);
-          font-size: 22px;
-          font-weight: 650;
-          letter-spacing: -0.02em;
-          line-height: 1.2;
-        }
-        .studio-element-detail-notes {
-          min-height: 4.5rem;
-          color: var(--color-cursor-text);
-          font-size: 14px;
-          line-height: 1.45;
-        }
-        .studio-element-detail-title::placeholder,
-        .studio-element-detail-notes::placeholder {
-          color: var(--color-cursor-muted);
-          opacity: 0.55;
-          font-weight: 500;
         }
         .studio-element-detail-file {
           position: relative;
           display: grid;
           place-items: center;
           width: 100%;
-          aspect-ratio: 4 / 5;
-          max-height: 260px;
+          height: 120px;
           padding: 0;
-          border: 1px dashed color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
-          border-radius: 14px;
           overflow: hidden;
-          background: transparent;
+          border: 1px dashed var(--color-cursor-border-soft);
+          border-radius: var(--studio-input-radius, var(--cursor-radius-xl, 12px));
+          background: var(--cursor-surface-input, color-mix(in srgb, var(--mos-surface) 72%, var(--mos-bg)));
           color: var(--color-cursor-muted);
           font-size: 13px;
+          font-weight: 500;
           cursor: pointer;
+          outline: none;
+          transition:
+            border-color var(--studio-motion-fast, 160ms) var(--studio-motion-ease, ease),
+            background var(--studio-motion-fast, 160ms) var(--studio-motion-ease, ease),
+            box-shadow var(--studio-motion-fast, 160ms) var(--studio-motion-ease, ease);
         }
         .studio-element-detail-file:hover {
           border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+        }
+        .studio-element-detail-file:focus-visible {
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-element-detail-file.has-media {
+          border-style: solid;
         }
         .studio-element-detail-file img,
         .studio-element-detail-file video {
@@ -21397,12 +21391,15 @@ export function StudioShell({
           padding: 0;
           border: 0;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--mos-page, #000) 78%, transparent);
+          background: color-mix(in srgb, var(--mos-panel, #000) 78%, transparent);
           color: var(--color-cursor-text-bright);
           cursor: pointer;
         }
+        .studio-element-detail-file-clear:hover {
+          background: color-mix(in srgb, var(--mos-panel, #000) 92%, transparent);
+        }
         .studio-element-detail-error {
-          min-height: 1.1em;
+          margin: 0;
           color: var(--color-cursor-muted);
           font-size: 12px;
         }
@@ -33181,7 +33178,7 @@ function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles
     <div className="studio-element-detail">
       <div className="studio-element-detail-form">
         <input
-          className="studio-element-detail-title"
+          className="cursor-input studio-element-detail-title"
           value={name}
           onChange={(event) => {
             const next = isStyleSheet ? event.target.value : slugElementTitleInput(event.target.value);
@@ -33200,7 +33197,7 @@ function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles
           aria-label="Title"
         />
         <textarea
-          className="studio-element-detail-notes"
+          className="cursor-input studio-element-detail-notes"
           value={description}
           onChange={(event) => {
             const next = event.target.value;
@@ -33216,7 +33213,7 @@ function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles
           aria-label="Description"
         />
         <div
-          className="studio-element-detail-file"
+          className={`studio-element-detail-file${media ? " has-media" : ""}`}
           role="button"
           tabIndex={0}
           onClick={() => {
