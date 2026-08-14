@@ -36,6 +36,139 @@ import {
 import { isMediaInspectTool } from "./agentToolTitles";
 import "./agent-steps.css";
 
+/** Follow a Create generation job until the asset lands in chat. */
+function AgentPendingGenerationCard({
+  pending,
+  onOpenAsset,
+}: {
+  pending: AgentPendingMedia;
+  onOpenAsset?: (assetId: Id<"assets">) => void;
+}) {
+  const jobId = pending.generationJobId;
+  const detail = useQuery(
+    api.generationLibrary.getGenerationDetail,
+    jobId
+      ? { jobId: jobId as Id<"generationJobs"> }
+      : "skip",
+  );
+
+  const ready =
+    detail &&
+    detail.stage === "done" &&
+    (detail.assetId || detail.playableUrl || detail.thumbnailUrl);
+
+  if (ready) {
+    const kind = detail.kind || pending.kind;
+    const fullUrl = detail.playableUrl || detail.thumbnailUrl;
+    const previewUrl = detail.thumbnailUrl || detail.playableUrl;
+    if (kind === "audio" && fullUrl) {
+      const audioTitle = detail.name || "Voiceover";
+      return (
+        <div className="studio-agent-media-card is-audio">
+          <StudioChatAudioPlayer
+            src={fullUrl}
+            title={audioTitle}
+            showTitle
+            orbSeed={orbSeedForVoice(String(detail.assetId || jobId), audioTitle)}
+          />
+          {detail.assetId && onOpenAsset ? (
+            <button
+              type="button"
+              className="studio-agent-media-open"
+              onClick={() => onOpenAsset(detail.assetId as Id<"assets">)}
+            >
+              Open
+            </button>
+          ) : null}
+        </div>
+      );
+    }
+    if (kind === "video" && (fullUrl || previewUrl)) {
+      return (
+        <div className="studio-agent-media-card is-video">
+          <video
+            className="studio-agent-media-frame"
+            src={fullUrl || previewUrl}
+            controls
+            playsInline
+            preload="metadata"
+          />
+          {detail.name ? (
+            <span className="studio-agent-media-caption">{detail.name}</span>
+          ) : null}
+          {detail.assetId && onOpenAsset ? (
+            <button
+              type="button"
+              className="studio-agent-media-open"
+              onClick={() => onOpenAsset(detail.assetId as Id<"assets">)}
+            >
+              Open
+            </button>
+          ) : null}
+        </div>
+      );
+    }
+    if (previewUrl || fullUrl) {
+      if (detail.assetId && onOpenAsset) {
+        return (
+          <button
+            type="button"
+            className="studio-agent-media-card is-image is-openable"
+            onClick={() => onOpenAsset(detail.assetId as Id<"assets">)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="studio-agent-media-frame"
+              src={previewUrl || fullUrl}
+              alt={detail.name || "Generated image"}
+            />
+            {detail.name ? (
+              <span className="studio-agent-media-caption">{detail.name}</span>
+            ) : null}
+          </button>
+        );
+      }
+      return (
+        <div className="studio-agent-media-card is-image">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="studio-agent-media-frame"
+            src={previewUrl || fullUrl}
+            alt={detail.name || "Generated image"}
+          />
+        </div>
+      );
+    }
+  }
+
+  return (
+    <div
+      className={`studio-agent-media-card is-pending is-${pending.kind}`}
+      style={
+        pending.kind === "audio"
+          ? undefined
+          : { ["--agent-gen-aspect" as string]: pending.aspectRatio }
+      }
+      role="status"
+      aria-label={
+        pending.kind === "video"
+          ? "Generating video"
+          : pending.kind === "audio"
+            ? "Generating audio"
+            : "Generating image"
+      }
+    >
+      {pending.kind === "audio" ? (
+        <StudioChatAudioPlayerLoading label="Generating voiceover" />
+      ) : (
+        <div className="studio-agent-media-pending-plate">
+          <LogoLoader size="md" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 type AgentTurnTimelineProps = {
   messages: AgentMessageRow[];
   toolCalls: AgentToolCallRow[];
@@ -300,40 +433,22 @@ function TurnBlock({
         const pendingItems = turn.steps
           .filter(
             (step) =>
-              (step.status === "started" || step.status === "pending_approval") &&
               step.pendingMedia &&
-              !(step.media && step.media.length),
+              !(step.media && step.media.length) &&
+              (step.status === "started" ||
+                step.status === "pending_approval" ||
+                Boolean(step.pendingMedia.generationJobId)),
           )
           .map((step) => step.pendingMedia!) as AgentPendingMedia[];
         if (!mediaItems.length && !pendingItems.length) return null;
         return (
           <div className="studio-agent-turn-media" aria-label="Generated media">
             {pendingItems.map((pending, index) => (
-              <div
-                key={`pending-${pending.kind}-${index}`}
-                className={`studio-agent-media-card is-pending is-${pending.kind}`}
-                style={
-                  pending.kind === "audio"
-                    ? undefined
-                    : { ["--agent-gen-aspect" as string]: pending.aspectRatio }
-                }
-                role="status"
-                aria-label={
-                  pending.kind === "video"
-                    ? "Generating video"
-                    : pending.kind === "audio"
-                      ? "Generating audio"
-                      : "Generating image"
-                }
-              >
-                {pending.kind === "audio" ? (
-                  <StudioChatAudioPlayerLoading label="Generating voiceover" />
-                ) : (
-                  <div className="studio-agent-media-pending-plate">
-                    <LogoLoader size="md" />
-                  </div>
-                )}
-              </div>
+              <AgentPendingGenerationCard
+                key={`pending-${pending.generationJobId || pending.kind}-${index}`}
+                pending={pending}
+                onOpenAsset={onOpenAsset}
+              />
             ))}
             {mediaItems.map((media, index) => {
               const resolved = media.assetId

@@ -200,11 +200,27 @@ export const execute = internalAction({
           status === "running" ||
           status === "pending")
       ) {
+        // Persist job id before long poll so chat can follow Create if this action dies.
+        await ctx.runMutation(internal.agentRuns.settleApprovalToolCall, {
+          runId: claimed.runId,
+          approvalId: args.approvalId,
+          status: "completed",
+          resultJson: JSON.stringify({
+            ok: true,
+            data: {
+              ...(data && typeof data === "object" ? data : {}),
+              id: jobId,
+              stillRendering: true,
+              message:
+                "Generation queued — rendering in Files. Chat will pick it up when ready.",
+            },
+          }),
+        });
         const polled = await pollGenerationJob(
           apiBase,
           capabilityToken,
           jobId,
-          540_000,
+          90_000,
         );
         if (!polled.ok) {
           throw new Error(polled.error || "Generation failed");
@@ -214,6 +230,12 @@ export const execute = internalAction({
 
       await ctx.runMutation(internal.agentApprovals.markCompleted, {
         approvalId: args.approvalId,
+        resultJson: JSON.stringify({ ok: true, data: finalData }),
+      });
+      await ctx.runMutation(internal.agentRuns.settleApprovalToolCall, {
+        runId: claimed.runId,
+        approvalId: args.approvalId,
+        status: "completed",
         resultJson: JSON.stringify({ ok: true, data: finalData }),
       });
     } catch (error) {

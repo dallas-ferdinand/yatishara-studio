@@ -68,6 +68,9 @@ export type StepOutcome = {
 
 export type AgentMediaPreview = {
   assetId?: string;
+  /** When gen is still rendering, follow this Create job until asset lands. */
+  generationJobId?: string;
+  stillRendering?: boolean;
   kind: "image" | "video" | "audio" | string;
   name?: string;
   url?: string;
@@ -81,6 +84,8 @@ export type AgentPendingMedia = {
   aspectRatio: string;
   /** Original arg e.g. "16:9" */
   aspectLabel?: string;
+  /** Create-tab generationJobs id — subscribe until stage=done. */
+  generationJobId?: string;
 };
 
 export type DisplayStep = {
@@ -334,12 +339,19 @@ export function extractGeneratedMedia(
       ? (root.data as Record<string, unknown>)
       : root;
 
+  const stillRendering = Boolean(payload.stillRendering);
+  const generationJobId =
+    (typeof payload.id === "string" && payload.id) ||
+    (typeof payload.jobId === "string" && payload.jobId) ||
+    (typeof payload._id === "string" && payload._id) ||
+    undefined;
+
   const out: AgentMediaPreview[] = [];
   const pushAsset = (raw: Record<string, unknown>) => {
     const assetId =
-      (typeof raw.id === "string" && raw.id) ||
-      (typeof raw._id === "string" && raw._id) ||
       (typeof raw.assetId === "string" && raw.assetId) ||
+      (typeof raw.id === "string" && raw.id && !stillRendering ? raw.id : undefined) ||
+      (typeof raw._id === "string" && raw._id && !stillRendering ? raw._id : undefined) ||
       undefined;
     const kindRaw = typeof raw.kind === "string" ? raw.kind : undefined;
     const kind =
@@ -352,9 +364,14 @@ export function extractGeneratedMedia(
     const url = typeof raw.url === "string" ? raw.url : undefined;
     const thumbnailUrl =
       typeof raw.thumbnailUrl === "string" ? raw.thumbnailUrl : undefined;
-    if (!assetId && !url && !thumbnailUrl) return;
+    if (!assetId && !url && !thumbnailUrl && !generationJobId) return;
+    // stillRendering payloads use id=jobId — don't treat job id as assetId.
+    if (stillRendering && !assetId && !url && !thumbnailUrl) return;
     out.push({
       assetId,
+      generationJobId:
+        stillRendering && generationJobId ? generationJobId : undefined,
+      stillRendering: stillRendering || undefined,
       kind,
       name: typeof raw.name === "string" ? raw.name : undefined,
       url,
@@ -377,11 +394,14 @@ export function extractGeneratedMedia(
   if (!out.length) {
     const assetId =
       (typeof payload.assetId === "string" && payload.assetId) ||
-      (typeof payload.id === "string" && payload.id) ||
-      (typeof payload._id === "string" && payload._id) ||
+      (!stillRendering && typeof payload.id === "string" && payload.id) ||
+      (!stillRendering && typeof payload._id === "string" && payload._id) ||
       undefined;
     if (assetId || payload.thumbnailUrl || payload.url) {
-      pushAsset(payload);
+      pushAsset({
+        ...payload,
+        ...(assetId ? { assetId } : {}),
+      });
     }
   }
   if (Array.isArray(payload.assetIds)) {
@@ -398,6 +418,20 @@ export function extractGeneratedMedia(
       });
     }
   }
+
+  // Queued / mid-render: no asset yet — return a followable stub for the UI.
+  if (!out.length && stillRendering && generationJobId) {
+    out.push({
+      generationJobId,
+      stillRendering: true,
+      kind: toolName.includes("video")
+        ? "video"
+        : toolName.includes("audio")
+          ? "audio"
+          : "image",
+    });
+  }
+
   return out.slice(0, 8);
 }
 
@@ -506,10 +540,64 @@ function toolCallToStep(
       }
     }
   }
-  const pendingMedia =
+  const pendingFromArgs =
     effectiveStatus === "started" || effectiveStatus === "pending_approval"
       ? extractPendingGenerateMedia(toolName, row.argsJson)
       : undefined;
+
+  // Queued gen already recorded (stillRendering + jobId) — keep the pending plate
+  // until Create finishes, even if the tool call is marked completed / run failed.
+  const renderingMedia = (media || []).find((m) => m.stillRendering && m.generationJobId);
+  const jobIdFromResult =
+    renderingMedia?.generationJobId ||
+    (() => {
+      if (row.status !== "completed" && row.status !== "failed") return undefined;
+      const parsed = parseJsonSafe(row.resultJson);
+      if (!parsed || typeof parsed !== "object") return undefined;
+      const root = parsed as Record<string, unknown>;
+      const payload =
+        root.data && typeof root.data === "object"
+          ? (root.data as Record<string, unknown>)
+          : root;
+      if (!payload.stillRendering) return undefined;
+      return (
+        (typeof payload.id === "string" && payload.id) ||
+        (typeof payload.jobId === "string" && payload.jobId) ||
+        undefined
+      );
+    })();
+
+  const pendingMedia: AgentPendingMedia | undefined = pendingFromArgs
+    ? {
+        ...pendingFromArgs,
+        generationJobId: pendingFromArgs.generationJobId || jobIdFromResult,
+      }
+    : renderingMedia
+      ? {
+          kind:
+            renderingMedia.kind === "audio" || renderingMedia.kind === "video"
+              ? renderingMedia.kind
+              : "image",
+          aspectRatio: "16 / 9",
+          aspectLabel: "16:9",
+          generationJobId: renderingMedia.generationJobId,
+        }
+      : jobIdFromResult
+        ? {
+            kind: /video/i.test(toolName)
+              ? "video"
+              : /audio/i.test(toolName)
+                ? "audio"
+                : "image",
+            aspectRatio: "16 / 9",
+            aspectLabel: "16:9",
+            generationJobId: jobIdFromResult,
+          }
+        : undefined;
+
+  const readyMedia = (media || []).filter(
+    (m) => !m.stillRendering && (m.assetId || m.url || m.thumbnailUrl),
+  );
 
   return {
     id: String(row._id),
@@ -525,7 +613,7 @@ function toolCallToStep(
     resultJson: row.resultJson,
     error: salvaged ? undefined : row.error,
     outcome,
-    media: media.length ? media : undefined,
+    media: readyMedia.length ? readyMedia : undefined,
     pendingMedia,
   };
 }

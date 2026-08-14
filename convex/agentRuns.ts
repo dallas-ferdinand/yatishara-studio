@@ -498,11 +498,12 @@ export const recordToolResult = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get("agentToolCalls", args.toolCallId);
     if (!row) return null;
+    // Allow a second write: queued (stillRendering) → final asset when poll finishes.
     await ctx.db.patch(row._id, {
       status: args.ok ? "completed" : "failed",
       resultJson: args.resultJson?.slice(0, 50000),
-      error: args.error?.slice(0, 1000),
-      finishedAt: Date.now(),
+      error: args.ok ? undefined : args.error?.slice(0, 1000),
+      finishedAt: row.finishedAt ?? Date.now(),
     });
     return null;
   },

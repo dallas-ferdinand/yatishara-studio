@@ -615,7 +615,27 @@ export function createStudioPiTools(opts) {
             token,
             toolName,
             invokeArgs,
-            invokeOpts(),
+            {
+              ...invokeOpts(),
+              // Write stillRendering + jobId to chat before the long poll so a
+              // dead Convex↔Pi fetch still leaves a followable generation.
+              onGenerationQueued: async ({ jobId, data }) => {
+                if (!trackId) return;
+                await opts.onAfterInvoke?.({
+                  toolCallId: trackId,
+                  toolName,
+                  ok: true,
+                  result: {
+                    ok: true,
+                    data: {
+                      ...data,
+                      id: jobId,
+                      stillRendering: true,
+                    },
+                  },
+                });
+              },
+            },
           );
         }
         result = salvageGenerationResult(toolName, result);

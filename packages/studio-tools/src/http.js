@@ -311,7 +311,7 @@ export async function pollGenerationJob(
  * @param {string} bearerToken
  * @param {string} toolName
  * @param {Record<string, unknown>} args
- * @param {{ awaitGeneration?: boolean, pollTimeoutMs?: number, pollIntervalMs?: number, signal?: AbortSignal }} [options]
+ * @param {{ awaitGeneration?: boolean, pollTimeoutMs?: number, pollIntervalMs?: number, signal?: AbortSignal, onGenerationQueued?: (info: { toolName: string, jobId: string, data: Record<string, unknown> }) => Promise<void>|void }} [options]
  */
 export async function invokeStudioTool(apiBase, bearerToken, toolName, args = {}, options = {}) {
   const req = buildStudioRequest(toolName, args);
@@ -358,6 +358,30 @@ export async function invokeStudioTool(apiBase, bearerToken, toolName, args = {}
   }
 
   const jobId = generationJobId(data);
+  // Persist job id in chat BEFORE polling — if the Pi turn dies mid-render
+  // (fetch failed / timeout), the UI can still follow Create → show the video.
+  if (jobId && typeof options.onGenerationQueued === "function") {
+    try {
+      await options.onGenerationQueued({
+        toolName: req.toolName || toolName,
+        jobId,
+        data: {
+          ...(data && typeof data === "object" ? data : {}),
+          id: jobId,
+          status: String(
+            data && typeof data === "object"
+              ? /** @type {Record<string, unknown>} */ (data).status || "queued"
+              : "queued",
+          ),
+          stillRendering: true,
+          message:
+            "Generation queued — rendering in Files. Chat will pick it up when ready.",
+        },
+      });
+    } catch {
+      // best-effort chat progress
+    }
+  }
   return pollGenerationJob(apiBase, bearerToken, jobId, {
     intervalMs: options.pollIntervalMs,
     timeoutMs: options.pollTimeoutMs ?? 540_000,

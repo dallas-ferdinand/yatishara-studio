@@ -28,7 +28,8 @@ const chargeTextGenerationRef = makeFunctionReference<
 >("generation:chargeTextGeneration");
 
 const CAP_PREFIX = "ysa_cap_";
-const CAP_TTL_MS = 15 * 60 * 1000;
+/** Long creative turns (multi-gen + poll) need headroom past 15m. */
+const CAP_TTL_MS = 45 * 60 * 1000;
 
 function mintCapabilityToken(): string {
   return `${CAP_PREFIX}${randomBytes(24).toString("hex")}`;
