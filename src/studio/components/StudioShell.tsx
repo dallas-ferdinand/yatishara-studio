@@ -12144,6 +12144,7 @@ export function StudioShell({
           .studio-preset-trigger,
           .studio-preset-grid-card,
           .studio-composer.cursor-composer-shell > .cursor-attach-preview-dock,
+          .studio-composer-mention-menu,
           .studio-composer .studio-pill-btn,
           .studio-composer .cursor-attach-tile-open,
           .studio-chat-chip,
@@ -17822,18 +17823,23 @@ export function StudioShell({
           height: 10px;
         }
         .studio-composer-mention-menu {
-          position: absolute;
-          left: 8px;
-          right: 8px;
-          bottom: 100%;
-          z-index: 8;
-          margin-bottom: 6px;
-          max-height: 220px;
+          position: fixed;
+          left: 12px;
+          right: 12px;
+          bottom: 7rem;
+          z-index: 86;
+          max-height: min(240px, 42vh);
           overflow: auto;
-          border: 1px solid var(--color-cursor-border-soft);
-          border-radius: 12px;
-          background: var(--color-cursor-panel);
-          box-shadow: 0 12px 32px color-mix(in srgb, #000 28%, transparent);
+          border: 1px solid var(--studio-composer-glass-border, var(--color-cursor-border-soft));
+          border-radius: 14px;
+          background: var(--studio-composer-glass, var(--color-cursor-panel));
+          box-shadow: var(--studio-composer-glass-shadow, 0 12px 32px color-mix(in srgb, #000 28%, transparent));
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          transform: none;
+          filter: none;
+          isolation: auto;
+          /* Overlay coords from overlayPanelBox override left/right/bottom. */
         }
         .studio-composer-mention-item {
           display: flex;
@@ -28295,6 +28301,55 @@ function StudioComposer({
             })}
           </div>
         ) : null}
+        {mentionQuery ? (
+          <div
+            className="studio-composer-mention-menu"
+            role="listbox"
+            aria-label="Attach"
+            style={
+              overlayPanelBox
+                ? {
+                    left: overlayPanelBox.left,
+                    width: overlayPanelBox.width,
+                    bottom: overlayPanelBox.bottom,
+                  }
+                : undefined
+            }
+          >
+            {mentionHits.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="studio-composer-mention-item"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  pickMentionItem(item);
+                }}
+              >
+                {item.thumbnailUrl ? (
+                  <img src={item.thumbnailUrl} alt="" />
+                ) : (
+                  <span className="studio-composer-mention-item-icon">@</span>
+                )}
+                <span>@{item.tag}</span>
+                <em>{item.kind === "element" ? "element" : "file"}</em>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="studio-composer-mention-item is-create"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                openCreateElementDialog(mentionQuery.query);
+              }}
+            >
+              <Plus aria-hidden="true" />
+              <span>
+                Create element{mentionQuery.query ? ` @${composerElementTag(mentionQuery.query)}` : ""}
+              </span>
+            </button>
+          </div>
+        ) : null}
         <div className="studio-composer-row">
           <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`} data-drop-target="composer">
       <div
@@ -28548,42 +28603,6 @@ function StudioComposer({
             pruneComposerAttachmentsFromDom(editor, setAttachments);
           }}
         />
-        {mentionQuery ? (
-          <div className="studio-composer-mention-menu" role="listbox" aria-label="Attach">
-            {mentionHits.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="studio-composer-mention-item"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  pickMentionItem(item);
-                }}
-              >
-                {item.thumbnailUrl ? (
-                  <img src={item.thumbnailUrl} alt="" />
-                ) : (
-                  <span className="studio-composer-mention-item-icon">@</span>
-                )}
-                <span>@{item.tag}</span>
-                <em>{item.kind === "element" ? "element" : "file"}</em>
-              </button>
-            ))}
-            <button
-              type="button"
-              className="studio-composer-mention-item is-create"
-              onMouseDown={(event) => {
-                event.preventDefault();
-                openCreateElementDialog(mentionQuery.query);
-              }}
-            >
-              <Plus aria-hidden="true" />
-              <span>
-                Create element{mentionQuery.query ? ` @${composerElementTag(mentionQuery.query)}` : ""}
-              </span>
-            </button>
-          </div>
-        ) : null}
       </div>
       <div className="studio-composer-toolbar">
         <div className="studio-composer-toolbar-left">
