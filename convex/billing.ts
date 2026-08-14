@@ -431,7 +431,7 @@ export const findMyPaymentForWamReturn = authedQuery({
               payment.providerRequestId === identifier,
           );
     if (!row) return null;
-    const billing = row.academyCourseId
+    const billing: "plans" | "invoices" | "topup" | "academy" = row.academyCourseId
       ? "academy"
       : row.subscriptionPlanId
         ? "plans"
