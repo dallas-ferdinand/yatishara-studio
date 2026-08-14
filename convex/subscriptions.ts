@@ -601,3 +601,123 @@ export const internalForceCancelByEmail = internalMutation({
     };
   },
 });
+
+/** QA/ops: put a test user on a catalog plan with no Wam charge. */
+export const internalAssignPlanByEmail = internalMutation({
+  args: {
+    email: v.string(),
+    slug: v.optional(
+      v.union(v.literal("core"), v.literal("plus"), v.literal("pro")),
+    ),
+    interval: v.optional(v.union(v.literal("month"), v.literal("year"))),
+  },
+  returns: v.object({
+    userId: v.id("users"),
+    name: v.string(),
+    email: v.string(),
+    planName: v.string(),
+    slug: v.string(),
+    interval: v.union(v.literal("month"), v.literal("year")),
+    creditsGranted: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
+    if (!email.includes("@")) {
+      throw new Error("Invalid email");
+    }
+    const slug = args.slug ?? "pro";
+    const interval = args.interval ?? "month";
+    const user =
+      (await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", email))
+        .unique()) ??
+      (email === args.email.trim()
+        ? null
+        : await ctx.db
+            .query("users")
+            .withIndex("email", (q) => q.eq("email", args.email.trim()))
+            .unique());
+    if (!user) {
+      throw new Error(`No user found for ${email}`);
+    }
+    const plan = await ctx.db
+      .query("subscriptionPlans")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .unique();
+    if (!plan || !plan.enabled) {
+      throw new Error(`Plan ${slug} is not available`);
+    }
+    const now = Date.now();
+    const periodEnd = addCalendarMonths(now, 1);
+    const termEnd = interval === "year" ? addCalendarMonths(now, 12) : periodEnd;
+    const live = await liveSubscriptionForUser(ctx, user._id);
+    const patch = {
+      planId: plan._id,
+      status: "active" as const,
+      interval,
+      customerReference: String(user._id),
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd,
+      termEnd,
+      monthsGrantedThisTerm: 1,
+      lastGrantAt: now,
+      pastDueSince: undefined,
+      cancelAtPeriodEnd: false,
+      cancelScheduledAt: undefined,
+      wamSubscriptionId: undefined,
+      updatedAt: now,
+    };
+    const subscriptionId =
+      live?._id ??
+      (await ctx.db.insert("subscriptions", {
+        userId: user._id,
+        createdAt: now,
+        ...patch,
+      }));
+    if (live) {
+      await ctx.db.patch(live._id, patch);
+    }
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+    if (account) {
+      await ctx.db.patch(account._id, {
+        activeSubscriptionId: subscriptionId,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("billingAccounts", {
+        userId: user._id,
+        creditBalance: 0,
+        reservedCredits: 0,
+        activeSubscriptionId: subscriptionId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    const creditsGranted = plan.includedMonthlyCredits;
+    if (creditsGranted > 0) {
+      await grantCredits(ctx, {
+        userId: user._id,
+        amount: creditsGranted,
+        reason: `QA assign ${plan.name} ${interval}`,
+        kind: "subscription_grant",
+      });
+    }
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+      user.name ||
+      email;
+    return {
+      userId: user._id,
+      name,
+      email,
+      planName: plan.name,
+      slug: plan.slug,
+      interval,
+      creditsGranted,
+    };
+  },
+});
