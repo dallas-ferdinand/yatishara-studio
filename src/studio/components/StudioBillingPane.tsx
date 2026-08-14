@@ -161,6 +161,8 @@ function invoiceSummary(row: InvoiceRow) {
   if (provider && provider !== status) bits.push(provider);
   return bits.join(" · ");
 }
+
+function canPayInvoice(row: InvoiceRow) {
   if (!isRenewalUnpaidInvoice(row)) return false;
   return row.status === "pending" || row.status === "checkout_failed";
 }
