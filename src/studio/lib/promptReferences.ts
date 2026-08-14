@@ -37,6 +37,9 @@ export type PromptAttachmentDraft = {
   thumbnailUrl?: string;
   mediaUrl?: string;
   elementType?: string;
+  mediaKind?: string;
+  referenceAssetIds?: string[];
+  sheetAssetId?: string;
 };
 
 export type HydratedPrompt = {
@@ -70,6 +73,9 @@ type ElementLike = {
   description?: string;
   thumbnailUrl?: string;
   mediaUrl?: string;
+  sheetAssetId?: string;
+  referenceAssetIds?: string[];
+  sourceAssetIds?: string[];
 };
 
 const MEDIA_LINK_LINE =
@@ -368,21 +374,45 @@ function findElement(elements: ElementLike[], idOrTag: string): ElementLike | nu
 function elementToAttachmentDraft(
   element: ElementLike,
   label?: string,
+  assets: AssetLike[] = [],
 ): PromptAttachmentDraft | null {
   const id = String(element._id || element.studioId || "").trim();
   if (!id) return null;
   const tag = elementStemFromDisplayName(label || element.name || id);
+  const referenceAssetIds = element.referenceAssetIds ?? element.sourceAssetIds ?? [];
+  const linked =
+    referenceAssetIds
+      .map((assetId) => findAsset(assets, assetId))
+      .find(
+        (asset) =>
+          asset &&
+          (asset.kind === "image" || asset.kind === "video" || asset.kind === "audio"),
+      ) ??
+    (element.sheetAssetId ? findAsset(assets, element.sheetAssetId) : null);
+  const mediaKind =
+    linked?.kind === "image" || linked?.kind === "video" || linked?.kind === "audio"
+      ? linked.kind
+      : undefined;
   return {
     id: `element:${id}`,
     kind: "context",
+    mediaKind,
     label: tag,
     path: `/Studio/elements/${id}`,
     filename: tag,
     studioKind: "element",
     studioId: id,
     elementType: element.type,
-    thumbnailUrl: element.thumbnailUrl,
-    mediaUrl: element.mediaUrl,
+    referenceAssetIds: referenceAssetIds.length ? referenceAssetIds : undefined,
+    sheetAssetId: element.sheetAssetId,
+    thumbnailUrl:
+      element.thumbnailUrl ||
+      linked?.signedThumbnailUrl ||
+      linked?.thumbnailUrl ||
+      linked?.signedReadUrl ||
+      linked?.mediaUrl,
+    mediaUrl:
+      element.mediaUrl || linked?.signedReadUrl || linked?.mediaUrl,
   };
 }
 
@@ -400,6 +430,7 @@ export function referenceToAttachmentDraft(
         type: ref.elementType,
       },
       ref.label,
+      assets,
     );
   }
   const id = assetIdFromReference(ref);
@@ -473,7 +504,7 @@ export function hydrateComposerFromText(
   for (const tag of collectPromptAtTags(body)) {
     const element = findElement(elements, tag);
     if (element) {
-      push(elementToAttachmentDraft(element, tag));
+      push(elementToAttachmentDraft(element, tag, assets));
       continue;
     }
     const asset = (assets ?? []).find(

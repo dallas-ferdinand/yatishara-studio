@@ -58,8 +58,12 @@ type AttachmentLike = {
   width?: number;
   height?: number;
   elementType?: string;
+  sheetAssetId?: string;
+  referenceAssetIds?: string[];
+  sourceAssetIds?: string[];
   sheetAsset?: {
     studioId?: string;
+    kind?: string;
     mediaUrl?: string;
     thumbnailUrl?: string;
     mimeType?: string;
@@ -94,7 +98,7 @@ function elementMediaAsset(attachment: AttachmentLike) {
   if (attachment.sheetAsset) {
     return {
       studioId: attachment.sheetAsset.studioId,
-      kind: "image" as const,
+      kind: (asMediaKind(attachment.sheetAsset.kind) ?? "image") as SeedanceMediaKind,
       mediaUrl: attachment.sheetAsset.mediaUrl,
       thumbnailUrl: attachment.sheetAsset.thumbnailUrl,
       mimeType: attachment.sheetAsset.mimeType,
@@ -104,7 +108,48 @@ function elementMediaAsset(attachment: AttachmentLike) {
 }
 
 export function elementMediaAssetId(attachment: AttachmentLike): string | undefined {
-  return elementMediaAsset(attachment)?.studioId;
+  const fromLive = elementMediaAsset(attachment)?.studioId;
+  if (fromLive) return fromLive;
+  const ids = attachment.referenceAssetIds ?? attachment.sourceAssetIds ?? [];
+  if (ids.length) return ids[0];
+  return attachment.sheetAssetId ?? attachment.sheetAsset?.studioId;
+}
+
+/** Composer rail / chip thumb — elements use nested media when top-level URLs are empty. */
+export function attachmentChipPreviewUrl(
+  attachment: AttachmentLike | null | undefined,
+): string | undefined {
+  if (!attachment) return undefined;
+  const liveKind = attachmentLiveMediaKind(attachment) ?? asMediaKind(attachment.kind);
+  const media = elementMediaAsset(attachment);
+  const candidates = [
+    attachment.thumbnailUrl,
+    media?.thumbnailUrl,
+    attachment.sheetAsset?.thumbnailUrl,
+    liveKind === "image" || liveKind === "video" || attachment.studioKind === "element"
+      ? attachment.mediaUrl
+      : undefined,
+    liveKind === "image" || liveKind === "video" || attachment.studioKind === "element"
+      ? media?.mediaUrl
+      : undefined,
+    attachment.sheetAsset?.mediaUrl,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate;
+  }
+  return undefined;
+}
+
+/** True when the Create chip should render as an image-only media square. */
+export function attachmentShowsImageOnlyChip(
+  attachment: AttachmentLike | null | undefined,
+): boolean {
+  if (!attachment) return false;
+  if (!attachmentChipPreviewUrl(attachment)) return false;
+  const liveKind = attachmentLiveMediaKind(attachment) ?? asMediaKind(attachment.kind);
+  if (liveKind === "image" || liveKind === "video") return true;
+  // Elements often store kind:"context" — still show the media square when we have a thumb.
+  return attachment.studioKind === "element";
 }
 
 /**

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  attachmentChipPreviewUrl,
   attachmentComposerTag,
   attachmentLiveMediaKind,
+  attachmentShowsImageOnlyChip,
+  elementMediaAssetId,
   pickGenerationUrl,
   splitVideoGenerationInputs,
 } from "./generationMedia";
@@ -90,5 +93,33 @@ describe("generationMedia", () => {
         filename: "untitled.element",
       }),
     ).toBe("untitled");
+  });
+
+  it("pulls element chip thumbs from nested reference media", () => {
+    const element = {
+      studioKind: "element",
+      kind: "context",
+      referenceAssets: [
+        {
+          studioId: "a1",
+          kind: "image",
+          thumbnailUrl: "https://cdn.example.com/thumb.jpg?width=320&quality=60",
+          mediaUrl: "https://cdn.example.com/full.png",
+        },
+      ],
+    };
+    expect(attachmentChipPreviewUrl(element)).toContain("thumb.jpg");
+    expect(attachmentShowsImageOnlyChip(element)).toBe(true);
+    expect(elementMediaAssetId(element)).toBe("a1");
+  });
+
+  it("falls back to referenceAssetIds when nested assets were not hydrated", () => {
+    expect(
+      elementMediaAssetId({
+        studioKind: "element",
+        kind: "context",
+        referenceAssetIds: ["asset_abc"],
+      }),
+    ).toBe("asset_abc");
   });
 });

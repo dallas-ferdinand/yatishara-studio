@@ -231,8 +231,10 @@ import {
   parsePromptDocument,
 } from "@/studio/lib/promptReferences";
 import {
+  attachmentChipPreviewUrl,
   attachmentComposerTag,
   attachmentLiveMediaKind,
+  attachmentShowsImageOnlyChip,
   generationReferenceInputs,
   splitVideoGenerationInputs,
   tooSmallSeedanceImageMessage,
@@ -5121,9 +5123,13 @@ export function StudioShell({
           taken.add(el.name);
         }
         const stem = uniqueElementStem(taken);
+        const createType =
+          ["character", "prop", "location", "doc"].includes(elementType)
+            ? elementType
+            : "character";
         const id = await createElement({
           folderId: parentFolder._id,
-          type: "prop",
+          type: createType,
           name: stem,
         });
         const entry = elementToEntry(
@@ -6515,7 +6521,7 @@ export function StudioShell({
     return id;
   }
 
-  async function createLibraryElement({ name, description, file }) {
+  async function createLibraryElement({ name, description, file, elementType: typeOverride }) {
     const folderId =
       generationSaveFolderId(activeThreadId) ?? activeFolder?._id ?? null;
     if (!folderId) {
@@ -6527,6 +6533,12 @@ export function StudioShell({
     if (kind !== "image" && kind !== "video") {
       throw new Error("Elements need an image or video.");
     }
+    const createType =
+      ["character", "prop", "location", "doc"].includes(typeOverride)
+        ? typeOverride
+        : ["character", "prop", "location", "doc"].includes(elementType)
+          ? elementType
+          : "character";
     const assetId = await uploadStudioAsset({
       file,
       folderId,
@@ -6534,9 +6546,10 @@ export function StudioShell({
       reserveUpload,
       commitStagingUpload,
     });
+    const previewObjectUrl = URL.createObjectURL(file);
     const id = await createElement({
       folderId,
-      type: "prop",
+      type: createType,
       name: tag,
       description: String(description ?? "").trim() || undefined,
       referenceAssetIds: [assetId],
@@ -6547,13 +6560,15 @@ export function StudioShell({
       name: file.name,
       kind,
       mimeType: file.type,
-      thumbnailUrl: kind === "image" ? URL.createObjectURL(file) : undefined,
+      mediaUrl: previewObjectUrl,
+      thumbnailUrl: kind === "image" ? previewObjectUrl : undefined,
+      signedReadUrl: previewObjectUrl,
     };
     const entry = elementToEntry(
       {
         _id: id,
         name: tag,
-        type: "prop",
+        type: createType,
         description,
         referenceAssetIds: [assetId],
         updatedAt: wallClockMs(),
@@ -26392,6 +26407,7 @@ export function StudioShell({
             hasVideoReferenceInput={mode === "video" && videoSupportsReferenceInput && hasVideoReferenceInput}
             hasNonVideoReferenceInput={mode === "video" && videoSupportsReferenceInput && hasNonVideoReferenceInput}
             generationReferences={generationReferences}
+            attachmentMediaUrls={attachmentMediaUrls}
             pricing={pricing}
             disabled={flowPending}
             entitlement={entitlement}
@@ -27432,6 +27448,7 @@ function StudioComposer({
   hasVideoReferenceInput,
   hasNonVideoReferenceInput,
   generationReferences,
+  attachmentMediaUrls,
   pricing,
   disabled,
   entitlement,
@@ -27586,10 +27603,25 @@ function StudioComposer({
           )
           .map((item) => {
             const kind = attachmentLiveMediaKind(item) ?? item.kind;
-            return { ...item, kind };
+            const signed =
+              attachmentMediaUrls?.[`element-media:${item.id}`] ||
+              attachmentMediaUrls?.[`element-sheet:${item.id}`] ||
+              attachmentMediaUrls?.[`attachment:${item.id}`];
+            const full = fullQualityUrl(signed, item.mediaUrl) ?? item.mediaUrl;
+            const thumb =
+              attachmentChipPreviewUrl(item) ||
+              (kind === "image" || kind === "video" || item.studioKind === "element"
+                ? thumbnailDisplayUrl(item.thumbnailUrl, full, signed)
+                : undefined);
+            return {
+              ...item,
+              kind,
+              mediaUrl: full ?? item.mediaUrl,
+              thumbnailUrl: thumb ?? item.thumbnailUrl,
+            };
           }),
       ),
-    [attachments],
+    [attachmentMediaUrls, attachments],
   );
   const mentionHits = useMemo(
     () =>
@@ -27632,6 +27664,7 @@ function StudioComposer({
         name: createElementName,
         description: createElementDescription,
         file: createElementFile,
+        elementType,
       });
       setCreateElementOpen(false);
     } catch (error) {
@@ -28131,6 +28164,13 @@ function StudioComposer({
         {createElementOpen ? (
           <div className="studio-composer-element-dialog" role="dialog" aria-label="Create element">
             <strong>New element</strong>
+            <div className="studio-composer-element-type">
+              <StudioElementTypePicker
+                elementType={elementType}
+                setElementType={setElementType}
+                showLabels
+              />
+            </div>
             <label>
               Unique title
               <input
@@ -28332,7 +28372,15 @@ function StudioComposer({
           <div className="studio-composer-media-rail" aria-label="Attached media">
             {railAttachments.map((item) => {
               const tag = `@${attachmentComposerTag(item)}`;
-              const thumb = item.thumbnailUrl || (item.kind === "image" ? item.mediaUrl : null);
+              const liveKind = attachmentLiveMediaKind(item) ?? item.kind;
+              const thumb = attachmentChipPreviewUrl(item);
+              const videoSrc =
+                liveKind === "video"
+                  ? item.mediaUrl ||
+                    item.sheetAsset?.mediaUrl ||
+                    (item.referenceAssets ?? []).find((ref) => ref?.mediaUrl)?.mediaUrl ||
+                    thumb
+                  : null;
               return (
                 <div key={item.id} className="studio-composer-media-tile">
                   <button
@@ -28341,8 +28389,8 @@ function StudioComposer({
                     title={`${tag} — remove the tag in the prompt to detach`}
                     onClick={() => setPreviewAttachment(item)}
                   >
-                    {item.kind === "video" && (item.mediaUrl || thumb) ? (
-                      <video src={item.mediaUrl || thumb} muted playsInline preload="metadata" />
+                    {liveKind === "video" && videoSrc ? (
+                      <video src={videoSrc} muted playsInline preload="metadata" />
                     ) : thumb ? (
                       <img src={thumb} alt="" />
                     ) : (
@@ -28911,7 +28959,7 @@ function StudioComposerControlStrip({
   return (
     <div className={layout === "panel" ? "studio-composer-options-body" : "studio-composer-controls"}>
       <div className="studio-composer-options-stack">
-        {false && isElementMode ? (
+        {isElementMode ? (
           <StudioInlineSettingChipGroup
             label="Type"
             value={elementType}
@@ -30559,19 +30607,22 @@ function createComposerAttachmentToken(attachment) {
   const kind = document.createElement("span");
   kind.className = "studio-inline-tag-kind";
   const tagLabel = `@${attachmentComposerTag(attachment)}`;
-  const thumb =
-    attachment.thumbnailUrl ||
-    (attachment.kind === "image" || attachment.kind === "video" ? attachment.mediaUrl : null);
-  if (thumb && (attachment.kind === "image" || attachment.kind === "video" || attachment.studioKind === "element")) {
+  const liveKind = attachmentLiveMediaKind(attachment) ?? attachment.kind;
+  const thumb = attachmentChipPreviewUrl(attachment);
+  const imageOnly = attachmentShowsImageOnlyChip(attachment);
+  if (thumb && (liveKind === "image" || liveKind === "video" || attachment.studioKind === "element")) {
     token.classList.add("studio-inline-tag--preview");
-    const media = attachment.kind === "video"
+    const media = liveKind === "video"
       ? document.createElement("video")
       : document.createElement("img");
     media.className = "studio-inline-tag-media";
-    media.src = attachment.kind === "video"
-      ? (attachment.mediaUrl ?? attachment.thumbnailUrl)
+    media.src = liveKind === "video"
+      ? (attachment.mediaUrl ||
+          attachment.sheetAsset?.mediaUrl ||
+          (attachment.referenceAssets ?? []).find((ref) => ref?.mediaUrl)?.mediaUrl ||
+          thumb)
       : thumb;
-    if (attachment.kind === "video") {
+    if (liveKind === "video") {
       media.muted = true;
       media.playsInline = true;
       media.preload = "metadata";
@@ -30583,11 +30634,22 @@ function createComposerAttachmentToken(attachment) {
     kind.appendChild(createComposerTokenIcon(composerTokenIconKind(attachment)));
   }
 
-  const label = document.createElement("span");
-  label.className = "studio-inline-tag-label";
-  label.textContent = tagLabel;
-  token.title = tagLabel;
-  token.append(kind, label);
+  if (imageOnly) {
+    token.classList.add("studio-inline-tag--image-only");
+    token.title = tagLabel;
+    const overlay = document.createElement("span");
+    overlay.className = "studio-inline-tag-overlay";
+    overlay.appendChild(
+      createComposerTokenIcon(liveKind === "video" ? "video" : "image"),
+    );
+    token.append(kind, overlay);
+  } else {
+    const label = document.createElement("span");
+    label.className = "studio-inline-tag-label";
+    label.textContent = tagLabel;
+    token.title = tagLabel;
+    token.append(kind, label);
+  }
   return token;
 }
 
