@@ -54,10 +54,14 @@
   background: transparent;
 }
 
-/* CN Messages rail / mobile sheet: chat fills the sidebar, Back stays there. */
+/* CN Messages rail / mobile sheet: chat fills the sidebar, Back stays there.
+   Narrow rail must NOT inherit desktop Create’s min(48rem, 80%) — too skinny.
+   Full panel width; side space comes from composer/message padding. */
 .studio-dm-pane.is-rail-embedded {
   flex: 1 1 auto;
   overflow: hidden;
+  --studio-composer-shell-max: 100%;
+  --studio-chat-column-max: 100%;
 }
 
 .studio-dm-pane.is-rail-embedded .studio-dm-chat-column {

@@ -9354,6 +9354,9 @@ export function StudioShell({
             transition: color 120ms ease, border-color 120ms ease !important;
           }
           .studio-polish.is-studio-mobile {
+            /* Full-bleed composer/messages — not desktop 80%/48rem reading column. */
+            --studio-composer-shell-max: 100%;
+            --studio-chat-column-max: 100%;
             --studio-chat-empty-clearance: calc(108px + env(safe-area-inset-bottom, 0px));
             --cursor-head-h: var(--studio-mobile-nav-height, 44px);
             /* Dark overlay chrome — readable bars, still slightly frosted */
@@ -19372,7 +19375,8 @@ export function StudioShell({
         }
         @media (max-width: 640px) {
           .studio-polish {
-            --studio-chat-column-max: min(92%, 36rem);
+            --studio-composer-shell-max: 100%;
+            --studio-chat-column-max: 100%;
             --studio-chat-bubble-max: 90%;
           }
           .studio-composer .cursor-composer {
@@ -19381,7 +19385,7 @@ export function StudioShell({
             left: 0;
           }
           .studio-chat-composer-align {
-            max-width: var(--studio-chat-column-max, min(92%, 36rem));
+            max-width: var(--studio-chat-column-max, 100%);
           }
         }
         .studio-composer-circle-btn {
