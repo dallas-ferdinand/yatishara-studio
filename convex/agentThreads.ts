@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 
 /** DM-style keyword terms: split on whitespace, strip @/#. */
