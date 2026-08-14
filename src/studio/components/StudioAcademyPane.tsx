@@ -1273,17 +1273,21 @@ export function StudioAcademyPane({
                 }}
               >
                 {partiallyPaid ? (
-                  <MessageCircle aria-hidden="true" />
+                  <>
+                    <MessageCircle aria-hidden="true" />
+                    Pay balance
+                  </>
                 ) : needsTopUp ? (
-                  <WamPayMark />
+                  <>
+                    Pay with
+                    <WamPayMark />
+                  </>
                 ) : (
-                  <Zap aria-hidden="true" />
+                  <>
+                    <Zap aria-hidden="true" />
+                    Pay with wallet
+                  </>
                 )}
-                {partiallyPaid
-                  ? "Pay balance"
-                  : needsTopUp
-                    ? "Pay"
-                    : "Pay with wallet"}
               </button>
             ) : null}
           </div>

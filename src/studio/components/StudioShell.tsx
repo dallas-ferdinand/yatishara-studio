@@ -13303,7 +13303,7 @@ export function StudioShell({
           white-space: nowrap;
         }
         .studio-wam-pay-mark {
-          height: 17px;
+          height: 13px;
           width: auto;
           display: block;
           flex: 0 0 auto;

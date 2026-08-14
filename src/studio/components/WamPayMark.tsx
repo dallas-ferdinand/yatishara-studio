@@ -15,7 +15,7 @@ export function WamPayMark() {
 export function WamPayLabel({ amountShort }: { amountShort?: string | null }) {
   return (
     <>
-      {amountShort ? `Pay ${amountShort}` : "Pay"}
+      {amountShort ? `Pay ${amountShort} with` : "Pay with"}
       <WamPayMark />
     </>
   );
