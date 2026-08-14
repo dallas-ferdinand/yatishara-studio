@@ -74,6 +74,16 @@ export function wamCheckoutTotalCents(amountCents: number): number {
   return base + wamCardFeeCents(base);
 }
 
+/** Wam paid the listed product (legacy merchant-pays) or the customer-covers total. */
+export function wamPaidAmountMatchesProduct(
+  providerAmountCents: number,
+  productCents: number,
+): boolean {
+  const paid = Math.round(Number(providerAmountCents) || 0);
+  const product = Math.max(0, Math.round(Number(productCents) || 0));
+  return paid === product || paid === wamCheckoutTotalCents(product);
+}
+
 export function wamErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return "Wam checkout failed";

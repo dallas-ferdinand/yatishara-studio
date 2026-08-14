@@ -25,6 +25,7 @@ import {
 } from "./lib/generationPricing";
 import { purchaseCourseForUser } from "./lib/academyPurchase";
 import { PAYWISE_CURRENCY } from "./lib/paywise";
+import { wamPaidAmountMatchesProduct } from "./lib/wam";
 import { createNotificationAndPush } from "./lib/notify";
 import {
   CREDIT_GRANT_KINDS,
@@ -1701,7 +1702,7 @@ export const applyPaywiseStatusCheck = internalMutation({
         });
         return { status: "needs_review" as const, granted: false, reason: "currency_mismatch" };
       }
-      if (args.providerAmountCents !== payment.amountCents) {
+      if (!wamPaidAmountMatchesProduct(args.providerAmountCents, payment.amountCents)) {
         await ctx.db.patch(payment._id, {
           ...basePatch,
           nextStatusCheckAt: now + PAYWISE_REVIEW_CHECK_DELAY_MS,

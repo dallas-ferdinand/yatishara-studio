@@ -129,6 +129,24 @@ describe("PayWise billing invariants", () => {
     });
   });
 
+  test("customer-covers Wam total still grants against the listed product", async () => {
+    const t = convexTest(schema, modules);
+    const seeded = await seedPaywisePayment(t);
+    const result = await t.mutation(internal.billing.applyPaywiseStatusCheck, {
+      paymentId: seeded.paymentId,
+      expectedExternalPaymentId: "pw-payment-1",
+      providerPaymentDetailsId: "pw-payment-1",
+      providerStatus: "sandbox-paid",
+      normalizedStatus: "paid",
+      providerAmountCents: 5_300,
+      providerCurrency: "TTD",
+    });
+    expect(result.granted).toBe(true);
+    await t.run(async (ctx) => {
+      expect((await ctx.db.get(seeded.accountId))?.creditBalance).toBe(100);
+    });
+  });
+
   test("amount and currency mismatches stay recoverable without granting", async () => {
     const t = convexTest(schema, modules);
     const seeded = await seedPaywisePayment(t);

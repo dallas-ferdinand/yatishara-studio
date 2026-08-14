@@ -9,6 +9,7 @@ import { buildSignInCodeEmail } from "./lib/authEmail";
 import {
   WAM_CURRENCY,
   normalizeWamIntentStatus,
+  wamCheckoutTotalCents,
   wamErrorMessage,
 } from "./lib/wam";
 import { getWamSDK } from "./lib/wamSdk";
@@ -255,7 +256,7 @@ export const internalStartPaywiseForCs = internalAction({
     try {
       const wam = getWamSDK();
       const intent = await wam.createPaymentIntent({
-        amountCents: prepared.amountCents,
+        amountCents: wamCheckoutTotalCents(prepared.amountCents),
         currency: WAM_CURRENCY,
         orderReference: String(prepared.paymentId),
         description:
