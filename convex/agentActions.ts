@@ -136,7 +136,8 @@ type MeasuredUsageBody = {
 
 /** Charge platform LLM tokens whenever we have measured usage (incl. failed/cancelled). */
 async function billPlatformTextIfNeeded(
-  ctx: { runMutation: (ref: unknown, args: unknown) => Promise<unknown> },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx: { runMutation: (...args: any[]) => Promise<any> },
   args: {
     usedByok: boolean;
     usage?: MeasuredUsageBody | null;
