@@ -247,6 +247,7 @@ import {
 import { AdminStudioOpsSidebar } from "./AdminStudioOpsSidebar";
 import { StudioCreativeNetworkStore } from "./StudioCreativeNetworkStore";
 import { StudioOnlinePresence } from "./StudioOnlinePresence";
+import { WamPayLabel } from "./WamPayMark";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
   DEFAULT_TOP_UP_AMOUNT_CENTS,
@@ -13177,6 +13178,7 @@ export function StudioShell({
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          gap: 8px;
           width: 100%;
           min-height: 42px;
           margin-top: 2px;
@@ -13291,10 +13293,26 @@ export function StudioShell({
           animation: studio-settings-topup-spin 0.7s linear infinite;
         }
         .studio-settings-topup-pay-label {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
           min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .studio-wam-pay-mark {
+          height: 17px;
+          width: auto;
+          display: block;
+          flex: 0 0 auto;
+          object-fit: contain;
+          filter: drop-shadow(0 1px 1px color-mix(in srgb, #052e16 55%, transparent));
+        }
+        .studio-settings-topup-pay:disabled:not(.is-loading) .studio-wam-pay-mark {
+          opacity: 0.55;
+          filter: none;
         }
         .studio-settings-topup-fee {
           margin: 10px 0 6px;
@@ -35717,6 +35735,16 @@ function SettingsWorkspacePane({
                       checkoutStarting
                     }
                     aria-busy={checkoutStarting}
+                    aria-label={
+                      checkoutStarting
+                        ? paymentStatus || "Please wait"
+                        : customAmountError
+                          ? customAmountError
+                          : paymentStatus ||
+                            (paywiseTotalCents > 0
+                              ? `Pay ${formatTtdShort(paywiseTotalCents)} with Wam`
+                              : "Pay with Wam")
+                    }
                     onClick={() => void handleWamCheckout()}
                   >
                     {checkoutStarting ? (
@@ -35727,10 +35755,15 @@ function SettingsWorkspacePane({
                         ? paymentStatus || "Please wait…"
                         : customAmountError
                           ? customAmountError
-                          : paymentStatus ||
-                            (paywiseTotalCents > 0
-                              ? `Pay ${formatTtdShort(paywiseTotalCents)} with Wam`
-                              : "Pay with Wam")}
+                          : paymentStatus || (
+                              <WamPayLabel
+                                amountShort={
+                                  paywiseTotalCents > 0
+                                    ? formatTtdShort(paywiseTotalCents)
+                                    : null
+                                }
+                              />
+                            )}
                     </span>
                   </button>
                   <p className="studio-settings-topup-secure">

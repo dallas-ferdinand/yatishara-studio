@@ -39,6 +39,7 @@ import { ProfileCommentsPanel } from "./ProfileCommentsPanel";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
 import { StudioConfirmOverlay } from "./StudioConfirmOverlay";
 import { StudioCnBookSheet } from "./StudioCnBookSheet";
+import { WamPayLabel, WamPayMark } from "./WamPayMark";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import "./studio-creative-network.css";
 import "./public-offers.css";
@@ -386,9 +387,7 @@ function CheckoutDock({
                   />
                 ) : null}
                 <span className="studio-settings-topup-pay-label">
-                  {busy
-                    ? "Opening Wam…"
-                    : `Pay ${paywiseTotalShort} with Wam`}
+                  {busy ? "Opening…" : <WamPayLabel amountShort={paywiseTotalShort} />}
                 </span>
               </button>
               <p className="studio-settings-topup-secure">
@@ -1275,13 +1274,15 @@ export function StudioAcademyPane({
               >
                 {partiallyPaid ? (
                   <MessageCircle aria-hidden="true" />
+                ) : needsTopUp ? (
+                  <WamPayMark />
                 ) : (
                   <Zap aria-hidden="true" />
                 )}
                 {partiallyPaid
                   ? "Pay balance"
                   : needsTopUp
-                    ? "Pay with Wam"
+                    ? "Pay"
                     : "Pay with wallet"}
               </button>
             ) : null}

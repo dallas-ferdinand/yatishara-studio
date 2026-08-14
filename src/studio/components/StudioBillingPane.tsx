@@ -8,6 +8,7 @@ import { api } from "../../../convex/_generated/api";
 import { STUDIO_PLAN_CATALOG, STUDIO_PLAN_SLUGS, isRenewalUnpaidInvoice } from "../../../convex/lib/studioPlans";
 import { humanizeWamProviderStatus } from "../../../convex/lib/wam";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { WamPayLabel } from "./WamPayMark";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
   DEFAULT_TOP_UP_AMOUNT_CENTS,
@@ -491,6 +492,16 @@ function BillingTopUp({
               }`}
               disabled={!checkoutPlan || customAmountCents < minAmountCents || checkoutStarting}
               aria-busy={checkoutStarting}
+              aria-label={
+                checkoutStarting
+                  ? paymentStatus || "Please wait"
+                  : customAmountError
+                    ? customAmountError
+                    : paymentStatus ||
+                      (paywiseTotalCents > 0
+                        ? `Pay ${formatTtdShort(paywiseTotalCents)} with Wam`
+                        : "Pay with Wam")
+              }
               onClick={() => void handleWamCheckout()}
             >
               {checkoutStarting ? (
@@ -501,10 +512,15 @@ function BillingTopUp({
                   ? paymentStatus || "Please wait…"
                   : customAmountError
                     ? customAmountError
-                    : paymentStatus ||
-                      (paywiseTotalCents > 0
-                        ? `Pay ${formatTtdShort(paywiseTotalCents)} with Wam`
-                        : "Pay with Wam")}
+                    : paymentStatus || (
+                        <WamPayLabel
+                          amountShort={
+                            paywiseTotalCents > 0
+                              ? formatTtdShort(paywiseTotalCents)
+                              : null
+                          }
+                        />
+                      )}
               </span>
             </button>
             <p className="studio-settings-topup-secure">

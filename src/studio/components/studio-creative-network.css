@@ -1661,6 +1661,12 @@ button.studio-cn-card-btn.public-offers-card {
   height: 13px;
 }
 
+.studio-cn-book-bar-cta .studio-wam-pay-mark {
+  height: 12px;
+  width: auto;
+  filter: none;
+}
+
 /* Academy comments head — outline bubble, not flat fill. */
 .studio-academy-comments-meta svg {
   fill: none !important;
