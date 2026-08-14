@@ -10,9 +10,12 @@ import { humanizeWamProviderStatus } from "../../../convex/lib/wam";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
+  DEFAULT_TOP_UP_AMOUNT_CENTS,
   TOP_UP_TIER_CREDITS,
   creditsFromAmountCents,
+  defaultTopUpAmountCents,
   formatTtdCents,
+  lastExtraTopUpFaceCents,
   formatTtdFromCredits,
   formatTtdShort,
   paywiseCardFeeCents,
@@ -53,6 +56,7 @@ type AccountSub = {
 type InvoiceRow = {
   _id: string;
   amountCents: number;
+  creditsGranted?: number;
   status: string;
   createdAt: number;
   billingInterval?: BillingInterval;
@@ -215,9 +219,28 @@ function chipAmountLabel(amountCents: number) {
   })}`;
 }
 
+function lastPaidTopUpCents(
+  payments: InvoiceRow[] | undefined,
+  creditPriceCents: number,
+) {
+  return lastExtraTopUpFaceCents(payments, creditPriceCents);
+}
+
+function applyTopUpAmount(
+  cents: number,
+  tiers: { key: string; amountCents: number }[],
+  setSelectedPlanKey: (key: string) => void,
+  setCustomAmountInput: (value: string) => void,
+) {
+  const matched = tiers.find((plan) => plan.amountCents === cents);
+  setSelectedPlanKey(matched?.key ?? "custom");
+  setCustomAmountInput(amountInputFromCents(cents));
+}
+
 function BillingTopUp({
   billingAccount,
   pricing,
+  payments,
   topUpPrefillCents,
   onTopUpPrefillConsumed,
   onChoosePlan,
@@ -225,6 +248,7 @@ function BillingTopUp({
 }: {
   billingAccount: Props["billingAccount"];
   pricing: Props["pricing"];
+  payments?: InvoiceRow[];
   topUpPrefillCents?: number | null;
   onTopUpPrefillConsumed?: () => void;
   onChoosePlan: () => void;
@@ -246,11 +270,14 @@ function BillingTopUp({
       ? Number(liveSubscription?.annualDiscountPercent ?? 0)
       : Number(liveSubscription?.discountPercent ?? 0);
   const [selectedPlanKey, setSelectedPlanKey] = useState("custom");
-  const [customAmountInput, setCustomAmountInput] = useState("");
+  const [customAmountInput, setCustomAmountInput] = useState(
+    String(DEFAULT_TOP_UP_AMOUNT_CENTS / 100),
+  );
   const [customAmountError, setCustomAmountError] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [checkoutStarting, setCheckoutStarting] = useState(false);
   const clientRequestIdRef = useRef<string | null>(null);
+  const seededAmountRef = useRef(false);
   const customAmountCents = Math.round(Number.parseFloat(customAmountInput || "0") * 100);
   const customCredits = creditsFromAmountCents(customAmountCents, creditPriceCents);
   const checkoutPlan =
@@ -277,15 +304,31 @@ function BillingTopUp({
       onTopUpPrefillConsumed?.();
       return;
     }
-    const matched = tiers.find((plan) => plan.amountCents === cents);
-    setSelectedPlanKey(matched?.key ?? "custom");
-    setCustomAmountInput(amountInputFromCents(cents));
+    seededAmountRef.current = true;
+    applyTopUpAmount(cents, tiers, setSelectedPlanKey, setCustomAmountInput);
     setCustomAmountError("");
     setPaymentStatus("");
     clientRequestIdRef.current = null;
     onTopUpPrefillConsumed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once per prefill handoff
   }, [topUpPrefillCents, minAmountCents]);
+
+  useEffect(() => {
+    if (seededAmountRef.current) return;
+    if (topUpPrefillCents != null) return;
+    if (payments === undefined) return;
+    seededAmountRef.current = true;
+    applyTopUpAmount(
+      defaultTopUpAmountCents(
+        lastPaidTopUpCents(payments, creditPriceCents),
+        minAmountCents,
+      ),
+      tiers,
+      setSelectedPlanKey,
+      setCustomAmountInput,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once after payments load
+  }, [payments, minAmountCents, topUpPrefillCents]);
 
   async function handleWamCheckout() {
     if (checkoutStarting) return;
@@ -371,6 +414,7 @@ function BillingTopUp({
                 value={customAmountInput}
                 onChange={(event) => {
                   const value = event.target.value;
+                  seededAmountRef.current = true;
                   setCustomAmountInput(value);
                   setCustomAmountError("");
                   setPaymentStatus("");
@@ -394,6 +438,7 @@ function BillingTopUp({
                   type="button"
                   className={`studio-settings-topup-chip${selectedPlanKey === plan.key && customAmountCents === plan.amountCents ? " is-active" : ""}`}
                   onClick={() => {
+                    seededAmountRef.current = true;
                     setSelectedPlanKey(plan.key);
                     setCustomAmountInput(amountInputFromCents(plan.amountCents));
                     setCustomAmountError("");
@@ -413,16 +458,12 @@ function BillingTopUp({
                   <dt>Add to account</dt>
                   <dd>{formatTtdCents(customAmountCents)}</dd>
                 </div>
-                {liveSubscription?.planName ? (
-                  <div
-                    className={`studio-academy-checkout-row${topUpSaveCents > 0 ? " is-discount" : " is-muted"}`}
-                  >
+                {topUpDiscountPercent > 0 && topUpSaveCents > 0 ? (
+                  <div className="studio-academy-checkout-row is-discount">
                     <dt>
-                      {topUpDiscountPercent > 0
-                        ? `${liveSubscription.planName} · ${topUpDiscountPercent}% off`
-                        : `${liveSubscription.planName} · ${liveSubscription.interval === "year" ? "annual" : "monthly"}`}
+                      {liveSubscription?.planName || "Plan"} · {topUpDiscountPercent}% off
                     </dt>
-                    <dd>{topUpSaveCents > 0 ? `−${formatTtdCents(topUpSaveCents)}` : null}</dd>
+                    <dd>−{formatTtdCents(topUpSaveCents)}</dd>
                   </div>
                 ) : null}
                 {paywiseFeeCents > 0 ? (
@@ -799,6 +840,7 @@ export function StudioBillingPane({
           <BillingTopUp
             billingAccount={billingAccount}
             pricing={pricing}
+            payments={payments}
             topUpPrefillCents={topUpPrefillCents}
             onTopUpPrefillConsumed={onTopUpPrefillConsumed}
             onChoosePlan={() => onSection("plans")}

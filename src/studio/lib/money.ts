@@ -10,6 +10,49 @@ export const DEFAULT_CREDIT_PRICE_CENTS = 50;
 export const TOP_UP_TIER_CREDITS = [100, 1000, 2000, 4000] as const;
 export const TOP_UP_TIER_LABELS = ["Starter", "Pro", "Studio", "Scale"] as const;
 
+/** Default extra top-up when they have no previous extra top-up. */
+export const DEFAULT_TOP_UP_AMOUNT_CENTS = 20_000;
+
+/** Face dollars last extra top-up added (credits × price), else charged cents. */
+export function lastExtraTopUpFaceCents(
+  payments:
+    | Array<{
+        status?: string;
+        amountCents?: number;
+        creditsGranted?: number;
+        academyCourseId?: unknown;
+        subscriptionPlanId?: unknown;
+        billingInterval?: unknown;
+      }>
+    | undefined,
+  creditPriceCents: number = DEFAULT_CREDIT_PRICE_CENTS,
+): number | null {
+  const row = (payments ?? []).find(
+    (payment) =>
+      payment.status === "payment_completed" &&
+      !payment.academyCourseId &&
+      !payment.subscriptionPlanId &&
+      !payment.billingInterval,
+  );
+  if (!row) return null;
+  const fromCredits = Math.round(
+    Number(row.creditsGranted || 0) * Number(creditPriceCents || DEFAULT_CREDIT_PRICE_CENTS),
+  );
+  if (fromCredits > 0) return fromCredits;
+  const cents = Math.round(Number(row.amountCents) || 0);
+  return cents > 0 ? cents : null;
+}
+
+/** Last paid extra top-up face amount, else $200, never below the min. */
+export function defaultTopUpAmountCents(
+  lastPaidCents: number | null | undefined,
+  minCents: number,
+): number {
+  const last = Math.round(Number(lastPaidCents) || 0);
+  const pick = last > 0 ? last : DEFAULT_TOP_UP_AMOUNT_CENTS;
+  return Math.max(minCents, pick);
+}
+
 /** Min top-up = TT$10 (20 credits at default 0.50). Override only for ops tests. */
 export const TOP_UP_MIN_AMOUNT_CENTS_OVERRIDE: number | null = 1000;
 

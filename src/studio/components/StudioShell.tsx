@@ -249,10 +249,13 @@ import { StudioCreativeNetworkStore } from "./StudioCreativeNetworkStore";
 import { StudioOnlinePresence } from "./StudioOnlinePresence";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
+  DEFAULT_TOP_UP_AMOUNT_CENTS,
   TOP_UP_TIER_CREDITS,
   TOP_UP_TIER_LABELS,
   creditsFromAmountCents,
+  defaultTopUpAmountCents,
   formatTtdCents,
+  lastExtraTopUpFaceCents,
   formatTtdFromCredits,
   formatTtdShort,
   paywiseCardFeeCents,
@@ -1813,7 +1816,8 @@ export function StudioShell({
             ((activeTab.startsWith("network:") ||
               activeTab.startsWith("offers:")) &&
               cnMode !== "my-assets") ||
-            activeTab.startsWith("academy:"))
+            activeTab.startsWith("academy:") ||
+            activeTab.startsWith("billing:"))
         ));
   const mySellerStatus = useQuery(
     api.marketplace.getMySellerStatus,
@@ -8574,6 +8578,9 @@ export function StudioShell({
 
   const isAcademyRail =
     typeof activeTab === "string" && activeTab.startsWith("academy:");
+
+  const isBillingWorkspace =
+    typeof activeTab === "string" && activeTab.startsWith("billing:");
 
   const isAgentRail =
     typeof activeTab === "string" && activeTab.startsWith("agent:");
@@ -24691,7 +24698,7 @@ export function StudioShell({
         className="studio-main-panels h-full min-h-0 min-w-0 flex-1 overflow-hidden"
         onLayout={isMobile ? undefined : handleMainPanelLayout}
       >
-        {!isMobile ? (
+        {!isMobile && !isBillingWorkspace ? (
         <Panel
           id="studio-sidebar"
           order={1}
@@ -25178,7 +25185,7 @@ export function StudioShell({
       </aside>
         </Panel>
         ) : null}
-        {!isMobile ? <PanelResizeHandle className="cursor-resize" /> : null}
+        {!isMobile && !isBillingWorkspace ? <PanelResizeHandle className="cursor-resize" /> : null}
         <Panel
           id="studio-main"
           order={2}
@@ -35316,12 +35323,15 @@ function SettingsWorkspacePane({
 }) {
   const [section, setSection] = useState(tab === "top-up" ? "billing" : tab || "general");
   const [selectedPlanKey, setSelectedPlanKey] = useState("custom");
-  const [customAmountInput, setCustomAmountInput] = useState("");
+  const [customAmountInput, setCustomAmountInput] = useState(
+    String(DEFAULT_TOP_UP_AMOUNT_CENTS / 100),
+  );
   const [customAmountError, setCustomAmountError] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [checkoutStarting, setCheckoutStarting] = useState(false);
   const [invoicesOpen, setInvoicesOpen] = useState(false);
   const clientRequestIdRef = useRef(null);
+  const seededAmountRef = useRef(false);
   const paymentReturnHandledRef = useRef(false);
   const settingsMenuScrollRef = useRef(null);
   useHorizontalWheelScroll(settingsMenuScrollRef);
@@ -35382,9 +35392,25 @@ function SettingsWorkspacePane({
     setCustomAmountError("");
     setPaymentStatus("");
     clientRequestIdRef.current = null;
+    seededAmountRef.current = true;
     onTopUpPrefillConsumed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once per prefill handoff
   }, [topUpPrefillCents, minAmountCents]);
+
+  useEffect(() => {
+    if (seededAmountRef.current) return;
+    if (topUpPrefillCents != null) return;
+    if (payments === undefined) return;
+    seededAmountRef.current = true;
+    const cents = defaultTopUpAmountCents(
+      lastExtraTopUpFaceCents(payments, creditPriceCents),
+      minAmountCents,
+    );
+    const matched = plans.find((plan) => plan.amountCents === cents);
+    setSelectedPlanKey(matched?.key ?? "custom");
+    setCustomAmountInput(amountInputFromCents(cents));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once after payments load
+  }, [payments, minAmountCents, topUpPrefillCents]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -35468,6 +35494,7 @@ function SettingsWorkspacePane({
   }
 
   function selectTopUpChip(plan) {
+    seededAmountRef.current = true;
     setSelectedPlanKey(plan.key);
     setCustomAmountInput(amountInputFromCents(plan.amountCents));
     setCustomAmountError("");
@@ -35616,6 +35643,7 @@ function SettingsWorkspacePane({
                       value={customAmountInput}
                       onChange={(event) => {
                         const value = event.target.value;
+                        seededAmountRef.current = true;
                         setCustomAmountInput(value);
                         setCustomAmountError("");
                         setPaymentStatus("");
@@ -35652,16 +35680,12 @@ function SettingsWorkspacePane({
                         <dt>Add to account</dt>
                         <dd>{formatTtdCents(customAmountCents)}</dd>
                       </div>
-                      {liveSubscription?.planName ? (
-                        <div
-                          className={`studio-academy-checkout-row${topUpSaveCents > 0 ? " is-discount" : " is-muted"}`}
-                        >
+                      {topUpDiscountPercent > 0 && topUpSaveCents > 0 ? (
+                        <div className="studio-academy-checkout-row is-discount">
                           <dt>
-                            {topUpDiscountPercent > 0
-                              ? `${liveSubscription.planName} · ${topUpDiscountPercent}% off`
-                              : `${liveSubscription.planName} · ${liveSubscription.interval === "year" ? "annual" : "monthly"}`}
+                            {liveSubscription?.planName || "Plan"} · {topUpDiscountPercent}% off
                           </dt>
-                          <dd>{topUpSaveCents > 0 ? `−${formatTtdCents(topUpSaveCents)}` : null}</dd>
+                          <dd>−{formatTtdCents(topUpSaveCents)}</dd>
                         </div>
                       ) : null}
                       {paywiseFeeCents > 0 ? (
