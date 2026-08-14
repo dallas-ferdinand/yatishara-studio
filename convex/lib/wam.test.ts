@@ -4,6 +4,8 @@ import {
   wamCardFeeCents,
   wamCheckoutTotalCents,
   wamPaidAmountMatchesProduct,
+  studioWamAppReturnUrl,
+  studioWamCsReturnUrl,
   humanizeWamProviderStatus,
 } from "./wam";
 
@@ -15,6 +17,15 @@ describe("wam helpers", () => {
     expect(wamPaidAmountMatchesProduct(10_00, 10_00)).toBe(true);
     expect(wamPaidAmountMatchesProduct(11_80, 10_00)).toBe(true);
     expect(wamPaidAmountMatchesProduct(11_00, 10_00)).toBe(false);
+  });
+
+  it("keeps Studio return ids in the path so Wam query replace cannot strip them", () => {
+    expect(studioWamAppReturnUrl("https://studio.yatishara.com/", "pay123")).toBe(
+      "https://studio.yatishara.com/pay/done/pay123/",
+    );
+    expect(studioWamCsReturnUrl("https://studio.yatishara.com", "pay123")).toBe(
+      "https://studio.yatishara.com/pay/wa/pay123/",
+    );
   });
 
   it("normalizes intent statuses", () => {

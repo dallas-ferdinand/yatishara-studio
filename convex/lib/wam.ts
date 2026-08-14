@@ -74,6 +74,18 @@ export function wamCheckoutTotalCents(amountCents: number): number {
   return base + wamCardFeeCents(base);
 }
 
+/** Path Wam cannot strip when it replaces the query string. Trailing slash matches Studio Next. */
+export function studioWamAppReturnUrl(appBase: string, paymentId: string): string {
+  const base = String(appBase || "").replace(/\/+$/, "");
+  return `${base}/pay/done/${encodeURIComponent(String(paymentId))}/`;
+}
+
+/** Agent paylinks bounce to WhatsApp after checkout. */
+export function studioWamCsReturnUrl(appBase: string, paymentId: string): string {
+  const base = String(appBase || "").replace(/\/+$/, "");
+  return `${base}/pay/wa/${encodeURIComponent(String(paymentId))}/`;
+}
+
 /** Wam paid the listed product (legacy merchant-pays) or the customer-covers total. */
 export function wamPaidAmountMatchesProduct(
   providerAmountCents: number,

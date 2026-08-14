@@ -414,10 +414,11 @@ export const findMyPaymentForWamReturn = authedQuery({
   handler: async (ctx, args) => {
     const identifier = args.identifier.trim();
     if (!identifier) return null;
-    const byExternal = await ctx.db
+    const byExternalRows = await ctx.db
       .query("payments")
       .withIndex("by_external_payment", (q) => q.eq("externalPaymentId", identifier))
-      .unique();
+      .take(1);
+    const byExternal = byExternalRows[0] ?? null;
     const recent = await ctx.db
       .query("payments")
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
@@ -428,6 +429,7 @@ export const findMyPaymentForWamReturn = authedQuery({
         ? byExternal
         : recent.find(
             (payment) =>
+              String(payment._id) === identifier ||
               payment.externalPaymentId === identifier ||
               payment.providerRequestId === identifier,
           );

@@ -26,6 +26,12 @@ import {
 } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import {
+  STUDIO_WAM_RETURN_COOKIE,
+  STUDIO_WAM_RETURN_KEY,
+  decodeWamReturnCookie,
+  parseWamReturnPayload,
+} from "../lib/wamReturn";
+import {
   AudioLines,
   ArrowDown,
   Ban,
@@ -616,26 +622,48 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
 const STUDIO_CUSTOM_CURSOR_KEY = "yatishara-studio-custom-cursor";
 /** localStorage: dismissed | enabled — controls auto fullscreen push prompt. */
 const STUDIO_PUSH_PROMPT_KEY = "yatishara-studio-push-prompt-v1";
-const STUDIO_WAM_RETURN_KEY = "yatishara-studio-wam-return-v1";
+function readWamReturnCookie() {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(
+    new RegExp(`(?:^|; )${STUDIO_WAM_RETURN_COOKIE}=([^;]*)`),
+  );
+  return decodeWamReturnCookie(match?.[1] ? match[1] : null);
+}
+
+function clearWamReturnCookie() {
+  if (typeof document === "undefined") return;
+  document.cookie = `${STUDIO_WAM_RETURN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
 
 function readWamReturn() {
   if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(STUDIO_WAM_RETURN_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
+  const fromCookie = readWamReturnCookie();
+  for (const store of [window.sessionStorage, window.localStorage]) {
+    try {
+      const parsed = parseWamReturnPayload(
+        JSON.parse(store.getItem(STUDIO_WAM_RETURN_KEY) || "null"),
+      );
+      if (parsed) {
+        return { ...parsed, ...(fromCookie || {}) };
+      }
+    } catch {
+      /* ignore */
+    }
   }
+  return fromCookie;
 }
 
 function stashWamReturn(next) {
   if (typeof window === "undefined" || !next || typeof next !== "object") return;
+  const merged = { ...(readWamReturn() || {}), ...next, at: Date.now() };
+  const raw = JSON.stringify(merged);
   try {
-    window.sessionStorage.setItem(
-      STUDIO_WAM_RETURN_KEY,
-      JSON.stringify({ ...(readWamReturn() || {}), ...next }),
-    );
+    window.sessionStorage.setItem(STUDIO_WAM_RETURN_KEY, raw);
+  } catch {
+    /* ignore */
+  }
+  try {
+    window.localStorage.setItem(STUDIO_WAM_RETURN_KEY, raw);
   } catch {
     /* ignore */
   }
@@ -648,6 +676,12 @@ function clearWamReturn() {
   } catch {
     /* ignore */
   }
+  try {
+    window.localStorage.removeItem(STUDIO_WAM_RETURN_KEY);
+  } catch {
+    /* ignore */
+  }
+  clearWamReturnCookie();
 }
 
 function billingSectionFromStash(stored) {
@@ -659,24 +693,34 @@ function billingSectionFromStash(stored) {
 
 function captureWamReturnFromUrl() {
   if (typeof window === "undefined") return;
+  const fromCookie = readWamReturnCookie();
+  if (fromCookie) {
+    stashWamReturn(fromCookie);
+    clearWamReturnCookie();
+  }
+  const pathPay = window.location.pathname.match(/\/pay\/done\/([^/]+)\/?$/i);
   const params = new URLSearchParams(window.location.search);
-  const paymentId = params.get("paymentId");
+  const paymentId = params.get("paymentId") || (pathPay ? decodeURIComponent(pathPay[1]) : "");
   const academyCourse = params.get("academyCourse");
   const billing = params.get("billing");
   const result = (params.get("result") || "").toUpperCase();
   const identifier = (params.get("identifier") || "").trim();
   const amountRaw = Number.parseInt(params.get("amount") || "", 10);
-  const wamOk = result === "OK";
-  if (!paymentId && !academyCourse && !wamOk && !identifier) return;
+  const wamOk = result === "OK" || Boolean(fromCookie?.wamOk) || Boolean(pathPay);
+  if (!paymentId && !academyCourse && !wamOk && !identifier && !fromCookie) return;
   stashWamReturn({
     ...(paymentId ? { paymentId } : {}),
     ...(academyCourse ? { academyCourse } : {}),
-    ...(billing === "plans" || billing === "invoices" || billing === "topup"
+    ...(billing === "plans" ||
+    billing === "invoices" ||
+    billing === "topup" ||
+    billing === "academy"
       ? { billing }
       : {}),
     ...(identifier ? { identifier } : {}),
     ...(Number.isFinite(amountRaw) && amountRaw > 0 ? { amountCents: amountRaw } : {}),
     ...(wamOk ? { wamOk: true } : {}),
+    at: Date.now(),
   });
   for (const key of [
     "payment",
@@ -690,6 +734,10 @@ function captureWamReturnFromUrl() {
     "signature",
   ]) {
     params.delete(key);
+  }
+  if (pathPay) {
+    window.history.replaceState({}, "", `/${params.toString() ? `?${params}` : ""}`);
+    return;
   }
   const cleaned = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
   window.history.replaceState({}, "", cleaned || "/");
@@ -5072,8 +5120,16 @@ export function StudioShell({
   useEffect(() => {
     captureWamReturnFromUrl();
     const stored = readWamReturn();
-    if (stored?.identifier && !stored?.paymentId) {
+    if (stored?.identifier) {
       setWamReturnIdentifier(stored.identifier);
+    }
+    if (stored?.paymentId || stored?.wamOk || stored?.identifier) {
+      setPaymentCelebration({
+        phase: "confirming",
+        kind: stored.academyCourse || stored.billing === "academy" ? "academy" : undefined,
+        billing: stored.billing === "academy" ? undefined : billingSectionFromStash(stored),
+        amountCents: stored.amountCents ?? null,
+      });
     }
   }, []);
 
@@ -5367,15 +5423,20 @@ export function StudioShell({
     if (typeof window === "undefined" || academyPaymentReturnHandledRef.current) return;
     if (!currentUser?._id) return;
     const stored = readWamReturn();
-    const paymentId = stored?.paymentId;
-    const academyCourse = stored?.academyCourse;
-    if (!paymentId || !academyCourse) return;
+    const academyCourse = stored?.academyCourse || wamReturnPayment?.academyCourseId;
+    const isAcademy =
+      stored?.billing === "academy" ||
+      wamReturnPayment?.billing === "academy" ||
+      Boolean(academyCourse);
+    if (!isAcademy) return;
+    const paymentId = stored?.paymentId || wamReturnPayment?.paymentId;
+    if (!paymentId) return;
     academyPaymentReturnHandledRef.current = true;
     openAcademyTab({ courseId: academyCourse });
     setPaymentCelebration({
       phase: "confirming",
       kind: "academy",
-      amountCents: stored?.amountCents ?? null,
+      amountCents: stored?.amountCents ?? wamReturnPayment?.amountCents ?? null,
     });
 
     let cancelled = false;
@@ -5393,7 +5454,6 @@ export function StudioShell({
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error ?? "");
-            // Auth can hydrate a beat late after the Wam return redirect.
             if (/sign in|not authenticated|unauthorized/i.test(message)) {
               continue;
             }
@@ -5401,10 +5461,11 @@ export function StudioShell({
           }
           if (cancelled) return;
           if (result.status === "payment_completed") {
+            clearWamReturn();
             setPaymentCelebration({
               phase: "success",
               kind: "academy",
-              amountCents: result.amountCents ?? null,
+              amountCents: result.amountCents ?? stored?.amountCents ?? null,
               creditsGranted: result.creditsGranted ?? null,
               academyUnlocked: result.academyUnlocked === true,
             });
@@ -5419,6 +5480,7 @@ export function StudioShell({
             result.status === "rejected" ||
             result.status === "checkout_failed"
           ) {
+            clearWamReturn();
             setPaymentCelebration(null);
             toast.error(
               result.status === "cancelled"
@@ -5428,8 +5490,12 @@ export function StudioShell({
             return;
           }
         }
-        setPaymentCelebration(null);
-        toast.error("Payment is still confirming — check Academy in a moment");
+        clearWamReturn();
+        setPaymentCelebration({
+          phase: "success",
+          kind: "academy",
+          amountCents: stored?.amountCents ?? null,
+        });
       } catch {
         setPaymentCelebration(null);
         toast.error("Could not confirm payment — try refreshing Academy");
@@ -5439,7 +5505,7 @@ export function StudioShell({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot Wam academy return after auth
-  }, [currentUser?._id, syncWamPayment, wamReturnPayment?.paymentId]);
+  }, [currentUser?._id, syncWamPayment, wamReturnPayment?.paymentId, wamReturnPayment?.academyCourseId]);
 
   useEffect(() => {
     if (!wamReturnPayment?.paymentId) return;
@@ -5458,9 +5524,16 @@ export function StudioShell({
     if (typeof window === "undefined" || billingPaymentReturnHandledRef.current) return;
     if (!currentUser?._id) return;
     const stored = readWamReturn();
-    if (stored?.academyCourse) return;
-    const paymentId = stored?.paymentId;
-    const billing = billingSectionFromStash(stored);
+    if (
+      stored?.academyCourse ||
+      stored?.billing === "academy" ||
+      wamReturnPayment?.billing === "academy" ||
+      wamReturnPayment?.academyCourseId
+    ) {
+      return;
+    }
+    const paymentId = stored?.paymentId || wamReturnPayment?.paymentId;
+    const billing = billingSectionFromStash(stored?.billing ? stored : { billing: wamReturnPayment?.billing });
     if (!paymentId) return;
     billingPaymentReturnHandledRef.current = true;
     openBillingTab(billing);

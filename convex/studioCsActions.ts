@@ -9,6 +9,8 @@ import { buildSignInCodeEmail } from "./lib/authEmail";
 import {
   WAM_CURRENCY,
   normalizeWamIntentStatus,
+  studioWamCsReturnUrl,
+  wamCardFeeCents,
   wamCheckoutTotalCents,
   wamErrorMessage,
 } from "./lib/wam";
@@ -193,6 +195,8 @@ export const internalStartPaywiseForCs = internalAction({
     shortUrl: v.optional(v.string()),
     publicPayCode: v.optional(v.string()),
     amountCents: v.number(),
+    feeCents: v.number(),
+    totalCents: v.number(),
   }),
   handler: async (ctx, args): Promise<{
     paymentId: string;
@@ -200,6 +204,8 @@ export const internalStartPaywiseForCs = internalAction({
     shortUrl?: string;
     publicPayCode?: string;
     amountCents: number;
+    feeCents: number;
+    totalCents: number;
   }> => {
     const phone = args.phone.replace(/\D/g, "");
     const user: StudioCsUser = await ctx.runQuery(
@@ -245,14 +251,13 @@ export const internalStartPaywiseForCs = internalAction({
         shortUrl: short.shortUrl,
         publicPayCode: short.publicPayCode,
         amountCents: prepared.amountCents,
+        feeCents: wamCardFeeCents(prepared.amountCents),
+        totalCents: wamCheckoutTotalCents(prepared.amountCents),
       };
     }
     if (!prepared.callbackToken) throw new Error("Checkout preparation failed");
     const appBase = requirePublicUrl("SITE_URL", siteUrl());
-    const academyCourseId = prepared.academyCourseId ?? args.courseId;
-    const returnUrl = academyCourseId
-      ? `${appBase}/?payment=success&paymentId=${prepared.paymentId}&academyCourse=${academyCourseId}`
-      : `${appBase}/?payment=success&paymentId=${prepared.paymentId}`;
+    const returnUrl = studioWamCsReturnUrl(appBase, String(prepared.paymentId));
     try {
       const wam = getWamSDK();
       const intent = await wam.createPaymentIntent({
@@ -287,6 +292,8 @@ export const internalStartPaywiseForCs = internalAction({
         shortUrl: short.shortUrl,
         publicPayCode: short.publicPayCode,
         amountCents: prepared.amountCents,
+        feeCents: wamCardFeeCents(prepared.amountCents),
+        totalCents: wamCheckoutTotalCents(prepared.amountCents),
       };
     } catch (err) {
       throw new Error(wamErrorMessage(err));

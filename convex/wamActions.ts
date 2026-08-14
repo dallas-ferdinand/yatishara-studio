@@ -8,6 +8,7 @@ import type { Id } from "./_generated/dataModel";
 import {
   WAM_CURRENCY,
   normalizeWamIntentStatus,
+  studioWamAppReturnUrl,
   wamCheckoutTotalCents,
   wamErrorMessage,
 } from "./lib/wam";
@@ -503,9 +504,7 @@ export const startCheckout = action({
       allowHttpLocalhost: true,
     });
     const academyCourseId = prepared.academyCourseId ?? args.academyCourseId;
-    const returnUrl = academyCourseId
-      ? `${appBase}/?payment=success&paymentId=${prepared.paymentId}&academyCourse=${academyCourseId}`
-      : `${appBase}/?payment=success&paymentId=${prepared.paymentId}&billing=topup`;
+    const returnUrl = studioWamAppReturnUrl(appBase, String(prepared.paymentId));
 
     let intent: Awaited<ReturnType<ReturnType<typeof getWamSDK>["createPaymentIntent"]>>;
     try {
@@ -880,7 +879,7 @@ export const startSubscribe = action({
     const appBase = requirePublicUrl("SITE_URL", siteUrl(), {
       allowHttpLocalhost: true,
     });
-    const returnUrl = `${appBase}/?payment=success&paymentId=${prepared.paymentId}&billing=plans`;
+    const returnUrl = studioWamAppReturnUrl(appBase, String(prepared.paymentId));
 
     let intent: Awaited<ReturnType<ReturnType<typeof getWamSDK>["createPaymentIntent"]>>;
     try {
@@ -1071,7 +1070,7 @@ export const startInvoicePay = action({
     const appBase = requirePublicUrl("SITE_URL", siteUrl(), {
       allowHttpLocalhost: true,
     });
-    const returnUrl = `${appBase}/?payment=success&paymentId=${prepared.paymentId}&billing=invoices`;
+    const returnUrl = studioWamAppReturnUrl(appBase, String(prepared.paymentId));
     let intent: Awaited<ReturnType<ReturnType<typeof getWamSDK>["createPaymentIntent"]>>;
     try {
       const wam = getWamSDK();
