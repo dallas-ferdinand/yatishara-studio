@@ -28465,28 +28465,23 @@ function StudioComposer({
                     pruneComposerAttachmentsFromDom(editor, setAttachments);
                     return;
                   }
-                  setAttachments((prev) => {
-                    const merged = [...prev];
-                    const seen = new Set(merged.map((item) => item.id));
-                    for (const item of hydrated.attachments) {
-                      if (!item?.id || seen.has(item.id)) continue;
-                      seen.add(item.id);
-                      merged.push(item);
-                    }
-                    const current = readComposerEditorText(editor)
-                      .replace(/\uFFFC/g, "")
-                      .trim();
-                    const nextDraft = current
-                      ? `${current}\n\n${hydrated.draftWithMarkers}`
-                      : hydrated.draftWithMarkers;
-                    applyComposerContextToEditor(editor, {
-                      draft: nextDraft,
-                      attachments: merged,
-                    });
-                    pushDraftToParent(readComposerEditorText(editor), {
-                      immediate: true,
-                    });
-                    return merged;
+                  const merged = mergeComposerAttachmentLists(
+                    attachments,
+                    hydrated.attachments,
+                  );
+                  const current = readComposerEditorText(editor)
+                    .replace(/\uFFFC/g, "")
+                    .trim();
+                  const nextDraft = current
+                    ? `${current}\n\n${hydrated.draftWithMarkers}`
+                    : hydrated.draftWithMarkers;
+                  applyComposerContextToEditor(editor, {
+                    draft: nextDraft,
+                    attachments: merged,
+                  });
+                  setAttachments(merged);
+                  pushDraftToParent(readComposerEditorText(editor), {
+                    immediate: true,
                   });
                 } catch (error) {
                   console.warn("Prompt paste hydrate failed", error);
@@ -31075,6 +31070,17 @@ function removeComposerTokenBeforeCaret(editor, setAttachments) {
     setAttachments((items) => items.filter((item) => item.id !== id));
   }
   return true;
+}
+
+function mergeComposerAttachmentLists(existing, incoming) {
+  const out = Array.isArray(existing) ? [...existing] : [];
+  const seen = new Set(out.map((item) => item.id).filter(Boolean));
+  for (const item of incoming ?? []) {
+    if (!item?.id || seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
 }
 
 function pruneComposerAttachmentsFromDom(editor, setAttachments) {
