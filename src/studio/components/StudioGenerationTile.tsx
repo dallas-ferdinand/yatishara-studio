@@ -250,6 +250,7 @@ export type GenerationLibraryTile = {
   mode: "image" | "video" | "audio";
   folderId?: string;
   error?: string;
+  audioType?: "voiceover" | "sfx" | "music";
 };
 
 function tileAspectCss(tile: GenerationLibraryTile): string {
@@ -287,6 +288,22 @@ function isBusy(stage: GenerationLibraryTile["stage"]) {
 
 function wasCancelled(error?: string) {
   return /cancell?ed by you/i.test(String(error ?? ""));
+}
+
+function tileKindBadge(tile: GenerationLibraryTile) {
+  if (tile.kind === "audio") {
+    if (tile.audioType === "sfx") return "SFX";
+    if (tile.audioType === "music") return "Music";
+    if (tile.audioType === "voiceover") return "Voiceover";
+    const model = tile.modelLabel ?? "";
+    if (/music/i.test(model)) return "Music";
+    if (/sfx/i.test(model)) return "SFX";
+    if (/voice/i.test(model)) return "Voiceover";
+    return "Audio";
+  }
+  if (tile.kind === "image") return "Image";
+  if (tile.kind === "video") return "Video";
+  return tile.kind;
 }
 
 export function StudioGenerationTile({
@@ -464,7 +481,7 @@ export function StudioGenerationTile({
       >
         {mediaBody}
 
-        <span className="studio-gen-tile-badge">{tile.kind}</span>
+        <span className="studio-gen-tile-badge">{tileKindBadge(tile)}</span>
 
         {busy ? (
           <button

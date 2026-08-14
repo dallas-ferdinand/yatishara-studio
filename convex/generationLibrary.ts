@@ -54,6 +54,9 @@ const tileReturn = v.object({
   mode: modeReturn,
   folderId: v.optional(v.id("folders")),
   error: v.optional(v.string()),
+  audioType: v.optional(
+    v.union(v.literal("voiceover"), v.literal("sfx"), v.literal("music")),
+  ),
 });
 
 const PAGE_DEFAULT = 24;
@@ -255,6 +258,7 @@ async function tileFromJob(
     mode: job.mode,
     folderId: job.saveFolderId,
     ...(job.error ? { error: job.error } : {}),
+    ...(job.audioType ? { audioType: job.audioType } : {}),
   };
 }
 

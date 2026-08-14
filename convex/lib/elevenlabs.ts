@@ -632,7 +632,8 @@ export async function composeMusic(args: {
   }
   return withElevenLabsApiKey(1, async (apiKey) => {
     const response = await fetch(
-      `${ELEVEN_API_BASE}/v1/music?output_format=mp3_44100_128`,
+      // v2 default is mp3_48000_192; 44100_128 is a v1 format and 400s compose.
+      `${ELEVEN_API_BASE}/v1/music?output_format=mp3_48000_192`,
       {
         method: "POST",
         headers: {

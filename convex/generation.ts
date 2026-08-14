@@ -1849,6 +1849,7 @@ export const getJobForAudio = internalQuery({
       audioLoop: v.optional(v.boolean()),
       promptInfluence: v.optional(v.number()),
       forceInstrumental: v.optional(v.boolean()),
+      resolvedModel: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -1867,6 +1868,7 @@ export const getJobForAudio = internalQuery({
       audioLoop: job.audioLoop,
       promptInfluence: job.promptInfluence,
       forceInstrumental: job.forceInstrumental,
+      resolvedModel: job.resolvedModel,
     };
   },
 });

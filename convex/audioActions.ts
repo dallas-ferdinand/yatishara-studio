@@ -122,6 +122,7 @@ const getJobRef = internalQueryRef<
     audioLoop?: boolean;
     promptInfluence?: number;
     forceInstrumental?: boolean;
+    resolvedModel?: string;
   } | null
 >("generation:getJobForAudio");
 
@@ -485,14 +486,21 @@ export const executeAudioJob = internalAction({
       if (!job) throw new Error("Audio job not found.");
 
       let audio: { data: Uint8Array; mediaType: string };
-      if (job.audioType === "sfx") {
+      const audioType =
+        job.audioType ??
+        (/music_v2|elevenlabs\/music/i.test(job.resolvedModel ?? "")
+          ? "music"
+          : /text_to_sound|sound_v2/i.test(job.resolvedModel ?? "")
+            ? "sfx"
+            : "voiceover");
+      if (audioType === "sfx") {
         audio = await soundGeneration({
           text: job.userPrompt,
           durationSeconds: job.durationSeconds,
           loop: job.audioLoop,
           promptInfluence: job.promptInfluence,
         });
-      } else if (job.audioType === "music") {
+      } else if (audioType === "music") {
         audio = await composeMusic({
           prompt: job.userPrompt,
           durationSeconds: job.durationSeconds,
@@ -526,11 +534,7 @@ export const executeAudioJob = internalAction({
 
       await ctx.runMutation(markStageRef, { jobId, stage: "saving" });
       const audioKind =
-        job.audioType === "sfx"
-          ? "sfx"
-          : job.audioType === "music"
-            ? "music"
-            : "audio";
+        audioType === "sfx" ? "sfx" : audioType === "music" ? "music" : "audio";
       const assetId = await saveAudioAsset(ctx, {
         jobId,
         name: generationAssetFileName({
