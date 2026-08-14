@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   attachmentComposerTag,
+  attachmentLiveMediaKind,
   pickGenerationUrl,
   splitVideoGenerationInputs,
 } from "./generationMedia";
@@ -53,6 +54,24 @@ describe("generationMedia", () => {
     expect(referenceInputs[0]?.url).toBe("https://cdn.example.com/product-signed.png");
     expect(referenceInputs[0]?.tag).toBe("product-shot");
     expect(referenceInputs[1]?.tag).toBe("baseball-shot.jpg");
+  });
+
+  it("reads image vs video from an attached element's media, not the chip kind", () => {
+    expect(
+      attachmentLiveMediaKind({
+        studioKind: "element",
+        kind: "context",
+        referenceAssets: [{ studioId: "v1", kind: "video", mediaUrl: "https://cdn.example.com/clip.mp4" }],
+      }),
+    ).toBe("video");
+    expect(
+      attachmentLiveMediaKind({
+        studioKind: "element",
+        kind: "context",
+        mediaKind: "image",
+        referenceAssets: [{ studioId: "i1", kind: "image", mediaUrl: "https://cdn.example.com/still.png" }],
+      }),
+    ).toBe("image");
   });
 
   it("tags files as filename.ext and elements as unique-id", () => {

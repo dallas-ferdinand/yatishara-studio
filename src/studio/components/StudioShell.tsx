@@ -229,6 +229,7 @@ import {
 } from "@/studio/lib/promptReferences";
 import {
   attachmentComposerTag,
+  attachmentLiveMediaKind,
   generationReferenceInputs,
   splitVideoGenerationInputs,
   tooSmallSeedanceImageMessage,
@@ -21411,10 +21412,9 @@ export function StudioShell({
           border-radius: 0;
           background: transparent;
         }
-        .studio-element-detail-file-actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
+        .studio-element-detail-file-actions.studio-gen-detail-actions {
+          grid-template-columns: 1fr;
+          margin-top: 4px;
         }
         [data-appearance="light"] .studio-element-detail {
           background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
@@ -21479,21 +21479,6 @@ export function StudioShell({
           gap: 2px;
           place-items: center;
           pointer-events: none;
-        }
-        .studio-element-detail-file-from {
-          justify-self: start;
-          margin: 0;
-          padding: 0;
-          border: 0;
-          background: transparent;
-          color: var(--color-cursor-muted);
-          font: inherit;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-        }
-        .studio-element-detail-file-from:hover {
-          color: var(--color-cursor-text);
         }
         .studio-element-detail-file img,
         .studio-element-detail-file video {
@@ -27492,12 +27477,17 @@ function StudioComposer({
   const railAttachments = useMemo(
     () =>
       orderKindsForSeedance(
-        (attachments ?? []).filter(
-          (item) =>
-            item.kind === "image" ||
-            item.kind === "video" ||
-            item.studioKind === "element",
-        ),
+        (attachments ?? [])
+          .filter(
+            (item) =>
+              item.kind === "image" ||
+              item.kind === "video" ||
+              item.studioKind === "element",
+          )
+          .map((item) => {
+            const kind = attachmentLiveMediaKind(item) ?? item.kind;
+            return { ...item, kind };
+          }),
       ),
     [attachments],
   );
@@ -30589,9 +30579,9 @@ function elementTokenIconKind(elementType) {
 }
 
 function composerTokenIconKind(attachment) {
+  if (attachment.studioKind === "element") return elementTokenIconKind(attachment.elementType);
   if (attachment.kind === "image" || attachment.kind === "video" || attachment.kind === "audio") return attachment.kind;
   if (attachment.studioKind === "folder") return "folder";
-  if (attachment.studioKind === "element") return elementTokenIconKind(attachment.elementType);
   if (attachment.studioKind === "document") return "file";
   return attachment.kind ?? "file";
 }
@@ -33436,6 +33426,8 @@ function StudioElementDetailPane({
   const media = (isStyleSheet ? sourceAssets : sourceAssets.slice(0, 1))[0] ?? null;
   const previewUrl = media?.thumbnailUrl ?? media?.mediaUrl;
   const isVideo = media?.kind === "video";
+  const removeLabel =
+    media?.kind === "video" ? "Remove video" : media?.kind === "audio" ? "Remove audio" : "Remove image";
   const fields = (
     <>
       <input
@@ -33476,19 +33468,15 @@ function StudioElementDetailPane({
     </>
   );
   const fileActions = (
-    <div className="studio-element-detail-file-actions">
+    <div className="studio-element-detail-file-actions studio-gen-detail-actions">
       {onRequestPickAsset ? (
-        <button type="button" className="studio-element-detail-file-from" onClick={() => openFilesPick()}>
+        <button type="button" onClick={() => openFilesPick()}>
           From Files
         </button>
       ) : null}
       {media ? (
-        <button
-          type="button"
-          className="studio-element-detail-file-from"
-          onClick={() => void removeMedia(media.studioId)}
-        >
-          Remove
+        <button type="button" className="is-danger" onClick={() => void removeMedia(media.studioId)}>
+          {removeLabel}
         </button>
       ) : null}
     </div>
@@ -33586,7 +33574,7 @@ function StudioElementDetailPane({
             <button
               type="button"
               className="studio-element-detail-file-clear"
-              aria-label="Remove"
+              aria-label={removeLabel}
               onClick={(event) => {
                 event.stopPropagation();
                 void removeMedia(media.studioId);
@@ -38373,15 +38361,22 @@ function mergeEntrySnapshot(entry, snapshot) {
 
 function entryToAttachment(entry) {
   const studioKind = entry.studioKind ?? (entry.type === "dir" ? "folder" : undefined);
-  const mediaKind =
+  const liveMediaKind =
     entry.mediaKind === "image" || entry.mediaKind === "video" || entry.mediaKind === "audio"
       ? entry.mediaKind
       : entry.kind === "image" || entry.kind === "video" || entry.kind === "audio"
         ? entry.kind
-        : null;
+        : (() => {
+            const live = (entry.referenceAssets ?? entry.sourceAssets ?? []).find(
+              (item) => item?.kind === "image" || item?.kind === "video" || item?.kind === "audio",
+            );
+            return live?.kind === "image" || live?.kind === "video" || live?.kind === "audio"
+              ? live.kind
+              : null;
+          })();
   const kind =
     studioKind === "asset" || !studioKind
-      ? mediaKind ?? inferAttachmentKind(entry)
+      ? liveMediaKind ?? inferAttachmentKind(entry)
       : studioKind === "document"
         ? "file"
         : "context";
@@ -38400,6 +38395,7 @@ function entryToAttachment(entry) {
   return {
     id,
     kind,
+    mediaKind: liveMediaKind ?? undefined,
     label,
     path: path || undefined,
     displayPath: entry.displayPath ?? (path ? displayWorkspacePath(path) : label),

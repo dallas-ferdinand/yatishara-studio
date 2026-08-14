@@ -47,6 +47,7 @@ export function attachmentComposerTag(attachment: {
 type AttachmentLike = {
   id?: string;
   kind?: string;
+  mediaKind?: string;
   studioKind?: string;
   studioId?: string;
   label?: string;
@@ -71,6 +72,18 @@ type AttachmentLike = {
     mimeType?: string;
   }>;
 };
+
+function asMediaKind(kind?: string | null): SeedanceMediaKind | null {
+  return kind === "image" || kind === "video" || kind === "audio" ? kind : null;
+}
+
+/** Image / video / audio the composer and Seedance should treat this attachment as. */
+export function attachmentLiveMediaKind(attachment: AttachmentLike): SeedanceMediaKind | null {
+  if (attachment.studioKind === "element") {
+    return asMediaKind(elementMediaAsset(attachment)?.kind) ?? asMediaKind(attachment.mediaKind);
+  }
+  return asMediaKind(attachment.kind) ?? asMediaKind(attachment.mediaKind);
+}
 
 function elementMediaAsset(attachment: AttachmentLike) {
   const refs = attachment.referenceAssets ?? [];
@@ -107,10 +120,9 @@ export function splitVideoGenerationInputs(
     if (attachment.studioKind === "element") {
       const media = elementMediaAsset(attachment);
       if (!media) continue;
-      const kind: SeedanceMediaKind | null =
-        media.kind === "image" || media.kind === "video" || media.kind === "audio"
-          ? media.kind
-          : "image";
+      const kind: SeedanceMediaKind =
+        attachmentLiveMediaKind(attachment) ??
+        (asMediaKind(media.kind) ?? "image");
       const url = pickGenerationUrl({
         signedUrl:
           signedUrls[`element-media:${attachment.id}`] ??
