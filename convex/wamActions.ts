@@ -1106,3 +1106,77 @@ export const startInvoicePay = action({
   },
 });
 
+const forceCancelByEmailRef = makeFunctionReference<
+  "mutation",
+  { email: string },
+  {
+    userId: Id<"users">;
+    name: string;
+    email: string;
+    previousStatus: string;
+    wamSubscriptionId?: string;
+    alreadyCancelled: boolean;
+  }
+>("subscriptions:internalForceCancelByEmail") as unknown as FunctionReference<
+  "mutation",
+  "internal",
+  { email: string },
+  {
+    userId: Id<"users">;
+    name: string;
+    email: string;
+    previousStatus: string;
+    wamSubscriptionId?: string;
+    alreadyCancelled: boolean;
+  }
+>;
+
+export const internalForceCancelByEmail = internalAction({
+  args: { email: v.string() },
+  returns: v.object({
+    userId: v.string(),
+    name: v.string(),
+    email: v.string(),
+    previousStatus: v.string(),
+    wamSubscriptionId: v.optional(v.string()),
+    alreadyCancelled: v.boolean(),
+    wamCancelled: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const row = await ctx.runMutation(forceCancelByEmailRef, {
+      email: args.email,
+    });
+    let wamCancelled = false;
+    if (row.wamSubscriptionId) {
+      const wam = getWamSDK() as ReturnType<typeof getWamSDK> & {
+        cancelSubscription?: (
+          id: string,
+          args?: { reason?: string },
+        ) => Promise<unknown>;
+      };
+      try {
+        if (typeof wam.cancelSubscription === "function") {
+          await wam.cancelSubscription(row.wamSubscriptionId, {
+            reason: "QA reset — subscribe again",
+          });
+          wamCancelled = true;
+        }
+      } catch (error) {
+        console.error("wam_force_cancel_failed", {
+          wamSubscriptionId: row.wamSubscriptionId,
+          message: error instanceof Error ? error.message : "unknown",
+        });
+      }
+    }
+    return {
+      userId: String(row.userId),
+      name: row.name,
+      email: row.email,
+      previousStatus: row.previousStatus,
+      wamSubscriptionId: row.wamSubscriptionId,
+      alreadyCancelled: row.alreadyCancelled,
+      wamCancelled,
+    };
+  },
+});
+

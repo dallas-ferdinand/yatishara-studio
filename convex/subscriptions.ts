@@ -520,3 +520,84 @@ export const resumeMyPlan = authedMutation({
     };
   },
 });
+
+/** QA/ops: immediately drop a live plan so the user can subscribe again. */
+export const internalForceCancelByEmail = internalMutation({
+  args: { email: v.string() },
+  returns: v.object({
+    userId: v.id("users"),
+    name: v.string(),
+    email: v.string(),
+    previousStatus: v.string(),
+    wamSubscriptionId: v.optional(v.string()),
+    alreadyCancelled: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
+    if (!email.includes("@")) {
+      throw new Error("Invalid email");
+    }
+    const user =
+      (await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", email))
+        .unique()) ??
+      (email === args.email.trim()
+        ? null
+        : await ctx.db
+            .query("users")
+            .withIndex("email", (q) => q.eq("email", args.email.trim()))
+            .unique());
+    if (!user) {
+      throw new Error(`No user found for ${email}`);
+    }
+    const now = Date.now();
+    const live = await liveSubscriptionForUser(ctx, user._id);
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+      user.name ||
+      email;
+    if (!live) {
+      if (account?.activeSubscriptionId) {
+        await ctx.db.patch(account._id, {
+          activeSubscriptionId: undefined,
+          updatedAt: now,
+        });
+      }
+      return {
+        userId: user._id,
+        name,
+        email,
+        previousStatus: "none",
+        alreadyCancelled: true,
+      };
+    }
+    const wamSubscriptionId = live.wamSubscriptionId;
+    await ctx.db.patch(live._id, {
+      status: "cancelled",
+      cancelAtPeriodEnd: false,
+      cancelScheduledAt: undefined,
+      pastDueSince: undefined,
+      wamSubscriptionId: undefined,
+      updatedAt: now,
+    });
+    if (account?.activeSubscriptionId === live._id) {
+      await ctx.db.patch(account._id, {
+        activeSubscriptionId: undefined,
+        updatedAt: now,
+      });
+    }
+    return {
+      userId: user._id,
+      name,
+      email,
+      previousStatus: live.status,
+      wamSubscriptionId,
+      alreadyCancelled: false,
+    };
+  },
+});
