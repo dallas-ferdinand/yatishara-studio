@@ -84,13 +84,13 @@ export function creditsFromAmountCents(
 }
 
 /**
- * Wam published card fee when the payer covers 100%: 3% + TT$1.50.
- * Used for checkout disclosure; live charged total may round a few cents differently.
+ * Wam card fee when the payer covers 100%: 3% + TT$1.50.
+ * Wam floors the 3% (e.g. $9.20 → fee $1.77, total $10.97 — not round→$10.98).
  * @see https://docs.wam.money/docs/help-center/fees
  */
 export function wamCardFeeCents(amountCents: number): number {
   const base = Math.max(0, Math.round(Number(amountCents) || 0));
-  return Math.round(base * 0.03) + 150;
+  return Math.floor(base * 0.03) + 150;
 }
 
 /** @deprecated Use wamCardFeeCents */

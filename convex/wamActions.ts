@@ -387,7 +387,11 @@ const finalizeAcademyRef = makeFunctionReference<
 >;
 
 function siteUrl(): string {
-  return (process.env.SITE_URL ?? "").replace(/\/$/, "");
+  const raw = (process.env.SITE_URL ?? "").replace(/\/$/, "");
+  if (/0\.0\.0\.0|127\.0\.0\.1|localhost/i.test(raw)) {
+    return "https://studio.yatishara.com";
+  }
+  return raw || "https://studio.yatishara.com";
 }
 
 function requirePublicUrl(

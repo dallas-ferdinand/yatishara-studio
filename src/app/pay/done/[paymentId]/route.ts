@@ -3,6 +3,7 @@ import {
   STUDIO_WAM_RETURN_COOKIE,
   encodeWamReturnCookie,
 } from "@/studio/lib/wamReturn";
+import { publicStudioOrigin } from "@/studio/lib/publicSiteUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,8 +21,8 @@ export async function GET(
   const url = new URL(request.url);
   const result = (url.searchParams.get("result") || "").toUpperCase();
   const paid = result === "OK";
-  const origin = url.origin;
-  const response = NextResponse.redirect(`${origin}/`, 302);
+  const home = `${publicStudioOrigin(url)}/`;
+  const response = NextResponse.redirect(home, 302);
   response.headers.set("Cache-Control", "no-store");
   if (!paid) {
     response.headers.set(

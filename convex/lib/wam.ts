@@ -62,11 +62,12 @@ export function humanizeWamProviderStatus(status?: string | null): string | null
 
 /**
  * Wam card fee when payer covers 100%: 3% + TT$1.50.
+ * Floor the 3% to match Wam checkout (920 → 177 fee → 1097 total, not 1098).
  * @see https://docs.wam.money/docs/help-center/fees
  */
 export function wamCardFeeCents(amountCents: number): number {
   const base = Math.max(0, Math.round(Number(amountCents) || 0));
-  return Math.round(base * 0.03) + 150;
+  return Math.floor(base * 0.03) + 150;
 }
 
 export function wamCheckoutTotalCents(amountCents: number): number {
