@@ -962,7 +962,10 @@ export async function getAppBuildStatus() {
 }
 
 export function higgsfieldImageUrl(id) {
-  return `${session.gatewayUrl}/api/higgsfield/images/${encodeURIComponent(id)}?token=${encodeURIComponent(session.token)}`;
+  if (!session?.gatewayUrl) return "";
+  const token = session.token ? encodeURIComponent(session.token) : "";
+  const base = `${session.gatewayUrl}/api/higgsfield/images/${encodeURIComponent(id)}`;
+  return token ? `${base}?token=${token}` : base;
 }
 
 export async function fetchFilesRevision(path = "", workspaceId = "mercuryos") {
@@ -1066,8 +1069,11 @@ export async function saveClientLayout(layout) {
 }
 
 export function previewUrl(path, workspaceId = "mercuryos") {
+  // Studio (Convex) has no MercuryOS gateway session — never throw on null.
+  if (!session?.gatewayUrl) return "";
   const base = `${session.gatewayUrl}/api/preview?path=${encodeURIComponent(path)}&workspaceId=${encodeURIComponent(workspaceId)}`;
-  if (session?.cookieAuth) return base;
+  if (session.cookieAuth) return base;
+  if (!session.token) return base;
   return `${base}&token=${encodeURIComponent(session.token)}`;
 }
 
