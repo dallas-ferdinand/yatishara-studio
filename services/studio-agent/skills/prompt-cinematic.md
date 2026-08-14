@@ -77,23 +77,24 @@ Length is not the enemy — swap-thinning is. Enough locks that a stranger could
 ## Save prompt as a script (when they asked for a prompt)
 
 1. Write the full sealed prompt above — never a short vibe line.
-2. **Always** `studio_create_document` into **CWD** (Script `.md`). Never `remember` the script body — only a short pointer to the file after create.
-3. `contentMarkdown` = **clean markdown only**. Studio decides how to render.
+2. **ELEMENT FLOW when identity is attached** — product / character / prop / location stills are not "just assets." Create (or reuse via `studio_list_elements`) a `.element` per lock, then use `@name` + `element://{id}` in References. Style/mood-only refs may stay `asset://`. Never claim Elements are retired; never skip to asset://-only when the job is identity continuity.
+3. **Always** `studio_create_document` into **CWD** (Script `.md`). Never `remember` the script body — only a short pointer to the file after create.
+4. `contentMarkdown` = **clean markdown only**. Studio decides how to render.
 
 ~~~
 # Prompt — <short>
 
 ```text
-@Label …sealed prompt that names each attached asset with @Label (same Label as References)…
+@Label …sealed prompt that names each locked element with @Label (same Label as References)…
 ```
 
 ## References
 
-- [Label](asset://{assetId}) — optional note
-- [bottle](element://{elementId}) — element lock
+- [Product](element://{elementId}) — identity lock
+- [mood](asset://{assetId}) — style-only ok as asset
 ~~~
 
 Asset or element ids from attach/create. No pipe-meta (`| kind: | path: | studio:`). No HTML. No unclosed fences.
 Every References Label MUST appear as `@Label` inside the sealed prompt text so paste/Run shows chips and Seedance binds the media.
-4. Paste in chat only if they asked to see/copy it; otherwise tell them the Script is in Files.
-5. If they also want a generate: `studio_get_document` if needed → parse refs → estimate → storyboard still (people) → `studio_generate_video` with `folderId` = CWD and `referenceAssetIds` / `referenceElementIds` / `startFrameAssetId`. Quote cost as $ / TTD only.
+5. Paste in chat only if they asked to see/copy it; otherwise tell them the Script is in Files.
+6. If they also want a generate: `studio_get_document` if needed → parse refs → estimate → storyboard still (people) → `studio_generate_video` with `folderId` = CWD and `referenceAssetIds` / `referenceElementIds` / `startFrameAssetId`. Quote cost as $ / TTD only.

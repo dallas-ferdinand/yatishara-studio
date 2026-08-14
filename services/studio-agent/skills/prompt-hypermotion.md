@@ -62,8 +62,9 @@ For short ads: pack concrete action verbs and spatial landmarks. Soft “beautif
 ## Save prompt as a script (when they asked for a prompt)
 
 1. Write a dense sealed HM prompt (beats + camera start→end) — not a short vibe dump.
-2. **Always** `studio_create_document` into **CWD** (Script `.md`: `Prompt — <short>` + clean markdown). Never stash the body in `remember`.
-3. Shape:
+2. **ELEMENT FLOW** — product/character/prop/location stills → `studio_create_element` (or reuse via list) then `@name` + `element://` in References. Style mood may stay `asset://`. Never claim Elements are retired.
+3. **Always** `studio_create_document` into **CWD** (Script `.md`: `Prompt — <short>` + clean markdown). Never stash the body in `remember`.
+4. Shape:
 
 ~~~
 # Prompt — <short>
@@ -74,9 +75,9 @@ For short ads: pack concrete action verbs and spatial landmarks. Soft “beautif
 
 ## References
 
-- [Label](asset://{assetId}) — product reference
+- [Product](element://{elementId}) — identity lock
 ~~~
 
-4. Asset or element ids — no pipe-meta rows, no HTML, no unclosed fences. Higgs-style: `@Label` inside the sealed prompt + `asset://` / `element://` links under ## References. Studio paste/Run hydrates chips from those links.
-5. Chat paste only if they asked to see/copy it.
-6. Generate path: get doc refs → estimate → still → video into CWD with `referenceAssetIds` / `referenceElementIds`. Speak $ / TTD only.
+5. Asset or element ids — no pipe-meta rows, no HTML, no unclosed fences. Higgs-style: `@Label` inside the sealed prompt + `asset://` / `element://` links under ## References. Studio paste/Run hydrates chips from those links.
+6. Chat paste only if they asked to see/copy it.
+7. Generate path: get doc refs → estimate → still → video into CWD with `referenceAssetIds` / `referenceElementIds`. Speak $ / TTD only.

@@ -62,9 +62,10 @@ MATERIALS: [skin/metal/fabric] look real — rust, weave, fingerprints when they
 ## Save prompt as a script (when they asked for a prompt, not a generate)
 
 1. Load this skill, write a **full** sealed prompt — never a one-line vibe dump.
-2. **Always** `studio_create_document` into **CWD** (Files → Script `.md`). Never put the prompt body in `remember`/memory — memory may only note *where* the Script lives after create.
-3. Title: `Prompt — <short subject>` (or `Script — <short>`).
-4. `contentMarkdown` must be **clean markdown only** (CommonMark).
+2. **ELEMENT FLOW** — if attached stills are the product/character/prop/location to lock: `studio_list_elements` → `studio_create_element` → use `element://` + `@name` in the Script. Style/mood-only may stay `asset://`. Never claim Elements are retired.
+3. **Always** `studio_create_document` into **CWD** (Files → Script `.md`). Never put the prompt body in `remember`/memory — memory may only note *where* the Script lives after create.
+4. Title: `Prompt — <short subject>` (or `Script — <short>`).
+5. `contentMarkdown` must be **clean markdown only** (CommonMark).
 
 Example `contentMarkdown`:
 
@@ -77,8 +78,8 @@ Example `contentMarkdown`:
 
 ## References
 
-- [Label](asset://{assetId}) — optional note
-- [bottle](element://{elementId}) — element lock
+- [Product](element://{elementId}) — identity lock
+- [mood](asset://{assetId}) — style-only ok as asset
 ~~~
 
 **Hard rules for Script files**
@@ -88,7 +89,7 @@ Example `contentMarkdown`:
 - **Forbidden:** pipe-meta rows (`| kind: | path: | studio:`), HTML, null bytes, unclosed fences, inventing ids.
 - Use real attached/created asset or element ids only.
 
-5. Chat: point them at the Script file. Paste in chat **only** if they asked to see / copy it.
-6. Generate only if they also asked to generate — then pass `referenceAssetIds` / `referenceElementIds` from the References lines (and `folderId` = CWD).
+6. Chat: point them at the Script file. Paste in chat **only** if they asked to see / copy it.
+7. Generate only if they also asked to generate — then pass `referenceAssetIds` / `referenceElementIds` from the References lines (and `folderId` = CWD).
 
 Estimate first if spend is unclear. After ok, optionally `studio_view_media`.

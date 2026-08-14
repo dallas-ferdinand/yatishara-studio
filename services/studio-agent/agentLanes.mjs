@@ -44,11 +44,11 @@ export const INTENT_BLURBS = {
   studio_list_video_models:
     "List real Studio video models + descriptions/caps. Call before inventing model details. Never invent legacy/pipeline marketing.",
   studio_create_element:
-    "Create a .element (@unique-name) with optional image/video. Args:{type:character|prop|location,name,folderId?,description?,referenceAssetIds?}. Upload media first. Tag @name in prompts + element://id in ## References. Generate with referenceElementIds.",
+    "Create a .element identity lock. WHY: Seedance/Create bind reusable product/character/prop/location via @name + element:// — bare asset:// is one-shot and weaker for continuity. Args:{type:character|prop|location,name,folderId?,description?,referenceAssetIds?}. Unique @name (no spaces). Upload first. Tag @name in sealed prompt + element://id in ## References. Generate with referenceElementIds. Never say elements are retired.",
   studio_update_element:
     "Swap element media or edit name/description. Args:{elementId,name?,description?,referenceAssetIds?}.",
   studio_list_elements:
-    "List .element files. Args:{folderId?,type?}.",
+    "List .element files. Args:{folderId?,type?}. Prefer before creating a duplicate identity lock.",
   studio_pull_frames:
     "Extract N stills from a video (VO cadence: count=clamp(round(duration/2),4,8)). Args:{assetId,startSec?,endSec?,count?} or timesSec[]. Then inspect frame assets.",
   studio_generate_audio:
@@ -107,11 +107,38 @@ export function detectActionLane(message, workingSet) {
     return "LANE: EDIT existing Script — get real documentId (CWD index / folder_contents), studio_get_document, then studio_patch_document with exact oldString→newString for ONLY the asked change. Preserve ``` fence, headings, References, and everything they did not mention. Never studio_update_document full rewrite unless the body is empty or they explicitly asked rewrite/from scratch. Never create a second Script with the same title.";
   }
 
-  if (
-    /\b(create|make|new|add)\b.{0,40}\belement\b/.test(text) ||
-    /\.element\b/.test(text)
-  ) {
-    return "LANE: studio_upload_asset if they gave media, then studio_create_element {type,name,folderId:CWD,description?,referenceAssetIds}. Unique @name (no spaces). Later prompts: @name + element://id in ## References, generate with referenceElementIds.";
+  const wantsElement =
+    /\b(create|make|new|add|lock|turn\s+into|elementize)\b.{0,48}\belements?\b/.test(text) ||
+    /\belements?\b.{0,32}\b(for|from|of)\b.{0,24}\b(these|this|them|it|attached)\b/.test(text) ||
+    /\.element\b/.test(text);
+
+  const wantsPrompt =
+    !editAsk &&
+    (/\b(hyper[\s-]?motion|whip|smash|fpv)\b/.test(text) ||
+      (/\b(cinematic|filmed|continuous[\s-]?take|lifestyle\s+ad)\b/.test(text) &&
+        /\b(prompt|video|clip|ad|shot)\b/.test(text)) ||
+      /\b(write|craft|create|give)\b.{0,40}\b(prompt|script)\b/.test(text) ||
+      /\b(prompt|script)\b.{0,40}\b(for|for\s+me|please)\b/.test(text) ||
+      /\b(image|product|hero|still|video|ad)\b.{0,40}\b(prompt|script)\b/.test(text) ||
+      /\b(prompt|script)\b.{0,40}\b(image|product|hero|still|video|ad)\b/.test(text) ||
+      /\bcreate a script\b/.test(text) ||
+      /\bshot script\b/.test(text) ||
+      (/\bmake\b.{0,40}\b(prompt|script)\b/.test(text) && !/\bmake\s+it\b/.test(text)));
+
+  // Identity-lock flow: attached product/character/prop media + prompt (or explicit element ask).
+  // WHY: .element + @name + element:// is how Create/Seedance reuse locked refs — not keyword theater.
+  const identityPromptWithAssets =
+    wantsPrompt &&
+    hasAsset &&
+    /\b(product|headphones?|bottle|hero|character|prop|location|flyer|logo|packshot|feature\s+ad|show\s+off|showcase)\b/.test(
+      text,
+    );
+
+  if (wantsElement || identityPromptWithAssets) {
+    const alsoPrompt = wantsPrompt || identityPromptWithAssets;
+    return alsoPrompt
+      ? "LANE: ELEMENT FLOW then prompt. WHY: attached product/character/prop/location stills become reusable Seedance locks via .element — bare asset:// alone skips chip hydration + continuity. 1) studio_list_elements in CWD — reuse live matches. 2) Else studio_create_element per identity still {type,name,folderId:CWD,referenceAssetIds:[assetId]} — unique @name no spaces (e.g. Product, Flyer). 3) skills prompt-* pack. 4) studio_create_document with @name inside ```text``` + `- [name](element://id)` under ## References (not asset:// for those locks). Style-only mood refs may stay asset://. NEVER say Elements are retired/unavailable. NEVER skip create when they asked for elements or identity-locked product/character prompts with attached media."
+      : "LANE: ELEMENT FLOW. WHY: .element is the reusable identity lock for Create/Seedance. studio_list_elements first (reuse). Else studio_upload_asset if needed → studio_create_element {type,name,folderId:CWD,description?,referenceAssetIds}. Unique @name. Later prompts: @name + element://id in ## References, generate with referenceElementIds. NEVER say Elements are retired.";
   }
 
   // Voiceover from video / VO script — before generic script craft
@@ -126,25 +153,14 @@ export function detectActionLane(message, workingSet) {
 
   // Prompt craft before generate — progressive skill load + save as editable doc
   if (/\b(hyper[\s-]?motion|whip|smash|fpv)\b/.test(text)) {
-    return "LANE: skills {id:\"prompt-hypermotion\"} then craft a sealed production prompt. Save via studio_create_document to CWD. Paste in chat only if they asked to see/copy it. Prefer videoModel seedance-2.5. Studio branding only.";
+    return "LANE: skills {id:\"prompt-hypermotion\"} then craft a sealed production prompt. Save via studio_create_document to CWD. Paste in chat only if they asked to see/copy it. Prefer videoModel seedance-2.5. Studio branding only. If identity stills are attached, elementize first (studio_create_element → @name + element://) — do not invent 'elements retired'.";
   }
   if (/\b(cinematic|filmed|continuous[\s-]?take|lifestyle\s+ad)\b/.test(text)
     && /\b(prompt|video|clip|ad|shot)\b/.test(text)) {
-    return "LANE: skills {id:\"prompt-cinematic\"} then craft sealed prompt → studio_create_document in CWD. Chat paste only if asked. Prefer videoModel seedance-2.5.";
+    return "LANE: skills {id:\"prompt-cinematic\"} then craft sealed prompt → studio_create_document in CWD. Chat paste only if asked. Prefer videoModel seedance-2.5. Attached product/character/prop stills → elementize first then element:// in References.";
   }
-  if (
-    !editAsk &&
-    (/\b(write|craft|create|give)\b.{0,40}\b(prompt|script)\b/.test(text) ||
-      /\b(prompt|script)\b.{0,40}\b(for|for\s+me|please)\b/.test(text) ||
-      /\b(image|product|hero|still|video|ad)\b.{0,40}\b(prompt|script)\b/.test(text) ||
-      /\b(prompt|script)\b.{0,40}\b(image|product|hero|still|video|ad)\b/.test(text) ||
-      /\bcreate a script\b/.test(text) ||
-      /\bshot script\b/.test(text) ||
-      // "make a prompt" (new) but not "make it longer"
-      (/\bmake\b.{0,40}\b(prompt|script)\b/.test(text) &&
-        !/\bmake\s+it\b/.test(text)))
-  ) {
-    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt/script. If they need a locked character/prop/location, studio_create_element then @name + element:// in References. If CWD already has a Prompt/Script → EDIT with studio_patch_document (or update only if empty). Else studio_create_document {folderId:CWD, title:\"Prompt — …\" or \"Script — …\", contentMarkdown NON-EMPTY with ```text fence + References: asset:// and element:// lines}. NEVER remember the script body. Do not dump the full prompt in chat unless they asked to see/copy it.";
+  if (wantsPrompt) {
+    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt/script. WHEN attached stills are the product/character/prop/location to lock: studio_list_elements → studio_create_element → @name + element:// in ## References (not asset://-only). Style mood refs may stay asset://. If CWD already has a Prompt/Script → EDIT with studio_patch_document (or update only if empty). Else studio_create_document {folderId:CWD, title:\"Prompt — …\" or \"Script — …\", contentMarkdown NON-EMPTY with ```text fence + References}. NEVER remember the script body. NEVER say Elements are retired. Do not dump the full prompt in chat unless they asked to see/copy it.";
   }
   if (/\b(generat(e|ing)|creat(e|ing)|make|draw|render)\b.{0,40}\b(image|picture|photo|still|art)\b/.test(text)
     || /\b(image|picture|photo)\b.{0,40}\b(generat|creat|make|draw|render)/.test(text)) {

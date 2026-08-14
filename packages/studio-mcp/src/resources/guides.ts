@@ -163,14 +163,31 @@ const ELEMENTS = guide(
   "Elements, character/prop sheets, style sheets.",
   `# Elements
 
-## Default (Create / Seedance)
+## Why
 
-1. \`studio_upload_asset\` (image or video)
-2. \`studio_create_element\` — unique \`@name\` (no spaces), optional description, \`referenceAssetIds\`
-3. In prompts: \`@name\` inside the sealed text + \`- [name](element://{elementId})\` under \`## References\`
-4. Generate with \`referenceElementIds\`
+A \`.element\` is a **reusable Seedance/Create identity lock** (product, character, prop, location).
+Bare \`asset://\` refs are one-shot. \`@name\` + \`element://\` hydrates chips on paste/Run and keeps the same lock across prompts and gens.
+Do **not** treat "create element" as a keyword-only ask — when the job is identity continuity, elementize first.
 
-\`studio_list_elements\`, \`studio_get_element\`, \`studio_update_element\` (swap media)
+## When
+
+- User asks to create / lock / elementize media
+- Attached product / character / prop / location stills + a prompt/ad/script that must keep that identity
+- Upcoming generate that should bind those locks
+
+Style/mood-only refs may stay \`asset://\`.
+
+## How (Create / Agent default)
+
+1. \`studio_list_elements\` in CWD — reuse live matches
+2. Else \`studio_upload_asset\` (image or video) if needed
+3. \`studio_create_element\` — unique \`@name\` (no spaces), optional description, \`referenceAssetIds\`
+4. In prompts: \`@name\` inside the sealed text + \`- [name](element://{elementId})\` under \`## References\`
+5. Generate with \`referenceElementIds\`
+
+\`studio_get_element\`, \`studio_update_element\` (swap media)
+
+Never claim Elements are retired or unavailable.
 
 ## Sheets (MCP only — not Agent)
 

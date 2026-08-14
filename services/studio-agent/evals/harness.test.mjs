@@ -43,6 +43,28 @@ export const GOLDEN_TASKS = [
     expectSkill: "generate-video",
   },
   {
+    id: "create-elements-and-prompt",
+    message:
+      "create elements for these and create a prompt to show off the product features",
+    workingSet: [
+      { studioKind: "asset", studioId: "a1" },
+      { studioKind: "asset", studioId: "a2" },
+    ],
+    expectLaneIncludes: "ELEMENT FLOW",
+  },
+  {
+    id: "product-prompt-with-assets",
+    message: "write a prompt to showcase these headphones",
+    workingSet: [{ studioKind: "asset", studioId: "a1" }],
+    expectLaneIncludes: "ELEMENT FLOW",
+  },
+  {
+    id: "create-element-only",
+    message: "make a new element from this",
+    workingSet: [{ studioKind: "asset", studioId: "a1" }],
+    expectLaneIncludes: "ELEMENT FLOW",
+  },
+  {
     id: "prompt-hypermotion",
     message: "write a hypermotion video prompt for a dance chaos ad",
     workingSet: [],
@@ -250,6 +272,9 @@ test("skills pack surface", () => {
   assert.ok(getSkill("prompt-cinematic")?.body?.includes("SCENE CONTEXT"));
   assert.ok(getSkill("prompt-cinematic")?.body?.includes("⛔"));
   assert.ok(getSkill("prompt-hypermotion")?.body?.includes("seedance"));
+  assert.ok(getSkill("prompt-cinematic")?.body?.includes("ELEMENT FLOW"));
+  assert.ok(getSkill("prompt-image")?.body?.includes("ELEMENT FLOW"));
+  assert.ok(getSkill("prompt-hypermotion")?.body?.includes("ELEMENT FLOW"));
   assert.ok(!/higgs|cinedance|hell\s*grind/i.test(getSkill("prompt-cinematic")?.body || ""));
   assert.ok(matchSkills("image").some((s) => s.id === "generate-image"));
   assert.ok(matchSkills("hypermotion").some((s) => s.id === "prompt-hypermotion"));
