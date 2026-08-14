@@ -347,13 +347,9 @@ function BillingTopUp({
             <strong>
               {formatTtdFromCredits(billingAccount?.creditBalance ?? 0, creditPriceCents)}
             </strong>
-            <p>
-              {canTopUp
-                ? liveSubscription?.planName
-                  ? `${liveSubscription.planName} · ${liveSubscription.interval === "year" ? "annual" : "monthly"}${liveSubscription.status === "past_due" ? " · payment due" : ""}`
-                  : "Plan active"
-                : "Extra top-up is available on a plan."}
-            </p>
+            {canTopUp ? null : (
+              <p>Extra top-up is available on a plan.</p>
+            )}
           </div>
           {canTopUp ? null : (
             <div className="studio-billing-current-actions">
@@ -418,12 +414,16 @@ function BillingTopUp({
                   <dt>Add to account</dt>
                   <dd>{formatTtdCents(customAmountCents)}</dd>
                 </div>
-                {topUpDiscountPercent > 0 && topUpSaveCents > 0 ? (
-                  <div className="studio-academy-checkout-row is-discount">
+                {liveSubscription?.planName ? (
+                  <div
+                    className={`studio-academy-checkout-row${topUpSaveCents > 0 ? " is-discount" : " is-muted"}`}
+                  >
                     <dt>
-                      {liveSubscription?.planName || "Plan"} · {topUpDiscountPercent}% off
+                      {topUpDiscountPercent > 0
+                        ? `${liveSubscription.planName} · ${topUpDiscountPercent}% off`
+                        : `${liveSubscription.planName} · ${liveSubscription.interval === "year" ? "annual" : "monthly"}`}
                     </dt>
-                    <dd>−{formatTtdCents(topUpSaveCents)}</dd>
+                    <dd>{topUpSaveCents > 0 ? `−${formatTtdCents(topUpSaveCents)}` : null}</dd>
                   </div>
                 ) : null}
                 {paywiseFeeCents > 0 ? (
