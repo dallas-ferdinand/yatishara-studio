@@ -71,8 +71,8 @@ type ElementLike = {
   mediaUrl?: string;
 };
 
-const ASSET_LINK_LINE =
-  /^\s*[-*+]\s*\[([^\]]+)\]\(\s*(?:asset:\/\/)?([a-z0-9]+)(?:\s+"[^"]*")?\s*\)(?:\s*[—\-–:]\s*(.*))?$/i;
+const MEDIA_LINK_LINE =
+  /^\s*[-*+]\s*\[([^\]]+)\]\(\s*(asset|element):\/\/([a-z0-9]+)(?:\s+"[^"]*")?\s*\)(?:\s*[—\-–:]\s*(.*))?$/i;
 
 function parseReferenceMeta(meta = ""): Omit<PromptReference, "label"> {
   const parts = String(meta)
@@ -102,15 +102,25 @@ function parseReferenceMeta(meta = ""): Omit<PromptReference, "label"> {
   return out;
 }
 
-/** Agent/script form: `- [Label](asset://id) — note` (and bare asset:// id). */
+/** Agent/script form: `- [Label](asset://id)` or `- [Label](element://id)`. */
 export function parseAssetLinkLine(line: string): PromptReference | null {
   const trimmed = String(line ?? "").trim();
-  const match = trimmed.match(ASSET_LINK_LINE);
+  const match = trimmed.match(MEDIA_LINK_LINE);
   if (!match) return null;
   const label = String(match[1] ?? "").trim().replace(/^@/, "");
-  const studioId = String(match[2] ?? "").trim();
+  const scheme = String(match[2] ?? "").toLowerCase();
+  const studioId = String(match[3] ?? "").trim();
   if (!studioId || !/^[a-z0-9]+$/i.test(studioId)) return null;
-  const notes = String(match[3] ?? "").trim();
+  const notes = String(match[4] ?? "").trim();
+  if (scheme === "element") {
+    return {
+      label: label || studioId,
+      kind: "context",
+      path: `/Studio/elements/${studioId}`,
+      studioId,
+      ...(notes ? { notes } : {}),
+    };
+  }
   return {
     label: label || studioId,
     kind: "image",
@@ -178,18 +188,28 @@ function collectReferencesFromBlock(block: string): PromptReference[] {
   return references;
 }
 
-/** Also pick up loose `asset://id` / markdown links anywhere in the doc. */
+/** Also pick up loose `asset://id` / `element://id` / markdown links anywhere in the doc. */
 function collectInlineAssetLinks(text: string): PromptReference[] {
   const refs: PromptReference[] = [];
   const seen = new Set<string>();
   const re =
-    /\[([^\]]+)\]\(\s*asset:\/\/([a-z0-9]+)\s*\)|asset:\/\/([a-z0-9]+)/gi;
+    /\[([^\]]+)\]\(\s*(asset|element):\/\/([a-z0-9]+)\s*\)|(asset|element):\/\/([a-z0-9]+)/gi;
   let match: RegExpExecArray | null;
   while ((match = re.exec(String(text ?? ""))) != null) {
-    const studioId = String(match[2] || match[3] || "").trim();
-    if (!studioId || seen.has(studioId)) continue;
-    seen.add(studioId);
+    const scheme = String(match[2] || match[4] || "asset").toLowerCase();
+    const studioId = String(match[3] || match[5] || "").trim();
+    if (!studioId || seen.has(`${scheme}:${studioId}`)) continue;
+    seen.add(`${scheme}:${studioId}`);
     const label = String(match[1] || studioId).trim().replace(/^@/, "");
+    if (scheme === "element") {
+      refs.push({
+        label: label || studioId,
+        kind: "context",
+        path: `/Studio/elements/${studioId}`,
+        studioId,
+      });
+      continue;
+    }
     refs.push({
       label: label || studioId,
       kind: "image",
@@ -228,7 +248,8 @@ export function parsePromptDocument(markdown: string): {
     if (
       /References:/i.test(after) ||
       /^##?\s*References/im.test(after) ||
-      /asset:\/\//i.test(after)
+      /asset:\/\//i.test(after) ||
+      /element:\/\//i.test(after)
     ) {
       const normalized = after.startsWith("#")
         ? `\n${after}`
@@ -267,7 +288,9 @@ export function looksLikePromptScript(text: string): boolean {
   if (/References:\n[\s\S]*?-\s*@/i.test(t)) return true;
   // Agent scripts: ## References + markdown asset:// links (or loose asset://).
   if (/asset:\/\/[a-z0-9]+/i.test(t) && /References/i.test(t)) return true;
+  if (/element:\/\/[a-z0-9]+/i.test(t) && /References/i.test(t)) return true;
   if (/\[([^\]]+)\]\(\s*asset:\/\/[a-z0-9]+\s*\)/i.test(t)) return true;
+  if (/\[([^\]]+)\]\(\s*element:\/\/[a-z0-9]+\s*\)/i.test(t)) return true;
   if (/@[\w.-]+/.test(t) && /\/Studio\/elements\//i.test(t)) return true;
   return false;
 }
@@ -307,6 +330,7 @@ export function elementIdFromReference(ref: PromptReference): string | null {
   const fromPath = path.match(/\/Studio\/elements\/([^/.]+)/i)?.[1];
   if (fromPath) return fromPath;
   if (ref?.elementType && ref.studioId) return String(ref.studioId).trim() || null;
+  if (/element:\/\//i.test(path) && ref.studioId) return String(ref.studioId).trim() || null;
   return null;
 }
 
@@ -483,7 +507,7 @@ export function hydrateComposerFromText(
   };
 }
 
-/** Serialize attachments back to a References block (assets preferred). */
+/** Serialize attachments back to a References block. */
 export function buildReferencesBlock(
   attachments: Array<{
     label?: string;
@@ -495,13 +519,15 @@ export function buildReferencesBlock(
   }>,
 ): string {
   const lines = (attachments ?? [])
-    .filter((item) => item.studioKind !== "element" && item.studioId)
+    .filter((item) => item.studioId)
     .map((item) => {
       const label = String(item.label || item.filename || item.studioId).replace(
         /^@/,
         "",
       );
-      // Prefer agent-safe markdown links (paste + Script open).
+      if (item.studioKind === "element") {
+        return `- [${label}](element://${item.studioId})`;
+      }
       return `- [${label}](asset://${item.studioId})`;
     });
   if (!lines.length) return "";
@@ -514,12 +540,17 @@ export function buildPromptDocumentMarkdown(
   opts?: { title?: string; fence?: boolean },
 ): string {
   const asRefs: PromptReference[] = (attachments ?? [])
-    .filter((item) => item.studioKind !== "element" && item.studioId)
+    .filter((item) => item.studioId)
     .map((item) => ({
       label: String(item.label || item.filename || item.studioId).replace(/^@/, ""),
-      kind: String(item.kind || "image"),
-      path: item.path || `/Studio/assets/${item.studioId}`,
+      kind: item.studioKind === "element" ? "context" : String(item.kind || "image"),
+      path:
+        item.path ||
+        (item.studioKind === "element"
+          ? `/Studio/elements/${item.studioId}`
+          : `/Studio/assets/${item.studioId}`),
       studioId: String(item.studioId),
+      elementType: item.studioKind === "element" ? "prop" : undefined,
     }));
   const body = ensureAtMentionsInBody(String(promptBody ?? "").trim(), asRefs);
   const refs = buildReferencesBlock(attachments);

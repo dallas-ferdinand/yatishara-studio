@@ -59,6 +59,29 @@ References:
     expect(hydrated.draftWithMarkers.startsWith("\uFFFC")).toBe(true);
   });
 
+  it("hydrates ## References element:// markdown links", () => {
+    const md = `# Prompt — bottle
+
+\`\`\`text
+@bottle Product on a dark table.
+\`\`\`
+
+## References
+
+- [bottle](element://elbottle1) — product lock
+`;
+    expect(looksLikePromptScript(md)).toBe(true);
+    const hydrated = hydrateComposerFromText(
+      md,
+      [],
+      [{ _id: "elbottle1", name: "bottle", type: "prop", thumbnailUrl: "https://cdn/t" }],
+    );
+    expect(hydrated.attachments).toHaveLength(1);
+    expect(hydrated.attachments[0]?.studioKind).toBe("element");
+    expect(hydrated.attachments[0]?.studioId).toBe("elbottle1");
+    expect(hydrated.body).toContain("@bottle");
+  });
+
   it("hydrates element @tags from the prompt body", () => {
     const md = `@product-shot Hypermotion ad on a table.`;
     const hydrated = hydrateComposerFromText(md, [], [
@@ -126,6 +149,11 @@ Hello
         "## References\n\n- [x](asset://abc123)\n",
       ),
     ).toBe(true);
+    expect(
+      looksLikePromptScript(
+        "## References\n\n- [bottle](element://elbottle1)\n",
+      ),
+    ).toBe(true);
   });
 
   it("injects missing @Label mentions for Higgs-style body", () => {
@@ -155,5 +183,21 @@ Product on marble.
     expect(out).toContain("@hero");
     const again = parsePromptDocument(out);
     expect(again.references[0]?.studioId).toBe("id1");
+  });
+
+  it("builds element:// links for element attachments", () => {
+    const out = buildPromptDocumentMarkdown(
+      "Hypermotion with the bottle.",
+      [{ label: "bottle", studioId: "el1", studioKind: "element" }],
+      { title: "Prompt — bottle" },
+    );
+    expect(out).toContain("element://el1");
+    expect(out).toContain("@bottle");
+    const hydrated = hydrateComposerFromText(
+      out,
+      [],
+      [{ _id: "el1", name: "bottle", type: "prop" }],
+    );
+    expect(hydrated.attachments[0]?.studioKind).toBe("element");
   });
 });
