@@ -8,6 +8,7 @@ import { getWamEnvironment } from "./wam";
 export { WamPaymentError, WamPaymentSDK };
 
 let cachedSdk: WamPaymentSDK | null = null;
+let cachedFingerprint = "";
 
 export function getWamSDK(opts?: { webhookSecret?: string }): WamPaymentSDK {
   const businessId = (process.env.WAM_BUSINESS_ID ?? "").trim();
@@ -22,7 +23,8 @@ export function getWamSDK(opts?: { webhookSecret?: string }): WamPaymentSDK {
     opts?.webhookSecret?.trim() ||
     (process.env.WAM_WEBHOOK_SECRET ?? "").trim() ||
     undefined;
-  if (cachedSdk && !opts?.webhookSecret) {
+  const fingerprint = `${businessId}:${apiKey}:${getWamEnvironment()}:${webhookSecret ?? ""}`;
+  if (cachedSdk && !opts?.webhookSecret && cachedFingerprint === fingerprint) {
     return cachedSdk;
   }
   const sdk = new WamPaymentSDK({
@@ -31,6 +33,9 @@ export function getWamSDK(opts?: { webhookSecret?: string }): WamPaymentSDK {
     environment: getWamEnvironment(),
     ...(webhookSecret ? { webhookSecret } : {}),
   });
-  if (!opts?.webhookSecret) cachedSdk = sdk;
+  if (!opts?.webhookSecret) {
+    cachedSdk = sdk;
+    cachedFingerprint = fingerprint;
+  }
   return sdk;
 }
