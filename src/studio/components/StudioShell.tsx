@@ -327,6 +327,8 @@ import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import {
   EXPLORER_DND_TYPE,
   clearActiveExplorerDrag,
+  inferMediaKind,
+  peekActiveExplorerDrag,
   readExplorerDragData,
   setComposerTouchDragPreviewHandler,
   setMobileComposerDropHandler,
@@ -1804,6 +1806,10 @@ export function StudioShell({
     setCopyDestBusy(false);
   }, []);
 
+  const bindElementMediaDrop = useCallback((handler) => {
+    elementMediaDropRef.current = typeof handler === "function" ? handler : null;
+  }, []);
+
   function entryToShareItem(entry) {
     if (!entry?.studioId || entry.type === "parent") return null;
     if (entry.studioKind === "folder" || entry.type === "dir") {
@@ -1875,6 +1881,7 @@ export function StudioShell({
   const shellRef = useRef(null);
   const editorRef = useRef(null);
   const attachEntryRef = useRef(null);
+  const elementMediaDropRef = useRef(null);
   /** Mobile: restore keyboard when Files closes if composer had focus/keyboard before. */
   const composerWantedKeyboardRef = useRef(false);
   /** Mobile: reopen Generate Files dock after keyboard dismiss if it was open on composer focus. */
@@ -8879,10 +8886,9 @@ export function StudioShell({
     setMobileComposerDropHandler(({ entry, clientX, clientY }) => {
       if (!entry) return false;
       const snapshot = { ...entry };
-      const x = Number(clientX) || 0;
-      const y = Number(clientY) || 0;
       window.requestAnimationFrame(() => {
         window.setTimeout(() => {
+          if (elementMediaDropRef.current?.(snapshot)) return;
           attachEntryRef.current?.(snapshot);
         }, 0);
       });
@@ -8903,6 +8909,7 @@ export function StudioShell({
       const x = Number(event.detail?.clientX) || 0;
       const y = Number(event.detail?.clientY) || 0;
       const attach = () => {
+        if (elementMediaDropRef.current?.(snapshot)) return;
         attachEntryRef.current?.(snapshot);
       };
       queueMicrotask(attach);
@@ -10414,6 +10421,13 @@ export function StudioShell({
           overscroll-behavior: none !important;
         }
         /* Soft “drop here” invite while a touch file-drag is in flight. */
+        body.is-touch-file-drag .studio-element-detail[data-drop-target="composer"] .studio-element-detail-file {
+          outline: 1.5px dashed color-mix(in srgb, var(--cursor-accent, #7dd3fc) 38%, transparent);
+          outline-offset: 2px;
+        }
+        body.is-touch-file-drag .studio-element-detail[data-drop-target="composer"] {
+          pointer-events: auto !important;
+        }
         body.is-touch-file-drag .cursor-composer-shell[data-drop-target="composer"] .cursor-composer-box {
           outline: 1.5px dashed color-mix(in srgb, var(--cursor-accent, #7dd3fc) 38%, transparent);
           outline-offset: 3px;
@@ -21370,8 +21384,34 @@ export function StudioShell({
           border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
           box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
         }
+        .studio-element-detail-file.is-drop-target,
         .studio-element-detail-file.has-media {
           border-style: solid;
+        }
+        .studio-element-detail-file.is-drop-target {
+          border-color: color-mix(in srgb, var(--cursor-accent) 55%, var(--color-cursor-border-soft));
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-element-detail-file-empty {
+          display: grid;
+          gap: 2px;
+          place-items: center;
+          pointer-events: none;
+        }
+        .studio-element-detail-file-from {
+          justify-self: start;
+          margin: 0;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: var(--color-cursor-muted);
+          font: inherit;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .studio-element-detail-file-from:hover {
+          color: var(--color-cursor-text);
         }
         .studio-element-detail-file img,
         .studio-element-detail-file video {
@@ -26015,6 +26055,7 @@ export function StudioShell({
             onRequestPickAsset={(request) => {
               startAssetPick(request);
             }}
+            onBindElementMediaDrop={bindElementMediaDrop}
             onOpenStudioShareItem={(item) => {
               if (!item?.itemId || !item?.itemKind) return;
               if (item.itemKind === "folder") {
@@ -26469,6 +26510,7 @@ export function StudioShell({
               window.setTimeout(() => {
                 const editor = editorRef.current;
                 const range = editor ? rangeFromPointInEditor(editor, x, y) : null;
+                if (elementMediaDropRef.current?.(snapshot)) return;
                 attachEntryRef.current?.(snapshot, range);
               }, 0);
             });
@@ -30139,6 +30181,42 @@ function uploadedElementAssetToEntry(asset) {
   };
 }
 
+function isElementAttachableEntry(entry) {
+  if (!entry || entry.type === "dir") return false;
+  if (entry.studioKind && entry.studioKind !== "asset") return false;
+  const kind = inferMediaKind(entry) ?? entry.kind;
+  return kind === "image" || kind === "video";
+}
+
+function studioAssetToElementMedia(entry, assets) {
+  const id = entry.studioId ?? entry._id ?? entry.itemId ?? entry.assetId;
+  if (!id) return null;
+  const live = (assets ?? []).find((item) => item._id === id || item.studioId === id);
+  if (live) return assetToEntry(live);
+  const kind = inferMediaKind(entry) ?? entry.kind ?? "image";
+  return {
+    type: "file",
+    name: entry.name ?? "file",
+    path: entry.path ?? `/Studio/assets/${id}`,
+    studioKind: "asset",
+    studioId: id,
+    kind,
+    kindLabel: kind === "video" ? "Video" : "Image",
+    mediaUrl: entry.mediaUrl ?? entry.signedReadUrl ?? entry.signedThumbnailUrl,
+    thumbnailUrl: entry.thumbnailUrl ?? entry.signedThumbnailUrl,
+    mimeType: entry.mimeType,
+  };
+}
+
+function dragOffersElementMedia(event) {
+  const types = Array.from(event.dataTransfer?.types ?? []);
+  if (types.includes("Files")) return true;
+  if (!types.includes(EXPLORER_DND_TYPE) && !peekActiveExplorerDrag()) return false;
+  const entry = peekActiveExplorerDrag();
+  if (!entry) return true;
+  return isElementAttachableEntry(entry);
+}
+
 const ELEMENT_TYPE_OPTIONS = [
   { value: "character", label: "Character", meta: "People, mascots, hands, faces", icon: UserRound },
   { value: "prop", label: "Prop", meta: "Products, packaging, objects", icon: Package },
@@ -32482,6 +32560,7 @@ function ActivePane({
   onOpenOffersJobs,
   showDmChatListWhenEmpty = false,
   onRequestPickAsset,
+  onBindElementMediaDrop,
   onOpenStudioShareItem,
   onOpenCreate,
   onOpenAgentSettings,
@@ -32969,6 +33048,8 @@ function ActivePane({
         assets={assets}
         onUpdate={onElementUpdate}
         onUploadElementFiles={onUploadElementFiles}
+        onRequestPickAsset={onRequestPickAsset}
+        onBindElementMediaDrop={onBindElementMediaDrop}
       />,
     );
   }
@@ -33015,7 +33096,14 @@ function elementEditorTitle(entry) {
   return displayElementStem(entry?.name);
 }
 
-function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles }) {
+function StudioElementDetailPane({
+  entry,
+  assets,
+  onUpdate,
+  onUploadElementFiles,
+  onRequestPickAsset,
+  onBindElementMediaDrop,
+}) {
   const isStyleSheet = entry.elementType === "style_sheet";
   const [name, setName] = useState(() => elementEditorTitle(entry));
   const [description, setDescription] = useState(entry.description ?? "");
@@ -33025,7 +33113,9 @@ function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles
   });
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
+  const dragCountRef = useRef(0);
   const nameRef = useRef(name);
   const descriptionRef = useRef(description);
   const assetsRef = useRef(sourceAssets);
@@ -33147,6 +33237,96 @@ function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles
     }
   }
 
+  async function attachStudioEntries(entries) {
+    const next = (entries ?? [])
+      .filter(isElementAttachableEntry)
+      .map((item) => studioAssetToElementMedia(item, assets))
+      .filter(Boolean);
+    if (!next.length) {
+      setError("Use an image or video.");
+      return false;
+    }
+    const byId = new Map();
+    const seed = isStyleSheet ? [...assetsRef.current] : [];
+    for (const row of [...seed, ...next]) {
+      if (row.studioId) byId.set(row.studioId, row);
+    }
+    const merged = isStyleSheet ? [...byId.values()] : [next[0]];
+    setSourceAssets(merged);
+    assetsRef.current = merged;
+    setError("");
+    await persist(merged);
+    return true;
+  }
+  const attachStudioEntriesRef = useRef(attachStudioEntries);
+  attachStudioEntriesRef.current = attachStudioEntries;
+
+  useEffect(() => {
+    if (!onBindElementMediaDrop) return undefined;
+    onBindElementMediaDrop((dropped) => {
+      if (dropped?.type === "dir") return false;
+      void attachStudioEntriesRef.current([dropped]);
+      return true;
+    });
+    return () => onBindElementMediaDrop(null);
+  }, [onBindElementMediaDrop]);
+
+  function openFilesPick() {
+    if (!onRequestPickAsset) return;
+    onRequestPickAsset({
+      pickMode: "choose",
+      kinds: ["image", "video"],
+      pickAnyStudio: false,
+      title: "Choose image or video",
+      maxSelected: isStyleSheet ? 10 : 1,
+      onConfirm: (picked) => {
+        void attachStudioEntries(
+          (picked ?? []).map((item) => ({
+            ...item,
+            studioKind: "asset",
+            studioId: item._id ?? item.studioId,
+          })),
+        );
+      },
+    });
+  }
+
+  function handleDragEnter(event) {
+    if (!dragOffersElementMedia(event)) return;
+    event.preventDefault();
+    dragCountRef.current += 1;
+    setDragOver(true);
+  }
+
+  function handleDragOver(event) {
+    if (!dragOffersElementMedia(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDragOver(true);
+  }
+
+  function handleDragLeave(event) {
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    dragCountRef.current = 0;
+    setDragOver(false);
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    dragCountRef.current = 0;
+    setDragOver(false);
+    const entryDrop =
+      readExplorerDragData(event.dataTransfer) ?? peekActiveExplorerDrag();
+    if (entryDrop) {
+      void attachStudioEntries([entryDrop]);
+      return;
+    }
+    if (event.dataTransfer?.files?.length) {
+      void upload(event.dataTransfer.files);
+    }
+  }
+
   async function removeMedia(studioId) {
     const next = assetsRef.current.filter((item) => item.studioId !== studioId);
     setSourceAssets(next);
@@ -33175,7 +33355,14 @@ function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles
   const isVideo = media?.kind === "video";
 
   return (
-    <div className="studio-element-detail">
+    <div
+      className="studio-element-detail"
+      data-drop-target="composer"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className="studio-element-detail-form">
         <input
           className="cursor-input studio-element-detail-title"
@@ -33213,7 +33400,7 @@ function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles
           aria-label="Description"
         />
         <div
-          className={`studio-element-detail-file${media ? " has-media" : ""}`}
+          className={`studio-element-detail-file${media ? " has-media" : ""}${dragOver ? " is-drop-target" : ""}`}
           role="button"
           tabIndex={0}
           onClick={() => {
@@ -33232,10 +33419,10 @@ function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles
             ) : previewUrl ? (
               <img src={previewUrl} alt="" />
             ) : (
-              <span>{uploading ? "Uploading…" : "Image or video"}</span>
+              <span className="studio-element-detail-file-empty">{uploading ? "Uploading…" : "Image or video"}</span>
             )
           ) : (
-            <span>{uploading ? "Uploading…" : "Image or video"}</span>
+            <span className="studio-element-detail-file-empty">{uploading ? "Uploading…" : "Drop or click"}</span>
           )}
           {media ? (
             <button
@@ -33251,6 +33438,15 @@ function StudioElementDetailPane({ entry, assets, onUpdate, onUploadElementFiles
             </button>
           ) : null}
         </div>
+        {onRequestPickAsset ? (
+          <button
+            type="button"
+            className="studio-element-detail-file-from"
+            onClick={() => openFilesPick()}
+          >
+            From Files
+          </button>
+        ) : null}
         <input
           ref={inputRef}
           className="hidden"
