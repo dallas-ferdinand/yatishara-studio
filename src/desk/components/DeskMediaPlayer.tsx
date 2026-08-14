@@ -18,6 +18,7 @@ import {
   formatMediaTime,
 } from "@/studio/lib/mediaPlayback";
 import { MediaLoadWave } from "@/studio/components/media-load-frame";
+import { downloadMediaUrl } from "@/studio/lib/mediaUrls";
 
 const mediaIcon = (size = 14) => ({
   size,
@@ -52,6 +53,14 @@ export function DeskMediaPlayer({
   const isVideo = kind === "video";
   const Tag = isVideo ? "video" : "audio";
   const shouldPrefetch = prefetch && Boolean(src) && !String(src).startsWith("blob:");
+  const saveOpened = useCallback(() => {
+    if (onDownload) {
+      onDownload();
+      return;
+    }
+    if (src) void downloadMediaUrl(src, name || "download");
+  }, [onDownload, src, name]);
+  const canDownload = Boolean(onDownload || src);
 
   useVideoChunkPrefetch({
     url: src,
@@ -271,8 +280,8 @@ export function DeskMediaPlayer({
             {name}
           </span>
           {volumeControls}
-          {onDownload ? (
-            <button type="button" className="cursor-icon-btn" title="Download" onClick={onDownload}>
+          {canDownload ? (
+            <button type="button" className="cursor-icon-btn" title="Download" onClick={saveOpened}>
               <Download {...mediaIcon(14)} />
             </button>
           ) : null}
@@ -359,8 +368,8 @@ export function DeskMediaPlayer({
           </div>
           <div className="desk-image-viewer-toolbar-center" />
           <div className="desk-image-viewer-toolbar-right">
-            {onDownload ? (
-              <button type="button" className="cursor-icon-btn" title="Download" onClick={onDownload}>
+            {canDownload ? (
+              <button type="button" className="cursor-icon-btn" title="Download" onClick={saveOpened}>
                 <Download {...mediaIcon(14)} />
               </button>
             ) : null}

@@ -58,6 +58,25 @@ function safeDownloadName(filename: string, fallback = "download") {
   return filename.replace(/[/\\?%*:|"<>]/g, "_").trim() || fallback;
 }
 
+function withDownloadExt(filename: string, mime: string, url: string) {
+  if (/\.[a-z0-9]{2,5}$/i.test(filename)) return filename;
+  const fromUrl = url.split("?")[0]?.split("/").pop() || "";
+  const urlExt = fromUrl.match(/(\.[a-z0-9]{2,5})$/i)?.[1];
+  if (urlExt) return `${filename}${urlExt}`;
+  const mimeExt: Record<string, string> = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "audio/mpeg": ".mp3",
+    "audio/wav": ".wav",
+  };
+  const ext = mimeExt[mime.split(";")[0]?.trim() || ""];
+  return ext ? `${filename}${ext}` : filename;
+}
+
 function triggerBlobDownload(blob: Blob, filename: string) {
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -286,17 +305,10 @@ export async function downloadMediaUrl(url: string, filename = "download") {
     const response = await fetch(url, { mode: "cors", credentials: "omit" });
     if (!response.ok) throw new Error(`Download failed (${response.status})`);
     const blob = await response.blob();
-    triggerBlobDownload(blob, safeName);
+    triggerBlobDownload(blob, withDownloadExt(safeName, blob.type, url));
     return true;
   } catch {
-    // Fallback: still try the download attribute without a new-tab target.
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = safeName;
-    anchor.rel = "noopener";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    // Cross-origin <a download> is ignored and opens the file in a tab.
     return false;
   }
 }

@@ -13,7 +13,7 @@ import {
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { orbSeedForVoice } from "./StudioOrbPlayButton";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
-import { fullQualityUrl, thumbnailDisplayUrl } from "@/studio/lib/mediaUrls";
+import { downloadMediaUrl, fullQualityUrl, thumbnailDisplayUrl } from "@/studio/lib/mediaUrls";
 import "./studio-create-library.css";
 
 const ImageZoomViewer = dynamic(
@@ -263,12 +263,7 @@ export function StudioCreateLibrary({
 
   const downloadLightbox = useCallback(() => {
     if (!lightbox?.url) return;
-    const a = document.createElement("a");
-    a.href = lightbox.url;
-    a.download = lightbox.name || "download";
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    a.click();
+    void downloadMediaUrl(lightbox.url, lightbox.name || "download");
   }, [lightbox]);
 
   const loading = firstPage === undefined;

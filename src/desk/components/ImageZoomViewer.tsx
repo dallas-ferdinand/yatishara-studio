@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { downloadMediaUrl } from "@/studio/lib/mediaUrls";
 import { Icon } from "./Icons";
 
 const MIN_SCALE = 0.25;
@@ -95,6 +96,15 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload, initialSc
     setEditingScale(false);
     setScaleDraft(String(Math.round(initialScale * 100)));
   }, [initialScale]);
+
+  const saveOpened = useCallback(() => {
+    if (onDownload) {
+      onDownload();
+      return;
+    }
+    const url = fullUrl || thumbUrl;
+    if (url) void downloadMediaUrl(url, name || "download");
+  }, [onDownload, fullUrl, thumbUrl, name]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -269,8 +279,8 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload, initialSc
           </button>
         </div>
         <div className="desk-image-viewer-toolbar-right">
-          {onDownload ? (
-            <button type="button" className="cursor-icon-btn" title="Download" onClick={onDownload}>
+          {onDownload || fullUrl || thumbUrl ? (
+            <button type="button" className="cursor-icon-btn" title="Download" onClick={saveOpened}>
               <Icon name="download" size={14} />
             </button>
           ) : null}
