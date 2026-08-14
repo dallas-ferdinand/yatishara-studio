@@ -398,6 +398,7 @@ export const expireMyAbandonedSubscribeInvoices = authedMutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
+    await seedSubscriptionPlans(ctx);
     await expireAbandonedFirstSubscribeInvoices(ctx, ctx.user._id);
     return null;
   },

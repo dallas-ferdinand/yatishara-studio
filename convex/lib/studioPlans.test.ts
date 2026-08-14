@@ -28,8 +28,8 @@ describe("studio subscription catalog", () => {
 
   test("core monthly has no discount", () => {
     const core = STUDIO_PLAN_CATALOG.find((plan) => plan.slug === "core")!;
-    expect(quoteStudioPlan(core, "month", 50).chargeCents).toBe(10_000);
-    expect(quoteStudioPlan(core, "year", 50).chargeCents).toBe(116_400);
+    expect(quoteStudioPlan(core, "month", 50).chargeCents).toBe(1_000);
+    expect(quoteStudioPlan(core, "year", 50).chargeCents).toBe(11_640);
   });
 
   test("first subscribe invoices expire; renewal unpaid stays payable", () => {
