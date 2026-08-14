@@ -802,28 +802,30 @@ export function StudioBillingPane({
             {filteredInvoices.length === 0 ? (
               <p className="studio-billing-empty">No invoices in this filter.</p>
             ) : (
-              filteredInvoices.map((row) => (
-                <div key={row._id} className="studio-billing-invoice">
-                  <div>
-                    <strong>{invoiceTitle(row)}</strong>
-                    <span>
-                      {invoiceKind(row)} · {invoiceStatusLabel(row.status, row)}
-                      {row.providerStatus && row.status !== "payment_completed"
-                        ? ` · ${row.providerStatus}`
-                        : ""}{" "}
-                      · {new Date(row.createdAt).toLocaleString()}
-                    </span>
+              <div className="studio-billing-invoice-list">
+                {filteredInvoices.map((row) => (
+                  <div key={row._id} className="studio-billing-invoice">
+                    <div>
+                      <strong>{invoiceTitle(row)}</strong>
+                      <span>
+                        {invoiceKind(row)} · {invoiceStatusLabel(row.status, row)}
+                        {row.providerStatus && row.status !== "payment_completed"
+                          ? ` · ${row.providerStatus}`
+                          : ""}{" "}
+                        · {new Date(row.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="studio-billing-invoice-meta">
+                      <strong>{formatTtdCents(row.amountCents)}</strong>
+                      {canPayInvoice(row) ? (
+                        <button type="button" disabled={Boolean(busy)} onClick={() => void payInvoice(row)}>
+                          {busy === row._id ? "Opening…" : "Pay"}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="studio-billing-invoice-meta">
-                    <strong>{formatTtdCents(row.amountCents)}</strong>
-                    {canPayInvoice(row) ? (
-                      <button type="button" disabled={Boolean(busy)} onClick={() => void payInvoice(row)}>
-                        {busy === row._id ? "Opening…" : "Pay"}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         )}

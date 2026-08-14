@@ -447,13 +447,21 @@
   color: var(--color-cursor-text-bright);
 }
 
+.studio-billing-invoice-list {
+  display: grid;
+  gap: 10px;
+}
+
 .studio-billing-invoice {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 12px;
   align-items: center;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--color-cursor-border-soft);
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  background: var(--mos-plate, var(--cursor-surface));
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 32%, transparent);
 }
 
 .studio-billing-invoice strong,

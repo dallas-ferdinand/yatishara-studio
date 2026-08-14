@@ -12811,14 +12811,13 @@ export function StudioShell({
           grid-template-columns: minmax(0, 1fr) auto;
           align-items: center;
           gap: 14px;
-          min-height: 58px;
-          padding: 14px 18px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 88%, transparent);
+          min-height: 0;
+          padding: 12px 14px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 88%, transparent);
+          border-radius: 12px;
+          background: var(--mos-page, var(--color-cursor-bg));
           color: var(--color-cursor-muted);
           font-size: 12px;
-        }
-        .studio-settings-invoice-row:last-child {
-          border-bottom: 0;
         }
         .studio-settings-invoice-copy {
           display: grid;
@@ -13340,8 +13339,8 @@ export function StudioShell({
         }
         .studio-settings-invoice-list {
           display: grid;
-          gap: 0;
-          padding: 0;
+          gap: 8px;
+          padding: 10px 12px 12px;
           border-top: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
         }
         .studio-settings-rate-strip {
@@ -35232,18 +35231,14 @@ function PushNotificationsPromptOverlay({ onClose }) {
 }
 
 function WamCheckoutHandoffOverlay({ handoff }) {
-  const phase = handoff?.phase ?? "preparing";
   const checkoutUrl = typeof handoff?.checkoutUrl === "string" ? handoff.checkoutUrl : "";
   const amountLabel =
     handoff?.amountCents != null ? formatTtdCents(handoff.amountCents) : null;
 
   useEffect(() => {
-    if (phase !== "redirect" || !checkoutUrl) return;
-    const timer = window.setTimeout(() => {
-      window.location.assign(checkoutUrl);
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [phase, checkoutUrl]);
+    if (!checkoutUrl) return;
+    window.location.assign(checkoutUrl);
+  }, [checkoutUrl]);
 
   return (
     <div
@@ -35256,15 +35251,13 @@ function WamCheckoutHandoffOverlay({ handoff }) {
       <div className="studio-payment-celebration-inner">
         <Loader2 className="studio-payment-celebration-spin" aria-hidden="true" />
         <h2 id="studio-wam-handoff-title" className="studio-payment-celebration-title">
-          {phase === "redirect" ? "Continuing to Wam" : "Preparing checkout"}
+          Redirecting to Wam
         </h2>
         {amountLabel ? (
           <p className="studio-wam-handoff-amount">{amountLabel}</p>
         ) : null}
         <p className="studio-payment-celebration-copy">
-          {phase === "redirect"
-            ? "Finish card payment on Wam. We'll bring you back here after."
-            : "Opening a secure checkout."}
+          Finish card payment on Wam. We'll bring you back here after.
         </p>
       </div>
     </div>
