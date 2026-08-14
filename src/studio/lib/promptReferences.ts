@@ -1,6 +1,7 @@
 import {
   composerAssetTag,
   elementStemFromDisplayName,
+  slugComposerTag,
 } from "./seedanceReferences";
 
 /**
@@ -41,7 +42,7 @@ export type PromptAttachmentDraft = {
 export type HydratedPrompt = {
   body: string;
   references: PromptReference[];
-  /** Body with one OBJECT_REPLACEMENT per resolved attachment (leading chips). */
+  /** Body with one OBJECT_REPLACEMENT per resolved attachment, in place of `@tag`s. */
   draftWithMarkers: string;
   attachments: PromptAttachmentDraft[];
   assetIds: string[];
@@ -495,15 +496,85 @@ export function hydrateComposerFromText(
       ),
     );
   }
-  const markers = attachments.map(() => OBJECT_REPLACEMENT).join("");
-  const draftWithMarkers =
-    markers && body ? `${markers} ${body}` : markers || body;
+  const placed = placeAttachmentMarkersInBody(body, attachments);
   return {
     body,
     references,
-    draftWithMarkers,
-    attachments,
+    draftWithMarkers: placed.draftWithMarkers,
+    attachments: placed.attachments,
     assetIds: collectAssetIdsFromReferences(references),
+  };
+}
+
+function attachmentPromptTag(attachment: PromptAttachmentDraft): string {
+  if (attachment.studioKind === "element") {
+    return elementStemFromDisplayName(attachment.label || attachment.filename || "");
+  }
+  return composerAssetTag(attachment.filename || attachment.label || "");
+}
+
+function normalizeAtTag(value: string): string {
+  return slugComposerTag(value).replace(/\.[a-z0-9]{2,5}$/i, "").toLowerCase();
+}
+
+function atTagMatchesAttachment(captured: string, attachment: PromptAttachmentDraft): boolean {
+  const raw = String(captured ?? "");
+  if (!raw || /^(Image|Video|Audio)$/i.test(raw)) return false;
+  const tag = attachmentPromptTag(attachment);
+  if (!tag) return false;
+  return (
+    normalizeAtTag(raw) === normalizeAtTag(tag) ||
+    elementStemFromDisplayName(raw) === elementStemFromDisplayName(tag)
+  );
+}
+
+/** Put `\uFFFC` where `@tag` sits in the body. Unmatched refs stay as leading chips. */
+export function placeAttachmentMarkersInBody(
+  body: string,
+  attachments: PromptAttachmentDraft[],
+): { draftWithMarkers: string; attachments: PromptAttachmentDraft[] } {
+  const source = String(body ?? "");
+  type Hit = { att: PromptAttachmentDraft; index: number; length: number };
+  const hits: Hit[] = [];
+  const taken: Array<{ start: number; end: number }> = [];
+  const overlaps = (start: number, end: number) =>
+    taken.some((range) => start < range.end && end > range.start);
+
+  for (const att of attachments) {
+    const re = /@([A-Za-z0-9._-]+)/g;
+    let match: RegExpExecArray | null;
+    let found: Hit | null = null;
+    while ((match = re.exec(source)) != null) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (overlaps(start, end)) continue;
+      if (!atTagMatchesAttachment(match[1] ?? "", att)) continue;
+      found = { att, index: start, length: match[0].length };
+      break;
+    }
+    if (!found) continue;
+    hits.push(found);
+    taken.push({ start: found.index, end: found.index + found.length });
+  }
+
+  const matchedIds = new Set(hits.map((hit) => hit.att.id));
+  const unmatched = attachments.filter((att) => !matchedIds.has(att.id));
+  hits.sort((a, b) => a.index - b.index);
+  const ordered = [...unmatched, ...hits.map((hit) => hit.att)];
+
+  let out = unmatched.length
+    ? unmatched.map(() => OBJECT_REPLACEMENT).join("") + (source ? " " : "")
+    : "";
+  let cursor = 0;
+  for (const hit of hits) {
+    out += source.slice(cursor, hit.index);
+    out += OBJECT_REPLACEMENT;
+    cursor = hit.index + hit.length;
+  }
+  out += source.slice(cursor);
+  return {
+    draftWithMarkers: out || unmatched.map(() => OBJECT_REPLACEMENT).join(""),
+    attachments: ordered,
   };
 }
 

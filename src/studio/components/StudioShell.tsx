@@ -222,6 +222,7 @@ import {
   insertPlainTextAtSelection,
   plainTextFromClipboard,
 } from "@/studio/lib/composerPasteIntelligence";
+import { writeComposerSelectionToClipboard } from "@/studio/lib/composerCopy";
 import {
   hydrateComposerFromText,
   looksLikePromptScript,
@@ -6360,8 +6361,12 @@ export function StudioShell({
       nextHtml = baseHtml;
       nextDraft = baseDraft;
     } else if (liveEditor) {
-      focusComposerEditorEnd(liveEditor);
-      insertComposerAttachmentToken(liveEditor, attachment);
+      if (insertRange && liveEditor.contains(insertRange.startContainer)) {
+        insertComposerAttachmentToken(liveEditor, attachment, insertRange);
+      } else {
+        focusComposerEditorEnd(liveEditor);
+        insertComposerAttachmentToken(liveEditor, attachment);
+      }
       nextHtml = liveEditor.innerHTML;
       nextDraft = readComposerEditorText(liveEditor);
     } else {
@@ -27600,8 +27605,13 @@ function StudioComposer({
     const editor = editorRef.current;
     if (!editor || !item?.entry) return;
     deleteComposerAtQuery(editor, mentionQuery);
+    const selection = window.getSelection();
+    const range =
+      selection?.rangeCount && editor.contains(selection.anchorNode)
+        ? selection.getRangeAt(0).cloneRange()
+        : null;
     setMentionQuery(null);
-    onDropEntry(item.entry);
+    onDropEntry(item.entry, range);
   }
 
   function openCreateElementDialog(prefill = "") {
@@ -28439,6 +28449,20 @@ function StudioComposer({
             recording ? " Listening…" : transcribing ? " Transcribing…" : undefined
           }
           className="cursor-composer-textarea cursor-composer-mention-editor"
+          onCopy={(event) => {
+            writeComposerSelectionToClipboard(event, editorRef.current);
+          }}
+          onCut={(event) => {
+            const editor = editorRef.current;
+            if (!writeComposerSelectionToClipboard(event, editor)) return;
+            removeComposerTokensInSelection(editor, setAttachments);
+            const selection = window.getSelection();
+            if (selection && !selection.isCollapsed && editor.contains(selection.anchorNode)) {
+              selection.deleteFromDocument();
+            }
+            pushDraftToParent(readComposerEditorText(editor), { immediate: true });
+            pruneComposerAttachmentsFromDom(editor, setAttachments);
+          }}
           onInput={(event) => {
             const next = readComposerEditorText(event.currentTarget);
             pushDraftToParent(next);
@@ -30946,19 +30970,30 @@ function readComposerTextBeforeCaret(editor) {
 
 function deleteComposerAtQuery(editor, atQuery) {
   if (!editor || !atQuery) return;
-  const count = String(atQuery.query ?? "").length + 1;
+  const needle = `@${String(atQuery.query ?? "")}`;
   const sel = window.getSelection();
   if (!sel?.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  const node = range.startContainer;
-  if (node.nodeType === Node.TEXT_NODE) {
-    const start = Math.max(0, range.startOffset - count);
-    node.deleteData(start, range.startOffset - start);
-    range.setStart(node, start);
-    range.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(range);
+  const caret = sel.getRangeAt(0);
+  if (!editor.contains(caret.startContainer)) return;
+
+  let node = caret.startContainer;
+  let offset = caret.startOffset;
+  if (node === editor) {
+    const child = editor.childNodes[Math.max(0, offset - 1)];
+    if (!child || child.nodeType !== Node.TEXT_NODE) return;
+    node = child;
+    offset = child.nodeValue?.length ?? 0;
   }
+  if (node.nodeType !== Node.TEXT_NODE) return;
+  const before = (node.nodeValue ?? "").slice(0, offset);
+  if (!before.endsWith(needle)) return;
+  const start = offset - needle.length;
+  node.deleteData(start, needle.length);
+  const next = document.createRange();
+  next.setStart(node, start);
+  next.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(next);
 }
 
 function rangeFromPointInEditor(editor, clientX, clientY) {

@@ -52,8 +52,8 @@ References:
     ]);
     expect(hydrated.attachments).toHaveLength(2);
     expect(hydrated.attachments.map((a) => a.studioId)).toEqual([
-      "jd788wn7ppv9t3qjtc3jjq9pd18cb68z",
       "abc123def456",
+      "jd788wn7ppv9t3qjtc3jjq9pd18cb68z",
     ]);
     expect(hydrated.body).toContain("@flyer");
     expect(hydrated.draftWithMarkers.startsWith("\uFFFC")).toBe(true);
@@ -95,6 +95,17 @@ References:
     expect(hydrated.attachments).toHaveLength(1);
     expect(hydrated.attachments[0]?.studioKind).toBe("element");
     expect(hydrated.attachments[0]?.label).toBe("product-shot");
+    expect(hydrated.draftWithMarkers.startsWith("\uFFFC")).toBe(true);
+    expect(hydrated.draftWithMarkers).not.toContain("@product-shot");
+  });
+
+  it("places a mid-prompt @tag chip where the tag was, not at the start", () => {
+    const md = `A woman holds @bottle in the kitchen.`;
+    const hydrated = hydrateComposerFromText(md, [], [
+      { _id: "elbottle1", name: "bottle", type: "prop" },
+    ]);
+    expect(hydrated.attachments).toHaveLength(1);
+    expect(hydrated.draftWithMarkers).toBe(`A woman holds \uFFFC in the kitchen.`);
   });
 
   it("parses ## References including elements when catalog is passed", () => {
@@ -135,6 +146,7 @@ Hello
     expect(hydrated.attachments).toHaveLength(1);
     expect(hydrated.attachments[0]?.studioKind).toBe("element");
     expect(hydrated.attachments[0]?.label).toBe("untitled");
+    expect(hydrated.draftWithMarkers).toBe("Use \uFFFC in the shot.");
   });
 
   it("detects prompt scripts for paste", () => {

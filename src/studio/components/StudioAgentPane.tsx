@@ -22,6 +22,7 @@ import {
   insertPlainTextAtSelection,
   plainTextFromClipboard,
 } from "@/studio/lib/composerPasteIntelligence";
+import { writeComposerSelectionToClipboard } from "@/studio/lib/composerCopy";
 import {
   hydrateComposerFromText,
   looksLikePromptScript,
@@ -1183,6 +1184,27 @@ export function StudioAgentPane({
                 suppressContentEditableWarning
                 data-placeholder="Ask the agent to set up a project, generate, or work across Studio…"
                 className="cursor-composer-mention-editor"
+                onCopy={(event) => {
+                  writeComposerSelectionToClipboard(event, editorRef.current);
+                }}
+                onCut={(event) => {
+                  const editor = editorRef.current;
+                  if (!editor || composerLocked) return;
+                  if (!writeComposerSelectionToClipboard(event, editor)) return;
+                  const selection = window.getSelection();
+                  if (!selection?.rangeCount || selection.isCollapsed) return;
+                  const range = selection.getRangeAt(0);
+                  editor.querySelectorAll(".studio-inline-tag").forEach((token) => {
+                    try {
+                      if (range.intersectsNode(token)) token.remove();
+                    } catch {
+                      /* detached */
+                    }
+                  });
+                  if (!selection.isCollapsed) selection.deleteFromDocument();
+                  setDraft(readComposerEditorText(editor));
+                  pruneDuplicateComposerTokens(editor);
+                }}
                 onInput={() => {
                   setDraft(readComposerEditorText(editorRef.current));
                   pruneDuplicateComposerTokens(editorRef.current);
