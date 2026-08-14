@@ -12,13 +12,13 @@ function clampScale(value) {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, +(value).toFixed(2)));
 }
 
-export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
+export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload, initialScale = DEFAULT_SCALE }) {
   const [displayUrl, setDisplayUrl] = useState(thumbUrl || fullUrl);
   const [fullLoaded, setFullLoaded] = useState(false);
-  const [scale, setScale] = useState(DEFAULT_SCALE);
+  const [scale, setScale] = useState(initialScale);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [editingScale, setEditingScale] = useState(false);
-  const [scaleDraft, setScaleDraft] = useState(String(Math.round(DEFAULT_SCALE * 100)));
+  const [scaleDraft, setScaleDraft] = useState(String(Math.round(initialScale * 100)));
   const stageRef = useRef(null);
   const scaleInputRef = useRef(null);
   const scaleRef = useRef(scale);
@@ -33,11 +33,11 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
   useEffect(() => {
     setDisplayUrl(thumbUrl || fullUrl);
     setFullLoaded(false);
-    setScale(DEFAULT_SCALE);
+    setScale(initialScale);
     setPan({ x: 0, y: 0 });
     setEditingScale(false);
-    setScaleDraft(String(Math.round(DEFAULT_SCALE * 100)));
-  }, [thumbUrl, fullUrl]);
+    setScaleDraft(String(Math.round(initialScale * 100)));
+  }, [thumbUrl, fullUrl, initialScale]);
 
   useEffect(() => {
     if (!fullUrl || fullUrl === thumbUrl) {
@@ -90,11 +90,11 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
   }, [applyScale]);
 
   const fit = useCallback(() => {
-    setScale(DEFAULT_SCALE);
+    setScale(initialScale);
     setPan({ x: 0, y: 0 });
     setEditingScale(false);
-    setScaleDraft(String(Math.round(DEFAULT_SCALE * 100)));
-  }, []);
+    setScaleDraft(String(Math.round(initialScale * 100)));
+  }, [initialScale]);
 
   useEffect(() => {
     const el = stageRef.current;

@@ -21357,6 +21357,19 @@ export function StudioShell({
           flex: 1 1 0;
           height: 100%;
         }
+        .studio-element-detail-stage .desk-image-viewer-stage,
+        .studio-element-detail-stage .desk-media-player-stage {
+          padding: 0;
+        }
+        .studio-element-detail-stage .desk-image-viewer-img,
+        .studio-element-detail-stage .desk-media-player-video {
+          width: 100%;
+          height: 100%;
+          max-width: 100%;
+          max-height: 100%;
+          object-fit: contain;
+          object-position: center;
+        }
         .studio-element-detail-stage-empty {
           flex: 1 1 0;
           display: grid;
@@ -21388,6 +21401,8 @@ export function StudioShell({
           width: 22rem;
           max-width: 42%;
           min-width: 16rem;
+          height: 100%;
+          min-height: 0;
         }
         .studio-element-detail.is-split .studio-element-detail-form {
           width: 100%;
@@ -33506,7 +33521,7 @@ function StudioElementDetailPane({
       >
         <div className="studio-element-detail-stage">
           {media ? (
-            <StudioAssetPreview key={media.studioId} entry={media} />
+            <StudioAssetPreview key={media.studioId} entry={media} initialScale={1} />
           ) : (
             <button
               type="button"
@@ -33589,7 +33604,7 @@ function StudioElementDetailPane({
   );
 }
 
-function StudioAssetPreview({ entry }) {
+function StudioAssetPreview({ entry, initialScale }) {
   const convex = useConvex();
   const kind = inferAttachmentKind(entry);
   const [previewExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
@@ -33656,7 +33671,7 @@ function StudioAssetPreview({ entry }) {
     <div className="studio-asset-preview">
       <div className="studio-asset-lightbox">
         {kind === "image" && mediaUrl ? (
-          <ImageZoomViewer thumbUrl={thumbUrl} fullUrl={mediaUrl} name={entry.name} onDownload={downloadAsset} />
+          <ImageZoomViewer thumbUrl={thumbUrl} fullUrl={mediaUrl} name={entry.name} onDownload={downloadAsset} initialScale={initialScale} />
         ) : kind === "video" && mediaUrl ? (
           <DeskMediaPlayer
             kind="video"
