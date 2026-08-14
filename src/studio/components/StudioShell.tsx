@@ -219,7 +219,9 @@ import { StudioPerfHud } from "@/studio/components/StudioPerfHud";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { placeShareConfirmNearButton } from "@/studio/lib/place-share-confirm-menu.js";
 import {
+  flattenPastedHtmlInComposer,
   insertPlainTextAtSelection,
+  isRichComposerInputType,
   plainTextFromClipboard,
 } from "@/studio/lib/composerPasteIntelligence";
 import { writeComposerSelectionToClipboard } from "@/studio/lib/composerCopy";
@@ -28103,6 +28105,16 @@ function StudioComposer({
           onDropEntry(entry);
         } else if (event.dataTransfer?.files?.length) {
           void onUploadFiles(event.dataTransfer.files);
+        } else {
+          const text = plainTextFromClipboard(event.dataTransfer);
+          const editor = editorRef.current;
+          if (text && editor) {
+            const range = rangeFromPointInEditor(editor, event.clientX, event.clientY);
+            if (range) setSelectionToRange(range);
+            insertPlainTextAtSelection(text);
+            flattenPastedHtmlInComposer(editor);
+            pushDraftToParent(readComposerEditorText(editor), { immediate: true });
+          }
         }
       }}
     >
@@ -28464,6 +28476,7 @@ function StudioComposer({
             pruneComposerAttachmentsFromDom(editor, setAttachments);
           }}
           onInput={(event) => {
+            flattenPastedHtmlInComposer(event.currentTarget);
             const next = readComposerEditorText(event.currentTarget);
             pushDraftToParent(next);
             pruneComposerAttachmentsFromDom(event.currentTarget, setAttachments);
@@ -28473,6 +28486,10 @@ function StudioComposer({
             const editor = editorRef.current;
             if (!editor) return;
             const inputType = event.inputType;
+            if (isRichComposerInputType(inputType)) {
+              event.preventDefault();
+              return;
+            }
             if (
               inputType !== "deleteContentBackward" &&
               inputType !== "deleteContentForward" &&
@@ -28591,20 +28608,15 @@ function StudioComposer({
           onPaste={(event) => {
             const editor = editorRef.current;
             if (!editor) return;
-            // Always take over paste: sites put rich HTML into contentEditable.
-            const text = plainTextFromClipboard(event.clipboardData);
-            if (!text) {
-              // Allow native image/file paste paths only when there is no text.
-              const items = event.clipboardData?.items;
-              if (items) {
-                for (const item of items) {
-                  if (item.kind === "file") return;
-                }
+            const items = event.clipboardData?.items;
+            if (items) {
+              for (const item of items) {
+                if (item.kind === "file") return;
               }
-              event.preventDefault();
-              return;
             }
             event.preventDefault();
+            const text = plainTextFromClipboard(event.clipboardData);
+            if (!text) return;
             if (
               removeComposerTokensInSelection(editor, setAttachments)
             ) {
@@ -28619,6 +28631,7 @@ function StudioComposer({
                   const hydrated = await onHydratePromptPaste(text);
                   if (!hydrated?.attachments?.length && !hydrated?.body) {
                     insertPlainTextAtSelection(text);
+                    flattenPastedHtmlInComposer(editor);
                     pushDraftToParent(readComposerEditorText(editor), {
                       immediate: true,
                     });
@@ -28646,6 +28659,7 @@ function StudioComposer({
                 } catch (error) {
                   console.warn("Prompt paste hydrate failed", error);
                   insertPlainTextAtSelection(text);
+                  flattenPastedHtmlInComposer(editor);
                   pushDraftToParent(readComposerEditorText(editor), {
                     immediate: true,
                   });
@@ -28655,6 +28669,7 @@ function StudioComposer({
               return;
             }
             insertPlainTextAtSelection(text);
+            flattenPastedHtmlInComposer(editor);
             pushDraftToParent(readComposerEditorText(editor), { immediate: true });
             pruneComposerAttachmentsFromDom(editor, setAttachments);
           }}

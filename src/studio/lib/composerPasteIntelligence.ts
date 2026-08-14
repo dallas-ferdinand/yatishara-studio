@@ -97,6 +97,60 @@ export function plainTextFromClipboard(clipboard: ClipboardLike | null | undefin
   return "";
 }
 
+const RICH_COMPOSER_INPUT_TYPES = new Set([
+  "insertFromPaste",
+  "insertFromPasteAsQuotation",
+  "insertFromDrop",
+  "insertFromYank",
+  "insertHTML",
+  "insertLink",
+]);
+
+/** Native CE input types that insert HTML / rich clipboard instead of typed text. */
+export function isRichComposerInputType(inputType: string | null | undefined): boolean {
+  const type = String(inputType ?? "");
+  if (RICH_COMPOSER_INPUT_TYPES.has(type)) return true;
+  return type.startsWith("format");
+}
+
+const COMPOSER_CHIP_SEL = ".studio-inline-tag, .composer-inline-mention";
+
+/**
+ * Unwrap pasted <div>/<span>/<p>/… so only text, BR, and chips remain.
+ * Chip subtrees are left intact.
+ */
+export function flattenPastedHtmlInComposer(editor: Element | null | undefined): boolean {
+  if (!editor) return false;
+  let changed = false;
+  for (let guard = 0; guard < 80; guard += 1) {
+    const foreign = [...editor.querySelectorAll("*")].filter((el) => {
+      if (el.tagName === "BR") return false;
+      if (el.closest(COMPOSER_CHIP_SEL)) return false;
+      return true;
+    });
+    if (!foreign.length) break;
+    foreign.sort(
+      (a, b) => b.querySelectorAll("*").length - a.querySelectorAll("*").length,
+    );
+    const el = foreign[0];
+    if (!el) break;
+    if (el.querySelector(COMPOSER_CHIP_SEL)) {
+      const parent = el.parentNode;
+      if (!parent) {
+        el.remove();
+      } else {
+        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+        el.remove();
+      }
+    } else {
+      const text = (el.innerText || el.textContent || "").replace(/\u00a0/g, " ");
+      el.replaceWith(editor.ownerDocument.createTextNode(text));
+    }
+    changed = true;
+  }
+  return changed;
+}
+
 /** Insert plain text at the caret (contentEditable-safe, preserves undo when possible). */
 export function insertPlainTextAtSelection(text: string): boolean {
   const value = String(text ?? "");

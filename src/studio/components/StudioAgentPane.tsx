@@ -19,7 +19,9 @@ import {
 } from "@/desk/lib/explorer-dnd";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import {
+  flattenPastedHtmlInComposer,
   insertPlainTextAtSelection,
+  isRichComposerInputType,
   plainTextFromClipboard,
 } from "@/studio/lib/composerPasteIntelligence";
 import { writeComposerSelectionToClipboard } from "@/studio/lib/composerCopy";
@@ -1206,24 +1208,27 @@ export function StudioAgentPane({
                   pruneDuplicateComposerTokens(editor);
                 }}
                 onInput={() => {
+                  flattenPastedHtmlInComposer(editorRef.current);
                   setDraft(readComposerEditorText(editorRef.current));
                   pruneDuplicateComposerTokens(editorRef.current);
+                }}
+                onBeforeInput={(event) => {
+                  if (isRichComposerInputType(event.inputType)) {
+                    event.preventDefault();
+                  }
                 }}
                 onPaste={(event) => {
                   const editor = editorRef.current;
                   if (!editor || composerLocked) return;
-                  const text = plainTextFromClipboard(event.clipboardData);
-                  if (!text) {
-                    const items = event.clipboardData?.items;
-                    if (items) {
-                      for (const item of items) {
-                        if (item.kind === "file") return;
-                      }
+                  const items = event.clipboardData?.items;
+                  if (items) {
+                    for (const item of items) {
+                      if (item.kind === "file") return;
                     }
-                    event.preventDefault();
-                    return;
                   }
                   event.preventDefault();
+                  const text = plainTextFromClipboard(event.clipboardData);
+                  if (!text) return;
                   ensureSelectionInEditor(editor);
                   if (looksLikePromptScript(text)) {
                     void (async () => {
@@ -1231,6 +1236,7 @@ export function StudioAgentPane({
                         const hydrated = await hydrateAgentPromptPaste(text);
                         if (!hydrated.attachments.length && !hydrated.body) {
                           insertPlainTextAtSelection(text);
+                          flattenPastedHtmlInComposer(editor);
                           setDraft(readComposerEditorText(editor));
                           pruneDuplicateComposerTokens(editor);
                           return;
@@ -1256,6 +1262,7 @@ export function StudioAgentPane({
                       } catch (error) {
                         console.warn("Agent prompt paste hydrate failed", error);
                         insertPlainTextAtSelection(text);
+                        flattenPastedHtmlInComposer(editor);
                         setDraft(readComposerEditorText(editor));
                         pruneDuplicateComposerTokens(editor);
                       }
@@ -1263,6 +1270,7 @@ export function StudioAgentPane({
                     return;
                   }
                   insertPlainTextAtSelection(text);
+                  flattenPastedHtmlInComposer(editor);
                   setDraft(readComposerEditorText(editor));
                   pruneDuplicateComposerTokens(editor);
                 }}

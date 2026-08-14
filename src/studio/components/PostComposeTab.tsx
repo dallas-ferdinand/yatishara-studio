@@ -22,7 +22,9 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import {
+  flattenPastedHtmlInComposer,
   insertPlainTextAtSelection,
+  isRichComposerInputType,
   plainTextFromClipboard,
 } from "@/studio/lib/composerPasteIntelligence";
 import { MediaLoadFrame } from "./media-load-frame";
@@ -898,14 +900,21 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
               aria-expanded={Boolean(visibleMenu)}
               data-placeholder="Write a description…"
               suppressContentEditableWarning
-              onInput={syncFromEditor}
+              onInput={() => {
+                flattenPastedHtmlInComposer(editorRef.current);
+                syncFromEditor();
+              }}
               onKeyUp={syncFromEditor}
               onClick={syncFromEditor}
               onKeyDown={onEditorKeyDown}
+              onBeforeInput={(event) => {
+                if (isRichComposerInputType(event.inputType)) event.preventDefault();
+              }}
               onPaste={(event) => {
                 event.preventDefault();
                 const text = plainTextFromClipboard(event.clipboardData).slice(0, MAX_CAPTION);
                 if (text) insertPlainTextAtSelection(text);
+                flattenPastedHtmlInComposer(editorRef.current);
                 syncFromEditor();
               }}
             />

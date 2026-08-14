@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  flattenPastedHtmlInComposer,
   htmlToPlainText,
+  isRichComposerInputType,
   looksLikeHtmlMarkup,
   normalizePastedPlainText,
   plainTextFromClipboard,
@@ -47,5 +49,25 @@ describe("composerPasteIntelligence", () => {
         f === "text/plain" ? markup : f === "text/html" ? markup : "",
     };
     expect(plainTextFromClipboard(cd)).toBe("Pastable");
+  });
+
+  it("flags rich clipboard input types", () => {
+    expect(isRichComposerInputType("insertFromPaste")).toBe(true);
+    expect(isRichComposerInputType("insertHTML")).toBe(true);
+    expect(isRichComposerInputType("formatBold")).toBe(true);
+    expect(isRichComposerInputType("insertText")).toBe(false);
+    expect(isRichComposerInputType("insertParagraph")).toBe(false);
+  });
+
+  it("flattens pasted HTML wrappers and keeps chips", () => {
+    if (typeof document === "undefined") return;
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<div><span style="color:red">Hello</span></div><span class="studio-inline-tag" data-attachment-id="x">@chip</span>';
+    expect(flattenPastedHtmlInComposer(root)).toBe(true);
+    expect(root.querySelector("span[style]")).toBeNull();
+    expect(root.querySelector("div")).toBeNull();
+    expect(root.textContent).toContain("Hello");
+    expect(root.querySelector(".studio-inline-tag")?.textContent).toBe("@chip");
   });
 });
