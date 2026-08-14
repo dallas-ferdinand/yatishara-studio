@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeWamIntentStatus, wamCardFeeCents, wamCheckoutTotalCents } from "./wam";
+import { normalizeWamIntentStatus, wamCardFeeCents, wamCheckoutTotalCents, humanizeWamProviderStatus } from "./wam";
 
 describe("wam helpers", () => {
   it("computes 3% + TT$1.50 fee", () => {
@@ -15,5 +15,12 @@ describe("wam helpers", () => {
     expect(normalizeWamIntentStatus("expired")).toBe("cancelled");
     expect(normalizeWamIntentStatus("processing")).toBe("pending");
     expect(normalizeWamIntentStatus("weird")).toBe("unknown");
+  });
+
+  it("humanizes Wam checkout states", () => {
+    expect(humanizeWamProviderStatus("requires_payment_method")).toBe("Needs a card");
+    expect(humanizeWamProviderStatus("processing")).toBe("Processing");
+    expect(humanizeWamProviderStatus("foo_bar_baz")).toBe("Foo Bar Baz");
+    expect(humanizeWamProviderStatus("")).toBeNull();
   });
 });

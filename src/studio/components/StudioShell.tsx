@@ -329,6 +329,7 @@ import {
   textCreditCost,
 } from "../../../convex/lib/generationPricing";
 import { resolveVideoModel } from "../../../convex/lib/videoModels";
+import { humanizeWamProviderStatus } from "../../../convex/lib/wam";
 import {
   orbSeedForVoice,
   StudioOrbAvatar,
@@ -35712,8 +35713,11 @@ function SettingsWorkspacePane({
                           <strong>{paymentInvoiceTitle(payment)}</strong>
                           <span>
                             {formatDate(payment.createdAt)}
-                            {payment.status !== "payment_completed" && payment.providerStatus
-                              ? ` · ${payment.providerStatus}`
+                            {payment.status !== "payment_completed" &&
+                            payment.status !== "cancelled" &&
+                            payment.status !== "checkout_failed" &&
+                            humanizeWamProviderStatus(payment.providerStatus)
+                              ? ` · ${humanizeWamProviderStatus(payment.providerStatus)}`
                               : ""}
                           </span>
                         </div>
@@ -36514,12 +36518,14 @@ function paymentInvoiceTitle(payment) {
 
 function paymentInvoiceStatusLine(payment) {
   const base = humanizePaymentStatus(payment?.status, payment?.method);
-  const provider = String(payment?.providerStatus ?? "").trim();
+  const provider = humanizeWamProviderStatus(payment?.providerStatus);
   if (
     (payment?.method === "wam" || payment?.method === "paywise") &&
     provider &&
     payment.status !== "payment_completed" &&
-    payment.status !== "checkout_failed"
+    payment.status !== "checkout_failed" &&
+    payment.status !== "cancelled" &&
+    provider !== base
   ) {
     return `${base} · ${provider}`;
   }

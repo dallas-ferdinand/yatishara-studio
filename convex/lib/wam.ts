@@ -36,6 +36,30 @@ export function normalizeWamIntentStatus(status: string): WamNormalizedStatus {
   return "unknown";
 }
 
+/** Customer-facing Wam checkout state. Never show snake_case to people. */
+export function humanizeWamProviderStatus(status?: string | null): string | null {
+  const raw = String(status ?? "").trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase();
+  const labels: Record<string, string> = {
+    requires_payment_method: "Needs a card",
+    requires_confirmation: "Confirming",
+    requires_action: "Needs confirmation",
+    processing: "Processing",
+    created: "Started",
+    succeeded: "Paid",
+    failed: "Didn't go through",
+    canceled: "Cancelled",
+    cancelled: "Cancelled",
+    expired: "Expired",
+  };
+  if (labels[key]) return labels[key];
+  if (/^[a-z0-9]+(_[a-z0-9]+)+$/i.test(raw)) {
+    return raw.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+  return raw;
+}
+
 /**
  * Wam card fee when payer covers 100%: 3% + TT$1.50.
  * @see https://docs.wam.money/docs/help-center/fees

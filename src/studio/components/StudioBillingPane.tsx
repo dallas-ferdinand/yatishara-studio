@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import { STUDIO_PLAN_CATALOG, STUDIO_PLAN_SLUGS, isRenewalUnpaidInvoice } from "../../../convex/lib/studioPlans";
+import { humanizeWamProviderStatus } from "../../../convex/lib/wam";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
@@ -132,7 +133,34 @@ function invoiceStatusLabel(status: string, row?: InvoiceRow) {
   return labels[status] ?? status;
 }
 
-function canPayInvoice(row: InvoiceRow) {
+function invoiceKindLabel(kind: Exclude<InvoiceKind, "all">) {
+  if (kind === "academy") return "Academy";
+  if (kind === "topup") return "Top-up";
+  return "Plan";
+}
+
+function invoiceWhen(createdAt: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(createdAt));
+}
+
+function invoiceSummary(row: InvoiceRow) {
+  const status = invoiceStatusLabel(row.status, row);
+  const kind = invoiceKindLabel(invoiceKind(row));
+  const hideProvider =
+    status === "Expired" ||
+    status === "Paid" ||
+    status === "Cancelled" ||
+    row.status === "payment_completed";
+  const provider = hideProvider ? null : humanizeWamProviderStatus(row.providerStatus);
+  const bits = [kind, status];
+  if (provider && provider !== status) bits.push(provider);
+  return bits.join(" · ");
+}
   if (!isRenewalUnpaidInvoice(row)) return false;
   return row.status === "pending" || row.status === "checkout_failed";
 }
@@ -807,13 +835,8 @@ export function StudioBillingPane({
                   <div key={row._id} className="studio-billing-invoice">
                     <div>
                       <strong>{invoiceTitle(row)}</strong>
-                      <span>
-                        {invoiceKind(row)} · {invoiceStatusLabel(row.status, row)}
-                        {row.providerStatus && row.status !== "payment_completed"
-                          ? ` · ${row.providerStatus}`
-                          : ""}{" "}
-                        · {new Date(row.createdAt).toLocaleString()}
-                      </span>
+                      <span>{invoiceSummary(row)}</span>
+                      <span className="studio-billing-invoice-when">{invoiceWhen(row.createdAt)}</span>
                     </div>
                     <div className="studio-billing-invoice-meta">
                       <strong>{formatTtdCents(row.amountCents)}</strong>

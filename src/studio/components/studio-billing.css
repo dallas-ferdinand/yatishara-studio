@@ -473,6 +473,12 @@
   margin-top: 3px;
   color: var(--color-cursor-muted);
   font-size: 12px;
+  line-height: 1.35;
+}
+
+.studio-billing-invoice-when {
+  opacity: 0.78;
+  font-size: 11px !important;
 }
 
 .studio-billing-invoice-meta {
