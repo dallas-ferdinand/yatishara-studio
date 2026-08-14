@@ -37,11 +37,25 @@ if (!process.env.ARK_API_KEY?.trim()) {
   );
 }
 
-/** @type {Map<string, { updatedAt: number, abort?: AbortController }>} */
+/** @type {Map<string, { updatedAt: number, abort?: AbortController, session?: { abort?: () => Promise<void>, dispose?: () => void } }>} */
 const sessions = new Map();
 
 function sessionKey(userId, threadId) {
   return `${userId}:${threadId}`;
+}
+
+async function abortSessionEntry(entry) {
+  if (!entry) return;
+  try {
+    entry.abort?.abort();
+  } catch {
+    // ignore
+  }
+  try {
+    await entry.session?.abort?.();
+  } catch {
+    // ignore
+  }
 }
 
 function authOk(req) {
@@ -174,25 +188,46 @@ async function runPiTurn(body, abortSignal) {
   }
 
   const key = sessionKey(userId || "anon", threadId || "default");
-  sessions.set(key, { updatedAt: Date.now() });
+  const sessionEntry = sessions.get(key) || { updatedAt: Date.now() };
+  sessionEntry.updatedAt = Date.now();
+  sessions.set(key, sessionEntry);
 
-  // Cancellation poll
-  const cancelPoll = setInterval(async () => {
-    try {
-      const status = await callback(
-        callbackBase,
-        workerCallbackToken,
-        "run-status",
-        { runId },
-        "GET",
-      );
-      if (status?.run?.status === "cancelled" || status?.run?.cancelRequestedAt) {
-        abortSignal?.abort?.();
+  let cancelNotified = false;
+
+  const requestAbort = async (reason = "cancelled") => {
+    if (cancelNotified) return;
+    cancelNotified = true;
+    console.log("[studio-agent] cancel", reason, { runId, threadId });
+    await abortSessionEntry(sessionEntry);
+    if (abortSignal && !abortSignal.aborted) {
+      try {
+        // Parent AbortController may already be this entry.abort
+        abortSignal.dispatchEvent?.(new Event("abort"));
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore poll errors
     }
-  }, 2500);
+  };
+
+  // Cancellation poll — call session.abort() (AbortController alone does not stop Pi).
+  const cancelPoll = setInterval(() => {
+    void (async () => {
+      try {
+        const status = await callback(
+          callbackBase,
+          workerCallbackToken,
+          "run-status",
+          { runId },
+          "GET",
+        );
+        if (status?.run?.status === "cancelled" || status?.run?.cancelRequestedAt) {
+          await requestAbort("run-status");
+        }
+      } catch {
+        // ignore poll errors
+      }
+    })();
+  }, 500);
 
   try {
     let approvalCreated = false;
@@ -398,6 +433,13 @@ async function runPiTurn(body, abortSignal) {
       // Studio tools only — no local bash/read/write on the VPS.
       noTools: "builtin",
     });
+    sessionEntry.session = session;
+    sessions.set(key, sessionEntry);
+
+    if (abortSignal?.aborted || cancelNotified) {
+      await requestAbort("pre-prompt");
+      throw new Error("cancelled");
+    }
 
     if (!session.model) {
       throw new Error(
@@ -518,13 +560,18 @@ async function runPiTurn(body, abortSignal) {
       .filter(Boolean)
       .join("\n\n");
 
-    if (abortSignal?.aborted) {
+    if (abortSignal?.aborted || cancelNotified) {
+      await requestAbort("pre-prompt-images");
       throw new Error("cancelled");
     }
 
     const images = [];
     const attachedAssets = Array.isArray(attachments) ? attachments.slice(0, 12) : [];
     for (const item of attachedAssets) {
+      if (abortSignal?.aborted || cancelNotified) {
+        await requestAbort("attach-images");
+        throw new Error("cancelled");
+      }
       if (images.length >= 8) break;
       if (textValue(item?.studioKind) !== "asset") continue;
       const studioId = textValue(item?.studioId);
@@ -547,7 +594,20 @@ async function runPiTurn(body, abortSignal) {
     }
 
     // prompt() resolves void — text + usage come from session after idle.
-    await session.prompt(prompt, images.length ? { images } : undefined);
+    // Cancel path must call session.abort() (wired via cancel poll /v1/cancel).
+    const onAbort = () => {
+      void requestAbort("abort-signal");
+    };
+    abortSignal?.addEventListener?.("abort", onAbort, { once: true });
+    try {
+      await session.prompt(prompt, images.length ? { images } : undefined);
+    } finally {
+      abortSignal?.removeEventListener?.("abort", onAbort);
+    }
+
+    if (abortSignal?.aborted || cancelNotified) {
+      throw new Error("cancelled");
+    }
 
     const lastAssistant = [...(session.messages || [])]
       .reverse()
@@ -680,11 +740,15 @@ const server = createServer(async (req, res) => {
           }),
         );
       } catch (error) {
-        res.writeHead(500, { "content-type": "application/json" });
+        const message = error instanceof Error ? error.message : String(error);
+        const cancelled = /cancelled/i.test(message);
+        res.writeHead(cancelled ? 200 : 500, { "content-type": "application/json" });
         res.end(
-          JSON.stringify({
-            error: error instanceof Error ? error.message : String(error),
-          }),
+          JSON.stringify(
+            cancelled
+              ? { cancelled: true, assistantText: "Stopped." }
+              : { error: message },
+          ),
         );
       }
       return;
@@ -697,10 +761,10 @@ const server = createServer(async (req, res) => {
       }
       const body = await readJson(req);
       const key = sessionKey(body.userId || "anon", body.threadId || "default");
-      const session = sessions.get(key);
-      session?.abort?.abort();
+      const entry = sessions.get(key);
+      await abortSessionEntry(entry);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify({ ok: true, aborted: Boolean(entry) }));
       return;
     }
     res.writeHead(404, { "content-type": "application/json" });

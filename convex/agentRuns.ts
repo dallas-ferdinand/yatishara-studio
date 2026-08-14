@@ -3,6 +3,7 @@ import {
   internalMutation,
   internalQuery,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 
 const runStatus = v.union(
@@ -236,8 +237,67 @@ export const requestCancel = authedMutation({
       cancelRequestedAt: now,
       finishedAt: now,
       updatedAt: now,
+      assistantText: row.assistantText || "Stopped.",
+    });
+    await ctx.db.insert("agentMessages", {
+      ownerId: row.ownerId,
+      threadId: row.threadId,
+      role: "assistant",
+      content: "Stopped.",
+      status: "complete",
+      createdAt: now,
+    });
+    await ctx.scheduler.runAfter(0, internal.agentActions.notifyWorkerCancel, {
+      ownerId: row.ownerId,
+      threadId: row.threadId,
+      runId: row._id,
     });
     return null;
+  },
+});
+
+/** Cancel the latest in-flight run on a thread (Stop before runId is known). */
+export const requestCancelLatestForThread = authedMutation({
+  args: { threadId: v.id("agentThreads") },
+  returns: v.union(v.null(), v.id("agentRuns")),
+  handler: async (ctx, args) => {
+    const thread = await ctx.db.get("agentThreads", args.threadId);
+    if (!thread || thread.ownerId !== ctx.user._id) {
+      throw new Error("Thread not found");
+    }
+    const rows = await ctx.db
+      .query("agentRuns")
+      .withIndex("by_thread_and_created", (q) => q.eq("threadId", args.threadId))
+      .order("desc")
+      .take(8);
+    const active = rows.find((row) =>
+      ["queued", "running", "awaiting_approval", "awaiting_question"].includes(
+        row.status,
+      ),
+    );
+    if (!active) return null;
+    const now = Date.now();
+    await ctx.db.patch(active._id, {
+      status: "cancelled",
+      cancelRequestedAt: now,
+      finishedAt: now,
+      updatedAt: now,
+      assistantText: active.assistantText || "Stopped.",
+    });
+    await ctx.db.insert("agentMessages", {
+      ownerId: active.ownerId,
+      threadId: active.threadId,
+      role: "assistant",
+      content: "Stopped.",
+      status: "complete",
+      createdAt: now,
+    });
+    await ctx.scheduler.runAfter(0, internal.agentActions.notifyWorkerCancel, {
+      ownerId: active.ownerId,
+      threadId: active.threadId,
+      runId: active._id,
+    });
+    return active._id;
   },
 });
 

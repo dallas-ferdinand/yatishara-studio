@@ -6,7 +6,7 @@
  */
 import { randomBytes } from "crypto";
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { decryptAgentApiKey, requireAgentKeySecret } from "./lib/agentCrypto";
@@ -97,6 +97,7 @@ type SendTurnResult = {
   error?: string;
   pendingApproval?: boolean;
   pendingAsk?: boolean;
+  cancelled?: boolean;
 };
 
 type AgentTurnAttachment = {
@@ -153,6 +154,7 @@ export const sendTurn = action({
     error: v.optional(v.string()),
     pendingApproval: v.optional(v.boolean()),
     pendingAsk: v.optional(v.boolean()),
+    cancelled: v.optional(v.boolean()),
   }),
   handler: async (ctx, args): Promise<SendTurnResult> => {
     const me = await ctx.runQuery(api.users.current, {});
@@ -263,6 +265,17 @@ export const sendTurn = action({
       content: message,
       attachmentsJson,
     });
+
+    // Create run early so Stop can cancel before working-set hydration finishes.
+    const runId = await ctx.runMutation(internal.agentRuns.createRun, {
+      ownerId,
+      threadId: args.threadId,
+      userMessage: message,
+      catalogVersion: "2026-08-11.3",
+      usedByok,
+      model: usedByok && byokProvider ? `byok:${byokProvider}` : "platform",
+    });
+    await ctx.runMutation(internal.agentRuns.markRunning, { runId });
 
     const history: Array<{ role: string; content: string }> = await ctx.runQuery(
       internal.agentMessages.listRecentMessagesInternal,
@@ -396,14 +409,20 @@ export const sendTurn = action({
       }
     }
 
-    const runId = await ctx.runMutation(internal.agentRuns.createRun, {
-      ownerId,
-      threadId: args.threadId,
-      userMessage: message,
-      catalogVersion: "2026-08-11.3",
-      usedByok,
-      model: usedByok && byokProvider ? `byok:${byokProvider}` : "platform",
+    const cancelledEarly = await ctx.runQuery(internal.agentRuns.getRunInternal, {
+      runId,
     });
+    if (cancelledEarly?.status === "cancelled") {
+      await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
+      return {
+        ok: true,
+        assistantText: "Stopped.",
+        creditsSpent: 0,
+        usedByok,
+        runId: String(runId),
+        cancelled: true,
+      };
+    }
 
     const threadRow = await ctx.runQuery(api.agentThreads.get, {
       threadId: args.threadId,
@@ -430,8 +449,6 @@ export const sendTurn = action({
       role,
       expiresAt: Date.now() + CAP_TTL_MS,
     });
-
-    await ctx.runMutation(internal.agentRuns.markRunning, { runId });
 
     // Visible chip: memories are injected into the Pi system prompt every turn,
     // but without a tool row users think recall never runs (only remember shows).
@@ -516,6 +533,7 @@ export const sendTurn = action({
         creditsSpent?: number;
         usedByok?: boolean;
         error?: string;
+        cancelled?: boolean;
         pendingApproval?: boolean;
         pendingAsk?: boolean;
         model?: string;
@@ -531,6 +549,21 @@ export const sendTurn = action({
         body = bodyText ? JSON.parse(bodyText) : {};
       } catch {
         body = { error: bodyText.slice(0, 500) };
+      }
+
+      const runAfterPi = await ctx.runQuery(internal.agentRuns.getRunInternal, {
+        runId,
+      });
+      if (body.cancelled || runAfterPi?.status === "cancelled") {
+        await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
+        return {
+          ok: true,
+          assistantText: "Stopped.",
+          creditsSpent: 0,
+          usedByok,
+          runId: String(runId),
+          cancelled: true,
+        };
       }
 
       if (!res.ok) {
@@ -672,6 +705,20 @@ export const sendTurn = action({
         runId: String(runId),
       };
     } catch (error) {
+      const runNow = await ctx.runQuery(internal.agentRuns.getRunInternal, {
+        runId,
+      });
+      if (runNow?.status === "cancelled") {
+        await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
+        return {
+          ok: true,
+          assistantText: "Stopped.",
+          creditsSpent: 0,
+          usedByok,
+          runId: String(runId),
+          cancelled: true,
+        };
+      }
       const err =
         error instanceof Error && error.name === "AbortError"
           ? `Pi worker timed out after ${timeoutMs}ms`
@@ -696,6 +743,38 @@ export const sendTurn = action({
     } finally {
       clearTimeout(timer);
     }
+  },
+});
+
+/** Ping Pi worker to abort the live session (Stop button). */
+export const notifyWorkerCancel = internalAction({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("agentThreads"),
+    runId: v.id("agentRuns"),
+  },
+  returns: v.null(),
+  handler: async (_ctx, args) => {
+    const piBase = workerUrl();
+    const token = workerToken();
+    if (!piBase || !token) return null;
+    try {
+      await fetch(`${piBase}/v1/cancel`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          userId: args.ownerId,
+          threadId: args.threadId,
+          runId: args.runId,
+        }),
+      });
+    } catch {
+      // best-effort; cancel poll still works
+    }
+    return null;
   },
 });
 

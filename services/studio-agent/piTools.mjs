@@ -531,6 +531,9 @@ export function createStudioPiTools(opts) {
       const trackId = started?.toolCallId;
 
       try {
+        if (opts.abortSignal?.aborted) {
+          throw new Error("cancelled");
+        }
         const auth = authorizeTool(toolName, { surface: "agent", role, scopes });
         if (!auth.ok) {
           const fail = {

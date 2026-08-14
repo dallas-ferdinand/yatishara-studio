@@ -568,6 +568,7 @@ export function StudioAgentPane({
   const decideApproval = useMutation(api.agentApprovals.decide);
   const answerQuestions = useMutation(api.agentQuestions.answer);
   const cancelRun = useMutation(api.agentRuns.requestCancel);
+  const cancelLatestRun = useMutation(api.agentRuns.requestCancelLatestForThread);
   const ensureMessagesFolder = useMutation(api.folders.ensureMessagesFolderForMe);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
@@ -994,12 +995,22 @@ export function StudioAgentPane({
   }
 
   async function handleCancel() {
-    if (!cancellableRunId) return;
     try {
-      await cancelRun({ runId: cancellableRunId });
-      toast.message("Cancel requested");
+      if (cancellableRunId) {
+        await cancelRun({ runId: cancellableRunId });
+      } else if (activeThreadId) {
+        await cancelLatestRun({ threadId: activeThreadId });
+      } else {
+        toast.message("Nothing to stop");
+        return;
+      }
+      setBusy(false);
+      setActiveRunId(null);
+      setPendingUserText(null);
+      setPendingAttachments([]);
+      toast.message("Stopped");
     } catch (error) {
-      toast.error(friendlyConvexError(error, "Could not cancel"));
+      toast.error(friendlyConvexError(error, "Could not stop"));
     }
   }
 
