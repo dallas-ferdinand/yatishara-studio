@@ -12,10 +12,10 @@ describe("studio subscription catalog", () => {
   test("monthly: pay less, receive full face dollars", () => {
     const plus = STUDIO_PLAN_CATALOG.find((plan) => plan.slug === "plus")!;
     const quote = quoteStudioPlan(plus, "month", 50);
-    expect(quote.chargeCents).toBe(29_100);
-    expect(quote.faceMonthlyCents).toBe(30_000);
-    expect(quote.monthlyCredits).toBe(600);
-    expect(discountedChargeCents(30_000, 3)).toBe(29_100);
+    expect(quote.chargeCents).toBe(33_950);
+    expect(quote.faceMonthlyCents).toBe(35_000);
+    expect(quote.monthlyCredits).toBe(700);
+    expect(discountedChargeCents(35_000, 3)).toBe(33_950);
   });
 
   test("annual prepaid still grants monthly face credits", () => {
@@ -28,8 +28,8 @@ describe("studio subscription catalog", () => {
 
   test("core monthly has no discount", () => {
     const core = STUDIO_PLAN_CATALOG.find((plan) => plan.slug === "core")!;
-    expect(quoteStudioPlan(core, "month", 50).chargeCents).toBe(1_000);
-    expect(quoteStudioPlan(core, "year", 50).chargeCents).toBe(11_640);
+    expect(quoteStudioPlan(core, "month", 50).chargeCents).toBe(15_000);
+    expect(quoteStudioPlan(core, "year", 50).chargeCents).toBe(174_600);
   });
 
   test("first subscribe invoices expire; renewal unpaid stays payable", () => {

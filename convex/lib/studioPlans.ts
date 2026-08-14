@@ -18,8 +18,7 @@ export const STUDIO_PLAN_CATALOG: readonly StudioPlanCatalogEntry[] = [
   {
     slug: "core",
     name: "Core",
-    /** TEMP 2026-08-13 Dallas live Wam test — revert to 10_000 when he says done. */
-    faceMonthlyCents: 1_000,
+    faceMonthlyCents: 15_000,
     monthlyDiscountPercent: 0,
     annualDiscountPercent: 3,
     sortOrder: 0,
@@ -27,7 +26,7 @@ export const STUDIO_PLAN_CATALOG: readonly StudioPlanCatalogEntry[] = [
   {
     slug: "plus",
     name: "Plus",
-    faceMonthlyCents: 30_000,
+    faceMonthlyCents: 35_000,
     monthlyDiscountPercent: 3,
     annualDiscountPercent: 8,
     sortOrder: 1,
