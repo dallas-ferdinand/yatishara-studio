@@ -155,6 +155,10 @@ const FIELD_HINTS = {
   studio_bulk_move: ["moved", "errors", "count", "targetFolderId"],
   studio_trash: ["trashed", "kind", "id", "ok"],
   studio_create_folder: ["folderId", "id", "name", "path", "parentId"],
+  studio_create_element: ["id", "_id", "elementId", "name", "type", "folderId", "referenceAssetIds"],
+  studio_update_element: ["id", "_id", "elementId", "name", "type", "folderId", "referenceAssetIds"],
+  studio_list_elements: ["elements", "items", "id", "_id", "name", "type"],
+  studio_get_element: ["id", "_id", "elementId", "name", "type", "folderId", "referenceAssetIds", "description"],
   studio_search: ["results", "items", "count", "query"],
   studio_workspace_tree: ["roots", "folders", "count", "truncated"],
   studio_folder_contents: ["folders", "assets", "documents", "elements"],
@@ -187,6 +191,24 @@ function flattenNestedPayload(toolName, data) {
       folderId: doc.folderId ?? next.folderId,
       title: doc.title ?? next.title,
       name: doc.title ?? next.name,
+    };
+  }
+
+  if (/element/i.test(toolName) && data.element && typeof data.element === "object") {
+    const el = data.element;
+    const id =
+      (typeof el._id === "string" && el._id) ||
+      (typeof el.id === "string" && el.id) ||
+      (typeof data.elementId === "string" && data.elementId) ||
+      null;
+    next = {
+      ...next,
+      ...(id ? { id, _id: id, elementId: id } : {}),
+      folderId: el.folderId ?? next.folderId,
+      name: el.name ?? next.name,
+      type: el.type ?? next.type,
+      referenceAssetIds: el.referenceAssetIds ?? next.referenceAssetIds,
+      description: el.description ?? next.description,
     };
   }
 

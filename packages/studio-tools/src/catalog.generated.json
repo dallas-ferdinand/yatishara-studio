@@ -747,12 +747,13 @@
   },
   {
     "name": "studio_create_element",
-    "description": "Creates the element record ONLY (buildStatus=unbuilt). Retired from Agent Mode surface.",
+    "description": "Create a .element (unique @name). Attach one image or video with referenceAssetIds after upload. Tag @name in prompts and element://id in ## References so paste hydrates. Pass referenceElementIds on generate.",
     "category": "elements",
     "scope": "write",
     "risk": "safe_write",
     "role": null,
     "surfaces": [
+      "agent",
       "mcp"
     ],
     "requiresApproval": false,
@@ -4475,12 +4476,13 @@
   },
   {
     "name": "studio_update_element",
-    "description": "Update element fields / referenceAssetIds. Retired from Agent Mode surface.",
+    "description": "Update element name, description, or attached media (referenceAssetIds).",
     "category": "elements",
     "scope": "write",
     "risk": "safe_write",
     "role": null,
     "surfaces": [
+      "agent",
       "mcp"
     ],
     "requiresApproval": false,

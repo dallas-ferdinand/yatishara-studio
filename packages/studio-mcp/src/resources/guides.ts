@@ -161,29 +161,27 @@ const ELEMENTS = guide(
   "elements",
   "elements",
   "Elements, character/prop sheets, style sheets.",
-  `# Elements & style sheets
+  `# Elements
 
-## Before building sheets
+## Default (Create / Seedance)
+
+1. \`studio_upload_asset\` (image or video)
+2. \`studio_create_element\` — unique \`@name\` (no spaces), optional description, \`referenceAssetIds\`
+3. In prompts: \`@name\` inside the sealed text + \`- [name](element://{elementId})\` under \`## References\`
+4. Generate with \`referenceElementIds\`
+
+\`studio_list_elements\`, \`studio_get_element\`, \`studio_update_element\` (swap media)
+
+## Sheets (MCP only — not Agent)
 
 1. \`studio_production_guide\`
-2. \`studio_element_sheet_guide\` when generating sheets
+2. \`studio_element_sheet_guide\`
+3. \`studio_generate_element_text_sheet\` / \`studio_generate_element_sheet\`
 
-## CRUD
-
-\`studio_list_elements\`, \`studio_get_element\`, \`studio_create_element\`, \`studio_update_element\`
-
-## Sheets
-
-- \`studio_generate_element_text_sheet\` — text lock / bible-style
-- \`studio_generate_element_sheet\` — visual sheet
-
-## Style sheets
+## Style sheets (MCP only)
 
 - \`studio_create_style_sheet\` / \`studio_build_style_sheet\`
-- \`studio_set_active_style_sheet\`
-- \`studio_list_style_sheets\`
-
-Pass the built style sheet element id into \`studio_generate_*\` as \`styleSheetElementId\` when you want enhancement to stick look + context.
+- Pass \`styleSheetElementId\` on \`studio_generate_*\` for styled work
 `,
 );
 

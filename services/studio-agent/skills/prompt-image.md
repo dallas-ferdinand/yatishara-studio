@@ -78,16 +78,17 @@ Example `contentMarkdown`:
 ## References
 
 - [Label](asset://{assetId}) — optional note
+- [bottle](element://{elementId}) — element lock
 ~~~
 
 **Hard rules for Script files**
 - Plain markdown only: headings, ```text fences, lists, links.
-- References = `## References` + markdown links `asset://{id}` only.
+- References = `## References` + markdown links `asset://{id}` and/or `element://{id}`.
 - Sealed prompt MUST include `@Label` for each References Label so Create paste shows chips and Seedance binds media.
-- **Forbidden:** pipe-meta rows (`| kind: | path: | studio:`), HTML, null bytes, unclosed fences, inventing element paths.
-- Only **asset** ids from attached chips / generated stills. Never invent element ids. Never use `/Studio/elements/…`.
+- **Forbidden:** pipe-meta rows (`| kind: | path: | studio:`), HTML, null bytes, unclosed fences, inventing ids.
+- Use real attached/created asset or element ids only.
 
 5. Chat: point them at the Script file. Paste in chat **only** if they asked to see / copy it.
-6. Generate only if they also asked to generate — then pass `referenceAssetIds` from the References lines (and `folderId` = CWD).
+6. Generate only if they also asked to generate — then pass `referenceAssetIds` / `referenceElementIds` from the References lines (and `folderId` = CWD).
 
 Estimate first if spend is unclear. After ok, optionally `studio_view_media`.

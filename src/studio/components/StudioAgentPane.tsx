@@ -573,6 +573,7 @@ export function StudioAgentPane({
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const pricing = useQuery(api.billing.getPricing, {});
   const agentPreferences = useQuery(api.agentPreferences.getMine, {});
+  const elements = useQuery(api.elements.list, {});
   const convex = useConvex();
 
   const [draft, setDraft] = useState("");
@@ -763,7 +764,7 @@ export function StudioAgentPane({
         console.warn("Agent prompt paste hydrate failed", error);
       }
     }
-    return hydrateComposerFromText(text, assets);
+    return hydrateComposerFromText(text, assets, elements ?? []);
   }
 
   useEffect(() => {

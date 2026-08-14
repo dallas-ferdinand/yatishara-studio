@@ -43,6 +43,12 @@ export const INTENT_BLURBS = {
     "Price a generation before paid generate. Args:{mode,prompt,...}. Prefer this before generate when spend isn't confirmed. Report $ / TTD only — never say credits.",
   studio_list_video_models:
     "List real Studio video models + descriptions/caps. Call before inventing model details. Never invent legacy/pipeline marketing.",
+  studio_create_element:
+    "Create a .element (@unique-name) with optional image/video. Args:{type:character|prop|location,name,folderId?,description?,referenceAssetIds?}. Upload media first. Tag @name in prompts + element://id in ## References. Generate with referenceElementIds.",
+  studio_update_element:
+    "Swap element media or edit name/description. Args:{elementId,name?,description?,referenceAssetIds?}.",
+  studio_list_elements:
+    "List .element files. Args:{folderId?,type?}.",
   studio_pull_frames:
     "Extract N stills from a video (VO cadence: count=clamp(round(duration/2),4,8)). Args:{assetId,startSec?,endSec?,count?} or timesSec[]. Then inspect frame assets.",
   studio_generate_audio:
@@ -101,6 +107,13 @@ export function detectActionLane(message, workingSet) {
     return "LANE: EDIT existing Script — get real documentId (CWD index / folder_contents), studio_get_document, then studio_patch_document with exact oldString→newString for ONLY the asked change. Preserve ``` fence, headings, References, and everything they did not mention. Never studio_update_document full rewrite unless the body is empty or they explicitly asked rewrite/from scratch. Never create a second Script with the same title.";
   }
 
+  if (
+    /\b(create|make|new|add)\b.{0,40}\belement\b/.test(text) ||
+    /\.element\b/.test(text)
+  ) {
+    return "LANE: studio_upload_asset if they gave media, then studio_create_element {type,name,folderId:CWD,description?,referenceAssetIds}. Unique @name (no spaces). Later prompts: @name + element://id in ## References, generate with referenceElementIds.";
+  }
+
   // Voiceover from video / VO script — before generic script craft
   if (
     !editAsk &&
@@ -131,7 +144,7 @@ export function detectActionLane(message, workingSet) {
       (/\bmake\b.{0,40}\b(prompt|script)\b/.test(text) &&
         !/\bmake\s+it\b/.test(text)))
   ) {
-    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt/script. If CWD already has a Prompt/Script → EDIT with studio_patch_document (or update only if empty). Else studio_create_document {folderId:CWD, title:\"Prompt — …\" or \"Script — …\", contentMarkdown NON-EMPTY with ```text fence + References: asset lines}. NEVER remember the script body. Do not dump the full prompt in chat unless they asked to see/copy it.";
+    return "LANE: skills {id} matching prompt-image / prompt-cinematic / prompt-hypermotion. Write a dense sealed prompt/script. If they need a locked character/prop/location, studio_create_element then @name + element:// in References. If CWD already has a Prompt/Script → EDIT with studio_patch_document (or update only if empty). Else studio_create_document {folderId:CWD, title:\"Prompt — …\" or \"Script — …\", contentMarkdown NON-EMPTY with ```text fence + References: asset:// and element:// lines}. NEVER remember the script body. Do not dump the full prompt in chat unless they asked to see/copy it.";
   }
   if (/\b(generat(e|ing)|creat(e|ing)|make|draw|render)\b.{0,40}\b(image|picture|photo|still|art)\b/.test(text)
     || /\b(image|picture|photo)\b.{0,40}\b(generat|creat|make|draw|render)/.test(text)) {

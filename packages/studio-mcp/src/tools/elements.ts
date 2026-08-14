@@ -11,10 +11,9 @@ const STYLE_SHEET_BUILD_GUIDE =
   "Build the visual style board image for a Style Sheet element. Requires styleRules and/or mood refs on the element.";
 
 const CREATE_ELEMENT_GUIDE =
-  "Creates the element record ONLY (buildStatus=unbuilt) — does not build a sheet image. " +
-  "Before calling: read studio_element_sheet_guide. " +
-  "sourceMode photographic = real person/object + upload referenceAssetIds. " +
-  "sourceMode designed = fictional character/prop/location + rich description — NO photo refs, NO throwaway plates before generate-sheet.";
+  "Create a Studio .element (unique @name, no spaces). Attach one image or video with referenceAssetIds after studio_upload_asset. Optional description. Empty media is allowed; generate still needs media. " +
+  "Then tag @name inside sealed prompts and add `- [name](element://{elementId})` under ## References so paste hydrates chips. Pass referenceElementIds on studio_generate_image|video. " +
+  "sourceMode photographic = real subject + upload refs. designed = fictional from description (no throwaway plates).";
 
 const GENERATE_SHEET_GUIDE =
   "BUILDS the reference sheet image (GPT Image 2) and sets sheetAssetId (buildStatus=built). " +
@@ -32,10 +31,15 @@ const stylePresetSheetFieldDesc =
   "Element sheet style: unstyled|raw (photoreal) for character/prop/location sheets. Style Sheet elements ignore cartoon presets.";
 
 const UPDATE_ELEMENT_GUIDE =
-  "Update referenceAssetIds (upload photos only — never include sheetAssetId). " +
-  "Rebuild sheet after changing refs.";
+  "Update name, description, or attached media (referenceAssetIds = one image or video asset id). Upload first with studio_upload_asset. Do not put sheetAssetId in referenceAssetIds.";
 
-export function registerElementTools(server: McpServer) {
+export function registerElementTools(
+  server: McpServer,
+  opts: { includeSheets?: boolean } = {},
+) {
+  const includeSheets = opts.includeSheets !== false;
+
+  if (includeSheets) {
   server.tool(
     "studio_production_guide",
     "READ FIRST for character/prop/location pipelines. Explains unbuilt vs built states, when to use sheet vs upload refs, and direct-prompt generation defaults (unstyled + skipPromptEnhancement — no Flash rewrite before Seedance).",
@@ -67,6 +71,7 @@ export function registerElementTools(server: McpServer) {
       return jsonResult(await studioFetch(`/elements/sheet-guide?type=${encodeURIComponent(type)}`));
     },
   );
+  }
 
   server.tool(
     "studio_list_elements",
@@ -103,7 +108,7 @@ export function registerElementTools(server: McpServer) {
       referenceAssetIds: z
         .array(z.string())
         .optional()
-        .describe("Upload photo asset IDs — see studio_element_sheet_guide for minimum counts"),
+        .describe("One image or video asset id to attach (upload first with studio_upload_asset)"),
       sourceAssetIds: z
         .array(z.string())
         .optional()
@@ -204,6 +209,7 @@ export function registerElementTools(server: McpServer) {
       ),
   );
 
+  if (includeSheets) {
   server.tool(
     "studio_generate_element_text_sheet",
     GENERATE_TEXT_SHEET_GUIDE,
@@ -332,4 +338,5 @@ export function registerElementTools(server: McpServer) {
         styleSheetElementId: styleSheetElementId ?? null,
       }),
   );
+  }
 }

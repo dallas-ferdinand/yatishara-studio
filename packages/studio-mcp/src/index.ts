@@ -33,7 +33,7 @@ const server = new McpServer({
 /**
  * Positive surfaces from @yatishara/studio-tools:
  * - default MCP: full mcp+admin catalog (external agents)
- * - STUDIO_MCP_AGENT_SURFACE=1: agent surface only (no retired Assist/Elements/style)
+ * - STUDIO_MCP_AGENT_SURFACE=1: agent surface (CRUD elements on; sheets/style/Assist off)
  */
 const agentSurface = process.env.STUDIO_MCP_AGENT_SURFACE === "1";
 
@@ -44,9 +44,7 @@ registerContextTools(server);
 registerFolderTools(server);
 registerAssetTools(server);
 registerDocumentTools(server);
-if (!agentSurface) {
-  registerElementTools(server);
-}
+registerElementTools(server, { includeSheets: !agentSurface });
 registerGenerationTools(server);
 registerVoiceTools(server);
 if (!agentSurface) {

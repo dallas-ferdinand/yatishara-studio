@@ -22,6 +22,11 @@ export const HOT_SCHEMAS = {
     oneOfGroups: [["assetId"], ["assetIds"], ["items"]],
   },
   studio_create_folder: { required: ["name"] },
+  studio_create_element: {
+    required: ["type", "name"],
+    enums: { type: ["character", "prop", "location", "doc"] },
+  },
+  studio_update_element: { required: ["elementId"] },
   studio_create_document: { required: ["title", "contentMarkdown"] },
   studio_folder_contents: { required: ["folderId"] },
   studio_view_media: { required: ["assetId"] },

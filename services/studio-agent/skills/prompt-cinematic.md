@@ -90,9 +90,10 @@ Length is not the enemy — swap-thinning is. Enough locks that a stranger could
 ## References
 
 - [Label](asset://{assetId}) — optional note
+- [bottle](element://{elementId}) — element lock
 ~~~
 
-Asset ids only (attached/generated). No elements. No pipe-meta (`| kind: | path: | studio:`). No HTML. No unclosed fences.
+Asset or element ids from attach/create. No pipe-meta (`| kind: | path: | studio:`). No HTML. No unclosed fences.
 Every References Label MUST appear as `@Label` inside the sealed prompt text so paste/Run shows chips and Seedance binds the media.
 4. Paste in chat only if they asked to see/copy it; otherwise tell them the Script is in Files.
-5. If they also want a generate: `studio_get_document` if needed → parse refs → estimate → storyboard still (people) → `studio_generate_video` with `folderId` = CWD and `referenceAssetIds` / `startFrameAssetId`. Quote cost as $ / TTD only.
+5. If they also want a generate: `studio_get_document` if needed → parse refs → estimate → storyboard still (people) → `studio_generate_video` with `folderId` = CWD and `referenceAssetIds` / `referenceElementIds` / `startFrameAssetId`. Quote cost as $ / TTD only.

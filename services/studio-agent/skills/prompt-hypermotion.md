@@ -77,6 +77,6 @@ For short ads: pack concrete action verbs and spatial landmarks. Soft “beautif
 - [Label](asset://{assetId}) — product reference
 ~~~
 
-4. Asset ids only — no elements, no pipe-meta rows, no HTML, no unclosed fences. Higgs-style: `@Label` inside the sealed prompt + `asset://` links under ## References. Studio paste/Run hydrates chips from those links.
+4. Asset or element ids — no pipe-meta rows, no HTML, no unclosed fences. Higgs-style: `@Label` inside the sealed prompt + `asset://` / `element://` links under ## References. Studio paste/Run hydrates chips from those links.
 5. Chat paste only if they asked to see/copy it.
-6. Generate path: get doc refs → estimate → still → video into CWD with `referenceAssetIds`. Speak $ / TTD only.
+6. Generate path: get doc refs → estimate → still → video into CWD with `referenceAssetIds` / `referenceElementIds`. Speak $ / TTD only.
