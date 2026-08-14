@@ -2274,7 +2274,8 @@
   background: var(--cursor-surface-raised, var(--mos-surface));
 }
 
-.studio-dm-attach-thumb img {
+.studio-dm-attach-thumb img,
+.studio-dm-attach-thumb video {
   width: 100%;
   height: 100%;
   object-fit: cover;

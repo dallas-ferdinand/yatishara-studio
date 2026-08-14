@@ -77,6 +77,7 @@ import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { playUiSound } from "@/mos-app/sounds.js";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import {
+  dmFileAssetName,
   dmPhotoAssetName,
   dmVoiceAssetName,
 } from "@/studio/lib/dmMediaNames";
@@ -111,12 +112,20 @@ const PEER_SIDEBAR_OPEN_KEY = "studio-dm-peer-sidebar-open";
 
 const VOICE_NOTE_MAX_SECONDS = 300;
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const VIDEO_MAX_BYTES = 200 * 1024 * 1024;
+const FILE_MAX_BYTES = 50 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/gif",
 ]);
+const BLOCKED_ATTACH_EXT =
+  /\.(exe|bat|cmd|com|scr|js|msi|apk|sh|ps1|dll)$/i;
+const DM_FILE_ACCEPT =
+  "image/jpeg,image/png,image/webp,image/gif,image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rtf";
+
+type DmAttachKind = "image" | "video" | "audio" | "document";
 
 type PendingImage = {
   /** Local upload (device / paste). */
@@ -125,7 +134,52 @@ type PendingImage = {
   assetId?: Id<"assets">;
   name: string;
   previewUrl: string;
+  mediaKind: DmAttachKind;
 };
+
+function classifyDmAttachFile(file: File): { kind: DmAttachKind; error?: string } {
+  const type = (file.type || "").toLowerCase();
+  const name = file.name || "";
+  if (BLOCKED_ATTACH_EXT.test(name)) {
+    return { kind: "document", error: "That file type isn’t allowed" };
+  }
+  const imageByName = /\.(jpe?g|png|webp|gif)$/i.test(name);
+  if (ALLOWED_IMAGE_TYPES.has(type) || imageByName) {
+    if (file.size > IMAGE_MAX_BYTES) {
+      return { kind: "image", error: "Images must be 10 MB or smaller" };
+    }
+    return { kind: "image" };
+  }
+  if (type.startsWith("image/")) {
+    return { kind: "image", error: "Only JPEG, PNG, WebP, or GIF images are allowed" };
+  }
+  const videoByName = /\.(mp4|webm|mov|m4v|mpeg|mpg)$/i.test(name);
+  if (type.startsWith("video/") || videoByName) {
+    if (file.size > VIDEO_MAX_BYTES) {
+      return { kind: "video", error: "Videos must be 200 MB or smaller" };
+    }
+    return { kind: "video" };
+  }
+  const audioByName = /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(name);
+  if (type.startsWith("audio/") || audioByName) {
+    if (file.size > FILE_MAX_BYTES) {
+      return { kind: "audio", error: "Audio files must be 50 MB or smaller" };
+    }
+    return { kind: "audio" };
+  }
+  if (file.size > FILE_MAX_BYTES) {
+    return { kind: "document", error: "Files must be 50 MB or smaller" };
+  }
+  return { kind: "document" };
+}
+
+function pendingAttachLabel(items: PendingImage[]): string {
+  if (items.length === 1) return items[0]!.name;
+  const kinds = new Set(items.map((item) => item.mediaKind));
+  if (kinds.size === 1 && kinds.has("image")) return `${items.length} photos`;
+  if (kinds.size === 1 && kinds.has("video")) return `${items.length} videos`;
+  return `${items.length} files`;
+}
 
 function revokePendingPreview(url: string) {
   if (url.startsWith("blob:")) URL.revokeObjectURL(url);
@@ -1961,7 +2015,7 @@ const DmMessageBubble = memo(function DmMessageBubble({
 async function uploadDmMediaAsset(args: {
   blob: Blob;
   name: string;
-  kind: "image" | "audio";
+  kind: "image" | "audio" | "video" | "document";
   mimeType: string;
   ensureMessagesFolder: () => Promise<Id<"folders">>;
   reserveUpload: Parameters<typeof uploadStudioAsset>[0]["reserveUpload"];
@@ -2225,6 +2279,7 @@ export function StudioMessagesPane({
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const sendVoiceMessage = useMutation(api.dms.sendVoiceMessage);
   const sendImageMessage = useMutation(api.dms.sendImageMessage);
+  const sendVideoMessage = useMutation(api.dms.sendVideoMessage);
   const sendFeedShare = useMutation(api.dms.sendFeedShare);
   const shareStudioItems = useMutation(api.studioShares.shareItems);
   const editMessage = useMutation(api.dms.editMessage);
@@ -2801,6 +2856,12 @@ export function StudioMessagesPane({
         if (row.kind === "image") {
           return Boolean(live.imageUrl) && live.body === row.body;
         }
+        if (row.kind === "video") {
+          return Boolean(live.videoUrl) && live.body === row.body;
+        }
+        if (row.kind === "studio_share") {
+          return Boolean(live.studioShare) && live.body === row.body;
+        }
         return live.body === row.body;
       });
       if (matched) {
@@ -2809,6 +2870,9 @@ export function StudioMessagesPane({
         }
         if (row.imageUrl?.startsWith("blob:")) {
           URL.revokeObjectURL(row.imageUrl);
+        }
+        if (row.videoUrl?.startsWith("blob:")) {
+          URL.revokeObjectURL(row.videoUrl);
         }
         dropOptimistic(conversationId, row.clientId);
       }
@@ -3035,19 +3099,20 @@ export function StudioMessagesPane({
     const accepted: PendingImage[] = [];
     let error = "";
     for (const file of files) {
-      const type = (file.type || "").toLowerCase();
-      if (!ALLOWED_IMAGE_TYPES.has(type)) {
-        error = "Only JPEG, PNG, WebP, or GIF images are allowed";
+      const classified = classifyDmAttachFile(file);
+      if (classified.error) {
+        error = classified.error;
         continue;
       }
-      if (file.size > IMAGE_MAX_BYTES) {
-        error = "Images must be 10 MB or smaller";
-        continue;
-      }
+      const previewUrl =
+        classified.kind === "image" || classified.kind === "video"
+          ? URL.createObjectURL(file)
+          : "";
       accepted.push({
         file,
         name: file.name,
-        previewUrl: URL.createObjectURL(file),
+        previewUrl,
+        mediaKind: classified.kind,
       });
     }
     if (accepted.length === 0) {
@@ -3058,7 +3123,7 @@ export function StudioMessagesPane({
     setPendingImages((prev) => {
       const room = Math.max(0, MAX_PENDING_IMAGES - prev.length);
       if (room <= 0) {
-        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} photos`);
+        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} files`);
         for (const item of accepted) revokePendingPreview(item.previewUrl);
         return prev;
       }
@@ -3067,7 +3132,7 @@ export function StudioMessagesPane({
         revokePendingPreview(item.previewUrl);
       }
       if (accepted.length > room) {
-        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} photos`);
+        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} files`);
       }
       return [...prev, ...next];
     });
@@ -3082,31 +3147,29 @@ export function StudioMessagesPane({
     if (assets.length === 0) return;
     clearPendingDmFeedShare();
     const accepted: PendingImage[] = [];
-    let error = "";
     for (const asset of assets) {
       const mime = (asset.mimeType || "").toLowerCase();
-      if (mime && !ALLOWED_IMAGE_TYPES.has(mime)) {
-        error = "Only JPEG, PNG, WebP, or GIF images are allowed";
-        continue;
-      }
+      const kind = (asset.kind || "").toLowerCase();
+      let mediaKind: DmAttachKind = "document";
+      if (kind === "image" || ALLOWED_IMAGE_TYPES.has(mime)) mediaKind = "image";
+      else if (kind === "video" || mime.startsWith("video/")) mediaKind = "video";
+      else if (kind === "audio" || mime.startsWith("audio/")) mediaKind = "audio";
       accepted.push({
         assetId: asset._id as Id<"assets">,
         name: asset.name,
         previewUrl: (asset.signedThumbnailUrl || "").trim(),
+        mediaKind,
       });
     }
-    if (accepted.length === 0) {
-      if (error) setSendError(error);
-      return;
-    }
-    setSendError(error);
+    if (accepted.length === 0) return;
+    setSendError("");
     setPendingImages((prev) => {
       const seen = new Set(
         prev.map((item) => item.assetId).filter((id): id is Id<"assets"> => Boolean(id)),
       );
       const room = Math.max(0, MAX_PENDING_IMAGES - prev.length);
       if (room <= 0) {
-        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} photos`);
+        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} files`);
         return prev;
       }
       const staged: PendingImage[] = [];
@@ -3117,7 +3180,7 @@ export function StudioMessagesPane({
         if (item.assetId) seen.add(item.assetId);
       }
       if (accepted.length > staged.length) {
-        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} photos`);
+        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} files`);
       }
       return staged.length ? [...prev, ...staged] : prev;
     });
@@ -3256,7 +3319,8 @@ export function StudioMessagesPane({
     const types = Array.from(event.dataTransfer.types);
     const feed = feedShareDragTypes(types);
     const studio = explorerDragHasStudioEntry(types) || Boolean(peekActiveExplorerDrag());
-    if (!feed && !studio) return;
+    const nativeFiles = types.includes("Files");
+    if (!feed && !studio && !nativeFiles) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
     if (studio) setStudioDropActive(true);
@@ -3278,9 +3342,16 @@ export function StudioMessagesPane({
     }
     const entry =
       readExplorerDragData(event.dataTransfer) ?? peekActiveExplorerDrag();
-    if (!entry) return;
-    event.preventDefault();
-    await shareDroppedStudioEntry(entry as Record<string, unknown>);
+    if (entry) {
+      event.preventDefault();
+      await shareDroppedStudioEntry(entry as Record<string, unknown>);
+      return;
+    }
+    const nativeFiles = Array.from(event.dataTransfer.files ?? []);
+    if (nativeFiles.length) {
+      event.preventDefault();
+      appendImageFiles(nativeFiles);
+    }
   }
 
   async function handleSend() {
@@ -3352,47 +3423,156 @@ export function StudioMessagesPane({
         const pending = images[i]!;
         const imageClientId = i === 0 ? clientId : newOptimisticClientId();
         batch.push({ clientId: imageClientId, pending });
-        pushOptimistic(
-          conversationKey,
-          makeOptimisticDmMessage({
-            clientId: imageClientId,
-            createdAt: createdAt + i,
-            kind: "image",
-            body: i === 0 ? body : "",
-            imageUrl: pending.previewUrl,
-            replyTo: i === 0 ? (reply ?? undefined) : undefined,
-          }),
-        );
+        const isFirst = i === 0;
+        if (pending.mediaKind === "video") {
+          pushOptimistic(
+            conversationKey,
+            makeOptimisticDmMessage({
+              clientId: imageClientId,
+              createdAt: createdAt + i,
+              kind: "video",
+              body: isFirst ? body : "",
+              videoUrl: pending.previewUrl,
+              replyTo: isFirst ? (reply ?? undefined) : undefined,
+            }),
+          );
+        } else if (pending.mediaKind === "image") {
+          pushOptimistic(
+            conversationKey,
+            makeOptimisticDmMessage({
+              clientId: imageClientId,
+              createdAt: createdAt + i,
+              kind: "image",
+              body: isFirst ? body : "",
+              imageUrl: pending.previewUrl,
+              replyTo: isFirst ? (reply ?? undefined) : undefined,
+            }),
+          );
+        } else {
+          pushOptimistic(
+            conversationKey,
+            makeOptimisticDmMessage({
+              clientId: imageClientId,
+              createdAt: createdAt + i,
+              kind: "studio_share",
+              body: isFirst ? body : "",
+              studioShare: {
+                items: [
+                  {
+                    itemKind: "asset",
+                    itemId: pending.assetId
+                      ? String(pending.assetId)
+                      : imageClientId,
+                    name: pending.name,
+                    assetKind:
+                      pending.mediaKind === "audio" ? "audio" : "document",
+                  },
+                ],
+              },
+              replyTo: isFirst ? (reply ?? undefined) : undefined,
+            }),
+          );
+        }
       }
       try {
+        let captionUsed = false;
+        let replyUsed = false;
+        const fileShare: Array<{
+          assetId: Id<"assets">;
+          clientId: string;
+        }> = [];
+        let fileShareNote: string | undefined;
         for (let i = 0; i < batch.length; i += 1) {
-          const { pending } = batch[i]!;
+          const { pending, clientId: rowClientId } = batch[i]!;
           let assetId = pending.assetId;
           if (!assetId) {
             if (!pending.file) {
               throw new Error("Attachment is missing");
             }
+            const uploadKind = pending.mediaKind;
             assetId = await uploadDmMediaAsset({
               blob: pending.file,
-              name: dmPhotoAssetName({
-                peerLabel: peerLabelRef.current,
-                fileName: pending.name || pending.file.name,
-                mimeType: pending.file.type || "image/jpeg",
-              }),
-              kind: "image",
-              mimeType: pending.file.type || "image/jpeg",
+              name:
+                uploadKind === "image"
+                  ? dmPhotoAssetName({
+                      peerLabel: peerLabelRef.current,
+                      fileName: pending.name || pending.file.name,
+                      mimeType: pending.file.type || "image/jpeg",
+                    })
+                  : dmFileAssetName({
+                      fileName: pending.name || pending.file.name,
+                      fallback:
+                        uploadKind === "video"
+                          ? "Video"
+                          : uploadKind === "audio"
+                            ? "Audio"
+                            : "File",
+                    }),
+              kind: uploadKind,
+              mimeType:
+                pending.file.type ||
+                (uploadKind === "image"
+                  ? "image/jpeg"
+                  : uploadKind === "video"
+                    ? "video/mp4"
+                    : uploadKind === "audio"
+                      ? "audio/mpeg"
+                      : "application/octet-stream"),
               ensureMessagesFolder: () => ensureMessagesFolder({}),
               reserveUpload,
               commitStagingUpload,
             });
           }
-          await sendImageMessage({
+          const caption = !captionUsed ? body || undefined : undefined;
+          const replyToMessageId = !replyUsed ? reply?._id : undefined;
+          if (pending.mediaKind === "image") {
+            captionUsed = true;
+            replyUsed = true;
+            await sendImageMessage({
+              conversationId,
+              assetId,
+              caption,
+              replyToMessageId,
+            });
+            markOptimisticSent(conversationKey, rowClientId);
+            continue;
+          }
+          if (pending.mediaKind === "video") {
+            captionUsed = true;
+            replyUsed = true;
+            await sendVideoMessage({
+              conversationId,
+              assetId,
+              caption,
+              replyToMessageId,
+            });
+            markOptimisticSent(conversationKey, rowClientId);
+            continue;
+          }
+          if (!captionUsed && caption) {
+            fileShareNote = caption;
+            captionUsed = true;
+          }
+          fileShare.push({ assetId, clientId: rowClientId });
+        }
+        if (fileShare.length > 0) {
+          if (!activeRow?.peer.userId) {
+            throw new Error("Conversation is missing");
+          }
+          await shareStudioItems({
+            peerUserIds: [activeRow.peer.userId],
+            items: fileShare.map((row) => ({
+              itemKind: "asset" as const,
+              itemId: String(row.assetId),
+            })),
             conversationId,
-            assetId,
-            caption: i === 0 ? body || undefined : undefined,
-            replyToMessageId: i === 0 ? reply?._id : undefined,
+            delivery: "file",
+            permission: "view",
+            note: fileShareNote,
           });
-          markOptimisticSent(conversationKey, batch[i]!.clientId);
+          for (const row of fileShare) {
+            markOptimisticSent(conversationKey, row.clientId);
+          }
         }
       } catch (error) {
         for (const row of batch) {
@@ -3823,12 +4003,15 @@ export function StudioMessagesPane({
                 key={`${pending.assetId ?? pending.name}-${index}`}
                 className="studio-dm-attach-thumb"
               >
-                {pending.previewUrl ? (
+                {pending.mediaKind === "image" && pending.previewUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={pending.previewUrl} alt="" />
+                ) : pending.mediaKind === "video" && pending.previewUrl ? (
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video src={pending.previewUrl} muted playsInline preload="metadata" />
                 ) : (
                   <span className="studio-dm-attach-thumb-fallback" aria-hidden="true">
-                    <ImageIcon />
+                    {pending.mediaKind === "audio" ? <Music /> : <FileText />}
                   </span>
                 )}
                 <button
@@ -3843,9 +4026,7 @@ export function StudioMessagesPane({
             ))}
           </div>
           <span className="studio-dm-attach-name">
-            {pendingImages.length === 1
-              ? pendingImages[0]!.name
-              : `${pendingImages.length} photos`}
+            {pendingAttachLabel(pendingImages)}
           </span>
           <button
             type="button"
@@ -3864,7 +4045,7 @@ export function StudioMessagesPane({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
+          accept={DM_FILE_ACCEPT}
           multiple
           className="studio-dm-file-input"
           onChange={(event) => {
@@ -4000,8 +4181,8 @@ export function StudioMessagesPane({
                 className="studio-settings-pill studio-dm-extra-pill"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={filesPickBusy || recState !== "idle"}
-                aria-label="Upload photos"
-                title="Upload photos"
+                aria-label="Upload from device"
+                title="Upload from device"
               >
                 <Upload aria-hidden="true" />
                 <span className="studio-dm-extra-pill-label">Upload</span>
@@ -4091,9 +4272,9 @@ export function StudioMessagesPane({
                   recState !== "idle"
                     ? "Send voice note"
                     : pendingImages.length > 1
-                      ? "Send photos"
+                      ? `Send ${pendingAttachLabel(pendingImages)}`
                       : pendingImages.length === 1
-                        ? "Send photo"
+                        ? "Send file"
                         : "Send message"
                 }
                 title="Send"
@@ -4117,7 +4298,7 @@ export function StudioMessagesPane({
           items={[
             {
               key: "upload",
-              label: "Upload photos",
+              label: "Upload from device",
               icon: <Upload className="h-3.5 w-3.5" aria-hidden="true" />,
               onSelect: () => fileInputRef.current?.click(),
             },
@@ -4146,11 +4327,7 @@ export function StudioMessagesPane({
           }
           pickAnyStudio={filesPickMode === "share"}
           allowFolderPick={filesPickMode === "share"}
-          kinds={
-            filesPickMode === "choose"
-              ? ["image", "video", "audio", "document"]
-              : ["image"]
-          }
+          kinds={["image", "video", "audio", "document"]}
           multi
           stayOpen
           maxSelected={MAX_PENDING_IMAGES}

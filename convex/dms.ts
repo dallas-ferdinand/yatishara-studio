@@ -303,7 +303,7 @@ async function requireOwnedReadyAsset(
   ctx: MutationCtx,
   ownerId: Id<"users">,
   assetId: Id<"assets">,
-  expectedKind: "image" | "audio",
+  expectedKind: "image" | "audio" | "video",
 ): Promise<Doc<"assets">> {
   const asset = await ctx.db.get(assetId);
   if (!asset || asset.ownerId !== ownerId || asset.deletedAt || asset.purgedAt) {
@@ -313,7 +313,9 @@ async function requireOwnedReadyAsset(
     throw new Error(
       expectedKind === "image"
         ? "Only image assets can be sent as photos"
-        : "Only audio assets can be sent as voice notes",
+        : expectedKind === "video"
+          ? "Only video assets can be sent as videos"
+          : "Only audio assets can be sent as voice notes",
     );
   }
   if (asset.storageStatus === "pending" || asset.storageStatus === "failed") {
@@ -330,6 +332,7 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/webp",
   "image/gif",
 ]);
+const VIDEO_MAX_BYTES = 200 * 1024 * 1024;
 const CONVERSATIONS_MAX = 60;
 const MESSAGES_PAGE_MAX = 200;
 const PUBLIC_URL_TTL_SECONDS = 60 * 60;
@@ -1571,6 +1574,82 @@ export const sendImageMessage = authedMutation({
         ? `${caption.slice(0, DM_PREVIEW_MAX)}…`
         : caption
       : IMAGE_PREVIEW;
+    await ctx.db.patch(conversation._id, {
+      lastMessageAt: now,
+      lastMessagePreview: preview,
+      lastMessageSenderId: ctx.user._id,
+      ...(isLow
+        ? { lowLastReadAt: now, lowTypingAt: 0 }
+        : { highLastReadAt: now, highTypingAt: 0 }),
+    });
+    await notifyDmPeer(ctx, {
+      conversation,
+      senderId: ctx.user._id,
+      body: preview,
+    });
+    return messageId;
+  },
+});
+
+export const sendVideoMessage = authedMutation({
+  args: {
+    conversationId: v.id("dmConversations"),
+    assetId: v.id("assets"),
+    caption: v.optional(v.string()),
+    replyToMessageId: v.optional(v.id("dmMessages")),
+  },
+  returns: v.id("dmMessages"),
+  handler: async (ctx, args) => {
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      ctx.user._id,
+    );
+    await assertCanMessagePeer(
+      ctx,
+      ctx.user._id,
+      peerIdOf(conversation, ctx.user._id),
+    );
+    const asset = await requireOwnedReadyAsset(
+      ctx,
+      ctx.user._id,
+      args.assetId,
+      "video",
+    );
+    const contentType = (asset.mimeType || "").toLowerCase();
+    if (contentType && !contentType.startsWith("video/")) {
+      throw new Error("Only video files can be sent as videos");
+    }
+    if ((asset.byteSize ?? 0) > VIDEO_MAX_BYTES) {
+      throw new Error("Videos must be 200 MB or smaller");
+    }
+    const caption = (args.caption ?? "").trim();
+    if (caption.length > DM_BODY_MAX) {
+      throw new Error(`Caption must be at most ${DM_BODY_MAX} characters`);
+    }
+    const replyToMessageId = await resolveReplyToMessageId(
+      ctx,
+      conversation._id,
+      args.replyToMessageId,
+    );
+
+    const now = Date.now();
+    const messageId = await ctx.db.insert("dmMessages", {
+      conversationId: conversation._id,
+      senderId: ctx.user._id,
+      body: caption,
+      kind: "video",
+      assetId: args.assetId,
+      contentType: contentType || asset.mimeType,
+      ...(replyToMessageId ? { replyToMessageId } : {}),
+      createdAt: now,
+    });
+    const isLow = conversation.userLowId === ctx.user._id;
+    const preview = caption
+      ? caption.length > DM_PREVIEW_MAX
+        ? `${caption.slice(0, DM_PREVIEW_MAX)}…`
+        : caption
+      : VIDEO_PREVIEW;
     await ctx.db.patch(conversation._id, {
       lastMessageAt: now,
       lastMessagePreview: preview,

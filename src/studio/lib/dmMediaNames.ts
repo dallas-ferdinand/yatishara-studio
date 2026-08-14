@@ -92,3 +92,12 @@ export function dmPhotoAssetName(args: {
   const ext = extFromMime(args.mimeType || "image/jpeg", "image", original);
   return `Photo · ${peer} · ${stamp}.${ext}`;
 }
+
+/** Device-upload title for video / docs / audio — keep the original filename. */
+export function dmFileAssetName(args: {
+  fileName?: string;
+  fallback?: string;
+}): string {
+  const original = (args.fileName || "").trim();
+  return original || args.fallback || "File";
+}
