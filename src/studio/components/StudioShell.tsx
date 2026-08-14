@@ -21347,18 +21347,23 @@ export function StudioShell({
         }
         .studio-element-detail.is-mobile-fill .studio-element-detail-title,
         .studio-element-detail.is-mobile-fill .studio-element-detail-notes {
+          box-sizing: border-box;
           width: 100%;
-          min-height: 40px;
+          height: var(--cursor-head-h);
+          min-height: var(--cursor-head-h);
+          max-height: var(--cursor-head-h);
           margin: 0;
-          padding: 10px 12px;
+          padding: 0 12px;
+          overflow: hidden;
           border: 0;
           border-radius: 0;
           border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
           background: transparent;
           box-shadow: none;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 500;
-          line-height: 1.3;
+          line-height: var(--cursor-head-h);
+          white-space: nowrap;
         }
         .studio-element-detail.is-mobile-fill .studio-element-detail-title:focus,
         .studio-element-detail.is-mobile-fill .studio-element-detail-notes:focus,
@@ -21368,20 +21373,52 @@ export function StudioShell({
           box-shadow: none;
         }
         .studio-element-detail.is-mobile-fill .studio-element-detail-notes {
-          min-height: 72px;
           resize: none;
+          field-sizing: fixed;
         }
         .studio-element-detail-bar {
+          box-sizing: border-box;
           flex: 0 0 auto;
-          display: grid;
-          gap: 8px;
-          padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+          display: flex;
+          align-items: center;
+          min-height: calc(var(--cursor-head-h) + env(safe-area-inset-bottom, 0px));
+          height: calc(var(--cursor-head-h) + env(safe-area-inset-bottom, 0px));
+          padding: 0 8px env(safe-area-inset-bottom, 0px);
           border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
         }
-        .studio-element-detail.is-mobile-fill .studio-element-detail-file-actions.studio-gen-detail-actions {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          margin: 0;
+        .studio-element-detail-file-actions {
+          display: flex;
+          flex-wrap: nowrap;
+          align-items: center;
+          gap: 6px;
+          width: 100%;
+        }
+        .studio-element-detail-file-actions button {
+          height: 26px;
+          min-height: 26px;
+          padding: 0 8px;
+          border-radius: 8px;
+        }
+        .studio-element-detail-file-actions button.is-icon {
+          width: 26px;
+          min-width: 26px;
           padding: 0;
+          justify-content: center;
+        }
+        .studio-element-detail-file-actions .is-danger {
+          color: #b91c1c;
+        }
+        [data-appearance="dark"] .studio-element-detail-file-actions .is-danger,
+        :root:not([data-appearance="light"]) .studio-element-detail-file-actions .is-danger {
+          color: #ff8d8d;
+        }
+        .studio-element-detail-bar .studio-element-detail-error {
+          margin: 0 0 0 auto;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 11px;
         }
         .studio-element-detail.is-mobile-fill .studio-element-detail-stage {
           flex: 1 1 0;
@@ -21395,13 +21432,27 @@ export function StudioShell({
           display: flex;
           flex-direction: column;
         }
-        .studio-element-detail-stage .studio-asset-preview {
+        .studio-element-detail-stage .studio-asset-preview,
+        .studio-element-detail-stage .studio-asset-lightbox,
+        .studio-element-detail-stage .desk-image-viewer,
+        .studio-element-detail-stage .desk-media-player--studio-preview {
           flex: 1 1 0;
           height: 100%;
+          min-height: 0;
+          background: transparent !important;
+          box-shadow: none !important;
         }
+        .studio-element-detail-stage .studio-asset-lightbox,
         .studio-element-detail-stage .desk-image-viewer-stage,
-        .studio-element-detail-stage .desk-media-player-stage {
-          padding: 0;
+        .studio-element-detail-stage .desk-media-player-stage,
+        .studio-element-detail-stage .desk-media-player--studio-preview .desk-image-viewer-stage {
+          padding: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        .studio-element-detail-stage .desk-image-viewer-name,
+        .studio-element-detail-stage .desk-media-player--studio-preview .desk-image-viewer-name {
+          display: none;
         }
         .studio-element-detail-stage .desk-image-viewer-img,
         .studio-element-detail-stage .desk-media-player-video {
@@ -21411,6 +21462,9 @@ export function StudioShell({
           max-height: 100%;
           object-fit: contain;
           object-position: center;
+          background: transparent !important;
+          box-shadow: none !important;
+          border-radius: 0;
         }
         .studio-element-detail-stage-empty {
           flex: 1 1 0;
@@ -21454,10 +21508,6 @@ export function StudioShell({
           border: 0;
           border-radius: 0;
           background: transparent;
-        }
-        .studio-element-detail-file-actions.studio-gen-detail-actions {
-          grid-template-columns: 1fr;
-          margin-top: 4px;
         }
         [data-appearance="light"] .studio-element-detail {
           background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
@@ -33493,15 +33543,34 @@ function StudioElementDetailPane({
     </>
   );
   const fileActions = (
-    <div className="studio-element-detail-file-actions studio-gen-detail-actions">
+    <div className="studio-element-detail-file-actions">
+      <button
+        type="button"
+        className={`${STYLE.iconButton} is-icon`}
+        onClick={() => {
+          if (!uploading) inputRef.current?.click();
+        }}
+        aria-label="Upload"
+        title="Upload"
+      >
+        <FileUp className="h-3.5 w-3.5" />
+      </button>
       {onRequestPickAsset ? (
-        <button type="button" onClick={() => openFilesPick()}>
-          From Files
+        <button type="button" className={STYLE.iconButton} onClick={() => openFilesPick()}>
+          <Folder className="h-3.5 w-3.5" />
+          <span>Files</span>
         </button>
       ) : null}
       {media ? (
-        <button type="button" className="is-danger" onClick={() => void removeMedia(media.studioId)}>
-          {removeLabel}
+        <button
+          type="button"
+          className={`${STYLE.iconButton} is-danger`}
+          onClick={() => void removeMedia(media.studioId)}
+          aria-label={removeLabel}
+          title={removeLabel}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          <span>Remove</span>
         </button>
       ) : null}
     </div>
@@ -33534,7 +33603,7 @@ function StudioElementDetailPane({
       >
         <div className="studio-element-detail-stage">
           {media ? (
-            <StudioAssetPreview key={media.studioId} entry={media} initialScale={1} />
+            <StudioAssetPreview key={media.studioId} entry={media} initialScale={1} hideName />
           ) : (
             <button
               type="button"
@@ -33571,7 +33640,7 @@ function StudioElementDetailPane({
       <div className="studio-element-detail-fields">{fields}</div>
       <div className="studio-element-detail-stage">
         {media ? (
-          <StudioAssetPreview key={media.studioId} entry={media} initialScale={1} />
+            <StudioAssetPreview key={media.studioId} entry={media} initialScale={1} hideName />
         ) : (
           <button
             type="button"
@@ -33593,7 +33662,7 @@ function StudioElementDetailPane({
   );
 }
 
-function StudioAssetPreview({ entry, initialScale }) {
+function StudioAssetPreview({ entry, initialScale, hideName }) {
   const convex = useConvex();
   const kind = inferAttachmentKind(entry);
   const [previewExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
@@ -33660,13 +33729,13 @@ function StudioAssetPreview({ entry, initialScale }) {
     <div className="studio-asset-preview">
       <div className="studio-asset-lightbox">
         {kind === "image" && mediaUrl ? (
-          <ImageZoomViewer thumbUrl={thumbUrl} fullUrl={mediaUrl} name={entry.name} onDownload={downloadAsset} initialScale={initialScale} />
+          <ImageZoomViewer thumbUrl={thumbUrl} fullUrl={mediaUrl} name={hideName ? undefined : entry.name} onDownload={downloadAsset} initialScale={initialScale} />
         ) : kind === "video" && mediaUrl ? (
           <DeskMediaPlayer
             kind="video"
             layout="studio-preview"
             src={mediaUrl}
-            name={entry.name}
+            name={hideName ? undefined : entry.name}
             poster={videoPosterUrl}
             fileSize={entry.byteSize ?? null}
             onDownload={downloadAsset}
