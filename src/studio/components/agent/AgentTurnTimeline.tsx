@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FileText,
   Folder,
@@ -25,6 +25,8 @@ import { AgentStepRow } from "./AgentStepRow";
 import { AgentThinkingCard } from "./AgentThinkingCard";
 import {
   buildAgentTurns,
+  foldableCompletedIds,
+  foldSettledSteps,
   type AgentAttachmentChip,
   type AgentApprovalRow,
   type AgentMessageRow,
@@ -35,6 +37,8 @@ import {
 } from "./agentStepUtils";
 import { isMediaInspectTool } from "./agentToolTitles";
 import "./agent-steps.css";
+
+const SETTLE_MS = 2000;
 
 /** Follow a Create generation job until the asset lands in chat. */
 function AgentPendingGenerationCard({
@@ -311,8 +315,50 @@ function TurnBlock({
   };
 
   const hasPendingQuestion = questions.some((q) => q.status === "pending");
-  const visibleSteps = turn.steps.filter(
+  const baseSteps = turn.steps.filter(
     (step) => !isMediaInspectTool(step.toolName),
+  );
+
+  // Historical turns: fold immediately. Live turns: settle each completed step after 2s.
+  const [settledIds, setSettledIds] = useState<Set<string>>(() =>
+    turn.isLive ? new Set() : new Set(foldableCompletedIds(baseSteps)),
+  );
+
+  useEffect(() => {
+    if (!turn.isLive) {
+      setSettledIds(new Set(foldableCompletedIds(baseSteps)));
+      return;
+    }
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const foldable = foldableCompletedIds(baseSteps);
+    for (const id of foldable) {
+      if (settledIds.has(id)) continue;
+      const step = baseSteps.find((s) => s.id === id);
+      const finishedAt = step?.finishedAt ?? Date.now();
+      const wait = Math.max(0, SETTLE_MS - (Date.now() - finishedAt));
+      timers.push(
+        setTimeout(() => {
+          setSettledIds((prev) => {
+            if (prev.has(id)) return prev;
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+          });
+        }, wait),
+      );
+    }
+    return () => {
+      for (const t of timers) clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settle from step ids + finishedAt
+  }, [
+    turn.isLive,
+    baseSteps.map((s) => `${s.id}:${s.status}:${s.finishedAt ?? 0}`).join("|"),
+  ]);
+
+  const visibleSteps = useMemo(
+    () => foldSettledSteps(baseSteps, settledIds),
+    [baseSteps, settledIds],
   );
   const inspectThinking = turn.steps.some(
     (step) =>

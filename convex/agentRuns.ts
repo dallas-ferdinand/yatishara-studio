@@ -123,7 +123,8 @@ export const setRunCredits = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("agentRuns", args.runId);
-    if (!row || row.status === "cancelled") return null;
+    if (!row) return null;
+    // Allow credits on cancelled/failed — work already billed upstream (BytePlus).
     await ctx.db.patch(row._id, {
       // Whole credits preferred; keep 2-decimal precision if a path still sends fractions.
       creditsSpent: Math.max(0, Math.round(args.creditsSpent * 100) / 100),
@@ -172,6 +173,9 @@ export const failRun = internalMutation({
   args: {
     runId: v.id("agentRuns"),
     error: v.string(),
+    creditsSpent: v.optional(v.number()),
+    usedByok: v.optional(v.boolean()),
+    usageJson: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -182,6 +186,13 @@ export const failRun = internalMutation({
     await ctx.db.patch(row._id, {
       status: "failed",
       error: args.error.slice(0, 1000),
+      ...(args.creditsSpent != null
+        ? {
+            creditsSpent: Math.max(0, Math.round(args.creditsSpent * 100) / 100),
+          }
+        : {}),
+      ...(args.usedByok !== undefined ? { usedByok: args.usedByok } : {}),
+      ...(args.usageJson !== undefined ? { usageJson: args.usageJson } : {}),
       finishedAt: now,
       updatedAt: now,
     });

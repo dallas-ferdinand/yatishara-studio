@@ -33,6 +33,40 @@
   box-sizing: border-box;
 }
 
+/* Settled tools collapse into a horizontal human summary strip. */
+.studio-agent-step.is-group-summary.studio-agent-step-summary {
+  width: 100%;
+  max-width: 100%;
+}
+
+.studio-agent-step-summary-strip {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-agent-step-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0;
+  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 58%, transparent);
+  font-size: 12px;
+  font-weight: 450;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.studio-agent-step-summary-chip + .studio-agent-step-summary-chip::before {
+  content: "·";
+  margin-right: 8px;
+  opacity: 0.45;
+}
+
 /* Thinking always owns its own row — never sits beside tool chips. */
 .studio-agent-turn-activity > .studio-agent-step.is-thinking {
   width: 100%;

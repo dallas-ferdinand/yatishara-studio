@@ -238,6 +238,85 @@ export const setTodosInternal = internalMutation({
   },
 });
 
+export const getWorkingScratchInternal = internalQuery({
+  args: { threadId: v.id("agentThreads") },
+  returns: v.union(v.null(), v.string()),
+  handler: async (ctx, args) => {
+    const thread = await ctx.db.get("agentThreads", args.threadId);
+    if (!thread) return null;
+    return thread.workingScratchJson ?? null;
+  },
+});
+
+/** Merge high-signal ids into thread working scratch after tool results. */
+export const patchWorkingScratchInternal = internalMutation({
+  args: {
+    threadId: v.id("agentThreads"),
+    patchJson: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const thread = await ctx.db.get("agentThreads", args.threadId);
+    if (!thread) return null;
+    let prev: Record<string, unknown> = {};
+    try {
+      prev = thread.workingScratchJson
+        ? (JSON.parse(thread.workingScratchJson) as Record<string, unknown>)
+        : {};
+    } catch {
+      prev = {};
+    }
+    let patch: Record<string, unknown> = {};
+    try {
+      patch = JSON.parse(args.patchJson) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+    const mergeIds = (key: string, next: unknown) => {
+      const existing = Array.isArray(prev[key])
+        ? (prev[key] as string[]).filter((x) => typeof x === "string")
+        : [];
+      const add = Array.isArray(next)
+        ? next.filter((x): x is string => typeof x === "string" && Boolean(x))
+        : typeof next === "string" && next
+          ? [next]
+          : [];
+      const merged = [...add, ...existing];
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const id of merged) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(id);
+        if (out.length >= 8) break;
+      }
+      return out;
+    };
+    const next = {
+      ...prev,
+      ...(typeof patch.cwdFolderId === "string"
+        ? { cwdFolderId: patch.cwdFolderId }
+        : {}),
+      ...(typeof patch.cwdFolderPath === "string"
+        ? { cwdFolderPath: patch.cwdFolderPath }
+        : {}),
+      lastDocumentIds: mergeIds("lastDocumentIds", patch.lastDocumentIds ?? patch.documentId),
+      lastAssetIds: mergeIds("lastAssetIds", patch.lastAssetIds ?? patch.assetId),
+      lastElementIds: mergeIds("lastElementIds", patch.lastElementIds ?? patch.elementId),
+      lastGenerationJobIds: mergeIds(
+        "lastGenerationJobIds",
+        patch.lastGenerationJobIds ?? patch.jobId,
+      ),
+      updatedAt: Date.now(),
+    };
+    await ctx.db.patch(thread._id, {
+      workingScratchJson: JSON.stringify(next).slice(0, 8000),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 /** Cost / media / search summary for the agent info sidebar */
 export const threadInsight = authedQuery({
   args: {

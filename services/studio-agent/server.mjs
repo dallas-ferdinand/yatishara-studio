@@ -37,15 +37,39 @@ if (!process.env.ARK_API_KEY?.trim()) {
   );
 }
 
-/** @type {Map<string, { updatedAt: number, abort?: AbortController, session?: { abort?: () => Promise<void>, dispose?: () => void } }>} */
+/** @type {Map<string, { updatedAt: number, abort?: AbortController, session?: any, lastUsage?: object }>} */
 const sessions = new Map();
 
 function sessionKey(userId, threadId) {
   return `${userId}:${threadId}`;
 }
 
+function usageFromSessionEntry(entry) {
+  if (!entry) return undefined;
+  if (entry.lastUsage) return entry.lastUsage;
+  const session = entry.session;
+  if (!session || typeof session.getSessionStats !== "function") return undefined;
+  try {
+    const tokens = session.getSessionStats()?.tokens || {};
+    return normalizeAgentUsage({
+      inputTokens: tokens.input,
+      outputTokens: tokens.output,
+      cacheReadTokens: tokens.cacheRead,
+      cacheWriteTokens: tokens.cacheWrite,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 async function abortSessionEntry(entry) {
   if (!entry) return;
+  // Capture usage before abort tears the session down.
+  try {
+    entry.lastUsage = usageFromSessionEntry(entry) || entry.lastUsage;
+  } catch {
+    // ignore
+  }
   try {
     entry.abort?.abort();
   } catch {
@@ -179,6 +203,7 @@ async function runPiTurn(body, abortSignal) {
     cwdFolderId,
     cwdFolderPath,
     threadSummary,
+    workingScratchJson,
   } = body;
 
   if (!capabilityToken) {
@@ -500,7 +525,7 @@ async function runPiTurn(body, abortSignal) {
             .slice(0, 6)
             .map((m) => {
               const pin = m.pinned ? " pinned" : "";
-              const body = String(m.body ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+              const body = String(m.body ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
               return `- [${m.kind}${pin}] ${m.title}: ${body}`;
             })
             .join("\n")}`
@@ -510,12 +535,45 @@ async function runPiTurn(body, abortSignal) {
       ? `Thread summary (durable continuity):\n${String(threadSummary).slice(0, 1200)}`
       : "";
 
+    let workingBlock = "";
+    if (textValue(workingScratchJson)) {
+      try {
+        const scratch = JSON.parse(String(workingScratchJson));
+        const lines = ["Working state (reuse these ids — verify with CWD index if unsure):"];
+        if (scratch.cwdFolderId) {
+          lines.push(
+            `- cwd folderId=${scratch.cwdFolderId}${scratch.cwdFolderPath ? ` path=${scratch.cwdFolderPath}` : ""}`,
+          );
+        }
+        if (Array.isArray(scratch.lastDocumentIds) && scratch.lastDocumentIds.length) {
+          lines.push(`- recent documents: ${scratch.lastDocumentIds.slice(0, 6).join(", ")}`);
+        }
+        if (Array.isArray(scratch.lastAssetIds) && scratch.lastAssetIds.length) {
+          lines.push(`- recent assets: ${scratch.lastAssetIds.slice(0, 6).join(", ")}`);
+        }
+        if (Array.isArray(scratch.lastElementIds) && scratch.lastElementIds.length) {
+          lines.push(`- recent elements: ${scratch.lastElementIds.slice(0, 6).join(", ")}`);
+        }
+        if (
+          Array.isArray(scratch.lastGenerationJobIds) &&
+          scratch.lastGenerationJobIds.length
+        ) {
+          lines.push(
+            `- recent generation jobs: ${scratch.lastGenerationJobIds.slice(0, 4).join(", ")}`,
+          );
+        }
+        if (lines.length > 1) workingBlock = lines.join("\n");
+      } catch {
+        workingBlock = "";
+      }
+    }
+
     const formatPriorLine = (row) => {
       const role = String(row?.role || "?");
       const tool = textValue(row?.toolName);
       const raw = String(row?.content || "").replace(/\s+/g, " ").trim();
       if (role === "tool") {
-        return `tool: ${tool || "step"} — ${raw.slice(0, 220)}`;
+        return `tool: ${tool || "step"} — ${raw.slice(0, 420)}`;
       }
       if (role === "user") return `user: ${raw.slice(0, 1400)}`;
       if (role === "assistant") return `assistant: ${raw.slice(0, 1000)}`;
@@ -580,6 +638,7 @@ async function runPiTurn(body, abortSignal) {
       "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets. No ids/JSON/debug talk.",
       "remember: ONLY short pointers — where a script/prompt lives (document title + folder path), durable prefs, decisions. NEVER store full prompts, shot lists, or script bodies in memory — those go in studio_create_document .md Scripts. Saying \"saved to memory\" for a prompt is wrong.",
       summaryBlock,
+      workingBlock,
       seedBoard
         ? `Existing TODO board (continue/update):\n${typeof seedBoard === "string" ? seedBoard : JSON.stringify(seedBoard).slice(0, 2500)}`
         : "",
@@ -673,6 +732,7 @@ async function runPiTurn(body, abortSignal) {
       cacheReadTokens: tokens.cacheRead,
       cacheWriteTokens: tokens.cacheWrite,
     });
+    sessionEntry.lastUsage = usage;
     console.log("[studio-agent] usage", JSON.stringify(usage));
     const assistantText =
       (typeof session.getLastAssistantText === "function"
@@ -783,15 +843,32 @@ const server = createServer(async (req, res) => {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const cancelled = /cancelled/i.test(message);
+        const usage = usageFromSessionEntry(sessions.get(key));
         res.writeHead(cancelled ? 200 : 500, { "content-type": "application/json" });
         res.end(
           JSON.stringify(
             cancelled
-              ? { cancelled: true, assistantText: "Stopped." }
-              : { error: message },
+              ? { cancelled: true, assistantText: "Stopped.", usage }
+              : { error: message, usage },
           ),
         );
       }
+      return;
+    }
+    if (req.method === "GET" && req.url?.startsWith("/v1/usage")) {
+      if (!authOk(req)) {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "unauthorized" }));
+        return;
+      }
+      const url = new URL(req.url, "http://localhost");
+      const key = sessionKey(
+        url.searchParams.get("userId") || "anon",
+        url.searchParams.get("threadId") || "default",
+      );
+      const usage = usageFromSessionEntry(sessions.get(key));
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, usage: usage || null }));
       return;
     }
     if (req.method === "POST" && req.url === "/v1/cancel") {

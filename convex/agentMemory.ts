@@ -158,11 +158,12 @@ export const retrieveForRun = internalQuery({
   ),
   handler: async (ctx, args) => {
     const limit = Math.min(Math.max(args.limit ?? 6, 1), 12);
+    // Take a wider pool so summary spam cannot crowd out real notes.
     const owned = await ctx.db
       .query("agentMemories")
       .withIndex("by_owner_and_updated", (q) => q.eq("ownerId", args.ownerId))
       .order("desc")
-      .take(40);
+      .take(120);
     const filtered = owned.filter((row) => {
       if (row.archivedAt) return false;
       // Thread summaries are injected separately — skip as generic recall noise.
@@ -184,6 +185,7 @@ export const retrieveForRun = internalQuery({
       .filter((t) => t.length >= 3)
       .slice(0, 16);
 
+    const now = Date.now();
     const scored = filtered.map((row) => {
       let score = row.pinned ? 1000 : 0;
       let tokenHits = 0;
@@ -205,15 +207,25 @@ export const retrieveForRun = internalQuery({
           }
         }
       }
-      score += Math.min(20, Math.floor((row.updatedAt % 1_000_000) / 80_000));
+      // Real recency: up to +40 for updates in the last ~14 days.
+      const ageMs = Math.max(0, now - row.updatedAt);
+      const ageDays = ageMs / (24 * 60 * 60 * 1000);
+      score += Math.max(0, Math.round(40 - ageDays * 3));
+      if (row.kind === "preference" || row.kind === "decision") score += 15;
       return { row, score, tokenHits, projectHit };
     });
 
     scored.sort((a, b) => b.score - a.score || b.row.updatedAt - a.row.updatedAt);
 
-    // Only keep high-signal memories — avoid flooding the turn with unrelated notes.
+    // Softer gate: one token hit or recent preference/decision is enough.
     const relevant = scored.filter(
-      (s) => s.row.pinned || s.projectHit || s.tokenHits >= 2 || s.score >= 36,
+      (s) =>
+        s.row.pinned ||
+        s.projectHit ||
+        s.tokenHits >= 1 ||
+        ((s.row.kind === "preference" || s.row.kind === "decision") &&
+          s.score >= 20) ||
+        s.score >= 36,
     );
 
     return relevant.slice(0, limit).map(({ row }) => ({
@@ -238,7 +250,7 @@ export const getThreadSummary = internalQuery({
       .query("agentMemories")
       .withIndex("by_owner_and_updated", (q) => q.eq("ownerId", args.ownerId))
       .order("desc")
-      .take(40);
+      .take(80);
     const hit = rows.find(
       (row) =>
         !row.archivedAt &&
@@ -267,12 +279,37 @@ export const rememberInternal = internalMutation({
       }
     }
     const now = Date.now();
+    const kind = args.kind ?? "note";
+    const title = args.title.trim().slice(0, 200) || "Memory";
+    const body = args.body.trim().slice(0, 8000);
+    // Update-by-title when same kind+title exists (avoid note spam).
+    const recent = await ctx.db
+      .query("agentMemories")
+      .withIndex("by_owner_and_updated", (q) => q.eq("ownerId", args.ownerId))
+      .order("desc")
+      .take(60);
+    const existing = recent.find(
+      (row) =>
+        !row.archivedAt &&
+        row.kind === kind &&
+        row.kind !== "summary" &&
+        row.title.toLowerCase() === title.toLowerCase(),
+    );
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        body,
+        projectFolderId: args.projectFolderId ?? existing.projectFolderId,
+        sourceThreadId: args.sourceThreadId ?? existing.sourceThreadId,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
     return await ctx.db.insert("agentMemories", {
       ownerId: args.ownerId,
       projectFolderId: args.projectFolderId,
-      kind: args.kind ?? "note",
-      title: args.title.trim().slice(0, 200) || "Memory",
-      body: args.body.trim().slice(0, 8000),
+      kind,
+      title,
+      body,
       sourceThreadId: args.sourceThreadId,
       createdAt: now,
       updatedAt: now,
@@ -289,11 +326,38 @@ export const saveThreadSummary = internalMutation({
   returns: v.id("agentMemories"),
   handler: async (ctx, args) => {
     const now = Date.now();
+    const body = args.summary.trim().slice(0, 8000);
+    const recent = await ctx.db
+      .query("agentMemories")
+      .withIndex("by_owner_and_updated", (q) => q.eq("ownerId", args.ownerId))
+      .order("desc")
+      .take(80);
+    const existing = recent.filter(
+      (row) =>
+        !row.archivedAt &&
+        row.kind === "summary" &&
+        row.sourceThreadId === args.threadId,
+    );
+    // Upsert one live summary; archive older duplicates for this thread.
+    for (let i = 1; i < existing.length; i++) {
+      await ctx.db.patch(existing[i]!._id, {
+        archivedAt: now,
+        updatedAt: now,
+      });
+    }
+    if (existing[0]) {
+      await ctx.db.patch(existing[0]._id, {
+        title: "Thread summary",
+        body,
+        updatedAt: now,
+      });
+      return existing[0]._id;
+    }
     return await ctx.db.insert("agentMemories", {
       ownerId: args.ownerId,
       kind: "summary",
-      title: `Thread summary`,
-      body: args.summary.trim().slice(0, 8000),
+      title: "Thread summary",
+      body,
       sourceThreadId: args.threadId,
       createdAt: now,
       updatedAt: now,

@@ -20,6 +20,84 @@ function workerAuthOk(request: Request): boolean {
   return Boolean(token && token === expected);
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Compact episode line for Prior — keep ids/titles, not raw checkmarks. */
+function formatEpisodeToolContent(
+  toolName: string,
+  ok: boolean,
+  result: unknown,
+  error?: string,
+): string {
+  if (!ok) {
+    return `✗ ${toolName}: ${String(error || "failed").slice(0, 180)}`;
+  }
+  const root = asRecord(result) ?? {};
+  const data = asRecord(root.data) ?? root;
+  const pick = (...keys: string[]) => {
+    for (const key of keys) {
+      const v = data[key] ?? root[key];
+      if (typeof v === "string" && v.trim()) return v.trim();
+      if (typeof v === "number") return String(v);
+    }
+    return "";
+  };
+  const title = pick("title", "name", "label");
+  const documentId = pick("documentId", "document_id");
+  const assetId = pick("assetId", "asset_id");
+  const elementId = pick("elementId", "element_id");
+  const folderId = pick("folderId", "folder_id");
+  const jobId = pick("id", "jobId", "_id");
+  const stillRendering = Boolean(data.stillRendering);
+  const parts: string[] = [`✓ ${toolName}`];
+  if (title) parts.push(`"${title.slice(0, 80)}"`);
+  if (documentId) parts.push(`documentId=${documentId}`);
+  if (assetId) parts.push(`assetId=${assetId}`);
+  if (elementId) parts.push(`elementId=${elementId}`);
+  if (folderId) parts.push(`folderId=${folderId}`);
+  if (
+    /generate_(image|video|audio)/.test(toolName) &&
+    jobId &&
+    (stillRendering || !assetId)
+  ) {
+    parts.push(`jobId=${jobId}${stillRendering ? " (rendering)" : ""}`);
+  }
+  return parts.join(" ").slice(0, 480);
+}
+
+function scratchPatchFromToolResult(
+  toolName: string,
+  result: unknown,
+): Record<string, unknown> | null {
+  const root = asRecord(result) ?? {};
+  const data = asRecord(root.data) ?? root;
+  const pick = (...keys: string[]) => {
+    for (const key of keys) {
+      const v = data[key] ?? root[key];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return "";
+  };
+  const patch: Record<string, unknown> = {};
+  const documentId = pick("documentId");
+  const assetId = pick("assetId");
+  const elementId = pick("elementId");
+  const folderId = pick("folderId");
+  const jobId = pick("id", "jobId");
+  if (documentId) patch.documentId = documentId;
+  if (assetId) patch.assetId = assetId;
+  if (elementId) patch.elementId = elementId;
+  if (folderId) patch.cwdFolderId = folderId;
+  if (/generate_(image|video|audio)/.test(toolName) && jobId) {
+    patch.jobId = jobId;
+  }
+  return Object.keys(patch).length ? patch : null;
+}
+
 export const agentWorkerCallback = httpAction(async (ctx, request) => {
   if (request.method === "OPTIONS") return optionsResponse();
   if (!workerAuthOk(request)) {
@@ -72,16 +150,29 @@ export const agentWorkerCallback = httpAction(async (ctx, request) => {
         resultJson: body.result != null ? JSON.stringify(body.result) : undefined,
         error: body.error,
       });
+      const toolName = String(body.toolName || "");
       await ctx.runMutation(internal.agentRuns.appendToolMessage, {
         ownerId: body.ownerId as Id<"users">,
         threadId: body.threadId as Id<"agentThreads">,
-        toolName: String(body.toolName || ""),
-        content: body.ok
-          ? `✓ ${body.toolName}`
-          : `✗ ${body.toolName}: ${body.error || "failed"}`,
+        toolName,
+        content: formatEpisodeToolContent(
+          toolName,
+          Boolean(body.ok),
+          body.result,
+          body.error,
+        ),
         toolCallId: String(body.toolCallId),
         status: body.ok ? "complete" : "error",
       });
+      if (body.ok) {
+        const patch = scratchPatchFromToolResult(toolName, body.result);
+        if (patch) {
+          await ctx.runMutation(internal.agentThreads.patchWorkingScratchInternal, {
+            threadId: body.threadId as Id<"agentThreads">,
+            patchJson: JSON.stringify(patch),
+          });
+        }
+      }
       return jsonResponse({ ok: true });
     }
 

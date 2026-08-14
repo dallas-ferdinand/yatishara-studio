@@ -98,6 +98,8 @@ export type DisplayStep = {
   subtitle?: string;
   status: AgentToolCallRow["status"] | "summary";
   durationMs?: number;
+  /** Epoch ms when the tool finished — used for 2s settle-into-summary. */
+  finishedAt?: number;
   argsJson?: string;
   resultJson?: string;
   error?: string;
@@ -107,6 +109,8 @@ export type DisplayStep = {
   collapsedGroupCount?: number;
   isGroupSummary?: boolean;
   isLive?: boolean;
+  /** Human segments for group summary strip e.g. ["Explored 5 files", "Generated 2 videos"]. */
+  summarySegments?: string[];
 };
 
 export type AgentTurn = {
@@ -609,6 +613,7 @@ function toolCallToStep(
     subtitle,
     status: effectiveStatus,
     durationMs: formatStepDuration(row.startedAt, row.finishedAt),
+    finishedAt: row.finishedAt,
     argsJson: row.argsJson,
     resultJson: row.resultJson,
     error: salvaged ? undefined : row.error,
@@ -618,14 +623,149 @@ function toolCallToStep(
   };
 }
 
+/** Bucket a completed step into a human summary segment key. */
+export function summaryBucketForStep(step: DisplayStep): string | null {
+  if (
+    step.status === "failed" ||
+    step.status === "pending_approval" ||
+    step.status === "started" ||
+    step.status === "queued" ||
+    step.status === "summary" ||
+    step.kind === "error" ||
+    step.kind === "approval"
+  ) {
+    return null;
+  }
+  const name = String(step.toolName || "");
+  if (name === "ask") return null;
+  if (
+    /search|workspace_tree|folder_contents|list_folders|list_elements|resolve_path|project_context|bootstrap|catalog|describe/.test(
+      name,
+    )
+  ) {
+    return "explore";
+  }
+  if (/get_document|get_asset|get_folder|view_media|^inspect$/.test(name)) {
+    return "read";
+  }
+  if (/generate_video/.test(name)) return "gen_video";
+  if (/generate_audio/.test(name)) return "gen_audio";
+  if (/generate_image|generate_batch|generate_script/.test(name)) return "gen_image";
+  if (/create_document|create_folder|create_element|upload_asset|ensure_path/.test(name)) {
+    return "create";
+  }
+  if (/patch_document|update_document|update_element|update_folder|update_asset|bulk_move/.test(name)) {
+    return "edit";
+  }
+  if (name === "plan") return "plan";
+  if (name === "skills") return "skills";
+  if (name === "remember" || name === "recall") return "memory";
+  if (/estimate/.test(name)) return "estimate";
+  if (/trash|restore/.test(name)) return "trash";
+  if (/send_|share|unshare/.test(name)) return "share";
+  if (step.kind === "read" || step.kind === "meta") return "explore";
+  if (step.kind === "write") return "edit";
+  if (step.kind === "generate") return "gen_image";
+  return "other";
+}
+
+function formatSummarySegments(counts: Record<string, number>): string[] {
+  const parts: string[] = [];
+  const push = (n: number, one: string, many: string) => {
+    if (n <= 0) return;
+    parts.push(n === 1 ? one : many.replace("{n}", String(n)));
+  };
+  push(counts.explore || 0, "Explored workspace", "Explored {n} places");
+  push(counts.read || 0, "Read 1 script", "Read {n} scripts");
+  push(counts.gen_video || 0, "Generated 1 video", "Generated {n} videos");
+  push(counts.gen_image || 0, "Generated 1 image", "Generated {n} images");
+  push(counts.gen_audio || 0, "Generated 1 voiceover", "Generated {n} voiceovers");
+  push(counts.create || 0, "Created 1 item", "Created {n} items");
+  push(counts.edit || 0, "Edited 1 item", "Edited {n} items");
+  push(counts.plan || 0, "Updated plan", "Updated plan {n}×");
+  push(counts.skills || 0, "Loaded 1 skill", "Loaded {n} skills");
+  push(counts.memory || 0, "Used memory", "Memory {n}×");
+  push(counts.estimate || 0, "Checked cost", "Checked cost {n}×");
+  push(counts.trash || 0, "Cleaned up 1 item", "Cleaned up {n} items");
+  push(counts.share || 0, "Shared 1 item", "Shared {n} items");
+  push(counts.other || 0, "Finished 1 step", "Finished {n} steps");
+  return parts;
+}
+
+/**
+ * Fold settled completed steps into one horizontal human summary.
+ * Live / unsettled / errors / approvals stay as full rows outside the summary.
+ */
+export function foldSettledSteps(
+  steps: DisplayStep[],
+  settledIds: ReadonlySet<string>,
+): DisplayStep[] {
+  const foldable: DisplayStep[] = [];
+  const kept: DisplayStep[] = [];
+  const foldableIds = new Set<string>();
+
+  for (const step of steps) {
+    if (step.isGroupSummary) continue;
+    const bucket = summaryBucketForStep(step);
+    const canFold =
+      Boolean(bucket) &&
+      step.status === "completed" &&
+      settledIds.has(step.id);
+    if (canFold) {
+      foldable.push(step);
+      foldableIds.add(step.id);
+    } else {
+      kept.push(step);
+    }
+  }
+
+  if (foldable.length === 0) return kept;
+
+  const counts: Record<string, number> = {};
+  for (const step of foldable) {
+    const bucket = summaryBucketForStep(step);
+    if (!bucket) continue;
+    counts[bucket] = (counts[bucket] || 0) + 1;
+  }
+  const segments = formatSummarySegments(counts);
+  if (!segments.length) return kept;
+
+  const summary: DisplayStep = {
+    id: `fold-summary-${foldable[0]!.id}`,
+    kind: "meta",
+    title: segments.join(" · "),
+    subtitle: undefined,
+    status: "summary",
+    collapsedGroupCount: foldable.length,
+    isGroupSummary: true,
+    summarySegments: segments,
+  };
+
+  // Summary first, then live/error/unsettled rows in original order.
+  const out: DisplayStep[] = [summary];
+  for (const step of steps) {
+    if (step.isGroupSummary) continue;
+    if (foldableIds.has(step.id)) continue;
+    out.push(step);
+  }
+  return out;
+}
+
+/** Ids that are eligible to fold once settled (completed, non-critical). */
+export function foldableCompletedIds(steps: DisplayStep[]): string[] {
+  return steps
+    .filter((step) => summaryBucketForStep(step) && step.status === "completed")
+    .map((step) => step.id);
+}
+
 /** Collapse only long runs of quiet folder peeks — never hide skills/memory/plan/tools. */
 export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
+  // Kept for tests / legacy; new UI uses foldSettledSteps.
   const out: DisplayStep[] = [];
   const visibleTail = 3;
   let i = 0;
   while (i < steps.length) {
     const step = steps[i]!;
-    // Never collapse named Pi tools or writes/generates/errors.
     if (
       isAlwaysVisibleTool(step.toolName) ||
       step.kind === "write" ||
@@ -782,7 +922,7 @@ export function buildAgentTurns(args: {
         }));
       rawSteps.push(...orphanApprovalSteps);
     }
-    const steps = collapseQuietSteps(rawSteps);
+    const steps = rawSteps;
     const assistant = assistantMessages[idx];
 
     turns.push({
@@ -808,12 +948,10 @@ export function buildAgentTurns(args: {
         );
     const liveRunId = liveRun?._id;
     const liveSteps = liveRunId
-      ? collapseQuietSteps(
-          (toolsByRun.get(String(liveRunId)) ?? []).map((tc) =>
-            toolCallToStep(
-              tc,
-              tc.approvalId ? approvalById.get(tc.approvalId) : undefined,
-            ),
+      ? (toolsByRun.get(String(liveRunId)) ?? []).map((tc) =>
+          toolCallToStep(
+            tc,
+            tc.approvalId ? approvalById.get(tc.approvalId) : undefined,
           ),
         )
       : [];

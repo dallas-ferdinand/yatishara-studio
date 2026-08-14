@@ -1895,6 +1895,8 @@ export default defineSchema({
     title: v.string(),
     /** Multi todo-list board JSON — see agentPlan board shape */
     todosJson: v.optional(v.string()),
+    /** Working scratch: cwd + recent doc/asset/element ids for Prior continuity. */
+    workingScratchJson: v.optional(v.string()),
     archivedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

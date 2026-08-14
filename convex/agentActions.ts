@@ -126,6 +126,87 @@ function safeAttachmentJson(input: AgentTurnAttachment[]): string | undefined {
   return cleaned.length ? JSON.stringify(cleaned) : undefined;
 }
 
+type MeasuredUsageBody = {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  promptTokens?: number;
+};
+
+/** Charge platform LLM tokens whenever we have measured usage (incl. failed/cancelled). */
+async function billPlatformTextIfNeeded(
+  ctx: { runMutation: (ref: unknown, args: unknown) => Promise<unknown> },
+  args: {
+    usedByok: boolean;
+    usage?: MeasuredUsageBody | null;
+    runId: Id<"agentRuns">;
+    model?: string;
+  },
+): Promise<{ creditsSpent: number; usageJson?: string }> {
+  if (args.usedByok) {
+    return { creditsSpent: 0 };
+  }
+  const usage = measuredTextUsageFromGateway(args.usage ?? {});
+  const hasTokens =
+    (usage.inputTokens ?? 0) > 0 ||
+    (usage.outputTokens ?? 0) > 0 ||
+    (usage.cacheReadTokens ?? 0) > 0 ||
+    (usage.cacheWriteTokens ?? 0) > 0;
+  if (!hasTokens) {
+    return { creditsSpent: 0 };
+  }
+  const creditsSpent = textCreditCost({
+    ...usage,
+    textModel: "turbo",
+  });
+  const usageJson = JSON.stringify({
+    ...usage,
+    textModel: "turbo",
+    credits: creditsSpent,
+  });
+  const folderId = await ctx.runMutation(api.folders.ensureMessagesFolderForMe, {});
+  await ctx.runMutation(chargeTextGenerationRef, {
+    folderId,
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    textModel: "turbo",
+  });
+  await ctx.runMutation(internal.agentRuns.setRunCredits, {
+    runId: args.runId,
+    creditsSpent,
+    usedByok: false,
+    model: args.model,
+    usageJson,
+  });
+  return { creditsSpent, usageJson };
+}
+
+async function fetchPiUsageBestEffort(args: {
+  userId: string;
+  threadId: string;
+}): Promise<MeasuredUsageBody | undefined> {
+  const piBase = workerUrl();
+  const token = workerToken();
+  if (!piBase || !token) return undefined;
+  try {
+    const url = new URL(`${piBase}/v1/usage`);
+    url.searchParams.set("userId", args.userId);
+    url.searchParams.set("threadId", args.threadId);
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as { usage?: MeasuredUsageBody };
+    return body.usage;
+  } catch {
+    return undefined;
+  }
+}
+
 export const sendTurn = action({
   args: {
     threadId: v.id("agentThreads"),
@@ -298,6 +379,10 @@ export const sendTurn = action({
       ownerId,
       threadId: args.threadId,
     });
+    let workingScratchJson = await ctx.runQuery(
+      internal.agentThreads.getWorkingScratchInternal,
+      { threadId: args.threadId },
+    );
 
     const folderRows = await ctx.runQuery(internal.agentMessages.listFoldersForOwner, {
       ownerId,
@@ -317,6 +402,20 @@ export const sendTurn = action({
       }
       return names.length ? `/${names.join("/")}` : undefined;
     };
+
+    if (args.currentFolderId) {
+      await ctx.runMutation(internal.agentThreads.patchWorkingScratchInternal, {
+        threadId: args.threadId,
+        patchJson: JSON.stringify({
+          cwdFolderId: String(args.currentFolderId),
+          cwdFolderPath: folderPathFor(String(args.currentFolderId)),
+        }),
+      });
+      workingScratchJson = await ctx.runQuery(
+        internal.agentThreads.getWorkingScratchInternal,
+        { threadId: args.threadId },
+      );
+    }
 
     const workingSet = [];
     for (const item of attachments) {
@@ -513,6 +612,7 @@ export const sendTurn = action({
           history,
           memories,
           threadSummary: threadSummary || undefined,
+          workingScratchJson: workingScratchJson || undefined,
           role,
           scopes,
           autoApprove: Boolean(args.autoApprove),
@@ -565,11 +665,17 @@ export const sendTurn = action({
         runId,
       });
       if (body.cancelled || runAfterPi?.status === "cancelled") {
+        const billed = await billPlatformTextIfNeeded(ctx, {
+          usedByok,
+          usage: body.usage,
+          runId,
+          model: body.model,
+        });
         await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
         return {
           ok: true,
           assistantText: "Stopped.",
-          creditsSpent: 0,
+          creditsSpent: billed.creditsSpent,
           usedByok,
           runId: String(runId),
           cancelled: true,
@@ -580,9 +686,18 @@ export const sendTurn = action({
         const err =
           body.error ||
           `Pi worker HTTP ${res.status}: Agent run failed (no silent fallback).`;
+        const billed = await billPlatformTextIfNeeded(ctx, {
+          usedByok,
+          usage: body.usage,
+          runId,
+          model: body.model,
+        });
         await ctx.runMutation(internal.agentRuns.failRun, {
           runId,
           error: err,
+          creditsSpent: billed.creditsSpent,
+          usedByok,
+          usageJson: billed.usageJson,
         });
         await ctx.runMutation(api.agentMessages.appendMessage, {
           threadId: args.threadId,
@@ -593,7 +708,7 @@ export const sendTurn = action({
         return {
           ok: false,
           assistantText: err,
-          creditsSpent: 0,
+          creditsSpent: billed.creditsSpent,
           usedByok,
           runId: String(runId),
           error: err,
@@ -602,34 +717,11 @@ export const sendTurn = action({
 
       if (body.pendingApproval || body.pendingAsk) {
         // LLM already ran to reach this pause — always bill measured usage.
-        let creditsSpent = 0;
-        let usageJson: string | undefined;
-        if (!usedByok) {
-          const usage = measuredTextUsageFromGateway(body.usage ?? {});
-          creditsSpent = textCreditCost({
-            ...usage,
-            textModel: "turbo",
-          });
-          usageJson = JSON.stringify({ ...usage, textModel: "turbo", credits: creditsSpent });
-          const folderId = await ctx.runMutation(
-            api.folders.ensureMessagesFolderForMe,
-            {},
-          );
-          await ctx.runMutation(chargeTextGenerationRef, {
-            folderId,
-            inputTokens: usage.inputTokens ?? 0,
-            outputTokens: usage.outputTokens ?? 0,
-            cacheReadTokens: usage.cacheReadTokens,
-            cacheWriteTokens: usage.cacheWriteTokens,
-            textModel: "turbo",
-          });
-        }
-        await ctx.runMutation(internal.agentRuns.setRunCredits, {
-          runId,
-          creditsSpent,
+        const billed = await billPlatformTextIfNeeded(ctx, {
           usedByok,
+          usage: body.usage,
+          runId,
           model: body.model,
-          usageJson,
         });
         if (body.pendingAsk) {
           await ctx.runMutation(internal.agentRuns.markAwaitingQuestion, {
@@ -644,7 +736,7 @@ export const sendTurn = action({
         return {
           ok: true,
           assistantText: "",
-          creditsSpent,
+          creditsSpent: billed.creditsSpent,
           usedByok,
           runId: String(runId),
           pendingApproval: Boolean(body.pendingApproval),
@@ -666,44 +758,35 @@ export const sendTurn = action({
 
       // Always bill platform LLM usage (measured tokens; exact BytePlus COGS ×2).
       // BYOK: no LLM ledger charge. Paid tools still charge via Studio API.
-      let creditsSpent = 0;
-      let usageJson: string | undefined;
-      if (!usedByok) {
-        const usage = measuredTextUsageFromGateway(body.usage ?? {});
-        creditsSpent = textCreditCost({
-          ...usage,
-          textModel: "turbo",
-        });
-        usageJson = JSON.stringify({ ...usage, textModel: "turbo", credits: creditsSpent });
-        const folderId = await ctx.runMutation(
-          api.folders.ensureMessagesFolderForMe,
-          {},
-        );
-        await ctx.runMutation(chargeTextGenerationRef, {
-          folderId,
-          inputTokens: usage.inputTokens ?? 0,
-          outputTokens: usage.outputTokens ?? 0,
-          cacheReadTokens: usage.cacheReadTokens,
-          cacheWriteTokens: usage.cacheWriteTokens,
-          textModel: "turbo",
-        });
-      }
+      const billed = await billPlatformTextIfNeeded(ctx, {
+        usedByok: Boolean(body.usedByok) || usedByok,
+        usage: body.usage,
+        runId,
+        model: body.model,
+      });
+      const creditsSpent = billed.creditsSpent;
 
       await ctx.runMutation(internal.agentRuns.completeRun, {
         runId,
         assistantText,
         creditsSpent,
         usedByok: Boolean(body.usedByok) || usedByok,
-        usageJson,
+        usageJson: billed.usageJson,
       });
       await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
 
-      // Compact long threads into durable summary occasionally
+      // Upsert one durable thread summary (not every-turn spam).
       if (history.length >= 18) {
+        const scratchBits = workingScratchJson
+          ? `\nWorking: ${String(workingScratchJson).slice(0, 400)}`
+          : "";
+        const todoBits = seedTodosJson
+          ? `\nTODO: ${String(seedTodosJson).slice(0, 400)}`
+          : "";
         await ctx.runMutation(internal.agentMemory.saveThreadSummary, {
           ownerId,
           threadId: args.threadId,
-          summary: `Recent focus: ${message.slice(0, 240)}\nLast reply: ${assistantText.slice(0, 500)}`,
+          summary: `Recent focus: ${message.slice(0, 240)}\nLast reply: ${assistantText.slice(0, 500)}${scratchBits}${todoBits}`,
         });
       }
 
@@ -719,11 +802,21 @@ export const sendTurn = action({
         runId,
       });
       if (runNow?.status === "cancelled") {
+        const usage =
+          (await fetchPiUsageBestEffort({
+            userId: String(ownerId),
+            threadId: String(args.threadId),
+          })) ?? undefined;
+        const billed = await billPlatformTextIfNeeded(ctx, {
+          usedByok,
+          usage,
+          runId,
+        });
         await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
         return {
           ok: true,
           assistantText: "Stopped.",
-          creditsSpent: 0,
+          creditsSpent: billed.creditsSpent,
           usedByok,
           runId: String(runId),
           cancelled: true,
@@ -735,7 +828,23 @@ export const sendTurn = action({
           : error instanceof Error
             ? error.message
             : String(error);
-      await ctx.runMutation(internal.agentRuns.failRun, { runId, error: err });
+      const usage =
+        (await fetchPiUsageBestEffort({
+          userId: String(ownerId),
+          threadId: String(args.threadId),
+        })) ?? undefined;
+      const billed = await billPlatformTextIfNeeded(ctx, {
+        usedByok,
+        usage,
+        runId,
+      });
+      await ctx.runMutation(internal.agentRuns.failRun, {
+        runId,
+        error: err,
+        creditsSpent: billed.creditsSpent,
+        usedByok,
+        usageJson: billed.usageJson,
+      });
       await ctx.runMutation(api.agentMessages.appendMessage, {
         threadId: args.threadId,
         role: "assistant",
@@ -748,7 +857,7 @@ export const sendTurn = action({
       return {
         ok: false,
         assistantText: `Agent run failed: ${err}`,
-        creditsSpent: 0,
+        creditsSpent: billed.creditsSpent,
         usedByok,
         runId: String(runId),
         error: err,

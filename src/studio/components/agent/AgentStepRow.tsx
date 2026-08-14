@@ -124,6 +124,10 @@ export function AgentStepRow({
   const canExpand = isError && Boolean(step.error || step.resultJson);
   const folderId = step.outcome?.folderId;
   const documentId = step.outcome?.documentId;
+  const segments =
+    step.isGroupSummary && step.summarySegments?.length
+      ? step.summarySegments
+      : null;
   // Prefer friendly action title; append compact outcome when useful.
   const label = isError
     ? step.subtitle || step.title
@@ -146,6 +150,25 @@ export function AgentStepRow({
   const interactive = Boolean(
     (documentId && onOpenDocument) || (folderId && onOpenFolder) || canExpand,
   );
+
+  if (segments) {
+    return (
+      <div
+        className="studio-agent-step is-meta is-group-summary studio-agent-step-summary"
+        data-step-status={step.status}
+        role="listitem"
+        aria-label={segments.join(", ")}
+      >
+        <div className="studio-agent-step-summary-strip">
+          {segments.map((seg) => (
+            <span key={seg} className="studio-agent-step-summary-chip">
+              {seg}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
