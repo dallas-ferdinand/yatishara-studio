@@ -19,6 +19,17 @@ export async function GET(
   const paymentId = decodeURIComponent(String(rawId || "")).replace(/\/+$/, "");
   const url = new URL(request.url);
   const result = (url.searchParams.get("result") || "").toUpperCase();
+  const paid = result === "OK";
+  const origin = url.origin;
+  const response = NextResponse.redirect(`${origin}/`, 302);
+  response.headers.set("Cache-Control", "no-store");
+  if (!paid) {
+    response.headers.set(
+      "Set-Cookie",
+      cookieHeader(encodeWamReturnCookie({ abandoned: true })),
+    );
+    return response;
+  }
   const identifier = (url.searchParams.get("identifier") || "").trim();
   const amountRaw = Number.parseInt(url.searchParams.get("amount") || "", 10);
   const billingRaw = url.searchParams.get("billing");
@@ -30,17 +41,18 @@ export async function GET(
       ? billingRaw
       : undefined;
   const academyCourse = url.searchParams.get("academyCourse") || undefined;
-  const payload = encodeWamReturnCookie({
-    ...(paymentId ? { paymentId } : {}),
-    ...(academyCourse ? { academyCourse } : {}),
-    ...(billing ? { billing } : {}),
-    ...(identifier ? { identifier } : {}),
-    ...(Number.isFinite(amountRaw) && amountRaw > 0 ? { amountCents: amountRaw } : {}),
-    ...(result === "OK" || !result ? { wamOk: true } : {}),
-  });
-  const origin = url.origin;
-  const response = NextResponse.redirect(`${origin}/`, 302);
-  response.headers.set("Set-Cookie", cookieHeader(payload));
-  response.headers.set("Cache-Control", "no-store");
+  response.headers.set(
+    "Set-Cookie",
+    cookieHeader(
+      encodeWamReturnCookie({
+        wamOk: true,
+        ...(paymentId ? { paymentId } : {}),
+        ...(academyCourse ? { academyCourse } : {}),
+        ...(billing ? { billing } : {}),
+        ...(identifier ? { identifier } : {}),
+        ...(Number.isFinite(amountRaw) && amountRaw > 0 ? { amountCents: amountRaw } : {}),
+      }),
+    ),
+  );
   return response;
 }

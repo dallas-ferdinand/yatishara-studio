@@ -694,6 +694,11 @@ function billingSectionFromStash(stored) {
 function captureWamReturnFromUrl() {
   if (typeof window === "undefined") return;
   const fromCookie = readWamReturnCookie();
+  if (fromCookie?.abandoned) {
+    clearWamReturnCookie();
+    clearWamReturn();
+    return;
+  }
   if (fromCookie) {
     stashWamReturn(fromCookie);
     clearWamReturnCookie();
@@ -706,8 +711,30 @@ function captureWamReturnFromUrl() {
   const result = (params.get("result") || "").toUpperCase();
   const identifier = (params.get("identifier") || "").trim();
   const amountRaw = Number.parseInt(params.get("amount") || "", 10);
-  const wamOk = result === "OK" || Boolean(fromCookie?.wamOk) || Boolean(pathPay);
-  if (!paymentId && !academyCourse && !wamOk && !identifier && !fromCookie) return;
+  const wamOk = result === "OK" || fromCookie?.wamOk === true;
+  if (!wamOk) {
+    if (pathPay || result) {
+      for (const key of [
+        "payment",
+        "paymentId",
+        "billing",
+        "academyCourse",
+        "result",
+        "amount",
+        "identifier",
+        "reference",
+        "signature",
+      ]) {
+        params.delete(key);
+      }
+      window.history.replaceState(
+        {},
+        "",
+        pathPay ? `/${params.toString() ? `?${params}` : ""}` : `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`,
+      );
+    }
+    return;
+  }
   stashWamReturn({
     ...(paymentId ? { paymentId } : {}),
     ...(academyCourse ? { academyCourse } : {}),
@@ -5120,17 +5147,17 @@ export function StudioShell({
   useEffect(() => {
     captureWamReturnFromUrl();
     const stored = readWamReturn();
-    if (stored?.identifier) {
-      setWamReturnIdentifier(stored.identifier);
-    }
-    if (stored?.paymentId || stored?.wamOk || stored?.identifier) {
-      setPaymentCelebration({
-        phase: "confirming",
-        kind: stored.academyCourse || stored.billing === "academy" ? "academy" : undefined,
-        billing: stored.billing === "academy" ? undefined : billingSectionFromStash(stored),
-        amountCents: stored.amountCents ?? null,
-      });
-    }
+    if (!stored?.wamOk) return;
+    if (stored.identifier) setWamReturnIdentifier(stored.identifier);
+    const isAcademy = Boolean(stored.academyCourse) || stored.billing === "academy";
+    setPaymentCelebration({
+      phase: "success",
+      kind: isAcademy ? "academy" : undefined,
+      billing: isAcademy ? undefined : billingSectionFromStash(stored),
+      amountCents: stored.amountCents ?? null,
+    });
+    if (isAcademy) openAcademyTab({ courseId: stored.academyCourse });
+    else openBillingTab(billingSectionFromStash(stored));
   }, []);
 
   useEffect(() => {
@@ -5420,92 +5447,13 @@ export function StudioShell({
   }
 
   useEffect(() => {
-    if (typeof window === "undefined" || academyPaymentReturnHandledRef.current) return;
     if (!currentUser?._id) return;
     const stored = readWamReturn();
-    const academyCourse = stored?.academyCourse || wamReturnPayment?.academyCourseId;
-    const isAcademy =
-      stored?.billing === "academy" ||
-      wamReturnPayment?.billing === "academy" ||
-      Boolean(academyCourse);
-    if (!isAcademy) return;
-    const paymentId = stored?.paymentId || wamReturnPayment?.paymentId;
-    if (!paymentId) return;
-    academyPaymentReturnHandledRef.current = true;
-    openAcademyTab({ courseId: academyCourse });
-    setPaymentCelebration({
-      phase: "confirming",
-      kind: "academy",
-      amountCents: stored?.amountCents ?? wamReturnPayment?.amountCents ?? null,
-    });
-
-    let cancelled = false;
-    void (async () => {
-      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      try {
-        for (let attempt = 0; attempt < 8; attempt += 1) {
-          if (cancelled) return;
-          if (attempt > 0) {
-            await sleep(Math.min(6_000, 1_200 * 2 ** Math.min(attempt - 1, 2)));
-          }
-          let result;
-          try {
-            result = await syncWamPayment({ paymentId, force: true });
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error ?? "");
-            if (/sign in|not authenticated|unauthorized/i.test(message)) {
-              continue;
-            }
-            throw error;
-          }
-          if (cancelled) return;
-          if (result.status === "payment_completed") {
-            clearWamReturn();
-            setPaymentCelebration({
-              phase: "success",
-              kind: "academy",
-              amountCents: result.amountCents ?? stored?.amountCents ?? null,
-              creditsGranted: result.creditsGranted ?? null,
-              academyUnlocked: result.academyUnlocked === true,
-            });
-            openAcademyTab({ courseId: result.academyCourseId || academyCourse });
-            if (result.academyUnlocked !== true) {
-              toast.message("Top-up received — finish unlock from checkout if needed");
-            }
-            return;
-          }
-          if (
-            result.status === "cancelled" ||
-            result.status === "rejected" ||
-            result.status === "checkout_failed"
-          ) {
-            clearWamReturn();
-            setPaymentCelebration(null);
-            toast.error(
-              result.status === "cancelled"
-                ? "Payment cancelled"
-                : "Payment not completed",
-            );
-            return;
-          }
-        }
-        clearWamReturn();
-        setPaymentCelebration({
-          phase: "success",
-          kind: "academy",
-          amountCents: stored?.amountCents ?? null,
-        });
-      } catch {
-        setPaymentCelebration(null);
-        toast.error("Could not confirm payment — try refreshing Academy");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot Wam academy return after auth
-  }, [currentUser?._id, syncWamPayment, wamReturnPayment?.paymentId, wamReturnPayment?.academyCourseId]);
+    if (!stored?.wamOk || !stored.paymentId) return;
+    if (billingPaymentReturnHandledRef.current) return;
+    billingPaymentReturnHandledRef.current = true;
+    void syncWamPayment({ paymentId: stored.paymentId, force: true }).catch(() => {});
+  }, [currentUser?._id, syncWamPayment]);
 
   useEffect(() => {
     if (!wamReturnPayment?.paymentId) return;
@@ -5519,79 +5467,6 @@ export function StudioShell({
     });
     setWamReturnIdentifier(null);
   }, [wamReturnPayment]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || billingPaymentReturnHandledRef.current) return;
-    if (!currentUser?._id) return;
-    const stored = readWamReturn();
-    if (
-      stored?.academyCourse ||
-      stored?.billing === "academy" ||
-      wamReturnPayment?.billing === "academy" ||
-      wamReturnPayment?.academyCourseId
-    ) {
-      return;
-    }
-    const paymentId = stored?.paymentId || wamReturnPayment?.paymentId;
-    const billing = billingSectionFromStash(stored?.billing ? stored : { billing: wamReturnPayment?.billing });
-    if (!paymentId) return;
-    billingPaymentReturnHandledRef.current = true;
-    openBillingTab(billing);
-    setPaymentCelebration({
-      phase: "confirming",
-      billing,
-      amountCents: stored?.amountCents ?? null,
-    });
-
-    void (async () => {
-      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      try {
-        for (let attempt = 0; attempt < 8; attempt += 1) {
-          if (attempt > 0) {
-            await sleep(Math.min(6_000, 1_200 * 2 ** Math.min(attempt - 1, 2)));
-          }
-          let result;
-          try {
-            result = await syncWamPayment({ paymentId, force: true });
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error ?? "");
-            if (/sign in|not authenticated|unauthorized/i.test(message)) continue;
-            throw error;
-          }
-          if (result.status === "payment_completed") {
-            clearWamReturn();
-            setPaymentCelebration({
-              phase: "success",
-              billing,
-              amountCents: result.amountCents ?? stored?.amountCents ?? null,
-              creditsGranted: result.creditsGranted ?? null,
-            });
-            return;
-          }
-          if (
-            result.status === "cancelled" ||
-            result.status === "rejected" ||
-            result.status === "checkout_failed"
-          ) {
-            clearWamReturn();
-            setPaymentCelebration(null);
-            toast.error(result.status === "cancelled" ? "Payment cancelled" : "Payment not completed");
-            return;
-          }
-        }
-        clearWamReturn();
-        setPaymentCelebration({
-          phase: "success",
-          billing,
-          amountCents: stored?.amountCents ?? null,
-        });
-      } catch {
-        setPaymentCelebration(null);
-        toast.error("Could not confirm payment — check Billing in a moment");
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot Wam billing return after auth
-  }, [currentUser?._id, wamReturnPayment?.paymentId]);
 
   /** @deprecated Use openNetworkTab — kept for call-site compatibility. */
   function openOffersTab(_section = "home") {
@@ -26785,8 +26660,10 @@ export function StudioShell({
               onClose={() => {
                 const billing = paymentCelebration?.billing;
                 const kind = paymentCelebration?.kind;
+                const paid = paymentCelebration?.phase === "success";
+                clearWamReturn();
                 setPaymentCelebration(null);
-                if (kind === "academy") return;
+                if (!paid || kind === "academy") return;
                 openBillingTab(
                   billing === "invoices" || billing === "topup" || billing === "plans"
                     ? billing
@@ -35286,11 +35163,11 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
 
   useEffect(() => {
     const onKey = (event) => {
-      if (event.key === "Escape" && phase === "success") onClose?.();
+      if (event.key === "Escape") onClose?.();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, phase]);
+  }, [onClose]);
 
   const successTitle =
     isAcademy && celebration?.academyUnlocked !== false
@@ -35330,7 +35207,11 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
           <button type="button" className="studio-payment-celebration-btn" onClick={onClose}>
             Thanks
           </button>
-        ) : null}
+        ) : (
+          <button type="button" className="studio-payment-celebration-btn is-secondary" onClick={onClose}>
+            Close
+          </button>
+        )}
       </div>
     </div>
   );

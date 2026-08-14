@@ -261,7 +261,7 @@ export const internalStartPaywiseForCs = internalAction({
     try {
       const wam = getWamSDK();
       const intent = await wam.createPaymentIntent({
-        amountCents: wamCheckoutTotalCents(prepared.amountCents),
+        amountCents: prepared.amountCents,
         currency: WAM_CURRENCY,
         orderReference: String(prepared.paymentId),
         description:

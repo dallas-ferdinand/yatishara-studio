@@ -9,7 +9,6 @@ import {
   WAM_CURRENCY,
   normalizeWamIntentStatus,
   studioWamAppReturnUrl,
-  wamCheckoutTotalCents,
   wamErrorMessage,
 } from "./lib/wam";
 import { WamPaymentError, getWamSDK } from "./lib/wamSdk";
@@ -510,7 +509,7 @@ export const startCheckout = action({
     try {
       const wam = getWamSDK();
       intent = await wam.createPaymentIntent({
-        amountCents: wamCheckoutTotalCents(prepared.amountCents),
+        amountCents: prepared.amountCents,
         currency: WAM_CURRENCY,
         orderReference: String(prepared.paymentId),
         description:
@@ -805,7 +804,7 @@ async function ensureWamRecurring(
     customerReference,
     customerEmail: row.customerEmail || "billing@yatishara.com",
     customerName: row.customerName,
-    amountCents: wamCheckoutTotalCents(row.chargeCents),
+    amountCents: row.chargeCents,
     currency: WAM_CURRENCY,
     interval: row.interval,
     startDate: new Date(startTs).toISOString(),
@@ -885,7 +884,7 @@ export const startSubscribe = action({
     try {
       const wam = getWamSDK();
       intent = await wam.createPaymentIntent({
-        amountCents: wamCheckoutTotalCents(prepared.amountCents),
+        amountCents: prepared.amountCents,
         currency: WAM_CURRENCY,
         orderReference: String(prepared.paymentId),
         description:
@@ -1075,7 +1074,7 @@ export const startInvoicePay = action({
     try {
       const wam = getWamSDK();
       intent = await wam.createPaymentIntent({
-        amountCents: wamCheckoutTotalCents(prepared.amountCents),
+        amountCents: prepared.amountCents,
         currency: WAM_CURRENCY,
         orderReference: String(prepared.paymentId),
         description: "Studio plan payment",

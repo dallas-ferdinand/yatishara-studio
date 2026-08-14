@@ -1,4 +1,4 @@
-export const STUDIO_WAM_RETURN_KEY = "yatishara-studio-wam-return-v1";
+export const STUDIO_WAM_RETURN_KEY = "yatishara-studio-wam-return-v2";
 export const STUDIO_WAM_RETURN_COOKIE = "yatishara-studio-wam-return";
 export const WAM_RETURN_TTL_MS = 15 * 60 * 1000;
 
@@ -9,6 +9,7 @@ export type WamReturnPayload = {
   identifier?: string;
   amountCents?: number;
   wamOk?: boolean;
+  abandoned?: boolean;
   at?: number;
 };
 
@@ -36,6 +37,7 @@ export function parseWamReturnPayload(raw: unknown): WamReturnPayload | null {
       : {}),
     ...(Number.isFinite(amountRaw) && amountRaw > 0 ? { amountCents: amountRaw } : {}),
     ...(row.wamOk === true ? { wamOk: true } : {}),
+    ...(row.abandoned === true ? { abandoned: true } : {}),
     ...(Number.isFinite(at) ? { at } : {}),
   };
 }
