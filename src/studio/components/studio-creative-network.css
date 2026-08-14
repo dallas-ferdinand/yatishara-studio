@@ -380,7 +380,7 @@
 }
 
 .studio-academy-checkout-row.is-discount dd {
-  color: var(--color-cursor-text-bright, var(--mos-text));
+  color: var(--mos-success, #22c55e);
   font-weight: 650;
 }
 

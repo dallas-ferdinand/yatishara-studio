@@ -612,6 +612,7 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
 const STUDIO_CUSTOM_CURSOR_KEY = "yatishara-studio-custom-cursor";
 /** localStorage: dismissed | enabled — controls auto fullscreen push prompt. */
 const STUDIO_PUSH_PROMPT_KEY = "yatishara-studio-push-prompt-v1";
+const STUDIO_WAM_RETURN_KEY = "yatishara-studio-wam-return-v1";
 const ACTIVE_STYLE_SHEET_KEY = "mercuryos-studio-active-style-sheet-v1";
 const COMPOSER_STYLE_MODE_KEY = "mercuryos-studio-composer-style-mode-v1";
 const STUDIO_MAIN_PANEL_SIZES_KEY = "yatishara-studio-main-panel-sizes";
@@ -4986,12 +4987,28 @@ export function StudioShell({
     const params = new URLSearchParams(window.location.search);
     const outcome = params.get("payment");
     const paymentId = params.get("paymentId");
-    if (!outcome || !paymentId) return;
-    // Academy returns are handled with sync + celebration below.
-    if (params.get("academyCourse")) return;
-    setSettingsSection("billing");
-    setSettingsOpen(true);
-  }, [isMobile]);
+    if (!outcome || !paymentId || params.get("academyCourse")) return;
+    const billing = params.get("billing");
+    try {
+      window.sessionStorage.setItem(
+        STUDIO_WAM_RETURN_KEY,
+        JSON.stringify({
+          paymentId,
+          billing:
+            billing === "plans" || billing === "invoices" || billing === "topup"
+              ? billing
+              : "topup",
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+    params.delete("payment");
+    params.delete("paymentId");
+    params.delete("billing");
+    const cleaned = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", cleaned);
+  }, []);
 
   useEffect(() => {
     void registerDeskServiceWorker();
@@ -5365,26 +5382,27 @@ export function StudioShell({
   useEffect(() => {
     if (typeof window === "undefined" || billingPaymentReturnHandledRef.current) return;
     if (!currentUser?._id) return;
-    const params = new URLSearchParams(window.location.search);
-    const outcome = params.get("payment");
-    const paymentId = params.get("paymentId");
-    const billing = params.get("billing");
-    if (!outcome || !paymentId || (billing !== "plans" && billing !== "invoices" && billing !== "topup")) return;
+    let stored = null;
+    try {
+      const raw = window.sessionStorage.getItem(STUDIO_WAM_RETURN_KEY);
+      stored = raw ? JSON.parse(raw) : null;
+    } catch {
+      stored = null;
+    }
+    const paymentId = stored?.paymentId;
+    const billing =
+      stored?.billing === "plans" || stored?.billing === "invoices" || stored?.billing === "topup"
+        ? stored.billing
+        : "topup";
+    if (!paymentId) return;
     billingPaymentReturnHandledRef.current = true;
     openBillingTab(billing);
     setPaymentCelebration({ phase: "confirming" });
-    params.delete("payment");
-    params.delete("paymentId");
-    params.delete("billing");
-    const cleaned = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
-    window.history.replaceState({}, "", cleaned);
 
-    let cancelled = false;
     void (async () => {
       const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       try {
         for (let attempt = 0; attempt < 8; attempt += 1) {
-          if (cancelled) return;
           if (attempt > 0) {
             await sleep(Math.min(6_000, 1_200 * 2 ** Math.min(attempt - 1, 2)));
           }
@@ -5396,8 +5414,12 @@ export function StudioShell({
             if (/sign in|not authenticated|unauthorized/i.test(message)) continue;
             throw error;
           }
-          if (cancelled) return;
           if (result.status === "payment_completed") {
+            try {
+              window.sessionStorage.removeItem(STUDIO_WAM_RETURN_KEY);
+            } catch {
+              /* ignore */
+            }
             setPaymentCelebration({
               phase: "success",
               amountCents: result.amountCents ?? null,
@@ -5410,21 +5432,29 @@ export function StudioShell({
             result.status === "rejected" ||
             result.status === "checkout_failed"
           ) {
+            try {
+              window.sessionStorage.removeItem(STUDIO_WAM_RETURN_KEY);
+            } catch {
+              /* ignore */
+            }
             setPaymentCelebration(null);
             toast.error(result.status === "cancelled" ? "Payment cancelled" : "Payment not completed");
             return;
           }
         }
-        setPaymentCelebration(null);
+        try {
+          window.sessionStorage.removeItem(STUDIO_WAM_RETURN_KEY);
+        } catch {
+          /* ignore */
+        }
+        setPaymentCelebration({ phase: "success" });
       } catch {
         setPaymentCelebration(null);
+        toast.error("Could not confirm payment — check Billing in a moment");
       }
     })();
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot Wam billing return after auth
-  }, [currentUser?._id, syncWamPayment]);
+  }, [currentUser?._id]);
 
   /** @deprecated Use openNetworkTab — kept for call-site compatibility. */
   function openOffersTab(_section = "home") {
@@ -35099,14 +35129,6 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
     isAcademy && celebration?.academyUnlocked !== false
       ? "Course unlocked"
       : "Payment received";
-  const successCopy =
-    isAcademy && celebration?.academyUnlocked !== false
-      ? amountLabel
-        ? `${amountLabel} topped up. Your course is unlocked.`
-        : "Your course is unlocked."
-      : amountLabel
-        ? `${amountLabel} was added to your account.`
-        : "Your Studio balance has been updated.";
 
   return (
     <div
@@ -35125,9 +35147,14 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
         <h2 id="studio-payment-celebration-title" className="studio-payment-celebration-title">
           {phase === "success" ? successTitle : "Confirming payment"}
         </h2>
+        {phase === "success" && amountLabel ? (
+          <p className="studio-wam-handoff-amount">{amountLabel}</p>
+        ) : null}
         <p className="studio-payment-celebration-copy">
           {phase === "success"
-            ? successCopy
+            ? isAcademy && celebration?.academyUnlocked !== false
+              ? "Your course is unlocked."
+              : "Added to your account."
             : isAcademy
               ? "Hang tight. We're verifying Wam and unlocking your course."
               : "Hang tight. We're verifying your payment."}
@@ -35330,6 +35357,7 @@ function SettingsWorkspacePane({
     Number.isFinite(customAmountCents) && customAmountCents >= minAmountCents
       ? Math.round((customAmountCents * (100 - topUpDiscountPercent)) / 100)
       : 0;
+  const topUpSaveCents = Math.max(0, customAmountCents - topUpChargeCents);
   const paywiseFeeCents =
     topUpChargeCents > 0 ? paywiseCardFeeCents(topUpChargeCents) : 0;
   const paywiseTotalCents =
@@ -35568,7 +35596,6 @@ function SettingsWorkspacePane({
                     {liveSubscription?.planName
                       ? `${liveSubscription.planName} · ${liveSubscription.interval === "year" ? "annual" : "monthly"}${liveSubscription.status === "past_due" ? " · payment due" : ""}`
                       : "Plan active"}
-                    . Extra balance uses the same plan discount.
                   </p>
                 ) : (
                   <p className="studio-settings-topup-locked">
@@ -35631,10 +35658,12 @@ function SettingsWorkspacePane({
                         <dt>Add to account</dt>
                         <dd>{formatTtdCents(customAmountCents)}</dd>
                       </div>
-                      {topUpDiscountPercent > 0 ? (
-                        <div className="studio-academy-checkout-row is-muted">
-                          <dt>Plan discount ({topUpDiscountPercent}%)</dt>
-                          <dd>{formatTtdCents(topUpChargeCents)}</dd>
+                      {topUpDiscountPercent > 0 && topUpSaveCents > 0 ? (
+                        <div className="studio-academy-checkout-row is-discount">
+                          <dt>
+                            {liveSubscription?.planName || "Plan"} · {topUpDiscountPercent}% off
+                          </dt>
+                          <dd>−{formatTtdCents(topUpSaveCents)}</dd>
                         </div>
                       ) : null}
                       {paywiseFeeCents > 0 ? (

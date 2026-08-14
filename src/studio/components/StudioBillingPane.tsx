@@ -267,6 +267,7 @@ function BillingTopUp({
     Number.isFinite(customAmountCents) && customAmountCents >= minAmountCents
       ? Math.round((customAmountCents * (100 - topUpDiscountPercent)) / 100)
       : 0;
+  const topUpSaveCents = Math.max(0, customAmountCents - topUpChargeCents);
   const paywiseFeeCents = topUpChargeCents > 0 ? paywiseCardFeeCents(topUpChargeCents) : 0;
   const paywiseTotalCents = topUpChargeCents > 0 ? paywiseCheckoutTotalCents(topUpChargeCents) : 0;
 
@@ -338,7 +339,6 @@ function BillingTopUp({
       <div className="studio-billing-intro">
         <p className="studio-billing-kicker">Billing</p>
         <h1>Add extra balance</h1>
-        <p>On a plan, extra top-up uses the same discount.</p>
       </div>
       <div className="studio-billing-topup">
         <div className="studio-billing-current">
@@ -418,10 +418,12 @@ function BillingTopUp({
                   <dt>Add to account</dt>
                   <dd>{formatTtdCents(customAmountCents)}</dd>
                 </div>
-                {topUpDiscountPercent > 0 ? (
-                  <div className="studio-academy-checkout-row is-muted">
-                    <dt>Plan discount ({topUpDiscountPercent}%)</dt>
-                    <dd>{formatTtdCents(topUpChargeCents)}</dd>
+                {topUpDiscountPercent > 0 && topUpSaveCents > 0 ? (
+                  <div className="studio-academy-checkout-row is-discount">
+                    <dt>
+                      {liveSubscription?.planName || "Plan"} · {topUpDiscountPercent}% off
+                    </dt>
+                    <dd>−{formatTtdCents(topUpSaveCents)}</dd>
                   </div>
                 ) : null}
                 {paywiseFeeCents > 0 ? (
