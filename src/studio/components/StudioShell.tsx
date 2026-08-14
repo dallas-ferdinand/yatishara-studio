@@ -9792,8 +9792,11 @@ export function StudioShell({
           .studio-polish .studio-chat-stream {
             padding-inline: max(10px, env(safe-area-inset-left, 0px)) max(10px, env(safe-area-inset-right, 0px));
           }
-          .studio-polish .studio-element-detail {
+          .studio-polish .studio-element-detail:not(.is-mobile-fill) {
             padding-inline: max(12px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px));
+          }
+          .studio-polish .studio-element-detail.is-mobile-fill {
+            padding-inline: 0;
           }
         }
         [data-studio-bg-family="animated"] .studio-polish,
@@ -17777,25 +17780,23 @@ export function StudioShell({
         .studio-composer-media-rail {
           display: flex;
           flex-wrap: wrap;
-          gap: 10px 12px;
+          gap: 8px;
           padding: 8px 10px 2px;
         }
         .studio-composer-media-tile {
           position: relative;
-          width: 58px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 4px;
+          width: 88px;
         }
         .studio-composer-media-tile-frame {
-          width: 48px;
-          height: 48px;
+          position: relative;
+          display: block;
+          width: 88px;
+          height: 88px;
           padding: 0;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
-          border-radius: 12px;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: 10px;
           overflow: hidden;
-          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--color-cursor-hover));
+          background: color-mix(in srgb, var(--mos-text-bright, #fff) 3.5%, var(--mos-bg, var(--color-cursor-bg)));
           cursor: pointer;
         }
         .studio-composer-media-tile-frame img,
@@ -17813,32 +17814,21 @@ export function StudioShell({
           color: var(--color-cursor-text);
         }
         .studio-composer-media-tile-tag {
-          max-width: 58px;
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 1;
+          padding: 14px 6px 6px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          font-size: 9px;
+          font-size: 10px;
+          font-weight: 600;
           line-height: 1.2;
-          color: var(--color-cursor-text);
-        }
-        .studio-composer-media-tile-remove {
-          position: absolute;
-          top: -6px;
-          right: -6px;
-          width: 16px;
-          height: 16px;
-          padding: 0;
-          border: 0;
-          border-radius: 999px;
-          display: grid;
-          place-items: center;
-          background: var(--color-cursor-panel);
-          color: var(--color-cursor-text);
-          cursor: pointer;
-        }
-        .studio-composer-media-tile-remove svg {
-          width: 10px;
-          height: 10px;
+          color: #fff;
+          background: linear-gradient(to top, rgba(0, 0, 0, 0.72), transparent);
+          pointer-events: none;
         }
         .studio-composer-mention-menu {
           position: fixed;
@@ -21339,12 +21329,63 @@ export function StudioShell({
           -webkit-backdrop-filter: none;
           isolation: isolate;
         }
-        .studio-element-detail.is-split {
+        .studio-element-detail.is-split,
+        .studio-element-detail.is-mobile-fill {
           flex-direction: row;
           align-items: stretch;
           justify-content: stretch;
           overflow: hidden;
           padding: 0;
+        }
+        .studio-element-detail.is-mobile-fill {
+          flex-direction: column;
+        }
+        .studio-element-detail-fields {
+          flex: 0 0 auto;
+          display: flex;
+          flex-direction: column;
+        }
+        .studio-element-detail.is-mobile-fill .studio-element-detail-title,
+        .studio-element-detail.is-mobile-fill .studio-element-detail-notes {
+          width: 100%;
+          min-height: 40px;
+          margin: 0;
+          padding: 10px 12px;
+          border: 0;
+          border-radius: 0;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          background: transparent;
+          box-shadow: none;
+          font-size: 13px;
+          font-weight: 500;
+          line-height: 1.3;
+        }
+        .studio-element-detail.is-mobile-fill .studio-element-detail-title:focus,
+        .studio-element-detail.is-mobile-fill .studio-element-detail-notes:focus,
+        .studio-element-detail.is-mobile-fill .studio-element-detail-title:focus-visible,
+        .studio-element-detail.is-mobile-fill .studio-element-detail-notes:focus-visible {
+          outline: none;
+          box-shadow: none;
+        }
+        .studio-element-detail.is-mobile-fill .studio-element-detail-notes {
+          min-height: 72px;
+          resize: none;
+        }
+        .studio-element-detail-bar {
+          flex: 0 0 auto;
+          display: grid;
+          gap: 8px;
+          padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+          border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+        }
+        .studio-element-detail.is-mobile-fill .studio-element-detail-file-actions.studio-gen-detail-actions {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          margin: 0;
+          padding: 0;
+        }
+        .studio-element-detail.is-mobile-fill .studio-element-detail-stage {
+          flex: 1 1 0;
+          min-height: 0;
         }
         .studio-element-detail-stage {
           position: relative;
@@ -21386,10 +21427,12 @@ export function StudioShell({
           cursor: pointer;
         }
         .studio-element-detail-stage-empty:hover,
-        .studio-element-detail.is-split.is-drop-target .studio-element-detail-stage-empty {
+        .studio-element-detail.is-split.is-drop-target .studio-element-detail-stage-empty,
+        .studio-element-detail.is-mobile-fill.is-drop-target .studio-element-detail-stage-empty {
           color: var(--color-cursor-text);
         }
-        .studio-element-detail.is-split.is-drop-target .studio-element-detail-stage::after {
+        .studio-element-detail.is-split.is-drop-target .studio-element-detail-stage::after,
+        .studio-element-detail.is-mobile-fill.is-drop-target .studio-element-detail-stage::after {
           content: "";
           position: absolute;
           inset: 10px;
@@ -28223,7 +28266,7 @@ function StudioComposer({
                   <button
                     type="button"
                     className="studio-composer-media-tile-frame"
-                    title={tag}
+                    title={`${tag} — remove the tag in the prompt to detach`}
                     onClick={() => setPreviewAttachment(item)}
                   >
                     {item.kind === "video" && (item.mediaUrl || thumb) ? (
@@ -28233,23 +28276,7 @@ function StudioComposer({
                     ) : (
                       <span className="studio-composer-media-tile-fallback">@</span>
                     )}
-                  </button>
-                  <span className="studio-composer-media-tile-tag">{tag}</span>
-                  <button
-                    type="button"
-                    className="studio-composer-media-tile-remove"
-                    aria-label={`Remove ${tag}`}
-                    onClick={() => {
-                      setAttachments((items) => items.filter((row) => row.id !== item.id));
-                      const editor = editorRef.current;
-                      if (!editor) return;
-                      editor
-                        .querySelectorAll(`.studio-inline-tag[data-attachment-id="${CSS.escape(item.id)}"]`)
-                        .forEach((node) => node.remove());
-                      pushDraftToParent(readComposerEditorText(editor), { immediate: true });
-                    }}
-                  >
-                    <X aria-hidden="true" />
+                    <span className="studio-composer-media-tile-tag">{tag}</span>
                   </button>
                 </div>
               );
@@ -33424,8 +33451,6 @@ function StudioElementDetailPane({
   }
 
   const media = (isStyleSheet ? sourceAssets : sourceAssets.slice(0, 1))[0] ?? null;
-  const previewUrl = media?.thumbnailUrl ?? media?.mediaUrl;
-  const isVideo = media?.kind === "video";
   const removeLabel =
     media?.kind === "video" ? "Remove video" : media?.kind === "audio" ? "Remove audio" : "Remove image";
   const fields = (
@@ -33536,54 +33561,30 @@ function StudioElementDetailPane({
 
   return (
     <div
-      className="studio-element-detail"
+      className={`studio-element-detail is-mobile-fill${dragOver ? " is-drop-target" : ""}`}
       data-drop-target="composer"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="studio-element-detail-form">
-        {fields}
-        <div
-          className={`studio-element-detail-file${media ? " has-media" : ""}${dragOver ? " is-drop-target" : ""}`}
-          role="button"
-          tabIndex={0}
-          onClick={() => {
-            if (!uploading) inputRef.current?.click();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
+      <div className="studio-element-detail-fields">{fields}</div>
+      <div className="studio-element-detail-stage">
+        {media ? (
+          <StudioAssetPreview key={media.studioId} entry={media} initialScale={1} />
+        ) : (
+          <button
+            type="button"
+            className="studio-element-detail-stage-empty"
+            onClick={() => {
               if (!uploading) inputRef.current?.click();
-            }
-          }}
-        >
-          {media ? (
-            isVideo ? (
-              <video src={media.mediaUrl} poster={isVideoFileUrl(previewUrl) ? undefined : previewUrl} muted playsInline />
-            ) : previewUrl ? (
-              <img src={previewUrl} alt="" />
-            ) : (
-              <span className="studio-element-detail-file-empty">{uploading ? "Uploading…" : "Image or video"}</span>
-            )
-          ) : (
-            <span className="studio-element-detail-file-empty">{uploading ? "Uploading…" : "Drop or click"}</span>
-          )}
-          {media ? (
-            <button
-              type="button"
-              className="studio-element-detail-file-clear"
-              aria-label={removeLabel}
-              onClick={(event) => {
-                event.stopPropagation();
-                void removeMedia(media.studioId);
-              }}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
-        </div>
+            }}
+          >
+            {uploading ? "Uploading…" : "Drop or click"}
+          </button>
+        )}
+      </div>
+      <div className="studio-element-detail-bar">
         {fileActions}
         {fileInput}
         {error ? <p className="studio-element-detail-error">{error}</p> : null}
