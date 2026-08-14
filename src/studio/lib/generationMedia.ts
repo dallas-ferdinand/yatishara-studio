@@ -1,7 +1,7 @@
 import { isBunnyOptimizedUrl } from "./mediaUrls";
 import {
   composerAssetTag,
-  composerElementTag,
+  elementStemFromDisplayName,
   orderKindsForSeedance,
   type SeedanceMediaKind,
 } from "./seedanceReferences";
@@ -39,7 +39,7 @@ export function attachmentComposerTag(attachment: {
   filename?: string;
 }): string {
   if (attachment.studioKind === "element") {
-    return composerElementTag(attachment.label || attachment.filename || "element");
+    return elementStemFromDisplayName(attachment.label || attachment.filename || "element");
   }
   return composerAssetTag(attachment.filename || attachment.label || "file");
 }

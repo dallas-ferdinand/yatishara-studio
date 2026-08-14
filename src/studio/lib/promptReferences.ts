@@ -1,6 +1,6 @@
 import {
   composerAssetTag,
-  composerElementTag,
+  elementStemFromDisplayName,
 } from "./seedanceReferences";
 
 /**
@@ -329,13 +329,13 @@ export function collectPromptAtTags(text: string): string[] {
 function findElement(elements: ElementLike[], idOrTag: string): ElementLike | null {
   const key = String(idOrTag ?? "").trim();
   if (!key) return null;
-  const tag = composerElementTag(key);
+  const tag = elementStemFromDisplayName(key);
   return (
     (elements ?? []).find(
       (row) =>
         row._id === key ||
         row.studioId === key ||
-        composerElementTag(row.name ?? "") === tag,
+        elementStemFromDisplayName(row.name ?? "") === tag,
     ) ?? null
   );
 }
@@ -346,7 +346,7 @@ function elementToAttachmentDraft(
 ): PromptAttachmentDraft | null {
   const id = String(element._id || element.studioId || "").trim();
   if (!id) return null;
-  const tag = composerElementTag(label || element.name || id);
+  const tag = elementStemFromDisplayName(label || element.name || id);
   return {
     id: `element:${id}`,
     kind: "context",

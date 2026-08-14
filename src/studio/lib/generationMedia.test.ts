@@ -65,5 +65,11 @@ describe("generationMedia", () => {
     expect(
       attachmentComposerTag({ studioKind: "element", label: "@baseball-shot" }),
     ).toBe("baseball-shot");
+    expect(
+      attachmentComposerTag({
+        studioKind: "element",
+        filename: "untitled.element",
+      }),
+    ).toBe("untitled");
   });
 });

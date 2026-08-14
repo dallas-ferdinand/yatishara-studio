@@ -47,6 +47,36 @@ export function composerElementTag(name: string): string {
   return slugComposerTag(name).toLowerCase();
 }
 
+/** Stored element id / @tag from a Files name (`untitled.element`, `@Foo Bar`). */
+export function elementStemFromDisplayName(name: string): string {
+  return composerElementTag(String(name ?? "").replace(/\.element$/i, ""));
+}
+
+export function elementFileName(stem: string): string {
+  const id = elementStemFromDisplayName(stem);
+  return `${!id || id === "ref" ? "untitled" : id}.element`;
+}
+
+/** Hyphen unique ids — never `untitled 2.element`. */
+export function uniqueElementStem(
+  taken: Iterable<string>,
+  base = "untitled",
+): string {
+  const used = new Set<string>();
+  for (const item of taken) {
+    const stem = elementStemFromDisplayName(item);
+    if (stem && stem !== "ref") used.add(stem);
+  }
+  const raw = elementStemFromDisplayName(base);
+  const seed = !raw || raw === "ref" ? "untitled" : raw;
+  if (!used.has(seed)) return seed;
+  for (let n = 2; n < 500; n += 1) {
+    const next = `${seed}-${n}`;
+    if (!used.has(next)) return next;
+  }
+  return `${seed}-${Date.now()}`;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

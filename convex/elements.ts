@@ -171,13 +171,6 @@ export const create = authedMutation({
     if (args.sourceDocumentId) {
       await requireDocumentOwner(ctx, args.sourceDocumentId);
     }
-    if (
-      args.type !== "style_sheet" &&
-      args.type !== "doc" &&
-      referenceAssetIds.length < 1
-    ) {
-      throw new Error("Attach an image or video to this element.");
-    }
     const now = Date.now();
     const name =
       args.type === "style_sheet"

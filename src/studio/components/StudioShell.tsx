@@ -237,7 +237,10 @@ import {
 import {
   composerAssetTag,
   composerElementTag,
+  elementFileName,
+  elementStemFromDisplayName,
   orderKindsForSeedance,
+  uniqueElementStem,
 } from "@/studio/lib/seedanceReferences";
 import {
   composerAtQuery,
@@ -602,6 +605,7 @@ const CREATE_MENU_ITEMS_BASE = [
   { action: "upload", label: "Upload media", icon: Upload },
   { action: "new-folder", label: "Folder", icon: Plus },
   { action: "new-file", label: "Script", icon: FileText },
+  { action: "new-element", label: "Element", icon: Package },
   { action: "new-video-edit", label: "Video edit", icon: Clapperboard, previewOnly: true },
 ];
 
@@ -5100,25 +5104,37 @@ export function StudioShell({
         return;
       }
       if (kind === "element") {
-        const displayName = uniqueName("@Untitled", exists);
-        const name = displayName.replace(/^@/, "");
+        const taken = new Set(exists);
+        for (const el of elements ?? []) {
+          if (el.deletedAt || el.type === "style_sheet") continue;
+          taken.add(el.name);
+        }
+        const stem = uniqueElementStem(taken);
         const id = await createElement({
           folderId: parentFolder._id,
-          type: "character",
-          name,
+          type: "prop",
+          name: stem,
         });
-        const entry = {
-          type: "file",
-          studioKind: "element",
-          studioId: id,
-          name: displayName,
-          path: `/Studio/elements/${id}.element`,
-        };
+        const entry = elementToEntry(
+          {
+            _id: id,
+            name: stem,
+            type: "prop",
+            folderId: parentFolder._id,
+            updatedAt: wallClockMs(),
+          },
+          [],
+        );
         setPendingInlineEntry(entry);
+        setTabEntrySnapshots((snapshots) => ({
+          ...snapshots,
+          [`element:${id}`]: entry,
+        }));
         setRecentFileRows(
           recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
         );
-        beginInlineRename(id, { pinToTop: true });
+        openTab(`element:${id}`);
+        if (isMobile) setMobileSection("composer");
         return;
       }
     } catch (error) {
@@ -5154,7 +5170,7 @@ export function StudioShell({
         : target.studioKind === "videoEdit"
           ? stripStudioProjectExt(String(target.name ?? ""))
           : target.studioKind === "element"
-            ? String(target.name ?? "").replace(/^@/, "")
+            ? elementStemFromDisplayName(target.name)
             : String(target.name ?? "");
     if (trimmed === seed) return;
     try {
@@ -5182,12 +5198,14 @@ export function StudioShell({
       void createInlineStudioItem("videoEdit");
       return;
     }
+    if (action === "new-element") {
+      void createInlineStudioItem("element");
+      return;
+    }
   }
 
   function openElementCreateInComposer() {
-    if (isMobile) setMobileSection("composer");
-    openTab(COMPOSER_TAB);
-    setMode("element");
+    void createInlineStudioItem("element");
   }
 
   function openSettingsTab(section = "general") {
@@ -6667,7 +6685,12 @@ export function StudioShell({
         name: stripStudioProjectExt(trimmed),
       });
     } else if (entry.studioKind === "element") {
-      await updateElement({ elementId: entry.studioId, name: trimmed });
+      const tag = elementStemFromDisplayName(trimmed);
+      if (!tag || tag === "ref") {
+        toast.error("Give the element a unique title (letters, numbers, dashes).");
+        return;
+      }
+      await updateElement({ elementId: entry.studioId, name: tag });
     } else {
       return;
     }
@@ -6680,7 +6703,9 @@ export function StudioShell({
               ? `${trimmed.replace(/\.md$/i, "")}.md`
               : entry.studioKind === "videoEdit"
                 ? withStudioProjectExt(trimmed)
-                : trimmed,
+                : entry.studioKind === "element"
+                  ? elementFileName(trimmed)
+                  : trimmed,
         },
         explorerUserId,
         RECENT_ACTIVITY.edited,
@@ -6693,7 +6718,7 @@ export function StudioShell({
     if (tabKey) {
       const displayName =
         entry.studioKind === "element"
-          ? `@${trimmed.replace(/^@/, "")}`
+          ? elementFileName(trimmed)
           : entry.studioKind === "videoEdit"
             ? withStudioProjectExt(trimmed)
             : entry.studioKind === "document"
@@ -6798,24 +6823,34 @@ export function StudioShell({
 
   async function updateElementDetails(entry, values) {
     if (!entry?.studioId || !values?.name?.trim()) return;
+    const tag = elementStemFromDisplayName(values.name);
+    if (!tag || tag === "ref") {
+      throw new Error("Give the element a unique title (letters, numbers, dashes).");
+    }
     await updateElement({
       elementId: entry.studioId,
-      name: values.name.trim(),
+      name: tag,
       description: values.description?.trim() || undefined,
       styleRules: values.styleRules?.trim() || undefined,
       renderMode: values.renderMode,
       referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
     });
+    const refs = values.referenceAssets ?? values.sourceAssets ?? entry.referenceAssets;
     const nextEntry = {
       ...entry,
-      name: `@${values.name.trim()}`,
+      name: elementFileName(tag),
       description: values.description?.trim() || undefined,
       styleRules: values.styleRules?.trim() || undefined,
       renderMode: values.renderMode ?? entry.renderMode,
       referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
-      referenceAssets: values.referenceAssets ?? values.sourceAssets ?? entry.referenceAssets,
+      referenceAssets: refs,
       sheetAsset: values.sheetAsset ?? entry.sheetAsset,
-      buildStatus: values.sheetAsset || entry.sheetAsset ? "built" : "unbuilt",
+      buildStatus:
+        values.sheetAsset || entry.sheetAsset
+          ? "built"
+          : (values.referenceAssetIds ?? values.sourceAssetIds ?? []).length || refs?.length
+            ? "ready"
+            : "unbuilt",
     };
     setTabEntrySnapshots((snapshots) => ({
       ...snapshots,
@@ -21367,6 +21402,16 @@ export function StudioShell({
           font-size: 12px;
           line-height: 1.5;
         }
+        .studio-element-detail-textarea.is-notes {
+          min-height: 96px;
+          font-family: inherit;
+          font-size: 13px;
+        }
+        .studio-element-detail-tag {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--cursor-accent);
+        }
         .studio-element-detail-input:focus,
         .studio-element-detail-textarea:focus {
           border-color: color-mix(in srgb, var(--cursor-accent) 55%, var(--color-cursor-border-soft));
@@ -33101,8 +33146,29 @@ function elementAssetOpenable(asset) {
   return kind === "image" || kind === "video" || kind === "audio";
 }
 
+function liveMediaReady(assets) {
+  return (assets ?? []).some((asset) => elementAssetOpenable(asset));
+}
+
+function displayElementStem(name) {
+  const stem = elementStemFromDisplayName(name);
+  return !stem || stem === "ref" ? "" : stem;
+}
+
+function slugElementTitleInput(raw) {
+  return String(raw ?? "")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]+/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^[-.]+/, "")
+    .toLowerCase();
+}
+
 function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, onBuildSheet, stylePresets, onUploadElementFiles, onOpenEntry, onTrash }) {
-  const [name, setName] = useState(entry.name.replace(/^@/, ""));
+  const isStyleSheet = entry.elementType === "style_sheet";
+  const [name, setName] = useState(() =>
+    isStyleSheet ? String(entry.name ?? "").replace(/^@/, "").replace(/\.element$/i, "") : displayElementStem(entry.name),
+  );
   const [description, setDescription] = useState(entry.description ?? "");
   const [styleRules, setStyleRules] = useState(entry.styleRules ?? "");
   const [renderMode, setRenderMode] = useState(entry.renderMode ?? "mixed");
@@ -33115,9 +33181,15 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
   const [message, setMessage] = useState("");
   const inputRef = useRef(null);
   const sheetLabel = elementSheetLabel(entry.elementType);
+  const titleStem = isStyleSheet ? name.trim() : displayElementStem(name);
+  const promptTag = titleStem || "untitled";
 
   useEffect(() => {
-    setName(entry.name.replace(/^@/, ""));
+    setName(
+      entry.elementType === "style_sheet"
+        ? String(entry.name ?? "").replace(/^@/, "").replace(/\.element$/i, "")
+        : displayElementStem(entry.name),
+    );
     setDescription(entry.description ?? "");
     setStyleRules(entry.styleRules ?? "");
     setRenderMode(entry.renderMode ?? "mixed");
@@ -33126,20 +33198,24 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
     setMessage("");
   }, [assets, entry]);
 
+  async function persist(nextAssets = sourceAssets, nextName = name, nextDescription = description) {
+    await onUpdate(entry, {
+      name: nextName,
+      description: nextDescription,
+      styleRules: isStyleSheet ? styleRules : undefined,
+      renderMode: isStyleSheet ? renderMode : undefined,
+      referenceAssetIds: nextAssets.map((asset) => asset.studioId).filter(Boolean),
+      referenceAssets: nextAssets,
+      sheetAsset: entry.sheetAsset,
+    });
+  }
+
   async function save() {
     if (!name.trim()) return;
     setSaving(true);
     setMessage("");
     try {
-      await onUpdate(entry, {
-        name,
-        description,
-        styleRules: entry.elementType === "style_sheet" ? styleRules : undefined,
-        renderMode: entry.elementType === "style_sheet" ? renderMode : undefined,
-        referenceAssetIds: sourceAssets.map((asset) => asset.studioId).filter(Boolean),
-        referenceAssets: sourceAssets,
-        sheetAsset: entry.sheetAsset,
-      });
+      await persist();
       setMessage("Saved.");
     } catch (error) {
       setMessage(friendlyConvexError(error, "Could not save element."));
@@ -33149,18 +33225,21 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
   }
 
   async function upload(files) {
-    if (!files?.length) return;
+    const picked = isStyleSheet ? files : files?.[0] ? [files[0]] : [];
+    if (!picked?.length) return;
     setUploading(true);
     setMessage("");
     try {
-      const uploaded = await onUploadElementFiles(files);
+      const uploaded = await onUploadElementFiles(picked);
       const nextAssets = (uploaded ?? []).map(uploadedElementAssetToEntry);
-      setSourceAssets(entry.elementType === "style_sheet" ? (items) => [...items, ...nextAssets] : nextAssets);
-      setMessage(
-        entry.elementType === "style_sheet"
-          ? "Media added. Save to keep it on this element."
-          : "Media swapped. Save to keep it on this element.",
-      );
+      const merged = isStyleSheet ? [...sourceAssets, ...nextAssets] : nextAssets;
+      setSourceAssets(merged);
+      if (!isStyleSheet) {
+        await persist(merged);
+        setMessage("Media saved.");
+      } else {
+        setMessage("Media added. Save to keep it on this element.");
+      }
     } catch (error) {
       setMessage(friendlyConvexError(error, "Upload failed."));
     } finally {
@@ -33192,14 +33271,14 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
 
   const draftEntry = {
     ...entry,
-    name: `@${name.trim() || entry.name.replace(/^@/, "")}`,
+    name: isStyleSheet ? name.trim() : elementFileName(promptTag),
     description,
-    styleRules: entry.elementType === "style_sheet" ? styleRules : undefined,
-    renderMode: entry.elementType === "style_sheet" ? renderMode : undefined,
+    styleRules: isStyleSheet ? styleRules : undefined,
+    renderMode: isStyleSheet ? renderMode : undefined,
     referenceAssetIds: sourceAssets.map((asset) => asset.studioId).filter(Boolean),
     referenceAssets: sourceAssets,
     sheetAsset: sheetPreview ?? resolveElementSheetAsset(entry, assets),
-    buildStatus: sheetPreview || entry.sheetAssetId ? "built" : "unbuilt",
+    buildStatus: sheetPreview || entry.sheetAssetId ? "built" : liveMediaReady(sourceAssets) ? "ready" : "unbuilt",
   };
   const sheetAsset = draftEntry.sheetAsset;
   const liveMedia =
@@ -33217,25 +33296,29 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
       <div className="studio-element-detail">
         <section className="studio-element-detail-hero">
           <div className="studio-element-detail-hero-copy">
-            <p className="studio-section-kicker">{entry.kindLabel}</p>
-            <h2>{entry.name}</h2>
+            <p className="studio-section-kicker">{isStyleSheet ? entry.kindLabel : "Element"}</p>
+            <h2>{isStyleSheet ? name || entry.name : `${promptTag}.element`}</h2>
             <p>
-              Unique title, optional notes, and one image or video. Type @{entry.name.replace(/^@/, "")} in Create to attach it. Seedance gets this file, not a thumbnail.
+              {isStyleSheet
+                ? "Style rules and mood refs for this look."
+                : `Unique id, no spaces. Type @${promptTag} in Create to attach it. Seedance gets this file, not a thumbnail.`}
             </p>
             <p className="studio-element-detail-status">
               Status: {liveMedia || sheetAsset ? "Ready — media will be sent with @tag" : "Add an image or video"}
             </p>
           </div>
           <div className="studio-element-detail-actions">
-            <button
-              type="button"
-              className={STYLE.iconButton}
-              disabled={buildingSheet || (!sourceAssets.length && !description.trim() && !styleRules.trim())}
-              onClick={() => void buildSheet()}
-            >
-              {buildingSheet ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-              {buildingSheet ? "Building..." : `Build ${sheetLabel}`}
-            </button>
+            {isStyleSheet ? (
+              <button
+                type="button"
+                className={STYLE.iconButton}
+                disabled={buildingSheet || (!sourceAssets.length && !description.trim() && !styleRules.trim())}
+                onClick={() => void buildSheet()}
+              >
+                {buildingSheet ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                {buildingSheet ? "Building..." : `Build ${sheetLabel}`}
+              </button>
+            ) : null}
             <button className={STYLE.iconButton} onClick={() => onAttach(draftEntry)}>
               <Plus className="h-3.5 w-3.5" />
               Use in request
@@ -33282,22 +33365,7 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
           <section className="studio-element-detail-card">
             <p className="studio-admin-card-kicker">Details</p>
             <div className="studio-element-detail-fields">
-              {entry.elementType !== "style_sheet" ? (
-                <label className="studio-element-detail-field">
-                  Sheet style
-                  <select
-                    className="studio-element-detail-input"
-                    value={stylePresetSlug}
-                    onChange={(event) => setStylePresetSlug(event.target.value)}
-                  >
-                    {(stylePresets ?? []).map((preset) => (
-                      <option key={preset._id} value={preset.slug}>
-                        {preset.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
+              {isStyleSheet ? (
                 <label className="studio-element-detail-field">
                   Render mode
                   <select
@@ -33311,16 +33379,25 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
                     <option value="mixed">Mixed</option>
                   </select>
                 </label>
-              )}
+              ) : null}
               <label className="studio-element-detail-field">
-                Name
+                Title
                 <input
                   className="studio-element-detail-input"
                   value={name}
-                  onChange={(event) => setName(event.target.value)}
+                  onChange={(event) =>
+                    setName(isStyleSheet ? event.target.value : slugElementTitleInput(event.target.value))
+                  }
+                  placeholder="product-shot"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                 />
+                {!isStyleSheet ? (
+                  <span className="studio-element-detail-tag">@{promptTag}</span>
+                ) : null}
               </label>
-              {entry.elementType === "style_sheet" ? (
+              {isStyleSheet ? (
                 <label className="studio-element-detail-field">
                   Style rules
                   <textarea
@@ -33332,15 +33409,15 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
                 </label>
               ) : null}
               <label className="studio-element-detail-field">
-                {sheetLabel.charAt(0).toUpperCase() + sheetLabel.slice(1)}
+                Description (optional)
                 <textarea
-                  className="studio-element-detail-textarea"
+                  className={`studio-element-detail-textarea${isStyleSheet ? "" : " is-notes"}`}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   placeholder={
-                    entry.elementType === "style_sheet"
+                    isStyleSheet
                       ? "Optional notes — style rules above drive the visual board."
-                      : `Build a ${sheetLabel} from media, or write notes manually. Includes a ## Generation prompt section when auto-built.`
+                      : "What this is"
                   }
                 />
               </label>
@@ -33350,18 +33427,23 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
           <section className="studio-element-detail-card">
             <div className="studio-element-detail-card-head">
               <div>
-                <p className="studio-admin-card-kicker">Reference media</p>
-                <p className="studio-element-detail-hint">Images, clips, or audio that define this element.</p>
+                <p className="studio-admin-card-kicker">{isStyleSheet ? "Reference media" : "Image or video"}</p>
+                <p className="studio-element-detail-hint">
+                  {isStyleSheet
+                    ? "Images, clips, or audio that define this look."
+                    : "One file. Swap replaces it. Sent with @tag on generate."}
+                </p>
               </div>
               <button className={STYLE.iconButton} type="button" disabled={uploading} onClick={() => inputRef.current?.click()}>
                 <Upload className="h-3.5 w-3.5" />
-                {uploading ? "Uploading..." : "Upload media"}
+                {uploading ? "Uploading..." : isStyleSheet ? "Upload media" : sourceAssets.length ? "Swap file" : "Choose file"}
               </button>
               <input
                 ref={inputRef}
                 className="hidden"
                 type="file"
-                multiple
+                accept={isStyleSheet ? undefined : "image/*,video/*"}
+                multiple={isStyleSheet}
                 onChange={(event) => {
                   void upload(event.currentTarget.files);
                   event.currentTarget.value = "";
@@ -33370,7 +33452,7 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
             </div>
             {sourceAssets.length ? (
               <div className="studio-element-detail-media-grid">
-                {sourceAssets.map((asset) => {
+                {(isStyleSheet ? sourceAssets : sourceAssets.slice(0, 1)).map((asset) => {
                   const previewUrl = asset.thumbnailUrl ?? asset.mediaUrl;
                   const openable = elementAssetOpenable(asset);
                   const tileBody = (
@@ -33409,7 +33491,10 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
                       <button
                         type="button"
                         className="studio-element-detail-media-remove"
-                        onClick={() => setSourceAssets((items) => items.filter((item) => item.studioId !== asset.studioId))}
+                        onClick={() => {
+                          const next = sourceAssets.filter((item) => item.studioId !== asset.studioId);
+                          setSourceAssets(next);
+                        }}
                       >
                         Remove
                       </button>
@@ -33418,9 +33503,15 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
                 })}
               </div>
             ) : (
-              <p className="studio-element-detail-empty">
-                No media yet. Add references so this element can guide image and video generation.
-              </p>
+              <button
+                type="button"
+                className="studio-element-detail-media-stage is-clickable"
+                onClick={() => inputRef.current?.click()}
+              >
+                <span className="studio-element-detail-empty">
+                  {isStyleSheet ? "No media yet." : "Click to add an image or video."}
+                </span>
+              </button>
             )}
           </section>
         </div>
@@ -33428,7 +33519,9 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
         <footer className="studio-element-detail-footer">
           <p>{message}</p>
           <div className="studio-element-detail-actions">
-            <button className={STYLE.iconButton} onClick={() => onRename(entry)}>Rename quick</button>
+            {isStyleSheet ? (
+              <button className={STYLE.iconButton} onClick={() => onRename(entry)}>Rename quick</button>
+            ) : null}
             <button className={STYLE.iconButton} onClick={() => onTrash(entry)}>Remove</button>
           </div>
         </footer>
@@ -37692,12 +37785,16 @@ function elementToEntry(element, assets = []) {
     referenceAssets.find(
       (asset) => asset.kind === "image" || asset.kind === "video" || asset.kind === "audio",
     ) ?? sheetAsset;
+  const fileName =
+    element.type === "style_sheet"
+      ? virtualFileName(String(element.name ?? "style").replace(/^@/, ""), ".element")
+      : elementFileName(element.name);
 
   return {
     type: "file",
-    name: `@${element.name}`,
+    name: fileName,
     path: `/Studio/elements/${element._id}.element`,
-    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(`@${element.name}`, ".element")}`),
+    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(fileName, ".element")}`),
     modified: element.updatedAt,
     mtimeMs: element.updatedAt,
     ext: ".element",
@@ -38214,7 +38311,8 @@ function entryToAttachment(entry) {
       : studioKind === "document"
         ? "file"
         : "context";
-  const label = safeEntryTitle(entry);
+  const label =
+    studioKind === "element" ? elementStemFromDisplayName(entry.name) : safeEntryTitle(entry);
   const path =
     entry.path ||
     (entry.studioId
@@ -38231,7 +38329,12 @@ function entryToAttachment(entry) {
     label,
     path: path || undefined,
     displayPath: entry.displayPath ?? (path ? displayWorkspacePath(path) : label),
-    filename: typeof entry.name === "string" ? entry.name : label,
+    filename:
+      studioKind === "element"
+        ? elementFileName(label)
+        : typeof entry.name === "string"
+          ? entry.name
+          : label,
     studioKind,
     studioId: entry.studioId,
     elementType: entry.elementType,

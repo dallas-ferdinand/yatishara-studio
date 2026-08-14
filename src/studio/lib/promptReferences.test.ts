@@ -103,6 +103,17 @@ Hello
     expect(hydrated.draftWithMarkers.startsWith("\uFFFC")).toBe(true);
   });
 
+  it("hydrates @untitled.element from the element id", () => {
+    const hydrated = hydrateComposerFromText(
+      "Use @untitled.element in the shot.",
+      [],
+      [{ _id: "e9", name: "untitled", type: "prop" }],
+    );
+    expect(hydrated.attachments).toHaveLength(1);
+    expect(hydrated.attachments[0]?.studioKind).toBe("element");
+    expect(hydrated.attachments[0]?.label).toBe("untitled");
+  });
+
   it("detects prompt scripts for paste", () => {
     expect(looksLikePromptScript("just text")).toBe(false);
     expect(

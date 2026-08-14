@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   composerAssetTag,
   composerElementTag,
+  elementFileName,
+  elementStemFromDisplayName,
   normalizeOfficialSeedanceTags,
   orderKindsForSeedance,
   remapPromptToSeedanceSlots,
   seedanceSlotTag,
+  uniqueElementStem,
 } from "./seedanceReferences";
 
 describe("seedanceReferences", () => {
@@ -17,6 +20,17 @@ describe("seedanceReferences", () => {
   it("keeps filename extensions in asset tags", () => {
     expect(composerAssetTag("BC Headphones.jpeg")).toBe("BC-Headphones.jpeg");
     expect(composerElementTag("@Product Shot")).toBe("product-shot");
+    expect(elementStemFromDisplayName("untitled.element")).toBe("untitled");
+    expect(elementStemFromDisplayName("@Foo Bar.element")).toBe("foo-bar");
+    expect(elementFileName("Product Shot")).toBe("product-shot.element");
+  });
+
+  it("mints hyphen unique element ids", () => {
+    expect(uniqueElementStem([])).toBe("untitled");
+    expect(uniqueElementStem(["untitled.element", "@untitled"])).toBe("untitled-2");
+    expect(uniqueElementStem(["untitled.element", "untitled-2.element"])).toBe(
+      "untitled-3",
+    );
   });
 
   it("normalizes compact official tags", () => {

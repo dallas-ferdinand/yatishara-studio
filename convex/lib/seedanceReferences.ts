@@ -38,6 +38,11 @@ export function composerElementTag(name: string): string {
   return slugComposerTag(name).toLowerCase();
 }
 
+/** Stored element id / @tag from a Files name (`untitled.element`, `@Foo Bar`). */
+export function elementStemFromDisplayName(name: string): string {
+  return composerElementTag(String(name ?? "").replace(/\.element$/i, ""));
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
