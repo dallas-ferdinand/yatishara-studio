@@ -37,6 +37,7 @@ import {
   finalizeGatewayVideoPrompt,
 } from "./lib/videoGeneration";
 import { isDirectPromptMode } from "./lib/skipPromptEnhancement";
+import { prepareSeedanceMedia } from "./lib/seedanceReferences";
 import {
   normalizeScriptType,
   scriptDocumentTitle,
@@ -2084,21 +2085,18 @@ export const executeApprovedJob = internalAction({
           creativePrompt: extractCreativeVideoPrompt(enhancedPrompt),
           directPrompt,
         });
+        const seedance = prepareSeedanceMedia(videoPrompt, referenceInputs);
         const video = await generateVideo({
-          prompt: videoPrompt,
+          prompt: seedance.prompt,
           aspectRatio: args.aspectRatio,
           resolution: args.resolution,
           durationSeconds: args.durationSeconds,
           generateAudio: args.audioEnabled ?? false,
           modelId: job.resolvedModel,
           startFrameUrl: args.startFrameUrl,
-          referenceImageUrls,
-          referenceVideoUrls: referenceInputs
-            .filter((input) => input.kind === "video")
-            .map((input) => input.url),
-          referenceAudioUrls: referenceInputs
-            .filter((input) => input.kind === "audio")
-            .map((input) => input.url),
+          referenceImageUrls: seedance.referenceImageUrls,
+          referenceVideoUrls: seedance.referenceVideoUrls,
+          referenceAudioUrls: seedance.referenceAudioUrls,
         });
         await ctx.runMutation(markStageRef, {
           jobId: args.jobId,

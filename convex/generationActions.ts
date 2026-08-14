@@ -19,6 +19,10 @@ import {
 } from "./lib/referenceInput";
 import { isDirectPromptMode, shouldSkipPromptEnhancement } from "./lib/skipPromptEnhancement";
 import {
+  orderKindsForSeedance,
+  prepareSeedanceMedia,
+} from "./lib/seedanceReferences";
+import {
   normalizeScriptType,
   scriptDocumentTitle,
 } from "./lib/composerScriptTypes";
@@ -81,6 +85,16 @@ function referenceOnlyVideoInputs(
           candidate.kind === reference.kind && candidate.url === reference.url,
       ) === index,
   );
+}
+
+function seedanceVideoRequest(
+  prompt: string,
+  references: ReferenceInput[],
+  finalizeArgs: Parameters<typeof finalizeVideoPrompt>[1],
+) {
+  const ordered = orderKindsForSeedance(references);
+  const finalized = finalizeVideoPrompt(prompt, finalizeArgs);
+  return prepareSeedanceMedia(finalized, ordered);
 }
 
 const createQueuedJobRef = makeFunctionReference<
@@ -556,7 +570,7 @@ export const runFlow = action({
         const referenceImageUrls = referenceInputs
           .filter((input) => input.kind === "image")
           .map((input) => input.url);
-        const videoPrompt = finalizeVideoPrompt(enhancedPrompt, {
+        const seedance = seedanceVideoRequest(enhancedPrompt, referenceInputs, {
           startFrameUrl: undefined,
           referenceImageCount: referenceImageUrls.length,
           gatewayModelId: job.resolvedModel,
@@ -565,20 +579,16 @@ export const runFlow = action({
           styleSheetElementId: job.styleSheetElementId,
         });
         const video = await generateVideo({
-          prompt: videoPrompt,
+          prompt: seedance.prompt,
           aspectRatio: args.aspectRatio,
           resolution: args.resolution,
           durationSeconds: args.durationSeconds,
           generateAudio: args.audioEnabled ?? false,
           modelId: job.resolvedModel,
           startFrameUrl: undefined,
-          referenceImageUrls,
-          referenceVideoUrls: referenceInputs
-            .filter((input) => input.kind === "video")
-            .map((input) => input.url),
-          referenceAudioUrls: referenceInputs
-            .filter((input) => input.kind === "audio")
-            .map((input) => input.url),
+          referenceImageUrls: seedance.referenceImageUrls,
+          referenceVideoUrls: seedance.referenceVideoUrls,
+          referenceAudioUrls: seedance.referenceAudioUrls,
         });
         await ctx.runMutation(markStageRef, {
           jobId,
@@ -756,32 +766,26 @@ async function executeQueuedApiJob(
     });
 
     if (args.mode === "video") {
-      const referenceImageUrls = referenceInputs
-        .filter((input) => input.kind === "image")
-        .map((input) => input.url);
-      const videoPrompt = finalizeVideoPrompt(enhancedPrompt, {
+      const seedance = seedanceVideoRequest(enhancedPrompt, referenceInputs, {
         startFrameUrl: undefined,
-        referenceImageCount: referenceImageUrls.length,
+        referenceImageCount: referenceInputs.filter((input) => input.kind === "image")
+          .length,
         gatewayModelId: job.resolvedModel,
         skipPromptEnhancement: job.skipPromptEnhancement,
         presetSlug: preset.slug,
         styleSheetElementId: job.styleSheetElementId,
       });
       const video = await generateVideo({
-        prompt: videoPrompt,
+        prompt: seedance.prompt,
         aspectRatio: args.aspectRatio,
         resolution: args.resolution,
         durationSeconds: args.durationSeconds,
         generateAudio: args.audioEnabled ?? false,
         modelId: job.resolvedModel,
         startFrameUrl: undefined,
-        referenceImageUrls,
-        referenceVideoUrls: referenceInputs
-          .filter((input) => input.kind === "video")
-          .map((input) => input.url),
-        referenceAudioUrls: referenceInputs
-          .filter((input) => input.kind === "audio")
-          .map((input) => input.url),
+        referenceImageUrls: seedance.referenceImageUrls,
+        referenceVideoUrls: seedance.referenceVideoUrls,
+        referenceAudioUrls: seedance.referenceAudioUrls,
       });
       await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "saving" });
       const assetId = await saveGeneratedMedia(ctx, {

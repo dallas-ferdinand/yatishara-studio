@@ -20,7 +20,7 @@ const estimateSchema = {
   referenceElementIds: z
     .array(z.string())
     .optional()
-    .describe("Built elements — video: prop/location sheets as [Image N] refs; characters prompt-only"),
+    .describe("Elements — video: attached image/video files as @Image N / @Video N. Characters send their media too."),
   startFrameAssetId: z
     .string()
     .optional()
@@ -425,7 +425,7 @@ Rules:
       referenceElementIds: z
         .array(z.string())
         .optional()
-        .describe("Built element IDs — uses sheet image + description, not upload refs"),
+        .describe("Element IDs — uses the element's image/video file + description"),
       skipPromptEnhancement: z
         .boolean()
         .optional()
@@ -485,7 +485,7 @@ Wait ≥65s between video calls (1 req/min gateway quota). For packs use studio_
       referenceElementIds: z
         .array(z.string())
         .optional()
-        .describe("Prop + location element IDs for [Image N] refs"),
+        .describe("Element IDs — send each element's image or video as @Image N / @Video N"),
       startFrameAssetId: z
         .string()
         .optional()

@@ -227,6 +227,22 @@ import {
   looksLikePromptScript,
   parsePromptDocument,
 } from "@/studio/lib/promptReferences";
+import {
+  attachmentComposerTag,
+  generationReferenceInputs,
+  splitVideoGenerationInputs,
+  tooSmallSeedanceImageMessage,
+  elementMediaAssetId,
+} from "@/studio/lib/generationMedia";
+import {
+  composerAssetTag,
+  composerElementTag,
+  orderKindsForSeedance,
+} from "@/studio/lib/seedanceReferences";
+import {
+  composerAtQuery,
+  filterMentionCandidates,
+} from "@/studio/lib/composerMentions";
 import { threadTitleFromPrompt, collectStudioAssetIdsFromPrompt } from "@/studio/lib/studio-prompt-display.js";
 import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
@@ -3066,30 +3082,40 @@ export function StudioShell({
     if (!hasCurrentUser) return queries;
     for (const attachment of attachments) {
       if (
-        attachment?.studioKind !== "asset" ||
-        !attachment.studioId ||
-        !["image", "video", "audio"].includes(attachment.kind) ||
-        /^https?:\/\//i.test(attachment.mediaUrl ?? "")
+        attachment?.studioKind === "asset" &&
+        attachment.studioId &&
+        ["image", "video", "audio"].includes(attachment.kind)
       ) {
-        // Not a direct media asset; elements resolve via their sheet below.
-      } else {
         queries[`attachment:${attachment.id}`] = {
           query: api.assets.signedReadUrl,
-          args: { assetId: attachment.studioId, expiresUnix: assetUrlExpiresUnix },
-        };
-      }
-      if (
-        attachment.studioKind === "element" &&
-        attachment.sheetAsset?.studioId &&
-        !/^https?:\/\//i.test(attachment.sheetAsset.mediaUrl ?? "")
-      ) {
-        queries[`element-sheet:${attachment.id}`] = {
-          query: api.assets.signedReadUrl,
           args: {
-            assetId: attachment.sheetAsset.studioId,
+            assetId: attachment.studioId,
             expiresUnix: assetUrlExpiresUnix,
+            quality: 100,
           },
         };
+      }
+      if (attachment.studioKind === "element") {
+        const mediaId = elementMediaAssetId(attachment);
+        if (mediaId) {
+          queries[`element-media:${attachment.id}`] = {
+            query: api.assets.signedReadUrl,
+            args: {
+              assetId: mediaId,
+              expiresUnix: assetUrlExpiresUnix,
+              quality: 100,
+            },
+          };
+        } else if (attachment.sheetAsset?.studioId) {
+          queries[`element-sheet:${attachment.id}`] = {
+            query: api.assets.signedReadUrl,
+            args: {
+              assetId: attachment.sheetAsset.studioId,
+              expiresUnix: assetUrlExpiresUnix,
+              quality: 100,
+            },
+          };
+        }
       }
     }
     return queries;
@@ -3366,6 +3392,43 @@ export function StudioShell({
     }
     return generationReferenceInputs(attachments, attachmentMediaUrls);
   }, [attachmentMediaUrls, attachments, mode, videoGenerationInputs.referenceInputs]);
+  const composerMentionItems = useMemo(() => {
+    const items = [];
+    const seen = new Set();
+    for (const element of elements ?? []) {
+      if (element.deletedAt || element.type === "style_sheet") continue;
+      const entry = elementToEntry(element, assetLookupPool ?? []);
+      const tag = composerElementTag(element.name);
+      const id = `element:${element._id}`;
+      seen.add(id);
+      items.push({
+        id,
+        tag,
+        kind: "element",
+        label: tag,
+        thumbnailUrl: entry.thumbnailUrl,
+        mediaKind: inferAttachmentKind(entry),
+        entry,
+      });
+    }
+    for (const asset of assetLookupPool ?? []) {
+      if (asset.kind !== "image" && asset.kind !== "video") continue;
+      const id = `asset:${asset._id}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const entry = assetToEntry(asset);
+      items.push({
+        id,
+        tag: composerAssetTag(asset.name),
+        kind: "asset",
+        label: composerAssetTag(asset.name),
+        thumbnailUrl: entry.thumbnailUrl,
+        mediaKind: asset.kind,
+        entry,
+      });
+    }
+    return items;
+  }, [assetLookupPool, elements]);
   const hasVideoReferenceInput = generationReferences.some((reference) => reference.kind === "video");
   const composerReferenceFlags = useMemo(() => {
     const hasElementReference = attachments.some((attachment) => attachment.studioKind === "element");
@@ -6271,9 +6334,8 @@ export function StudioShell({
       nextHtml = baseHtml;
       nextDraft = baseDraft;
     } else if (liveEditor) {
-      // Desktop: HTML5 drop. Mobile: only called AFTER the gesture (rAF+timeout),
-      // so Range insert is safe — same caret placement as desktop.
-      insertComposerAttachmentToken(liveEditor, attachment, insertRange);
+      focusComposerEditorEnd(liveEditor);
+      insertComposerAttachmentToken(liveEditor, attachment);
       nextHtml = liveEditor.innerHTML;
       nextDraft = readComposerEditorText(liveEditor);
     } else {
@@ -6418,6 +6480,55 @@ export function StudioShell({
       recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
     );
     return id;
+  }
+
+  async function createLibraryElement({ name, description, file }) {
+    const folderId =
+      generationSaveFolderId(activeThreadId) ?? activeFolder?._id ?? null;
+    if (!folderId) {
+      throw new Error("Open a folder first so the element has a home.");
+    }
+    const tag = composerElementTag(name);
+    if (!file) throw new Error("Attach an image or video.");
+    const kind = kindFromMime(file.type);
+    if (kind !== "image" && kind !== "video") {
+      throw new Error("Elements need an image or video.");
+    }
+    const assetId = await uploadStudioAsset({
+      file,
+      folderId,
+      kind,
+      reserveUpload,
+      commitStagingUpload,
+    });
+    const id = await createElement({
+      folderId,
+      type: "prop",
+      name: tag,
+      description: String(description ?? "").trim() || undefined,
+      referenceAssetIds: [assetId],
+    });
+    const stubAsset = {
+      _id: assetId,
+      studioId: assetId,
+      name: file.name,
+      kind,
+      mimeType: file.type,
+      thumbnailUrl: kind === "image" ? URL.createObjectURL(file) : undefined,
+    };
+    const entry = elementToEntry(
+      {
+        _id: id,
+        name: tag,
+        type: "prop",
+        description,
+        referenceAssetIds: [assetId],
+        updatedAt: wallClockMs(),
+      },
+      [stubAsset, ...(assetLookupPool ?? [])],
+    );
+    attachEntry(entry);
+    return entry;
   }
 
   async function createStudioItem(values) {
@@ -7741,6 +7852,8 @@ export function StudioShell({
           filename: file.name,
           studioKind: "asset",
           studioId: assetId,
+          width: undefined,
+          height: undefined,
           thumbnailUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
         });
       }
@@ -8139,7 +8252,7 @@ export function StudioShell({
         console.warn("Prompt script asset hydrate failed", error);
       }
     }
-    return hydrateComposerFromText(text, assets);
+    return hydrateComposerFromText(text, assets, elements ?? []);
   }
 
   function mergeComposerAttachments(existing, incoming) {
@@ -8500,6 +8613,27 @@ export function StudioShell({
           : null;
       const userPrompt = buildPromptWithAttachments(liveDraft, attachments);
       const genMode = mode;
+      if (genMode === "video") {
+        const tooSmall = attachments
+          .map((item) => tooSmallSeedanceImageMessage(item))
+          .find(Boolean);
+        if (tooSmall) {
+          toast.error(tooSmall);
+          throw new Error(tooSmall);
+        }
+        const wantsMedia = attachments.some(
+          (item) =>
+            item.kind === "image" ||
+            item.kind === "video" ||
+            item.studioKind === "element",
+        );
+        if (wantsMedia && generationReferences.length === 0) {
+          const message =
+            "Reference media isn't ready — originals haven't signed yet. Wait a moment and retry.";
+          toast.error(message);
+          throw new Error(message);
+        }
+      }
 
       let threadId = reuseThreadId;
       if (!threadId) {
@@ -8712,9 +8846,7 @@ export function StudioShell({
       const y = Number(clientY) || 0;
       window.requestAnimationFrame(() => {
         window.setTimeout(() => {
-          const editor = editorRef.current;
-          const range = editor ? rangeFromPointInEditor(editor, x, y) : null;
-          attachEntryRef.current?.(snapshot, range);
+          attachEntryRef.current?.(snapshot);
         }, 0);
       });
       return true;
@@ -8734,9 +8866,7 @@ export function StudioShell({
       const x = Number(event.detail?.clientX) || 0;
       const y = Number(event.detail?.clientY) || 0;
       const attach = () => {
-        const editor = editorRef.current;
-        const range = editor ? rangeFromPointInEditor(editor, x, y) : null;
-        attachEntryRef.current?.(snapshot, range);
+        attachEntryRef.current?.(snapshot);
       };
       queueMicrotask(attach);
       window.setTimeout(attach, 0);
@@ -17587,6 +17717,165 @@ export function StudioShell({
           padding: 6px 10px 4px;
           overflow: hidden;
         }
+        .studio-composer-media-rail {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px 12px;
+          padding: 8px 10px 2px;
+        }
+        .studio-composer-media-tile {
+          position: relative;
+          width: 58px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 4px;
+        }
+        .studio-composer-media-tile-frame {
+          width: 48px;
+          height: 48px;
+          padding: 0;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
+          border-radius: 12px;
+          overflow: hidden;
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--color-cursor-hover));
+          cursor: pointer;
+        }
+        .studio-composer-media-tile-frame img,
+        .studio-composer-media-tile-frame video,
+        .studio-composer-media-tile-fallback {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .studio-composer-media-tile-fallback {
+          display: grid;
+          place-items: center;
+          font-size: 12px;
+          color: var(--color-cursor-text);
+        }
+        .studio-composer-media-tile-tag {
+          max-width: 58px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 9px;
+          line-height: 1.2;
+          color: var(--color-cursor-text);
+        }
+        .studio-composer-media-tile-remove {
+          position: absolute;
+          top: -6px;
+          right: -6px;
+          width: 16px;
+          height: 16px;
+          padding: 0;
+          border: 0;
+          border-radius: 999px;
+          display: grid;
+          place-items: center;
+          background: var(--color-cursor-panel);
+          color: var(--color-cursor-text);
+          cursor: pointer;
+        }
+        .studio-composer-media-tile-remove svg {
+          width: 10px;
+          height: 10px;
+        }
+        .studio-composer-mention-menu {
+          position: absolute;
+          left: 8px;
+          right: 8px;
+          bottom: 100%;
+          z-index: 8;
+          margin-bottom: 6px;
+          max-height: 220px;
+          overflow: auto;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: 12px;
+          background: var(--color-cursor-panel);
+          box-shadow: 0 12px 32px color-mix(in srgb, #000 28%, transparent);
+        }
+        .studio-composer-mention-item {
+          display: flex;
+          width: 100%;
+          align-items: center;
+          gap: 8px;
+          padding: 7px 10px;
+          border: 0;
+          background: transparent;
+          color: var(--color-cursor-text-bright);
+          font: inherit;
+          font-size: 12px;
+          text-align: left;
+          cursor: pointer;
+        }
+        .studio-composer-mention-item:hover,
+        .studio-composer-mention-item.is-create {
+          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+        }
+        .studio-composer-mention-item img,
+        .studio-composer-mention-item-icon {
+          width: 22px;
+          height: 22px;
+          border-radius: 6px;
+          object-fit: cover;
+          flex: 0 0 auto;
+          background: var(--cursor-overlay-subtle);
+        }
+        .studio-composer-mention-item em {
+          margin-left: auto;
+          font-style: normal;
+          font-size: 10px;
+          opacity: 0.55;
+        }
+        .studio-composer-mention-item svg {
+          width: 14px;
+          height: 14px;
+        }
+        .studio-composer-element-dialog {
+          display: grid;
+          gap: 8px;
+          margin: 8px 10px 0;
+          padding: 12px;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: 14px;
+          background: var(--color-cursor-panel);
+        }
+        .studio-composer-element-dialog strong {
+          font-size: 13px;
+        }
+        .studio-composer-element-dialog label {
+          display: grid;
+          gap: 4px;
+          font-size: 11px;
+          color: var(--color-cursor-text);
+        }
+        .studio-composer-element-dialog input,
+        .studio-composer-element-dialog textarea {
+          width: 100%;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: 8px;
+          background: transparent;
+          color: var(--color-cursor-text-bright);
+          font: inherit;
+          font-size: 13px;
+          padding: 6px 8px;
+        }
+        .studio-composer-element-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+        }
+        .studio-composer-element-actions button {
+          border: 0;
+          border-radius: 999px;
+          padding: 6px 12px;
+          font: inherit;
+          font-size: 12px;
+          cursor: pointer;
+        }
         .studio-composer-selection-layer {
           position: absolute;
           inset: 0;
@@ -26019,6 +26308,8 @@ export function StudioShell({
             onCancelAssist={undefined}
             expiresUnix={assetUrlExpiresUnix}
             onHydratePromptPaste={resolvePromptScriptHydration}
+            mentionItems={composerMentionItems}
+            onCreateElement={(values) => createLibraryElement(values)}
           />
         ) : null}
       </main>
@@ -27056,6 +27347,8 @@ function StudioComposer({
   onCancelAssist,
   expiresUnix,
   onHydratePromptPaste,
+  mentionItems = [],
+  onCreateElement,
 }) {
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const enhanceComposerDraft = useAction(api.composerEnhanceActions.enhanceComposerDraft);
@@ -27065,9 +27358,14 @@ function StudioComposer({
   const micBusyRef = useRef(false);
   const micStartedRef = useRef(0);
   const [dragOver, setDragOver] = useState(false);
-  const [dropMarker, setDropMarker] = useState(null);
   const [selectionHighlights, setSelectionHighlights] = useState([]);
   const [previewAttachment, setPreviewAttachment] = useState(null);
+  const [mentionQuery, setMentionQuery] = useState(null);
+  const [createElementOpen, setCreateElementOpen] = useState(false);
+  const [createElementName, setCreateElementName] = useState("");
+  const [createElementDescription, setCreateElementDescription] = useState("");
+  const [createElementFile, setCreateElementFile] = useState(null);
+  const [createElementBusy, setCreateElementBusy] = useState(false);
   const [presetGridOpen, setPresetGridOpen] = useState(false);
   const [videoTypeGridOpen, setVideoTypeGridOpen] = useState(false);
   const [voicePickerOpen, setVoicePickerOpen] = useState(false);
@@ -27171,6 +27469,62 @@ function StudioComposer({
       audio: media.filter((attachment) => attachment.kind === "audio").length,
     };
   }, [attachments]);
+  const railAttachments = useMemo(
+    () =>
+      orderKindsForSeedance(
+        (attachments ?? []).filter(
+          (item) =>
+            item.kind === "image" ||
+            item.kind === "video" ||
+            item.studioKind === "element",
+        ),
+      ),
+    [attachments],
+  );
+  const mentionHits = useMemo(
+    () =>
+      mentionQuery
+        ? filterMentionCandidates(mentionItems, mentionQuery.query)
+        : [],
+    [mentionItems, mentionQuery],
+  );
+
+  function syncMentionFromEditor(editor) {
+    setMentionQuery(composerAtQuery(readComposerTextBeforeCaret(editor)));
+  }
+
+  function pickMentionItem(item) {
+    const editor = editorRef.current;
+    if (!editor || !item?.entry) return;
+    deleteComposerAtQuery(editor, mentionQuery);
+    setMentionQuery(null);
+    onDropEntry(item.entry);
+  }
+
+  function openCreateElementDialog(prefill = "") {
+    setCreateElementName(prefill);
+    setCreateElementDescription("");
+    setCreateElementFile(null);
+    setCreateElementOpen(true);
+    setMentionQuery(null);
+  }
+
+  async function submitCreateElement() {
+    if (!onCreateElement) return;
+    setCreateElementBusy(true);
+    try {
+      await onCreateElement({
+        name: createElementName,
+        description: createElementDescription,
+        file: createElementFile,
+      });
+      setCreateElementOpen(false);
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Couldn't create that element."));
+    } finally {
+      setCreateElementBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!isMobile) {
@@ -27178,52 +27532,13 @@ function StudioComposer({
     }
   }, [isMobile]);
 
-  // Mobile touch-drag has no HTML5 dragover — FileTree publishes finger coords
-  // so we can drive the same pulsing drop caret desktop shows.
+  // Mobile touch-drag highlights the composer; files land on the media rail, not the caret.
   useEffect(() => {
-    let lastInComposerY = null;
-    setComposerTouchDragPreviewHandler(({ clientX, clientY, active }) => {
-      if (!active) {
-        setDragOver(false);
-        setDropMarker(null);
-        lastInComposerY = null;
-        return;
-      }
-      setDragOver(true);
-      const editor = editorRef.current;
-      let x = clientX;
-      let y = clientY;
-      if (editor) {
-        const rect = editor.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          const inside =
-            clientX >= rect.left &&
-            clientX <= rect.right &&
-            clientY >= rect.top &&
-            clientY <= rect.bottom;
-          if (inside) {
-            // Raw coords when finger is over the editor — same as desktop dragover.
-            lastInComposerY = clientY;
-          } else {
-            // Still in Files dock / chrome: project X; keep last in-composer Y
-            // (or end-of-content), never always clamp to bottom.
-            x = Math.min(rect.right - 2, Math.max(rect.left + 2, clientX));
-            y =
-              lastInComposerY != null
-                ? Math.min(rect.bottom - 6, Math.max(rect.top + 6, lastInComposerY))
-                : rect.bottom - 6;
-          }
-        }
-      }
-      updateComposerDropMarker(
-        { clientX: x, clientY: y },
-        editor,
-        inputLineRef.current,
-        setDropMarker,
-      );
+    setComposerTouchDragPreviewHandler(({ active }) => {
+      setDragOver(Boolean(active));
     });
     return () => setComposerTouchDragPreviewHandler(null);
-  }, [editorRef]);
+  }, []);
 
   useEffect(() => {
     setPresetGridOpen(false);
@@ -27655,29 +27970,24 @@ function StudioComposer({
       onDragOver={(event) => {
         event.preventDefault();
         setDragOver(true);
-        updateComposerDropMarker(event, editorRef.current, inputLineRef.current, setDropMarker);
       }}
       onDragLeave={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
           setDragOver(false);
-          setDropMarker(null);
         }
       }}
       onDrop={(event) => {
         event.preventDefault();
         setDragOver(false);
-        setDropMarker(null);
         const tokenAttachment = readComposerTokenDragData(event.dataTransfer);
         const entry = readExplorerDragData(event.dataTransfer);
         if (tokenAttachment) {
           moveComposerDraggedToken(editorRef.current, tokenAttachment.tokenId);
-          const range = rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY);
-          insertComposerAttachmentToken(editorRef.current, tokenAttachment, range);
+          focusComposerEditorEnd(editorRef.current);
+          insertComposerAttachmentToken(editorRef.current, tokenAttachment);
           setDraft(readComposerEditorText(editorRef.current));
         } else if (entry) {
-          const range = rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY);
-          if (range) setSelectionToRange(range);
-          onDropEntry(entry, range);
+          onDropEntry(entry);
         } else if (event.dataTransfer?.files?.length) {
           void onUploadFiles(event.dataTransfer.files);
         }
@@ -27693,6 +28003,50 @@ function StudioComposer({
         />
       ) : null}
       <div className="cursor-composer">
+        {createElementOpen ? (
+          <div className="studio-composer-element-dialog" role="dialog" aria-label="Create element">
+            <strong>New element</strong>
+            <label>
+              Unique title
+              <input
+                value={createElementName}
+                onChange={(event) => setCreateElementName(event.target.value)}
+                placeholder="product-shot"
+                autoFocus
+              />
+            </label>
+            <label>
+              Description (optional)
+              <textarea
+                value={createElementDescription}
+                onChange={(event) => setCreateElementDescription(event.target.value)}
+                rows={2}
+                placeholder="What this is"
+              />
+            </label>
+            <label className="studio-composer-element-file">
+              Image or video
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={(event) => setCreateElementFile(event.target.files?.[0] ?? null)}
+              />
+              {createElementFile ? <span>{createElementFile.name}</span> : null}
+            </label>
+            <div className="studio-composer-element-actions">
+              <button type="button" onClick={() => setCreateElementOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={createElementBusy || !createElementName.trim() || !createElementFile}
+                onClick={() => void submitCreateElement()}
+              >
+                {createElementBusy ? "Saving…" : "Create"}
+              </button>
+            </div>
+          </div>
+        ) : null}
         {false && presetGridOpen ? (
           <div
             className="studio-composer-options-panel is-overlay is-style"
@@ -27849,6 +28203,49 @@ function StudioComposer({
             />
           </div>
         ) : null}
+        {railAttachments.length ? (
+          <div className="studio-composer-media-rail" aria-label="Attached media">
+            {railAttachments.map((item) => {
+              const tag = `@${attachmentComposerTag(item)}`;
+              const thumb = item.thumbnailUrl || (item.kind === "image" ? item.mediaUrl : null);
+              return (
+                <div key={item.id} className="studio-composer-media-tile">
+                  <button
+                    type="button"
+                    className="studio-composer-media-tile-frame"
+                    title={tag}
+                    onClick={() => setPreviewAttachment(item)}
+                  >
+                    {item.kind === "video" && (item.mediaUrl || thumb) ? (
+                      <video src={item.mediaUrl || thumb} muted playsInline preload="metadata" />
+                    ) : thumb ? (
+                      <img src={thumb} alt="" />
+                    ) : (
+                      <span className="studio-composer-media-tile-fallback">@</span>
+                    )}
+                  </button>
+                  <span className="studio-composer-media-tile-tag">{tag}</span>
+                  <button
+                    type="button"
+                    className="studio-composer-media-tile-remove"
+                    aria-label={`Remove ${tag}`}
+                    onClick={() => {
+                      setAttachments((items) => items.filter((row) => row.id !== item.id));
+                      const editor = editorRef.current;
+                      if (!editor) return;
+                      editor
+                        .querySelectorAll(`.studio-inline-tag[data-attachment-id="${CSS.escape(item.id)}"]`)
+                        .forEach((node) => node.remove());
+                      pushDraftToParent(readComposerEditorText(editor), { immediate: true });
+                    }}
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="studio-composer-row">
           <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`} data-drop-target="composer">
       <div
@@ -27860,9 +28257,6 @@ function StudioComposer({
           focusComposerEditorEnd(editorRef.current);
         }}
       >
-        {dropMarker ? (
-          <span className="studio-composer-drop-caret" style={{ left: dropMarker.left, top: dropMarker.top, height: dropMarker.height }} />
-        ) : null}
         {selectionHighlights.length ? (
           <div className="studio-composer-selection-layer" aria-hidden="true">
             {selectionHighlights.map((rect, index) => (
@@ -27913,6 +28307,7 @@ function StudioComposer({
             const next = readComposerEditorText(event.currentTarget);
             pushDraftToParent(next);
             pruneComposerAttachmentsFromDom(event.currentTarget, setAttachments);
+            syncMentionFromEditor(event.currentTarget);
           }}
           onBeforeInput={(event) => {
             const editor = editorRef.current;
@@ -27943,6 +28338,18 @@ function StudioComposer({
             }
           }}
           onKeyDown={(event) => {
+            if (mentionQuery) {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setMentionQuery(null);
+                return;
+              }
+              if (event.key === "Enter" && !event.shiftKey && mentionHits[0]) {
+                event.preventDefault();
+                pickMentionItem(mentionHits[0]);
+                return;
+              }
+            }
             if (
               (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
               moveCaretAcrossComposerToken(editorRef.current, event.key === "ArrowLeft" ? "left" : "right")
@@ -28043,7 +28450,10 @@ function StudioComposer({
             ) {
               // Selection may have included chips; clear remaining range via insert.
             }
-            if (looksLikePromptScript(text) && onHydratePromptPaste) {
+            if (
+              onHydratePromptPaste &&
+              (looksLikePromptScript(text) || /@[A-Za-z0-9._-]{2,}/.test(text))
+            ) {
               void (async () => {
                 try {
                   const hydrated = await onHydratePromptPaste(text);
@@ -28094,11 +28504,58 @@ function StudioComposer({
             pruneComposerAttachmentsFromDom(editor, setAttachments);
           }}
         />
+        {mentionQuery ? (
+          <div className="studio-composer-mention-menu" role="listbox" aria-label="Attach">
+            {mentionHits.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="studio-composer-mention-item"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  pickMentionItem(item);
+                }}
+              >
+                {item.thumbnailUrl ? (
+                  <img src={item.thumbnailUrl} alt="" />
+                ) : (
+                  <span className="studio-composer-mention-item-icon">@</span>
+                )}
+                <span>@{item.tag}</span>
+                <em>{item.kind === "element" ? "element" : "file"}</em>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="studio-composer-mention-item is-create"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                openCreateElementDialog(mentionQuery.query);
+              }}
+            >
+              <Plus aria-hidden="true" />
+              <span>
+                Create element{mentionQuery.query ? ` @${composerElementTag(mentionQuery.query)}` : ""}
+              </span>
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="studio-composer-toolbar">
         <div className="studio-composer-toolbar-left">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
           {!isAudioMode ? <StudioUploadButton inputRef={uploadInputRef} /> : null}
+          {!isAudioMode ? (
+            <button
+              type="button"
+              className="studio-composer-circle-btn"
+              title="New element"
+              aria-label="New element"
+              onClick={() => openCreateElementDialog("")}
+            >
+              <Package size={14} strokeWidth={2.25} aria-hidden="true" />
+            </button>
+          ) : null}
           <button
             type="button"
             className={`studio-composer-circle-btn studio-composer-options-btn${composerOptionsOpen ? " is-open" : ""}`}
@@ -29931,20 +30388,20 @@ function createComposerAttachmentToken(attachment) {
 
   const kind = document.createElement("span");
   kind.className = "studio-inline-tag-kind";
-  const isElement = attachment.studioKind === "element";
-  const elementThumb = isElement ? attachment.thumbnailUrl : null;
-  const isPreviewAsset =
-    !isElement && attachment.thumbnailUrl && (attachment.kind === "image" || attachment.kind === "video");
-  if (isPreviewAsset || elementThumb) {
+  const tagLabel = `@${attachmentComposerTag(attachment)}`;
+  const thumb =
+    attachment.thumbnailUrl ||
+    (attachment.kind === "image" || attachment.kind === "video" ? attachment.mediaUrl : null);
+  if (thumb && (attachment.kind === "image" || attachment.kind === "video" || attachment.studioKind === "element")) {
     token.classList.add("studio-inline-tag--preview");
-    const media = !isElement && attachment.kind === "video"
+    const media = attachment.kind === "video"
       ? document.createElement("video")
       : document.createElement("img");
     media.className = "studio-inline-tag-media";
-    media.src = !isElement && attachment.kind === "video"
+    media.src = attachment.kind === "video"
       ? (attachment.mediaUrl ?? attachment.thumbnailUrl)
-      : attachment.thumbnailUrl;
-    if (!isElement && attachment.kind === "video") {
+      : thumb;
+    if (attachment.kind === "video") {
       media.muted = true;
       media.playsInline = true;
       media.preload = "metadata";
@@ -29958,26 +30415,9 @@ function createComposerAttachmentToken(attachment) {
 
   const label = document.createElement("span");
   label.className = "studio-inline-tag-label";
-  label.textContent = String(attachment.label ?? attachment.filename ?? "Reference");
-
-  if (isElement && elementThumb) {
-    // Element chip: sheet thumb only, type icon overlaid — same style as image/video chips.
-    token.classList.add("studio-inline-tag--image-only");
-    token.title = attachment.label ?? "Element";
-    const overlay = document.createElement("span");
-    overlay.className = "studio-inline-tag-overlay";
-    overlay.appendChild(createComposerTokenIcon(elementTokenIconKind(attachment.elementType)));
-    token.append(kind, overlay);
-  } else if ((attachment.kind === "image" || attachment.kind === "video") && attachment.thumbnailUrl) {
-    token.classList.add("studio-inline-tag--image-only");
-    token.title = attachment.label ?? attachment.filename ?? (attachment.kind === "video" ? "Video" : "Image");
-    const overlay = document.createElement("span");
-    overlay.className = "studio-inline-tag-overlay";
-    overlay.appendChild(createComposerTokenIcon(attachment.kind === "video" ? "video" : "image"));
-    token.append(kind, overlay);
-  } else {
-    token.append(kind, label);
-  }
+  label.textContent = tagLabel;
+  token.title = tagLabel;
+  token.append(kind, label);
   return token;
 }
 
@@ -30358,6 +30798,35 @@ function moveComposerDraggedToken(editor, tokenId) {
   token?.remove();
   if (next?.nodeType === Node.TEXT_NODE && /^\s*$/.test(next.nodeValue ?? "")) {
     next.remove();
+  }
+}
+
+function readComposerTextBeforeCaret(editor) {
+  const sel = window.getSelection();
+  if (!editor || !sel?.rangeCount) return "";
+  const range = sel.getRangeAt(0).cloneRange();
+  try {
+    range.setStart(editor, 0);
+    return range.toString();
+  } catch {
+    return "";
+  }
+}
+
+function deleteComposerAtQuery(editor, atQuery) {
+  if (!editor || !atQuery) return;
+  const count = String(atQuery.query ?? "").length + 1;
+  const sel = window.getSelection();
+  if (!sel?.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer;
+  if (node.nodeType === Node.TEXT_NODE) {
+    const start = Math.max(0, range.startOffset - count);
+    node.deleteData(start, range.startOffset - start);
+    range.setStart(node, start);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
 }
 
@@ -32676,8 +33145,12 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
     try {
       const uploaded = await onUploadElementFiles(files);
       const nextAssets = (uploaded ?? []).map(uploadedElementAssetToEntry);
-      setSourceAssets((items) => [...items, ...nextAssets]);
-      setMessage("Media added. Save to keep it on this element.");
+      setSourceAssets(entry.elementType === "style_sheet" ? (items) => [...items, ...nextAssets] : nextAssets);
+      setMessage(
+        entry.elementType === "style_sheet"
+          ? "Media added. Save to keep it on this element."
+          : "Media swapped. Save to keep it on this element.",
+      );
     } catch (error) {
       setMessage(friendlyConvexError(error, "Upload failed."));
     } finally {
@@ -32719,6 +33192,10 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
     buildStatus: sheetPreview || entry.sheetAssetId ? "built" : "unbuilt",
   };
   const sheetAsset = draftEntry.sheetAsset;
+  const liveMedia =
+    sourceAssets.find(
+      (asset) => asset.kind === "image" || asset.kind === "video" || asset.kind === "audio",
+    ) ?? sheetAsset;
 
   function openAssetEntry(asset) {
     if (!elementAssetOpenable(asset) || !onOpenEntry) return;
@@ -32733,10 +33210,10 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
             <p className="studio-section-kicker">{entry.kindLabel}</p>
             <h2>{entry.name}</h2>
             <p>
-              Upload reference photos, build a {sheetLabel}, then attach to generation — only the built sheet is sent to the model, not raw uploads.
+              Unique title, optional notes, and one image or video. Type @{entry.name.replace(/^@/, "")} in Create to attach it. Seedance gets this file, not a thumbnail.
             </p>
             <p className="studio-element-detail-status">
-              Status: {sheetAsset ? "Built — ready for generation" : "Unbuilt — add refs and build sheet"}
+              Status: {liveMedia || sheetAsset ? "Ready — media will be sent with @tag" : "Add an image or video"}
             </p>
           </div>
           <div className="studio-element-detail-actions">
@@ -37201,6 +37678,10 @@ function elementToEntry(element, assets = []) {
         return asset ? assetToEntry(asset) : null;
       })()
     : null;
+  const liveMedia =
+    referenceAssets.find(
+      (asset) => asset.kind === "image" || asset.kind === "video" || asset.kind === "audio",
+    ) ?? sheetAsset;
 
   return {
     type: "file",
@@ -37214,15 +37695,24 @@ function elementToEntry(element, assets = []) {
     studioId: element._id,
     folderId: element.folderId,
     elementType: element.type,
-    buildStatus: sheetAssetId || sheetAsset ? "built" : "unbuilt",
+    buildStatus: sheetAssetId || sheetAsset ? "built" : liveMedia ? "ready" : "unbuilt",
     builtAt: element.builtAt,
     referenceAssetIds,
     referenceAssets,
     sheetAssetId,
     sheetAsset,
-    thumbnailUrl: thumbnailDisplayUrl(sheetAsset?.thumbnailUrl, sheetAsset?.mediaUrl),
-    mediaUrl: fullQualityUrl(sheetAsset?.mediaUrl),
-    mimeType: sheetAsset?.mimeType,
+    kind: liveMedia?.kind,
+    mediaKind: liveMedia?.kind,
+    thumbnailUrl: thumbnailDisplayUrl(
+      liveMedia?.thumbnailUrl,
+      sheetAsset?.thumbnailUrl,
+      liveMedia?.mediaUrl,
+      sheetAsset?.mediaUrl,
+    ),
+    mediaUrl: fullQualityUrl(liveMedia?.mediaUrl, sheetAsset?.mediaUrl),
+    mimeType: liveMedia?.mimeType ?? sheetAsset?.mimeType,
+    width: liveMedia?.width,
+    height: liveMedia?.height,
     sourceAssetIds: referenceAssetIds,
     sourceAssets: referenceAssets,
     kindLabel:
@@ -37744,13 +38234,15 @@ function entryToAttachment(entry) {
     sourceAssetIds: entry.referenceAssetIds ?? entry.sourceAssetIds,
     sourceAssets: entry.referenceAssets ?? entry.sourceAssets,
     mimeType: entry.mimeType ?? entry.sheetAsset?.mimeType,
+    width: entry.width,
+    height: entry.height,
     thumbnailUrl: thumbnailDisplayUrl(
-      entry.sheetAsset?.thumbnailUrl,
       entry.thumbnailUrl,
-      entry.sheetAsset?.mediaUrl,
+      entry.sheetAsset?.thumbnailUrl,
       entry.mediaUrl,
+      entry.sheetAsset?.mediaUrl,
     ),
-    mediaUrl: fullQualityUrl(entry.sheetAsset?.mediaUrl, entry.mediaUrl),
+    mediaUrl: fullQualityUrl(entry.mediaUrl, entry.sheetAsset?.mediaUrl),
   };
 }
 
@@ -37854,72 +38346,6 @@ function attachmentsFromPromptReferences(prompt, assets = [], elements = []) {
     out.push(attachment);
   }
   return out;
-}
-
-function splitVideoGenerationInputs(attachments, signedUrls = {}) {
-  const referenceInputs = [];
-  for (const attachment of attachments) {
-    if (attachment.studioKind === "element") {
-      if (attachment.elementType === "character") {
-        continue;
-      }
-      const sheet = attachment.sheetAsset;
-      if (!sheet) continue;
-      const url =
-        sheet.mediaUrl ??
-        signedUrls[`element-sheet:${attachment.id}`] ??
-        sheet.thumbnailUrl;
-      if (!url || !/^https?:\/\//i.test(url)) continue;
-      referenceInputs.push({ kind: "image", url, mimeType: sheet.mimeType });
-      continue;
-    }
-    const direct = {
-      kind: attachment.kind,
-      url:
-        attachment.mediaUrl ??
-        signedUrls[`attachment:${attachment.id}`] ??
-        attachment.thumbnailUrl,
-      mimeType: attachment.mimeType,
-    };
-    if (
-      ["image", "video", "audio"].includes(direct.kind) &&
-      /^https?:\/\//i.test(direct.url ?? "")
-    ) {
-      referenceInputs.push(direct);
-    }
-  }
-  return { referenceInputs };
-}
-
-function generationReferenceInputs(attachments, signedUrls = {}) {
-  return attachments
-    .flatMap((attachment) => {
-      if (attachment.studioKind === "element") {
-        const sheet = attachment.sheetAsset;
-        if (!sheet) {
-          // Unbuilt element: no sheet to send. Its notes still ride along in the prompt.
-          return [];
-        }
-        const url =
-          sheet.mediaUrl ??
-          signedUrls[`element-sheet:${attachment.id}`] ??
-          sheet.thumbnailUrl;
-        if (!url || !/^https?:\/\//i.test(url)) {
-          return [];
-        }
-        return [{ kind: "image", url, mimeType: sheet.mimeType }];
-      }
-      const direct = {
-        kind: attachment.kind,
-        url: attachment.mediaUrl ?? signedUrls[`attachment:${attachment.id}`] ?? attachment.thumbnailUrl,
-        mimeType: attachment.mimeType,
-      };
-      return [direct];
-    })
-    .filter((reference) =>
-      ["image", "video", "audio"].includes(reference.kind) &&
-      /^https?:\/\//i.test(reference.url ?? ""),
-    );
 }
 
 function kindFromMime(mime) {

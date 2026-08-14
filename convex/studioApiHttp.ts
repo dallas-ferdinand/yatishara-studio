@@ -1648,10 +1648,12 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           presetSlug: preset.slug,
           styleSheetElementId: body.styleSheetElementId,
         });
-        userPrompt = directPrompt
-          ? appendVideoReferenceTags(userPrompt, referenceImageLabels)
-          : `${startFramePromptPrefix()}\n\n${appendVideoReferenceTags(userPrompt, referenceImageLabels)}`;
-      } else if (mode === "video" && referenceImageLabels.length) {
+        if (klingVideo) {
+          userPrompt = directPrompt
+            ? appendVideoReferenceTags(userPrompt, referenceImageLabels)
+            : `${startFramePromptPrefix()}\n\n${appendVideoReferenceTags(userPrompt, referenceImageLabels)}`;
+        }
+      } else if (klingVideo && mode === "video" && referenceImageLabels.length) {
         userPrompt = appendVideoReferenceTags(userPrompt, referenceImageLabels);
       }
 
@@ -1684,7 +1686,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
 
       let referenceUrls: string[] | undefined;
       let referenceInputs:
-        | Array<{ kind: "image" | "video" | "audio"; url: string; mimeType?: string }>
+        | Array<{ kind: "image" | "video" | "audio"; url: string; mimeType?: string; tag?: string }>
         | undefined;
       if (mergedReferenceAssetIds.length) {
         const refs: Array<{
@@ -1709,10 +1711,11 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           }
           referenceUrls = imageRefs.map((ref) => ref.url);
         } else {
-          referenceInputs = refs.map((ref) => ({
+          referenceInputs = refs.map((ref, index) => ({
             kind: ref.kind === "document" ? "image" : ref.kind,
             url: ref.url,
             mimeType: ref.mimeType,
+            tag: referenceImageLabels[index]?.tag?.replace(/^@/, "") || undefined,
           }));
         }
       }

@@ -59,24 +59,29 @@ export function finalizeGatewayVideoPrompt(args: {
   }));
 
   let result = args.prompt.trim();
-  if (
-    args.startFrameUrl &&
-    !promptHasStartFramePrefix(result) &&
-    !args.directPrompt
-  ) {
-    result = `${startFramePromptPrefix()}\n\n${appendVideoReferenceTags(result, labels)}`;
-  } else if (!args.startFrameUrl && labels.length && !result.includes("Reference images:")) {
-    result = appendVideoReferenceTags(result, labels);
-  } else if (
-    args.startFrameUrl &&
-    args.directPrompt &&
-    labels.length &&
-    !result.includes("Reference images:")
-  ) {
-    result = appendVideoReferenceTags(result, labels);
+  const kling = gatewayUsesKling(args.gatewayModelId);
+  // Seedance 2.0/2.5 use `@Image N` / `@Video N` remapped at submit — do not
+  // append legacy `[Image N]` lines (Kling-only).
+  if (kling) {
+    if (
+      args.startFrameUrl &&
+      !promptHasStartFramePrefix(result) &&
+      !args.directPrompt
+    ) {
+      result = `${startFramePromptPrefix()}\n\n${appendVideoReferenceTags(result, labels)}`;
+    } else if (!args.startFrameUrl && labels.length && !result.includes("Reference images:")) {
+      result = appendVideoReferenceTags(result, labels);
+    } else if (
+      args.startFrameUrl &&
+      args.directPrompt &&
+      labels.length &&
+      !result.includes("Reference images:")
+    ) {
+      result = appendVideoReferenceTags(result, labels);
+    }
   }
 
-  if (gatewayUsesKling(args.gatewayModelId)) {
+  if (kling) {
     assertKlingGatewayPromptLength({
       prompt: result,
       creativePrompt: args.creativePrompt ?? args.prompt,

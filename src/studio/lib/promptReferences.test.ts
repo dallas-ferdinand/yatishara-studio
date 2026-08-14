@@ -59,7 +59,22 @@ References:
     expect(hydrated.draftWithMarkers.startsWith("\uFFFC")).toBe(true);
   });
 
-  it("parses ## References and skips elements", () => {
+  it("hydrates element @tags from the prompt body", () => {
+    const md = `@product-shot Hypermotion ad on a table.`;
+    const hydrated = hydrateComposerFromText(md, [], [
+      {
+        _id: "el1",
+        name: "product-shot",
+        type: "prop",
+        thumbnailUrl: "https://cdn/t",
+      },
+    ]);
+    expect(hydrated.attachments).toHaveLength(1);
+    expect(hydrated.attachments[0]?.studioKind).toBe("element");
+    expect(hydrated.attachments[0]?.label).toBe("product-shot");
+  });
+
+  it("parses ## References including elements when catalog is passed", () => {
     const md = `# Prompt
 
 Hello
@@ -68,16 +83,23 @@ Hello
 - @still | kind: image | path: /Studio/assets/a1 | studio: a1
 - @maya | kind: context | element: character | path: /Studio/elements/e1.element | studio: e1
 `;
-    const hydrated = hydrateComposerFromText(md, [
-      {
-        _id: "a1",
-        name: "still.png",
-        kind: "image",
-        signedThumbnailUrl: "https://cdn/t",
-      },
+    const hydrated = hydrateComposerFromText(
+      md,
+      [
+        {
+          _id: "a1",
+          name: "still.png",
+          kind: "image",
+          signedThumbnailUrl: "https://cdn/t",
+        },
+      ],
+      [{ _id: "e1", name: "maya", type: "character" }],
+    );
+    expect(hydrated.attachments).toHaveLength(2);
+    expect(hydrated.attachments.map((item) => item.studioKind)).toEqual([
+      "asset",
+      "element",
     ]);
-    expect(hydrated.attachments).toHaveLength(1);
-    expect(hydrated.attachments[0]?.studioId).toBe("a1");
     expect(hydrated.draftWithMarkers.startsWith("\uFFFC")).toBe(true);
   });
 

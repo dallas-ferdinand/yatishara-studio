@@ -1355,7 +1355,7 @@ export const resolveReferenceElementIds = internalQuery({
     userId: v.id("users"),
     sandboxFolderId: v.id("folders"),
     elementIds: v.array(v.id("elements")),
-    /** video: attach prop/location sheets only (skip character sheets). image: attach all sheets. */
+    /** image/video: attach each element's image or video file (not a thumbnail). */
     generationMode: v.optional(v.union(v.literal("image"), v.literal("video"))),
     /** full = element bibles on job prompt. gateway_kling = compact stubs (shot packet keeps full definition). */
     promptAppendStyle: v.optional(v.union(v.literal("full"), v.literal("gateway_kling"))),
@@ -1397,23 +1397,21 @@ export const resolveReferenceElementIds = internalQuery({
         throw new Error(`Element not found: ${elementId}`);
       }
       const resolved = await resolveElementAssets(ctx, element);
-      if (resolved.buildStatus !== "built" || !resolved.sheetAssetId) {
+      const mediaId = resolved.referenceAssetIds[0] ?? resolved.sheetAssetId;
+      if (!mediaId) {
         unbuiltElementNames.push(element.name);
         continue;
       }
-      const attachSheet =
-        !videoMode || element.type === "prop" || element.type === "location";
+      const attachSheet = true;
       let imageTag: string | undefined;
       if (attachSheet) {
-        referenceAssetIds.push(resolved.sheetAssetId);
+        referenceAssetIds.push(mediaId);
         referenceImageIndex += 1;
-        imageTag = `[Image ${referenceImageIndex}]`;
+        imageTag = `@${element.name.replace(/^@/, "")}`;
         referenceImageLabels.push({
           tag: imageTag,
           label: `${element.type} @${element.name}`,
         });
-      } else {
-        skippedCharacterSheetIds.push(elementId);
       }
       if (compactKling) {
         promptLines.push(
@@ -1443,7 +1441,7 @@ export const resolveReferenceElementIds = internalQuery({
 
     if (unbuiltElementNames.length) {
       throw new Error(
-        `Elements must be built before use in generation (missing sheet): ${unbuiltElementNames.join(", ")}. Call generate-sheet first.`,
+        `Elements need an image or video attached: ${unbuiltElementNames.join(", ")}.`,
       );
     }
 

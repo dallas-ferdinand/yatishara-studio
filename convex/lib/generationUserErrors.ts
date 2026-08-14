@@ -114,6 +114,20 @@ export function friendlyGenerationError(
     };
   }
 
+  if (
+    /at least 300px|width to be at least|received a \d+x\d+px image|downloading image/i.test(
+      lower,
+    )
+  ) {
+    const size = text.match(/(\d+)\s*[x×]\s*(\d+)\s*px/i);
+    return {
+      title: "Image is too small",
+      message: size
+        ? `Seedance needs images at least 300×300. That file was ${size[1]}×${size[2]}. Attach the original, not a thumbnail.`
+        : "Seedance needs images at least 300×300. Attach the original file, not a thumbnail.",
+    };
+  }
+
   if (/duration must be|between 4 and 15/i.test(lower)) {
     return {
       title: "Check your settings",

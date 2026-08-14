@@ -4,12 +4,15 @@ export const referenceInputValidator = v.object({
   kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
   url: v.string(),
   mimeType: v.optional(v.string()),
+  /** Friendly composer tag (`product-shot`, `headphones.jpeg`) remapped to @Image N. */
+  tag: v.optional(v.string()),
 });
 
 export type ReferenceInput = {
   kind: "image" | "video" | "audio";
   url: string;
   mimeType?: string;
+  tag?: string;
 };
 
 /** MIME types supported by Gemini 2.5 Flash-Lite audio input. */

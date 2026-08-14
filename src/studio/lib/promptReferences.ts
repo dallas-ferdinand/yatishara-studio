@@ -1,6 +1,11 @@
+import {
+  composerAssetTag,
+  composerElementTag,
+} from "./seedanceReferences";
+
 /**
  * Prompt script references — parse / hydrate chips from markdown docs
- * and Create `References:` blocks. Assets only for new hydrate.
+ * and Create `References:` blocks. Assets and elements.
  */
 
 export const REFERENCES_MARKER = "\n\nReferences:\n";
@@ -25,11 +30,12 @@ export type PromptAttachmentDraft = {
   path?: string;
   displayPath?: string;
   filename?: string;
-  studioKind: "asset";
+  studioKind: "asset" | "element";
   studioId: string;
   mimeType?: string;
   thumbnailUrl?: string;
   mediaUrl?: string;
+  elementType?: string;
 };
 
 export type HydratedPrompt = {
@@ -51,6 +57,16 @@ type AssetLike = {
   displayPath?: string;
   signedThumbnailUrl?: string;
   signedReadUrl?: string;
+  thumbnailUrl?: string;
+  mediaUrl?: string;
+};
+
+type ElementLike = {
+  _id?: string;
+  studioId?: string;
+  name?: string;
+  type?: string;
+  description?: string;
   thumbnailUrl?: string;
   mediaUrl?: string;
 };
@@ -252,6 +268,7 @@ export function looksLikePromptScript(text: string): boolean {
   // Agent scripts: ## References + markdown asset:// links (or loose asset://).
   if (/asset:\/\/[a-z0-9]+/i.test(t) && /References/i.test(t)) return true;
   if (/\[([^\]]+)\]\(\s*asset:\/\/[a-z0-9]+\s*\)/i.test(t)) return true;
+  if (/@[\w.-]+/.test(t) && /\/Studio\/elements\//i.test(t)) return true;
   return false;
 }
 
@@ -285,10 +302,81 @@ function findAsset(assets: AssetLike[], id: string): AssetLike | null {
   );
 }
 
+export function elementIdFromReference(ref: PromptReference): string | null {
+  const path = String(ref?.path ?? "");
+  const fromPath = path.match(/\/Studio\/elements\/([^/.]+)/i)?.[1];
+  if (fromPath) return fromPath;
+  if (ref?.elementType && ref.studioId) return String(ref.studioId).trim() || null;
+  return null;
+}
+
+export function collectPromptAtTags(text: string): string[] {
+  const tags: string[] = [];
+  const seen = new Set<string>();
+  const re = /@([A-Za-z0-9._-]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(String(text ?? ""))) != null) {
+    const tag = String(match[1] ?? "");
+    if (!tag || /^(Image|Video|Audio)$/i.test(tag)) continue;
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+  }
+  return tags;
+}
+
+function findElement(elements: ElementLike[], idOrTag: string): ElementLike | null {
+  const key = String(idOrTag ?? "").trim();
+  if (!key) return null;
+  const tag = composerElementTag(key);
+  return (
+    (elements ?? []).find(
+      (row) =>
+        row._id === key ||
+        row.studioId === key ||
+        composerElementTag(row.name ?? "") === tag,
+    ) ?? null
+  );
+}
+
+function elementToAttachmentDraft(
+  element: ElementLike,
+  label?: string,
+): PromptAttachmentDraft | null {
+  const id = String(element._id || element.studioId || "").trim();
+  if (!id) return null;
+  const tag = composerElementTag(label || element.name || id);
+  return {
+    id: `element:${id}`,
+    kind: "context",
+    label: tag,
+    path: `/Studio/elements/${id}`,
+    filename: tag,
+    studioKind: "element",
+    studioId: id,
+    elementType: element.type,
+    thumbnailUrl: element.thumbnailUrl,
+    mediaUrl: element.mediaUrl,
+  };
+}
+
 export function referenceToAttachmentDraft(
   ref: PromptReference,
   assets: AssetLike[] = [],
+  elements: ElementLike[] = [],
 ): PromptAttachmentDraft | null {
+  const elementId = elementIdFromReference(ref);
+  if (elementId) {
+    return elementToAttachmentDraft(
+      findElement(elements, elementId) ?? {
+        _id: elementId,
+        name: ref.label,
+        type: ref.elementType,
+      },
+      ref.label,
+    );
+  }
   const id = assetIdFromReference(ref);
   if (!id) return null;
   const asset = findAsset(assets, id);
@@ -331,7 +419,7 @@ export function ensureAtMentionsInBody(
   const missing: string[] = [];
   for (const ref of references) {
     const label = String(ref.label || "").trim().replace(/^@/, "");
-    if (!label || /[^a-zA-Z0-9_-]/.test(label)) continue;
+    if (!label || /[^a-zA-Z0-9._-]/.test(label)) continue;
     const re = new RegExp(`@${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
     if (!re.test(out)) missing.push(`@${label}`);
   }
@@ -343,16 +431,45 @@ export function ensureAtMentionsInBody(
 export function hydrateComposerFromText(
   markdown: string,
   assets: AssetLike[] = [],
+  elements: ElementLike[] = [],
 ): HydratedPrompt {
   const { body: rawBody, references } = parsePromptDocument(markdown);
   const body = ensureAtMentionsInBody(rawBody, references);
   const attachments: PromptAttachmentDraft[] = [];
   const seen = new Set<string>();
-  for (const ref of references) {
-    const draft = referenceToAttachmentDraft(ref, assets);
-    if (!draft || seen.has(draft.id)) continue;
+  const push = (draft: PromptAttachmentDraft | null) => {
+    if (!draft?.id || seen.has(draft.id)) return;
     seen.add(draft.id);
     attachments.push(draft);
+  };
+  for (const ref of references) {
+    push(referenceToAttachmentDraft(ref, assets, elements));
+  }
+  for (const tag of collectPromptAtTags(body)) {
+    const element = findElement(elements, tag);
+    if (element) {
+      push(elementToAttachmentDraft(element, tag));
+      continue;
+    }
+    const asset = (assets ?? []).find(
+      (row) => composerAssetTag(row.name ?? "") === composerAssetTag(tag),
+    );
+    if (!asset) continue;
+    const id = String(asset._id || asset.studioId || "").trim();
+    if (!id) continue;
+    push(
+      referenceToAttachmentDraft(
+        {
+          label: tag,
+          kind: String(asset.kind || "image"),
+          path: asset.path || `/Studio/assets/${id}`,
+          studioId: id,
+          filename: asset.name,
+        },
+        assets,
+        elements,
+      ),
+    );
   }
   const markers = attachments.map(() => OBJECT_REPLACEMENT).join("");
   const draftWithMarkers =

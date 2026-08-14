@@ -16,6 +16,7 @@ import {
   requireShareEdit,
   viewerCanAccessSharedItem,
 } from "./lib/studioShareAccess";
+import { composerElementTag } from "./lib/seedanceReferences";
 
 const elementType = v.union(
   v.literal("character"),
@@ -109,6 +110,32 @@ export const get = authedQuery({
   },
 });
 
+async function assertUniqueElementName(
+  ctx: (QueryCtx | MutationCtx) & { user: Doc<"users"> & { _id: Id<"users"> } },
+  name: string,
+  exceptId?: Id<"elements">,
+) {
+  const tag = composerElementTag(name);
+  if (!tag || tag === "ref") {
+    throw new Error("Give the element a unique title (letters, numbers, dashes).");
+  }
+  const existing = await ctx.db
+    .query("elements")
+    .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
+    .collect();
+  const clash = existing.find(
+    (row) =>
+      !row.deletedAt &&
+      row._id !== exceptId &&
+      row.type !== "style_sheet" &&
+      composerElementTag(row.name) === tag,
+  );
+  if (clash) {
+    throw new Error(`@${tag} is already used. Pick a unique title.`);
+  }
+  return tag;
+}
+
 export const listStyleSheets = authedQuery({
   args: {},
   returns: v.array(elementReturn),
@@ -144,7 +171,18 @@ export const create = authedMutation({
     if (args.sourceDocumentId) {
       await requireDocumentOwner(ctx, args.sourceDocumentId);
     }
+    if (
+      args.type !== "style_sheet" &&
+      args.type !== "doc" &&
+      referenceAssetIds.length < 1
+    ) {
+      throw new Error("Attach an image or video to this element.");
+    }
     const now = Date.now();
+    const name =
+      args.type === "style_sheet"
+        ? args.name.trim()
+        : await assertUniqueElementName(ctx, args.name);
     const sourceMode =
       args.sourceMode ??
       inferElementSourceMode({
@@ -155,7 +193,7 @@ export const create = authedMutation({
       ownerId: ctx.user._id,
       folderId: args.folderId,
       type: args.type,
-      name: args.name.trim(),
+      name,
       description: args.description,
       sourceMode,
       sourceAssetIds: referenceAssetIds,
@@ -212,8 +250,14 @@ export const update = authedMutation({
     if (args.sourceDocumentId !== undefined) {
       await requireDocumentOwner(ctx, args.sourceDocumentId);
     }
+    const nextName =
+      args.name !== undefined && element.type !== "style_sheet"
+        ? await assertUniqueElementName(ctx, args.name, element._id)
+        : args.name !== undefined
+          ? args.name.trim()
+          : undefined;
     await ctx.db.patch(element._id, {
-      ...(args.name !== undefined ? { name: args.name.trim() } : {}),
+      ...(nextName !== undefined ? { name: nextName } : {}),
       ...(args.description !== undefined ? { description: args.description } : {}),
       ...(args.folderId !== undefined ? { folderId: args.folderId } : {}),
       ...(nextReferenceAssetIds !== undefined
