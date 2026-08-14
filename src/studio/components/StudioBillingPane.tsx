@@ -19,7 +19,6 @@ import {
   paywiseCheckoutTotalCents,
   topUpMinAmountCents,
 } from "@/studio/lib/money";
-import { StudioConfirmOverlay } from "./StudioConfirmOverlay";
 import "./studio-billing.css";
 
 type BillingInterval = "month" | "year";
@@ -502,7 +501,6 @@ export function StudioBillingPane({
   const [interval, setInterval] = useState<BillingInterval>("month");
   const [invoiceFilter, setInvoiceFilter] = useState<InvoiceKind>("all");
   const [busy, setBusy] = useState<string | null>(null);
-  const [manageOpen, setManageOpen] = useState(false);
   const requestIds = useRef(new Map<string, string>());
   const sub = billingAccount?.subscription ?? null;
   const currentPlanId = sub?.planId || "";
@@ -607,7 +605,6 @@ export function StudioBillingPane({
       if (result.wamSubscriptionId) {
         await stopRecurring({ wamSubscriptionId: result.wamSubscriptionId });
       }
-      setManageOpen(false);
       toast.success(
         result.mode === "immediate"
           ? "Plan cancelled. No further charges."
@@ -638,7 +635,9 @@ export function StudioBillingPane({
   function actionLabel(plan: CatalogPlan) {
     if (!live) return "Subscribe";
     if (plan._id === currentPlanId) {
-      if ((sub?.interval ?? "month") === interval) return "Current plan";
+      if ((sub?.interval ?? "month") === interval) {
+        return sub?.cancelAtPeriodEnd ? "Keep plan" : "Cancel";
+      }
       return interval === "year" ? "Switch to annual" : "Switch to monthly";
     }
     const current = plans.find((item) => item._id === currentPlanId);
@@ -689,33 +688,6 @@ export function StudioBillingPane({
               <p>Subscribe to a community of creators and builders just like you.</p>
             </div>
 
-            {live ? (
-              <div className="studio-billing-current">
-                <div>
-                  <h2>Your plan</h2>
-                  <strong>{sub?.planName || "Studio"}</strong>
-                  <p>
-                    {sub?.cancelAtPeriodEnd
-                      ? `Cancels ${sub.cancelScheduledAt ? new Date(sub.cancelScheduledAt).toLocaleDateString() : "at period end"}. Resume before then to keep it.`
-                      : sub?.status === "past_due"
-                        ? "Payment failed. Open Invoices and pay to keep the plan."
-                        : `Renews ${sub?.currentPeriodEnd ? new Date(sub.currentPeriodEnd).toLocaleDateString() : "next cycle"}.`}
-                  </p>
-                </div>
-                <div className="studio-billing-current-actions">
-                  {sub?.cancelAtPeriodEnd ? (
-                    <button type="button" disabled={busy === "resume"} onClick={() => void resumePlan()}>
-                      Resume plan
-                    </button>
-                  ) : (
-                    <button type="button" className="is-danger" onClick={() => setManageOpen(true)}>
-                      Manage plan
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : null}
-
             <div className="studio-billing-period" role="tablist" aria-label="Billing period">
               <button
                 type="button"
@@ -739,6 +711,7 @@ export function StudioBillingPane({
                 const quote = quotePlan(plan, interval);
                 const featured = plan.slug === "plus";
                 const current = live && plan._id === currentPlanId && (sub?.interval ?? "month") === interval;
+                const ending = Boolean(current && sub?.cancelAtPeriodEnd);
                 const label = actionLabel(plan);
                 const faceYearCents = quote.faceMonthlyCents * (interval === "year" ? 12 : 1);
                 return (
@@ -771,7 +744,11 @@ export function StudioBillingPane({
                         </span>
                       </p>
                     </div>
-                    {interval === "year" ? (
+                    {ending ? (
+                      <p className="studio-billing-equiv">
+                        Cancels {sub?.cancelScheduledAt ? new Date(sub.cancelScheduledAt).toLocaleDateString() : "at period end"}
+                      </p>
+                    ) : interval === "year" ? (
                       <p className="studio-billing-equiv">
                         {formatTtdShort(Math.round(quote.chargeCents / 12))}/mo billed yearly ·{" "}
                         {formatTtdShort(quote.faceMonthlyCents)} still lands each month
@@ -791,11 +768,26 @@ export function StudioBillingPane({
                     </ul>
                     <button
                       type="button"
-                      className={`studio-billing-card-cta${current ? " is-ghost" : featured ? " is-featured-cta" : ""}`}
-                      disabled={Boolean(busy) || current}
-                      onClick={() => void checkout(plan)}
+                      className={`studio-billing-card-cta${current && !ending ? " is-ghost" : featured && !current ? " is-featured-cta" : ""}`}
+                      disabled={Boolean(busy)}
+                      onClick={() => {
+                        if (current) {
+                          if (ending) void resumePlan();
+                          else void cancelPlan();
+                          return;
+                        }
+                        void checkout(plan);
+                      }}
                     >
-                      <span>{busy === plan._id ? "Opening checkout…" : label}</span>
+                      <span>
+                        {busy === "cancel" && current
+                          ? "Cancelling…"
+                          : busy === "resume" && current
+                            ? "Resuming…"
+                            : busy === plan._id
+                              ? "Opening checkout…"
+                              : label}
+                      </span>
                       {current || busy === plan._id ? null : <ArrowRight aria-hidden="true" />}
                     </button>
                   </article>
@@ -857,22 +849,6 @@ export function StudioBillingPane({
           </div>
         )}
       </div>
-
-      <StudioConfirmOverlay
-        open={manageOpen}
-        title="Cancel this plan?"
-        body={
-          sub?.status === "past_due"
-            ? "This period was not paid, so the plan will cancel now. No further charges."
-            : "Billing stops at the next payment date. You can resume before then. After that date you will need a new subscription."
-        }
-        confirmLabel="Cancel plan"
-        cancelLabel="Keep plan"
-        danger
-        busy={busy === "cancel"}
-        onConfirm={() => void cancelPlan()}
-        onCancel={() => setManageOpen(false)}
-      />
     </div>
   );
 }
