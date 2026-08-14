@@ -10421,6 +10421,7 @@ export function StudioShell({
           overscroll-behavior: none !important;
         }
         /* Soft “drop here” invite while a touch file-drag is in flight. */
+        body.is-touch-file-drag .studio-element-detail[data-drop-target="composer"] .studio-element-detail-stage,
         body.is-touch-file-drag .studio-element-detail[data-drop-target="composer"] .studio-element-detail-file {
           outline: 1.5px dashed color-mix(in srgb, var(--cursor-accent, #7dd3fc) 38%, transparent);
           outline-offset: 2px;
@@ -21337,6 +21338,69 @@ export function StudioShell({
           -webkit-backdrop-filter: none;
           isolation: isolate;
         }
+        .studio-element-detail.is-split {
+          flex-direction: row;
+          align-items: stretch;
+          justify-content: stretch;
+          overflow: hidden;
+          padding: 0;
+        }
+        .studio-element-detail-stage {
+          position: relative;
+          flex: 1 1 0;
+          min-width: 0;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        .studio-element-detail-stage .studio-asset-preview {
+          flex: 1 1 0;
+          height: 100%;
+        }
+        .studio-element-detail-stage-empty {
+          flex: 1 1 0;
+          display: grid;
+          place-items: center;
+          margin: 0;
+          padding: 24px;
+          border: 0;
+          background: transparent;
+          color: var(--color-cursor-muted);
+          font: inherit;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+        }
+        .studio-element-detail-stage-empty:hover,
+        .studio-element-detail.is-split.is-drop-target .studio-element-detail-stage-empty {
+          color: var(--color-cursor-text);
+        }
+        .studio-element-detail.is-split.is-drop-target .studio-element-detail-stage::after {
+          content: "";
+          position: absolute;
+          inset: 10px;
+          border: 1.5px dashed color-mix(in srgb, var(--cursor-accent) 55%, var(--color-cursor-border-soft));
+          border-radius: 12px;
+          pointer-events: none;
+        }
+        .studio-element-detail-side {
+          flex: 0 0 22rem;
+          width: 22rem;
+          max-width: 42%;
+          min-width: 16rem;
+        }
+        .studio-element-detail.is-split .studio-element-detail-form {
+          width: 100%;
+          padding: 0;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+        }
+        .studio-element-detail-file-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+        }
         [data-appearance="light"] .studio-element-detail {
           background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
         }
@@ -21355,6 +21419,9 @@ export function StudioShell({
         .studio-element-detail-notes.cursor-input {
           min-height: 88px;
           resize: none;
+        }
+        .studio-element-detail.is-split .studio-element-detail-notes.cursor-input {
+          min-height: 140px;
         }
         .studio-element-detail-file {
           position: relative;
@@ -33104,6 +33171,7 @@ function StudioElementDetailPane({
   onRequestPickAsset,
   onBindElementMediaDrop,
 }) {
+  const { isMobile } = useMobileLayout();
   const isStyleSheet = entry.elementType === "style_sheet";
   const [name, setName] = useState(() => elementEditorTitle(entry));
   const [description, setDescription] = useState(entry.description ?? "");
@@ -33353,6 +33421,115 @@ function StudioElementDetailPane({
   const media = (isStyleSheet ? sourceAssets : sourceAssets.slice(0, 1))[0] ?? null;
   const previewUrl = media?.thumbnailUrl ?? media?.mediaUrl;
   const isVideo = media?.kind === "video";
+  const fields = (
+    <>
+      <input
+        className="cursor-input studio-element-detail-title"
+        value={name}
+        onChange={(event) => {
+          const next = isStyleSheet ? event.target.value : slugElementTitleInput(event.target.value);
+          setName(next);
+          nameRef.current = next;
+          queueSave();
+        }}
+        onBlur={() => {
+          window.clearTimeout(saveTimerRef.current);
+          if (!restoreTitleIfEmpty()) void persist();
+        }}
+        placeholder="Title"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        aria-label="Title"
+      />
+      <textarea
+        className="cursor-input studio-element-detail-notes"
+        value={description}
+        onChange={(event) => {
+          const next = event.target.value;
+          setDescription(next);
+          descriptionRef.current = next;
+          queueSave();
+        }}
+        onBlur={() => {
+          window.clearTimeout(saveTimerRef.current);
+          void persist();
+        }}
+        placeholder="Description"
+        aria-label="Description"
+      />
+    </>
+  );
+  const fileActions = (
+    <div className="studio-element-detail-file-actions">
+      {onRequestPickAsset ? (
+        <button type="button" className="studio-element-detail-file-from" onClick={() => openFilesPick()}>
+          From Files
+        </button>
+      ) : null}
+      {media ? (
+        <button
+          type="button"
+          className="studio-element-detail-file-from"
+          onClick={() => void removeMedia(media.studioId)}
+        >
+          Remove
+        </button>
+      ) : null}
+    </div>
+  );
+  const fileInput = (
+    <input
+      ref={inputRef}
+      className="hidden"
+      type="file"
+      accept={isStyleSheet ? undefined : "image/*,video/*"}
+      multiple={isStyleSheet}
+      onChange={(event) => {
+        void upload(event.currentTarget.files);
+        event.currentTarget.value = "";
+      }}
+    />
+  );
+
+  if (!isMobile) {
+    return (
+      <div
+        className={`studio-element-detail is-split${dragOver ? " is-drop-target" : ""}`}
+        data-drop-target="composer"
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragOverCapture={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onDropCapture={handleDrop}
+      >
+        <div className="studio-element-detail-stage">
+          {media ? (
+            <StudioAssetPreview key={media.studioId} entry={media} />
+          ) : (
+            <button
+              type="button"
+              className="studio-element-detail-stage-empty"
+              onClick={() => {
+                if (!uploading) inputRef.current?.click();
+              }}
+            >
+              {uploading ? "Uploading…" : "Drop or click"}
+            </button>
+          )}
+        </div>
+        <aside className="studio-element-detail-side studio-gen-detail">
+          <div className="studio-gen-detail-body">
+            {fields}
+            {fileActions}
+            {fileInput}
+            {error ? <p className="studio-element-detail-error">{error}</p> : null}
+          </div>
+        </aside>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -33364,41 +33541,7 @@ function StudioElementDetailPane({
       onDrop={handleDrop}
     >
       <div className="studio-element-detail-form">
-        <input
-          className="cursor-input studio-element-detail-title"
-          value={name}
-          onChange={(event) => {
-            const next = isStyleSheet ? event.target.value : slugElementTitleInput(event.target.value);
-            setName(next);
-            nameRef.current = next;
-            queueSave();
-          }}
-          onBlur={() => {
-            window.clearTimeout(saveTimerRef.current);
-            if (!restoreTitleIfEmpty()) void persist();
-          }}
-          placeholder="Title"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          aria-label="Title"
-        />
-        <textarea
-          className="cursor-input studio-element-detail-notes"
-          value={description}
-          onChange={(event) => {
-            const next = event.target.value;
-            setDescription(next);
-            descriptionRef.current = next;
-            queueSave();
-          }}
-          onBlur={() => {
-            window.clearTimeout(saveTimerRef.current);
-            void persist();
-          }}
-          placeholder="Description"
-          aria-label="Description"
-        />
+        {fields}
         <div
           className={`studio-element-detail-file${media ? " has-media" : ""}${dragOver ? " is-drop-target" : ""}`}
           role="button"
@@ -33438,26 +33581,8 @@ function StudioElementDetailPane({
             </button>
           ) : null}
         </div>
-        {onRequestPickAsset ? (
-          <button
-            type="button"
-            className="studio-element-detail-file-from"
-            onClick={() => openFilesPick()}
-          >
-            From Files
-          </button>
-        ) : null}
-        <input
-          ref={inputRef}
-          className="hidden"
-          type="file"
-          accept={isStyleSheet ? undefined : "image/*,video/*"}
-          multiple={isStyleSheet}
-          onChange={(event) => {
-            void upload(event.currentTarget.files);
-            event.currentTarget.value = "";
-          }}
-        />
+        {fileActions}
+        {fileInput}
         {error ? <p className="studio-element-detail-error">{error}</p> : null}
       </div>
     </div>
