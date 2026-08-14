@@ -178,6 +178,7 @@ async function runPiTurn(body, abortSignal) {
     currentFolderPath,
     cwdFolderId,
     cwdFolderPath,
+    threadSummary,
   } = body;
 
   if (!capabilityToken) {
@@ -326,6 +327,7 @@ async function runPiTurn(body, abortSignal) {
       cwdFolderId: currentFolderId || cwdFolderId || null,
       cwdIndex,
       abortSignal,
+      generationPollTimeoutMs: 90_000,
       getBearerToken: async () => capabilityToken,
       onPlanChange: (snap) => {
         if (!callbackBase) return;
@@ -447,18 +449,6 @@ async function runPiTurn(body, abortSignal) {
       );
     }
 
-    const memoryBlock =
-      Array.isArray(memories) && memories.length
-        ? `Memories (already loaded for this turn — use them; do not claim you have no memory):\n${memories
-            .slice(0, 10)
-            .map((m) => {
-              const pin = m.pinned ? " pinned" : "";
-              const body = String(m.body ?? "").replace(/\s+/g, " ").trim().slice(0, 280);
-              return `- [${m.kind}${pin}] ${m.title}: ${body}`;
-            })
-            .join("\n")}`
-        : "Memories: none loaded for this turn.";
-
     const attachmentBlock = Array.isArray(workingSet) && workingSet.length
       ? `Attached (use these ids):\n${workingSet
           .map((item, index) => {
@@ -467,7 +457,9 @@ async function runPiTurn(body, abortSignal) {
               textValue(item.studioKind) ? `kind=${textValue(item.studioKind)}` : "",
               textValue(item.studioId) ? `id=${textValue(item.studioId)}` : "",
               textValue(item.elementType) ? `type=${textValue(item.elementType)}` : "",
-              textValue(item.folderPath || item.path) ? `path=${textValue(item.folderPath || item.path)}` : "",
+              textValue(item.folderPath || item.path)
+                ? `path=${textValue(item.folderPath || item.path)}`
+                : "",
             ].filter(Boolean);
             const lines = [parts.join(" | ")];
             if (item.preview?.folders?.length) {
@@ -481,8 +473,12 @@ async function runPiTurn(body, abortSignal) {
                   .join(", ")}`,
               );
             }
-            if (textValue(item.excerpt)) lines.push(`excerpt: ${textValue(item.excerpt).slice(0, 280)}`);
-            if (textValue(item.description)) lines.push(`notes: ${textValue(item.description).slice(0, 200)}`);
+            if (textValue(item.excerpt)) {
+              lines.push(`excerpt: ${textValue(item.excerpt).slice(0, 280)}`);
+            }
+            if (textValue(item.description)) {
+              lines.push(`notes: ${textValue(item.description).slice(0, 200)}`);
+            }
             return lines.join("\n");
           })
           .join("\n\n")}`
@@ -498,11 +494,59 @@ async function runPiTurn(body, abortSignal) {
       ? `Current folder (CWD): id=${cwdId}${cwdPath ? ` path=${cwdPath}` : ""}. Default folderId for studio_create_document, studio_generate_*, studio_create_folder (as parent), uploads, and other saves — unless the user names another folder or attaches a different target.`
       : "Current folder (CWD): none open — if saving, ask once or use an attached folder id.";
 
+    const memoryBlock =
+      Array.isArray(memories) && memories.length
+        ? `Memories (high-signal only — already loaded; do not tool-call recall):\n${memories
+            .slice(0, 6)
+            .map((m) => {
+              const pin = m.pinned ? " pinned" : "";
+              const body = String(m.body ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+              return `- [${m.kind}${pin}] ${m.title}: ${body}`;
+            })
+            .join("\n")}`
+        : "Memories: none relevant for this turn (do not invent recall).";
+
+    const summaryBlock = textValue(threadSummary)
+      ? `Thread summary (durable continuity):\n${String(threadSummary).slice(0, 1200)}`
+      : "";
+
+    const formatPriorLine = (row) => {
+      const role = String(row?.role || "?");
+      const tool = textValue(row?.toolName);
+      const raw = String(row?.content || "").replace(/\s+/g, " ").trim();
+      if (role === "tool") {
+        return `tool: ${tool || "step"} — ${raw.slice(0, 220)}`;
+      }
+      if (role === "user") return `user: ${raw.slice(0, 1400)}`;
+      if (role === "assistant") return `assistant: ${raw.slice(0, 1000)}`;
+      return `${role}: ${raw.slice(0, 400)}`;
+    };
+
+    const priorRows = Array.isArray(history) ? history.slice(-20) : [];
+    // Drop the trailing user echo of this turn's message if present.
+    const prior =
+      priorRows.length > 0
+        ? priorRows
+            .filter((row, i) => {
+              if (i !== priorRows.length - 1) return true;
+              return !(
+                row?.role === "user" &&
+                String(row.content || "").trim() === String(userMessage || "").trim()
+              );
+            })
+            .map(formatPriorLine)
+            .join("\n")
+        : "";
+
+    const isContinue = /^\s*continue\.?\s*$/i.test(String(userMessage || ""));
+
     const system = [
       "Yatishara Studio Agent. Act with tools — don't advise how unless asked.",
+      "CONTINUITY: Prior + Thread summary + TODO board ARE this chat. Resume unfinished work; do not restart from scratch unless asked. \"Continue.\" means pick up the next unfinished step from Prior/TODO.",
       "Pi tools: catalog, describe, invoke, inspect, remember, skills, plan, ask.",
       "Studio actions: invoke {name:\"studio_*\", args:{...}}. Never call studio_* as a top-level tool.",
-      "catalog: starter set by default; q= or category= to search. describe if args unclear.",
+      "catalog: starter set by default; q= or category= to search. describe if args unclear. Skip catalog when you already know the studio_* name.",
+      "Do not call remember for ephemeral tool chatter. Memories are auto-injected when relevant — never invent a recall tool step.",
       skillPromptBlock(),
       "Before writing image/video prompts or choosing hypermotion vs cinematic, skills {id} for the matching prompt-* pack. Do not invent third-party brand names in prompts.",
       "Voiceover from video/edit: skills {id:\"prompt-voiceover\"}. Pull frames (VO cadence), write VO, studio_create_document titled \"VO script — …\", ALWAYS paste spoken-only ```text fence in chat for Copy, then ask once before ElevenLabs audio gen.",
@@ -515,6 +559,7 @@ async function runPiTurn(body, abortSignal) {
       "Video models: only from studio_list_video_models (or known slugs seedance-2.5 / seedance-2.0). Talk about motion/light/res/length. Never invent caps, features, or legacy/pipeline marketing.",
       "Bias to action: for vague creative asks, assume strong defaults and DO the next useful tool step (usually estimate, then generate → approval). Do not offer a menu of options.",
       "Assumptions: pick model seedance-2.5, duration ~8s (clamp to model max), aspect from attached still or 16:9, cinematic unless they said hypermotion/chaos. Disclose assumptions in one short line after tools run.",
+      "Generate returns: if stillRendering/queued, tell the user it's rendering in Files and STOP — do not spin/poll forever inside the turn.",
       "TODO: if the job needs 2+ tool steps, call plan {action:\"create\", title, steps:[...]} first (cancelActive true if replacing direction). Mark steps doing/done with update_step as you go. add_step/remove_step/set_list_status when needed. Latest board reinjects on every tool result.",
       "Before your final reply this turn: update the active todo list to match real progress (doing/done). If the user cancelled the direction, set_list_status cancelled and create a new list if still working.",
       "ask: only for material unknowns (aspect/subject/direction that would change the gen). 1–4 multi-choice questions, then stop. Never ask readiness menus.",
@@ -530,30 +575,26 @@ async function runPiTurn(body, abortSignal) {
       "Cost: for paid generate, estimate first when the user did not clearly confirm spend, then proceed to generate (approval card handles spend). Quote estimates as $ / TTD only.",
       "Paid/destructive/outbound/admin → approval card (stop; chat UI handles it).",
       "Done criteria: never claim success unless invoke ok (or pendingApproval / pendingAsk). Follow verifyHint / verified.",
-      "Failures: on error → fix args or catalog/describe → retry once → then tell the user the error. Never invent 'tool unavailable'.",
+      "Failures: on error → fix args or catalog/describe → retry ONCE → then tell the user the real error and stop. Never invent 'tool unavailable'. Never thrash the same broken call.",
       "inspect: only for pixels beyond attached vision; max 8; videos → pull frames first.",
       "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets. No ids/JSON/debug talk.",
       "remember: ONLY short pointers — where a script/prompt lives (document title + folder path), durable prefs, decisions. NEVER store full prompts, shot lists, or script bodies in memory — those go in studio_create_document .md Scripts. Saying \"saved to memory\" for a prompt is wrong.",
-      "Memories block above is auto-loaded each turn (you will also see a Recall memory step in chat). Prefer those facts when relevant; do not invent that you checked memory if the block says none.",
+      summaryBlock,
       seedBoard
         ? `Existing TODO board (continue/update):\n${typeof seedBoard === "string" ? seedBoard : JSON.stringify(seedBoard).slice(0, 2500)}`
         : "",
-      lane,
+      isContinue
+        ? "LANE: CONTINUE — read Prior + TODO. Finish the next incomplete step. Do not re-ask; do not replay the original request verbatim."
+        : lane,
       byokFallbackNote || "",
       memoryBlock,
     ]
       .filter(Boolean)
       .join("\n");
 
-    const prior = Array.isArray(history)
-      ? history
-          .slice(-8)
-          .map((row) => `${row.role}: ${String(row.content || "").slice(0, 600)}`)
-          .join("\n")
-      : "";
     const prompt = [
       system,
-      prior ? `Prior:\n${prior}` : "",
+      prior ? `Prior conversation (this thread):\n${prior}` : "",
       attachmentBlock,
       `User:\n${userMessage}`,
     ]

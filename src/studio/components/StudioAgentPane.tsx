@@ -1020,9 +1020,9 @@ export function StudioAgentPane({
     try {
       const result = await retryRun({ runId: latestFailedRun._id });
       if (!result.ok && result.error) toast.error(result.error);
-      else toast.message("Retried");
+      else toast.message("Continuing…");
     } catch (error) {
-      toast.error(friendlyConvexError(error, "Retry failed"));
+      toast.error(friendlyConvexError(error, "Continue failed"));
     } finally {
       setBusy(false);
     }
@@ -1358,8 +1358,8 @@ export function StudioAgentPane({
                 <button
                   type="button"
                   className="studio-composer-circle-btn studio-dm-composer-circle"
-                  title="Retry last failed run"
-                  aria-label="Retry last failed run"
+                  title="Continue"
+                  aria-label="Continue"
                   onClick={() => void handleRetry()}
                 >
                   <RotateCcw size={14} strokeWidth={2.25} aria-hidden="true" />

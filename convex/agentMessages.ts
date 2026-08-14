@@ -80,12 +80,13 @@ export const listRecentMessagesInternal = internalQuery({
       role: v.string(),
       content: v.string(),
       attachmentsJson: v.optional(v.string()),
+      toolName: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
     const thread = await ctx.db.get("agentThreads", args.threadId);
     if (!thread || thread.ownerId !== args.ownerId) return [];
-    const limit = Math.min(40, Math.max(1, args.limit ?? 24));
+    const limit = Math.min(60, Math.max(1, args.limit ?? 32));
     const rows = await ctx.db
       .query("agentMessages")
       .withIndex("by_thread_and_created", (q) => q.eq("threadId", args.threadId))
@@ -93,11 +94,18 @@ export const listRecentMessagesInternal = internalQuery({
       .take(limit);
     return rows
       .reverse()
-      .filter((row) => row.role === "user" || row.role === "assistant")
+      .filter(
+        (row) =>
+          row.role === "user" ||
+          row.role === "assistant" ||
+          row.role === "tool" ||
+          row.role === "system",
+      )
       .map((row) => ({
         role: row.role,
         content: row.content,
         attachmentsJson: row.attachmentsJson,
+        toolName: row.toolName,
       }));
   },
 });

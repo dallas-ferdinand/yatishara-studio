@@ -157,14 +157,16 @@ export const retrieveForRun = internalQuery({
     }),
   ),
   handler: async (ctx, args) => {
-    const limit = Math.min(Math.max(args.limit ?? 12, 1), 30);
+    const limit = Math.min(Math.max(args.limit ?? 6, 1), 12);
     const owned = await ctx.db
       .query("agentMemories")
       .withIndex("by_owner_and_updated", (q) => q.eq("ownerId", args.ownerId))
       .order("desc")
-      .take(80);
+      .take(40);
     const filtered = owned.filter((row) => {
       if (row.archivedAt) return false;
+      // Thread summaries are injected separately — skip as generic recall noise.
+      if (row.kind === "summary") return false;
       if (
         args.projectFolderId &&
         row.projectFolderId &&
@@ -180,40 +182,70 @@ export const retrieveForRun = internalQuery({
       .split(/[^a-z0-9]+/i)
       .map((t) => t.trim())
       .filter((t) => t.length >= 3)
-      .slice(0, 24);
+      .slice(0, 16);
 
     const scored = filtered.map((row) => {
       let score = row.pinned ? 1000 : 0;
-      // Prefer project-scoped rows when CWD is set.
+      let tokenHits = 0;
+      let projectHit = false;
       if (
         args.projectFolderId &&
         row.projectFolderId &&
         row.projectFolderId === args.projectFolderId
       ) {
         score += 200;
-      } else if (!row.projectFolderId) {
-        score += 40; // global prefs still useful
+        projectHit = true;
       }
       if (tokens.length) {
         const hay = `${row.title}\n${row.body}`.toLowerCase();
         for (const t of tokens) {
-          if (hay.includes(t)) score += 12;
+          if (hay.includes(t)) {
+            score += 12;
+            tokenHits += 1;
+          }
         }
       }
-      // Mild recency: newer updatedAt ranks slightly higher among equals.
-      score += Math.min(30, Math.floor((row.updatedAt % 1_000_000) / 50_000));
-      return { row, score };
+      score += Math.min(20, Math.floor((row.updatedAt % 1_000_000) / 80_000));
+      return { row, score, tokenHits, projectHit };
     });
 
     scored.sort((a, b) => b.score - a.score || b.row.updatedAt - a.row.updatedAt);
 
-    return scored.slice(0, limit).map(({ row }) => ({
+    // Only keep high-signal memories — avoid flooding the turn with unrelated notes.
+    const relevant = scored.filter(
+      (s) => s.row.pinned || s.projectHit || s.tokenHits >= 2 || s.score >= 36,
+    );
+
+    return relevant.slice(0, limit).map(({ row }) => ({
       _id: row._id,
       kind: row.kind,
       title: row.title,
       body: row.body,
       pinned: row.pinned,
     }));
+  },
+});
+
+/** Latest durable summary for this thread (if any). */
+export const getThreadSummary = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("agentThreads"),
+  },
+  returns: v.union(v.null(), v.string()),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("agentMemories")
+      .withIndex("by_owner_and_updated", (q) => q.eq("ownerId", args.ownerId))
+      .order("desc")
+      .take(40);
+    const hit = rows.find(
+      (row) =>
+        !row.archivedAt &&
+        row.kind === "summary" &&
+        row.sourceThreadId === args.threadId,
+    );
+    return hit ? hit.body.slice(0, 1200) : null;
   },
 });
 

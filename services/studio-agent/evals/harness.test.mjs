@@ -121,6 +121,12 @@ export const GOLDEN_TASKS = [
     expectSkill: "send-dm",
   },
   {
+    id: "continue-resume",
+    message: "Continue.",
+    workingSet: [],
+    expectLaneIncludes: "CONTINUE",
+  },
+  {
     id: "orient-no-lane",
     message: "what folders do I have?",
     workingSet: [],

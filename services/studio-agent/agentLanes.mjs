@@ -89,6 +89,11 @@ export function detectActionLane(message, workingSet) {
       ["asset", "document", "element", "folder"].includes(String(i.studioKind || "")),
   );
 
+  // Resume / timeout Continue — never treat as a fresh job.
+  if (/^\s*continue\.?\s*$/i.test(String(message || ""))) {
+    return "LANE: CONTINUE — Prior + TODO + Thread summary are the job. Finish the next incomplete step. Do not restart; do not re-ask the original request.";
+  }
+
   if (/\b(post|publish|share\s+(this|it|to\s+(feed|profile|public)))\b/.test(text) && hasAsset) {
     return "LANE: invoke studio_share_asset_post with attached asset id (+ optional caption). Do not advise; do not claim unavailable unless invoke fails.";
   }

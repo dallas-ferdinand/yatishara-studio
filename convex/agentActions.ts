@@ -277,16 +277,25 @@ export const sendTurn = action({
     });
     await ctx.runMutation(internal.agentRuns.markRunning, { runId });
 
-    const history: Array<{ role: string; content: string }> = await ctx.runQuery(
+    const history: Array<{
+      role: string;
+      content: string;
+      attachmentsJson?: string;
+      toolName?: string;
+    }> = await ctx.runQuery(
       internal.agentMessages.listRecentMessagesInternal,
-      { threadId: args.threadId, ownerId, limit: 20 },
+      { threadId: args.threadId, ownerId, limit: 32 },
     );
 
     const memories = await ctx.runQuery(internal.agentMemory.retrieveForRun, {
       ownerId,
       projectFolderId: args.currentFolderId,
-      limit: 12,
+      limit: 6,
       query: message,
+    });
+    const threadSummary = await ctx.runQuery(internal.agentMemory.getThreadSummary, {
+      ownerId,
+      threadId: args.threadId,
     });
 
     const folderRows = await ctx.runQuery(internal.agentMessages.listFoldersForOwner, {
@@ -450,16 +459,15 @@ export const sendTurn = action({
       expiresAt: Date.now() + CAP_TTL_MS,
     });
 
-    // Visible chip: memories are injected into the Pi system prompt every turn,
-    // but without a tool row users think recall never runs (only remember shows).
-    {
+    // Visible chip only when we actually inject high-signal memories.
+    if (memories.length > 0) {
       const recallId = await ctx.runMutation(internal.agentRuns.recordToolStart, {
         ownerId,
         threadId: args.threadId,
         runId,
         toolName: "recall",
         argsJson: JSON.stringify({
-          limit: 12,
+          limit: memories.length,
           projectFolderId: args.currentFolderId
             ? String(args.currentFolderId)
             : null,
@@ -482,8 +490,8 @@ export const sendTurn = action({
 
     const callbackBase = apiBase;
     const controller = new AbortController();
-    // Video/image gens now queue+poll; keep headroom for multi-step turns.
-    const timeoutMs = Number(process.env.STUDIO_AGENT_TURN_TIMEOUT_MS || 600000);
+    // Long creative turns need headroom; gens themselves queue+short-poll now.
+    const timeoutMs = Number(process.env.STUDIO_AGENT_TURN_TIMEOUT_MS || 900000);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -503,6 +511,7 @@ export const sendTurn = action({
           workingSet,
           history,
           memories,
+          threadSummary: threadSummary || undefined,
           role,
           scopes,
           autoApprove: Boolean(args.autoApprove),
@@ -721,7 +730,7 @@ export const sendTurn = action({
       }
       const err =
         error instanceof Error && error.name === "AbortError"
-          ? `Pi worker timed out after ${timeoutMs}ms`
+          ? `Timed out after ${Math.round(timeoutMs / 60000)}m — tap Continue to keep going.`
           : error instanceof Error
             ? error.message
             : String(error);
@@ -729,7 +738,10 @@ export const sendTurn = action({
       await ctx.runMutation(api.agentMessages.appendMessage, {
         threadId: args.threadId,
         role: "assistant",
-        content: `Agent run failed: ${err}`,
+        content:
+          error instanceof Error && error.name === "AbortError"
+            ? err
+            : `Agent run failed: ${err}`,
       });
       await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
       return {
@@ -787,6 +799,7 @@ export const retryRun = action({
     usedByok: v.boolean(),
     runId: v.optional(v.string()),
     error: v.optional(v.string()),
+    cancelled: v.optional(v.boolean()),
   }),
   handler: async (ctx, args): Promise<SendTurnResult> => {
     const me = await ctx.runQuery(api.users.current, {});
@@ -796,16 +809,10 @@ export const retryRun = action({
     if (!run || run.ownerId !== me.userId) {
       throw new Error("Run not found");
     }
-    const full = await ctx.runQuery(api.agentRuns.listForThread, {
-      threadId: run.threadId,
-      limit: 50,
-    });
-    const match = full.find((row: { _id: Id<"agentRuns">; userMessage?: string }) => row._id === args.runId);
-    const message = match?.userMessage?.trim();
-    if (!message) throw new Error("Original run message missing");
+    // Continue the thread — do NOT replay the original user prompt.
     return await ctx.runAction(api.agentActions.sendTurn, {
       threadId: run.threadId,
-      message: `Retry previous request:\n${message}`,
+      message: "Continue.",
     });
   },
 });
