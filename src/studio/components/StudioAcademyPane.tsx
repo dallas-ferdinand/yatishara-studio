@@ -771,6 +771,9 @@ export function StudioAcademyPane({
         phase: "redirect",
         amountCents: topUpAmountCents,
         checkoutUrl: result.checkoutUrl,
+        paymentId: result.paymentId,
+        billing: "academy",
+        academyCourse: academy.courseId,
       });
     } catch (error) {
       onWamHandoff?.(null);

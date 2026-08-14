@@ -393,6 +393,58 @@ export const listMyPayments = authedQuery({
   },
 });
 
+/** Wam returnUrl uses identifier=invoiceId, not our Convex payment id. */
+export const findMyPaymentForWamReturn = authedQuery({
+  args: { identifier: v.string() },
+  returns: v.union(
+    v.object({
+      paymentId: v.id("payments"),
+      amountCents: v.number(),
+      academyCourseId: v.optional(v.id("academyCourses")),
+      billing: v.union(
+        v.literal("plans"),
+        v.literal("invoices"),
+        v.literal("topup"),
+        v.literal("academy"),
+      ),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const identifier = args.identifier.trim();
+    if (!identifier) return null;
+    const byExternal = await ctx.db
+      .query("payments")
+      .withIndex("by_external_payment", (q) => q.eq("externalPaymentId", identifier))
+      .unique();
+    const recent = await ctx.db
+      .query("payments")
+      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+      .order("desc")
+      .take(30);
+    const row =
+      byExternal && byExternal.userId === ctx.user._id
+        ? byExternal
+        : recent.find(
+            (payment) =>
+              payment.externalPaymentId === identifier ||
+              payment.providerRequestId === identifier,
+          );
+    if (!row) return null;
+    const billing = row.academyCourseId
+      ? "academy"
+      : row.subscriptionPlanId
+        ? "plans"
+        : "topup";
+    return {
+      paymentId: row._id,
+      amountCents: row.amountCents,
+      academyCourseId: row.academyCourseId,
+      billing,
+    };
+  },
+});
+
 /** Abandoned first-subscribe checkouts are not payable. Renewal unpaid invoices keep Pay. */
 export const expireMyAbandonedSubscribeInvoices = authedMutation({
   args: {},

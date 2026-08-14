@@ -85,6 +85,9 @@ type Props = {
     phase: "preparing" | "redirect";
     amountCents?: number;
     checkoutUrl?: string;
+    paymentId?: string;
+    billing?: "plans" | "invoices" | "topup" | "academy";
+    academyCourse?: string;
   } | null) => void;
 };
 
@@ -368,6 +371,8 @@ function BillingTopUp({
         phase: "redirect",
         amountCents: topUpChargeCents || checkoutPlan.amountCents,
         checkoutUrl: result.checkoutUrl,
+        paymentId: result.paymentId,
+        billing: "topup",
       });
     } catch (error) {
       onWamHandoff(null);
@@ -623,6 +628,8 @@ export function StudioBillingPane({
         phase: "redirect",
         amountCents: quote.chargeCents,
         checkoutUrl: result.checkoutUrl,
+        paymentId: result.paymentId,
+        billing: "plans",
       });
     } catch (error) {
       onWamHandoff(null);
@@ -645,6 +652,8 @@ export function StudioBillingPane({
         phase: "redirect",
         amountCents: row.amountCents,
         checkoutUrl: result.checkoutUrl,
+        paymentId: result.paymentId,
+        billing: "invoices",
       });
     } catch (error) {
       onWamHandoff(null);

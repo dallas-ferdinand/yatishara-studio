@@ -617,6 +617,83 @@ const STUDIO_CUSTOM_CURSOR_KEY = "yatishara-studio-custom-cursor";
 /** localStorage: dismissed | enabled — controls auto fullscreen push prompt. */
 const STUDIO_PUSH_PROMPT_KEY = "yatishara-studio-push-prompt-v1";
 const STUDIO_WAM_RETURN_KEY = "yatishara-studio-wam-return-v1";
+
+function readWamReturn() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(STUDIO_WAM_RETURN_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function stashWamReturn(next) {
+  if (typeof window === "undefined" || !next || typeof next !== "object") return;
+  try {
+    window.sessionStorage.setItem(
+      STUDIO_WAM_RETURN_KEY,
+      JSON.stringify({ ...(readWamReturn() || {}), ...next }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearWamReturn() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(STUDIO_WAM_RETURN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function billingSectionFromStash(stored) {
+  if (stored?.billing === "plans" || stored?.billing === "invoices" || stored?.billing === "topup") {
+    return stored.billing;
+  }
+  return "plans";
+}
+
+function captureWamReturnFromUrl() {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  const paymentId = params.get("paymentId");
+  const academyCourse = params.get("academyCourse");
+  const billing = params.get("billing");
+  const result = (params.get("result") || "").toUpperCase();
+  const identifier = (params.get("identifier") || "").trim();
+  const amountRaw = Number.parseInt(params.get("amount") || "", 10);
+  const wamOk = result === "OK";
+  if (!paymentId && !academyCourse && !wamOk && !identifier) return;
+  stashWamReturn({
+    ...(paymentId ? { paymentId } : {}),
+    ...(academyCourse ? { academyCourse } : {}),
+    ...(billing === "plans" || billing === "invoices" || billing === "topup"
+      ? { billing }
+      : {}),
+    ...(identifier ? { identifier } : {}),
+    ...(Number.isFinite(amountRaw) && amountRaw > 0 ? { amountCents: amountRaw } : {}),
+    ...(wamOk ? { wamOk: true } : {}),
+  });
+  for (const key of [
+    "payment",
+    "paymentId",
+    "billing",
+    "academyCourse",
+    "result",
+    "amount",
+    "identifier",
+    "reference",
+    "signature",
+  ]) {
+    params.delete(key);
+  }
+  const cleaned = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
+  window.history.replaceState({}, "", cleaned || "/");
+}
 const ACTIVE_STYLE_SHEET_KEY = "mercuryos-studio-active-style-sheet-v1";
 const COMPOSER_STYLE_MODE_KEY = "mercuryos-studio-composer-style-mode-v1";
 const STUDIO_MAIN_PANEL_SIZES_KEY = "yatishara-studio-main-panel-sizes";
@@ -1484,6 +1561,7 @@ export function StudioShell({
   const [wamHandoff, setWamHandoff] = useState(null);
   const academyPaymentReturnHandledRef = useRef(false);
   const billingPaymentReturnHandledRef = useRef(false);
+  const [wamReturnIdentifier, setWamReturnIdentifier] = useState(null);
   /** Full-screen ask to enable browser push (gens / DMs / followed posts). */
   const [pushPromptOpen, setPushPromptOpen] = useState(false);
   const [mobileSection, setMobileSection] = useState("composer");
@@ -1892,6 +1970,10 @@ export function StudioShell({
 
   const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
   const pricing = useQuery(api.billing.getPricing, hasCurrentUser ? {} : "skip");
+  const wamReturnPayment = useQuery(
+    api.billing.findMyPaymentForWamReturn,
+    hasCurrentUser && wamReturnIdentifier ? { identifier: wamReturnIdentifier } : "skip",
+  );
   // Defer payment lists until settings or admin — they stampeded boot and near-timeouted with listThreads.
   const needsBillingDetails =
     settingsOpen ||
@@ -4988,31 +5070,11 @@ export function StudioShell({
   }
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const outcome = params.get("payment");
-    const paymentId = params.get("paymentId");
-    if (!outcome || !paymentId || params.get("academyCourse")) return;
-    const billing = params.get("billing");
-    try {
-      window.sessionStorage.setItem(
-        STUDIO_WAM_RETURN_KEY,
-        JSON.stringify({
-          paymentId,
-          billing:
-            billing === "plans" || billing === "invoices" || billing === "topup"
-              ? billing
-              : "topup",
-        }),
-      );
-    } catch {
-      /* ignore */
+    captureWamReturnFromUrl();
+    const stored = readWamReturn();
+    if (stored?.identifier && !stored?.paymentId) {
+      setWamReturnIdentifier(stored.identifier);
     }
-    params.delete("payment");
-    params.delete("paymentId");
-    params.delete("billing");
-    const cleaned = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
-    window.history.replaceState({}, "", cleaned);
   }, []);
 
   useEffect(() => {
@@ -5304,22 +5366,17 @@ export function StudioShell({
   useEffect(() => {
     if (typeof window === "undefined" || academyPaymentReturnHandledRef.current) return;
     if (!currentUser?._id) return;
-    const params = new URLSearchParams(window.location.search);
-    const outcome = params.get("payment");
-    const paymentId = params.get("paymentId");
-    const academyCourse = params.get("academyCourse");
-    if (!outcome || !paymentId || !academyCourse) return;
+    const stored = readWamReturn();
+    const paymentId = stored?.paymentId;
+    const academyCourse = stored?.academyCourse;
+    if (!paymentId || !academyCourse) return;
     academyPaymentReturnHandledRef.current = true;
     openAcademyTab({ courseId: academyCourse });
     setPaymentCelebration({
       phase: "confirming",
       kind: "academy",
+      amountCents: stored?.amountCents ?? null,
     });
-    params.delete("payment");
-    params.delete("paymentId");
-    params.delete("academyCourse");
-    const cleaned = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
-    window.history.replaceState({}, "", cleaned);
 
     let cancelled = false;
     void (async () => {
@@ -5382,27 +5439,36 @@ export function StudioShell({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot Wam academy return after auth
-  }, [currentUser?._id, syncWamPayment]);
+  }, [currentUser?._id, syncWamPayment, wamReturnPayment?.paymentId]);
+
+  useEffect(() => {
+    if (!wamReturnPayment?.paymentId) return;
+    stashWamReturn({
+      paymentId: wamReturnPayment.paymentId,
+      billing: readWamReturn()?.billing || wamReturnPayment.billing,
+      amountCents: wamReturnPayment.amountCents,
+      ...(wamReturnPayment.academyCourseId
+        ? { academyCourse: wamReturnPayment.academyCourseId }
+        : {}),
+    });
+    setWamReturnIdentifier(null);
+  }, [wamReturnPayment]);
 
   useEffect(() => {
     if (typeof window === "undefined" || billingPaymentReturnHandledRef.current) return;
     if (!currentUser?._id) return;
-    let stored = null;
-    try {
-      const raw = window.sessionStorage.getItem(STUDIO_WAM_RETURN_KEY);
-      stored = raw ? JSON.parse(raw) : null;
-    } catch {
-      stored = null;
-    }
+    const stored = readWamReturn();
+    if (stored?.academyCourse) return;
     const paymentId = stored?.paymentId;
-    const billing =
-      stored?.billing === "plans" || stored?.billing === "invoices" || stored?.billing === "topup"
-        ? stored.billing
-        : "topup";
+    const billing = billingSectionFromStash(stored);
     if (!paymentId) return;
     billingPaymentReturnHandledRef.current = true;
     openBillingTab(billing);
-    setPaymentCelebration({ phase: "confirming" });
+    setPaymentCelebration({
+      phase: "confirming",
+      billing,
+      amountCents: stored?.amountCents ?? null,
+    });
 
     void (async () => {
       const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -5420,14 +5486,11 @@ export function StudioShell({
             throw error;
           }
           if (result.status === "payment_completed") {
-            try {
-              window.sessionStorage.removeItem(STUDIO_WAM_RETURN_KEY);
-            } catch {
-              /* ignore */
-            }
+            clearWamReturn();
             setPaymentCelebration({
               phase: "success",
-              amountCents: result.amountCents ?? null,
+              billing,
+              amountCents: result.amountCents ?? stored?.amountCents ?? null,
               creditsGranted: result.creditsGranted ?? null,
             });
             return;
@@ -5437,29 +5500,25 @@ export function StudioShell({
             result.status === "rejected" ||
             result.status === "checkout_failed"
           ) {
-            try {
-              window.sessionStorage.removeItem(STUDIO_WAM_RETURN_KEY);
-            } catch {
-              /* ignore */
-            }
+            clearWamReturn();
             setPaymentCelebration(null);
             toast.error(result.status === "cancelled" ? "Payment cancelled" : "Payment not completed");
             return;
           }
         }
-        try {
-          window.sessionStorage.removeItem(STUDIO_WAM_RETURN_KEY);
-        } catch {
-          /* ignore */
-        }
-        setPaymentCelebration({ phase: "success" });
+        clearWamReturn();
+        setPaymentCelebration({
+          phase: "success",
+          billing,
+          amountCents: stored?.amountCents ?? null,
+        });
       } catch {
         setPaymentCelebration(null);
         toast.error("Could not confirm payment — check Billing in a moment");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot Wam billing return after auth
-  }, [currentUser?._id]);
+  }, [currentUser?._id, wamReturnPayment?.paymentId]);
 
   /** @deprecated Use openNetworkTab — kept for call-site compatibility. */
   function openOffersTab(_section = "home") {
@@ -26650,7 +26709,17 @@ export function StudioShell({
             <PaymentReceivedOverlay
               celebration={paymentCelebration}
               creditPriceCents={pricing?.creditPriceCents}
-              onClose={() => setPaymentCelebration(null)}
+              onClose={() => {
+                const billing = paymentCelebration?.billing;
+                const kind = paymentCelebration?.kind;
+                setPaymentCelebration(null);
+                if (kind === "academy") return;
+                openBillingTab(
+                  billing === "invoices" || billing === "topup" || billing === "plans"
+                    ? billing
+                    : "plans",
+                );
+              }}
             />,
             document.body,
           )
@@ -35289,9 +35358,17 @@ function WamCheckoutHandoffOverlay({ handoff }) {
     handoff?.amountCents != null ? formatTtdCents(handoff.amountCents) : null;
 
   useEffect(() => {
+    if (handoff?.paymentId || handoff?.billing) {
+      stashWamReturn({
+        ...(handoff.paymentId ? { paymentId: handoff.paymentId } : {}),
+        ...(handoff.billing ? { billing: handoff.billing } : {}),
+        ...(handoff.amountCents != null ? { amountCents: handoff.amountCents } : {}),
+        ...(handoff.academyCourse ? { academyCourse: handoff.academyCourse } : {}),
+      });
+    }
     if (!checkoutUrl) return;
     window.location.assign(checkoutUrl);
-  }, [checkoutUrl]);
+  }, [checkoutUrl, handoff]);
 
   return (
     <div
@@ -35557,6 +35634,8 @@ function SettingsWorkspacePane({
         phase: "redirect",
         amountCents: topUpChargeCents || checkoutPlan.amountCents,
         checkoutUrl: result.checkoutUrl,
+        paymentId: result.paymentId,
+        billing: "topup",
       });
     } catch (error) {
       onWamHandoff?.(null);
