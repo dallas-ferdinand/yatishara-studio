@@ -48,6 +48,16 @@ import {
 import { clipAtPlayhead } from "./lib/editorProjectOps";
 
 const execFileAsync = promisify(execFile);
+const FFMPEG_EXEC_OPTS = { maxBuffer: 16 * 1024 * 1024 };
+
+/** Quiet stats so a failed mix does not surface `frame= 0` progress as the error. */
+function runFfmpeg(args: string[]) {
+  return execFileAsync(
+    "ffmpeg",
+    ["-hide_banner", "-nostats", "-loglevel", "error", ...args],
+    FFMPEG_EXEC_OPTS,
+  );
+}
 
 /**
  * Export re-encodes audio per segment, per concat pair, then again at the mix.
@@ -374,6 +384,25 @@ async function probeAudioStream(
 
 async function hasAudioStream(path: string): Promise<boolean> {
   return (await probeAudioStream(path)).present;
+}
+
+async function hasVideoStream(path: string): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=index",
+      "-of",
+      "csv=p=0",
+      path,
+    ]);
+    return stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
 }
 
 async function probeMediaDurationSeconds(path: string): Promise<number> {
@@ -725,17 +754,28 @@ async function mixAudioTrack(args: {
   if (!audioClips.length) return videoPath;
 
   const outputPath = join(tempDir, "export-with-audio.mp4");
-  const audioInputs: string[] = ["-i", videoPath];
+  const audioInputs: string[] = [];
   const filterParts: string[] = [];
   const mixLabels: string[] = [];
-  let inputIndex = 1;
+  let inputIndex = 0;
+  let videoInputIndex = -1;
 
-  // Keep camera / embedded video audio and layer music/SFX on top (preview does this).
+  // Open picture and soundtrack as separate inputs of the same file. Sharing one
+  // demuxer for `-map 0:v -c:v copy` plus `[0:a]amix` stalls the muxer at
+  // frame=0 / size=0kB while audio time crawls — that dump was the "error".
+  const videoHasPicture = await hasVideoStream(videoPath);
+  if (videoHasPicture) {
+    videoInputIndex = inputIndex;
+    audioInputs.push("-i", videoPath);
+    inputIndex += 1;
+  }
   if (await hasAudioStream(videoPath)) {
     filterParts.push(
-      "[0:a]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100[abase]",
+      `[${inputIndex}:a]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100[abase]`,
     );
     mixLabels.push("[abase]");
+    audioInputs.push("-i", videoPath);
+    inputIndex += 1;
   }
 
   let bedEnd = 0;
@@ -775,25 +815,30 @@ async function mixAudioTrack(args: {
   // apad keeps audio as long as the timeline; picture must already cover targetDuration
   // (black tail via exportCoverUntilSec). Do not -shortest or we cut beds after last video.
   const filter = `${filterParts.join(";")};${mixLabels.join("")}amix=inputs=${mixLabels.length}:duration=longest:dropout_transition=0:normalize=0[amixed];[amixed]apad[aout]`;
-  await execFileAsync("ffmpeg", [
-    "-y",
-    ...audioInputs,
-    "-filter_complex",
-    filter,
-    "-map",
-    "0:v",
-    "-map",
-    "[aout]",
-    "-c:v",
-    "copy",
-    "-c:a",
-    "aac",
-    "-b:a",
-    EXPORT_AUDIO_BITRATE,
-    "-t",
-    String(targetDuration),
-    outputPath,
-  ]);
+  const mapArgs =
+    videoInputIndex >= 0
+      ? ["-map", `${videoInputIndex}:v`, "-map", "[aout]", "-c:v", "copy"]
+      : ["-map", "[aout]", "-vn"];
+  try {
+    await runFfmpeg([
+      "-y",
+      ...audioInputs,
+      "-filter_complex",
+      filter,
+      ...mapArgs,
+      "-c:a",
+      "aac",
+      "-b:a",
+      EXPORT_AUDIO_BITRATE,
+      "-max_muxing_queue_size",
+      "9999",
+      "-t",
+      String(targetDuration),
+      outputPath,
+    ]);
+  } catch (error) {
+    throw new Error(ffmpegFailMessage(error, "Could not mix audio onto the export."));
+  }
   return outputPath;
 }
 

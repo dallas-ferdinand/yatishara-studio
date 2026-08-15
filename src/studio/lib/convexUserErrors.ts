@@ -211,6 +211,10 @@ const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
     match: /Export requires ffmpeg/i,
     message: "Export isn't available on the server right now. Try again in a bit.",
   },
+  {
+    match: /frame=\s*0|Could not mix audio onto the export/i,
+    message: "Audio mix hit a muxer stall. Retry — this was fixed on the server.",
+  },
 ];
 
 /**

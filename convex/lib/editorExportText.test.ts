@@ -119,4 +119,28 @@ describe("helpers", () => {
       ),
     ).toMatch(/Text overlay export failed/);
   });
+
+  it("does not surface mix-step progress as the error", () => {
+    const stderr =
+      "Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, stereo, fltp, 320 kb/s\r" +
+      "Metadata:\r encoder : Lavc60.31.102 aac\r" +
+      "frame= 0 fps=0.0 q=0.0 size= 0kB time=N/A bitrate=N/A speed=N/A\r" +
+      "frame= 0 fps=0.0 q=0.0 size= 0kB time=00:00:01.16 bitrate= 0.3kbits/s speed=0.335x\r" +
+      "Error muxing a packet\n";
+    expect(ffmpegFailMessage({ stderr }, "Could not mix audio onto the export.")).toBe(
+      "Error muxing a packet",
+    );
+  });
+
+  it("falls back when stderr is only progress", () => {
+    expect(
+      ffmpegFailMessage(
+        {
+          stderr:
+            "frame= 0 fps=0.0 q=0.0 size= 0kB time=00:00:01.16 bitrate= 0.3kbits/s speed=0.335x",
+        },
+        "Could not mix audio onto the export.",
+      ),
+    ).toBe("Could not mix audio onto the export.");
+  });
 });
