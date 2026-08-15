@@ -2591,12 +2591,14 @@
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 0.5rem;
-  height: 42px;
-  min-height: 42px;
-  max-height: 42px;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
   padding: 0 0.75rem;
-  border-top: 1px solid var(--mos-border);
-  border-bottom: 1px solid var(--mos-border);
+  box-sizing: border-box;
+  /* Resize handle above already draws the top divider — no second border. */
+  border-top: none;
+  border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border));
   background: var(--mos-panel);
   flex-shrink: 0;
 }
@@ -2615,8 +2617,8 @@
 .studio-editor-transport-left button,
 .studio-editor-transport-right .studio-editor-zoom button,
 .studio-editor-overlay-snap {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 6px;
   border: none;
   background: transparent;
@@ -2946,14 +2948,14 @@
 
 .studio-editor-track-row.is-text .studio-editor-track-rail {
   margin: 0;
-  border-radius: 6px 0 0 6px;
+  border-radius: 0;
 }
 
 .studio-editor-track-row.is-text .studio-editor-track-lane {
   margin: 0 6px 0 0;
   height: 100%;
   min-height: 0;
-  border-radius: 0 6px 6px 0;
+  border-radius: 6px;
   overflow: hidden;
 }
 
