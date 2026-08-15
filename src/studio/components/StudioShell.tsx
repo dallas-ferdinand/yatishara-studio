@@ -1295,10 +1295,19 @@ function studioCursorResizeYUrl(accent) {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 7 14, ns-resize`;
 }
 
+function studioCursorResizeCornerUrl(accent, degrees, fallback) {
+  // Horizontal arrows rotated onto a corner diagonal. -45 = bottom-left / top-right
+  // (nesw, top-right handle). +45 = top-left / bottom-right (nwse, top-left handle).
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><g transform='translate(16 16) rotate(${degrees}) translate(-14 -7)'>${studioCursorResizeXMarkup(accent)}</g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 16 16, ${fallback}`;
+}
+
 function studioCursorResizeNeswUrl(accent) {
-  // Same left/right arrows, rotated 45° for the composer corner handle.
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><g transform='translate(16 16) rotate(45) translate(-14 -7)'>${studioCursorResizeXMarkup(accent)}</g></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 16 16, nesw-resize`;
+  return studioCursorResizeCornerUrl(accent, -45, "nesw-resize");
+}
+
+function studioCursorResizeNwseUrl(accent) {
+  return studioCursorResizeCornerUrl(accent, 45, "nwse-resize");
 }
 
 function studioCursorDragUrl(accent) {
@@ -1325,6 +1334,7 @@ function applyStudioCursorTheme(element) {
   root.style.setProperty("--studio-cursor-resize-x", studioCursorResizeXUrl(accent));
   root.style.setProperty("--studio-cursor-resize-y", studioCursorResizeYUrl(accent));
   root.style.setProperty("--studio-cursor-resize-nesw", studioCursorResizeNeswUrl(accent));
+  root.style.setProperty("--studio-cursor-resize-nwse", studioCursorResizeNwseUrl(accent));
   root.style.setProperty("--studio-cursor-drag", studioCursorDragUrl(accent));
   root.style.setProperty("--studio-cursor-grabbing", studioCursorGrabbingUrl(accent));
 }
