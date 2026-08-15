@@ -201,6 +201,6 @@ export const DEFAULT_PPS = 72;
 export const VIDEO_TRACK_HEIGHT = 50;
 export const TEXT_TRACK_HEIGHT = 28;
 export const AUDIO_TRACK_HEIGHT = VIDEO_TRACK_HEIGHT;
-export const TRACK_RAIL_WIDTH = 40;
+export const TRACK_RAIL_WIDTH = 52;
 export const RULER_HEIGHT = 26;
 export const INSPECTOR_WIDTH = 300;
