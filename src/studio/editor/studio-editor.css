@@ -2990,6 +2990,12 @@ body.is-timeline-panning * {
   user-select: none !important;
 }
 
+body.is-timeline-zoom-drag,
+body.is-timeline-zoom-drag * {
+  cursor: var(--studio-cursor-resize-x, ew-resize) !important;
+  user-select: none !important;
+}
+
 body.is-drag-cursor .studio-editor-clip {
   pointer-events: none;
 }

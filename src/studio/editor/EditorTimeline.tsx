@@ -1288,6 +1288,66 @@ export function EditorTimeline({
     [onZoom, pixelsPerSecond],
   );
 
+  /**
+   * Ctrl/Cmd + drag on timeline: right/up zoom in, left/down zoom out (anchored under cursor).
+   */
+  const beginTimelineZoomDrag = useCallback(
+    (event) => {
+      if (!onZoom) return;
+      if (event.button !== 0) return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const scroll = scrollRef.current;
+      if (!scroll) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startPps = pixelsPerSecond;
+      const rect = scroll.getBoundingClientRect();
+      const xInView = startX - rect.left;
+      const time = Math.max(
+        0,
+        (scroll.scrollLeft + xInView - TRACK_RAIL_WIDTH) / Math.max(startPps, 1),
+      );
+      let lastPps = startPps;
+      const STEP_PX = 28;
+
+      document.body.classList.add("is-timeline-zoom-drag");
+      const captureEl = event.currentTarget;
+      captureEl?.setPointerCapture?.(event.pointerId);
+
+      const onMove = (moveEvent) => {
+        // Right / up → zoom in; left / down → zoom out.
+        const score = (moveEvent.clientX - startX) - (moveEvent.clientY - startY);
+        const steps = Math.trunc(score / STEP_PX);
+        const factor = Math.pow(1.1, steps);
+        const next = Math.max(MIN_PPS, Math.min(MAX_PPS, Math.round(startPps * factor)));
+        if (next === lastPps) return;
+        lastPps = next;
+        zoomAnchorRef.current = { time, xInView };
+        onZoom(next);
+      };
+
+      const onUp = (upEvent) => {
+        try {
+          captureEl?.releasePointerCapture?.(upEvent.pointerId);
+        } catch {
+          /* ignore */
+        }
+        document.body.classList.remove("is-timeline-zoom-drag");
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [onZoom, pixelsPerSecond],
+  );
+
   const beginTimelinePan = useCallback((event) => {
     const scroll = scrollRef.current;
     if (!scroll) return;
@@ -1530,6 +1590,10 @@ export function EditorTimeline({
   /** Click-drag scrub on the ruler, empty lanes, or playhead. */
   const beginPlayheadScrub = useCallback(
     (event, source) => {
+      if ((event.ctrlKey || event.metaKey) && event.button === 0) {
+        beginTimelineZoomDrag(event);
+        return;
+      }
       if (event.button === 1 || event.altKey) {
         beginTimelinePan(event);
         return;
@@ -1582,7 +1646,7 @@ export function EditorTimeline({
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onUp);
     },
-    [beginTimelinePan, onSetPlayhead, pixelsPerSecond, project.duration, timeFromClientX],
+    [beginTimelinePan, beginTimelineZoomDrag, onSetPlayhead, pixelsPerSecond, project.duration, timeFromClientX],
   );
 
   /**
@@ -1591,6 +1655,10 @@ export function EditorTimeline({
    */
   const beginLanePointer = useCallback(
     (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.button === 0) {
+        beginTimelineZoomDrag(event);
+        return;
+      }
       if (event.button === 1 || event.altKey) {
         beginTimelinePan(event);
         return;
@@ -1712,6 +1780,7 @@ export function EditorTimeline({
     },
     [
       beginTimelinePan,
+      beginTimelineZoomDrag,
       onSelectClip,
       onSelectJoint,
       onSetPlayhead,
@@ -1911,7 +1980,7 @@ export function EditorTimeline({
             className="studio-editor-ruler"
             style={{ height: RULER_HEIGHT, marginLeft: TRACK_RAIL_WIDTH }}
             onPointerDown={(event) => beginPlayheadScrub(event, "ruler")}
-            title="Click or drag to seek · Ctrl+scroll to zoom"
+            title="Click or drag to seek · Ctrl+drag or Ctrl+scroll to zoom"
           >
             {minorTicks.map((tick) => (
               <span
