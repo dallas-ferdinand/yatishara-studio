@@ -435,6 +435,7 @@ export function createStudioPiTools(opts) {
         if (params.category) {
           tools = tools.filter((t) => t.category === params.category);
         }
+        const max = Math.min(Math.max(Number(params.limit) || 24, 1), 60);
         if (params.q) {
           const found = searchTools(tools, params.q, max);
           return {
@@ -453,7 +454,6 @@ export function createStudioPiTools(opts) {
           const alwaysOn = new Set(ALWAYS_ON_TOOL_NAMES.length ? ALWAYS_ON_TOOL_NAMES : STARTER_TOOL_NAMES);
           tools = tools.filter((t) => alwaysOn.has(t.name));
         }
-        const max = Math.min(Math.max(Number(params.limit) || 24, 1), 60);
         return {
           ok: true,
           catalogVersion: catalogVersion(),
