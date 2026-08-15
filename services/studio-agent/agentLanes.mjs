@@ -68,13 +68,18 @@ export const ALWAYS_ON_TOOL_NAMES = [
   "studio_estimate_generation",
   "studio_create_document",
   "studio_patch_document",
+  "studio_update_document",
   "studio_get_document",
   "studio_create_element",
   "studio_list_elements",
+  "studio_get_element",
   "studio_workspace_tree",
   "studio_folder_contents",
   "studio_search",
   "studio_pull_frames",
+  "studio_get_asset",
+  "studio_view_media",
+  "studio_trash",
 ];
 
 /** @deprecated alias — catalog starter = always-on lean set */

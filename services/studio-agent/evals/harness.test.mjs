@@ -286,6 +286,14 @@ test("skills pack surface", () => {
   assert.ok(matchSkills("hypermotion").some((s) => s.id === "prompt-hypermotion"));
 });
 
+test("hot schemas coerce search/estimate aliases", () => {
+  assert.equal(validateHotToolArgs("studio_search", { q: "logo" }).ok, true);
+  assert.equal(
+    validateHotToolArgs("studio_estimate_generation", {}).args.mode,
+    "image",
+  );
+});
+
 test("plan store formats and updates", () => {
   const store = createPlanStore();
   store.set("Ship post", ["share", "verify"]);

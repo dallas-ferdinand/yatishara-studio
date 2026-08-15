@@ -28,6 +28,11 @@ export const HOT_SCHEMAS = {
   },
   studio_update_element: { required: ["elementId"] },
   studio_create_document: { required: ["title", "contentMarkdown"] },
+  studio_get_document: { required: ["documentId"] },
+  studio_patch_document: {
+    required: ["documentId"],
+    oneOfGroups: [["oldString"], ["edits"]],
+  },
   studio_folder_contents: { required: ["folderId"] },
   studio_view_media: { required: ["assetId"] },
   studio_get_asset: { required: ["assetId"] },
@@ -36,14 +41,85 @@ export const HOT_SCHEMAS = {
 };
 
 /**
+ * Map common model mis-keys onto the real arg names before required checks.
+ * @param {string} toolName
+ * @param {Record<string, unknown>} args
+ */
+export function coerceHotToolArgs(toolName, args) {
+  const input =
+    args && typeof args === "object" && !Array.isArray(args) ? { ...args } : {};
+
+  if (toolName === "studio_search") {
+    if (input.query == null || input.query === "") {
+      const alias = input.q ?? input.search ?? input.text ?? input.keyword;
+      if (alias != null && alias !== "") input.query = alias;
+    }
+  }
+
+  if (toolName === "studio_estimate_generation" && !input.mode) {
+    const blob = [input.type, input.kind, input.mediaType, input.prompt]
+      .filter((value) => value != null && value !== "")
+      .join(" ")
+      .toLowerCase();
+    if (/\b(video|clip|seedance|footage)\b/.test(blob)) input.mode = "video";
+    else if (/\b(audio|voice|voiceover|music|sfx)\b/.test(blob)) input.mode = "audio";
+    else input.mode = "image";
+  }
+
+  if (toolName === "studio_folder_contents" && !input.folderId) {
+    const alias = input.id ?? input.folder_id ?? input.parentId;
+    if (alias) input.folderId = alias;
+  }
+
+  if (
+    (toolName === "studio_view_media" ||
+      toolName === "studio_get_asset" ||
+      toolName === "studio_update_asset" ||
+      toolName === "studio_is_asset_shared") &&
+    !input.assetId
+  ) {
+    const alias = input.id ?? input.asset_id;
+    if (alias) input.assetId = alias;
+  }
+
+  if (
+    (toolName === "studio_get_document" ||
+      toolName === "studio_update_document" ||
+      toolName === "studio_patch_document") &&
+    !input.documentId
+  ) {
+    const alias = input.id ?? input.document_id;
+    if (alias) input.documentId = alias;
+  }
+
+  if (toolName === "studio_patch_document") {
+    if (input.oldString == null || input.oldString === "") {
+      const alias = input.old ?? input.find ?? input.from ?? input.search;
+      if (alias != null && alias !== "") input.oldString = alias;
+    }
+    if (input.newString == null) {
+      const alias = input.new ?? input.replace ?? input.to ?? input.replacement;
+      if (alias != null) input.newString = alias;
+    }
+  }
+
+  if (toolName === "studio_create_element" && !input.folderId) {
+    const alias = input.parentId ?? input.cwd ?? input.folder_id;
+    if (alias) input.folderId = alias;
+  }
+
+  return input;
+}
+
+/**
  * @param {string} toolName
  * @param {Record<string, unknown>} args
  * @returns {{ ok: true, args: Record<string, unknown> } | { ok: false, error: string, example?: object }}
  */
 export function validateHotToolArgs(toolName, args) {
   const schema = HOT_SCHEMAS[toolName];
-  if (!schema) return { ok: true, args: args || {} };
-  const input = args && typeof args === "object" && !Array.isArray(args) ? { ...args } : {};
+  const input = coerceHotToolArgs(toolName, args);
+  if (!schema) return { ok: true, args: input };
 
   for (const key of schema.required) {
     const value = input[key];
@@ -177,6 +253,15 @@ function exampleFor(toolName) {
     studio_send_message: { conversationId: "<id>", body: "hello" },
     studio_send_media_message: { conversationId: "<id>", assetId: "<assetId>" },
     studio_create_folder: { name: "New folder" },
+    studio_search: { query: "flyer" },
+    studio_estimate_generation: { mode: "image", prompt: "…" },
+    studio_patch_document: {
+      documentId: "<documentId>",
+      oldString: "exact existing snippet",
+      newString: "replacement",
+    },
+    studio_get_document: { documentId: "<documentId>" },
+    studio_folder_contents: { folderId: "<CWD>" },
   };
   return examples[toolName];
 }

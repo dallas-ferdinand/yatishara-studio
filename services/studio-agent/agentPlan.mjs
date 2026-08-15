@@ -18,6 +18,64 @@
 const LIST_STATUS = new Set(["active", "working", "completed", "cancelled"]);
 const STEP_STATUS = new Set(["pending", "doing", "done", "blocked"]);
 
+const LIST_STATUS_ALIAS = {
+  done: "completed",
+  complete: "completed",
+  finished: "completed",
+  in_progress: "working",
+  "in-progress": "working",
+  doing: "working",
+  started: "working",
+  canceled: "cancelled",
+  cancel: "cancelled",
+  open: "active",
+  pending: "active",
+};
+
+const STEP_STATUS_ALIAS = {
+  complete: "done",
+  completed: "done",
+  finished: "done",
+  in_progress: "doing",
+  "in-progress": "doing",
+  working: "doing",
+  started: "doing",
+  progress: "doing",
+  todo: "pending",
+  open: "pending",
+  cancelled: "blocked",
+  canceled: "blocked",
+};
+
+function normalizeListStatus(status) {
+  const raw = String(status || "").trim().toLowerCase();
+  return LIST_STATUS_ALIAS[raw] || raw;
+}
+
+function normalizeStepStatus(status) {
+  const raw = String(status || "").trim().toLowerCase();
+  return STEP_STATUS_ALIAS[raw] || raw;
+}
+
+function findStep(list, stepId) {
+  const raw = String(stepId || "").trim();
+  if (!raw || !list) return null;
+  const exact = list.steps.find((step) => step.id === raw);
+  if (exact) return exact;
+  const asNum = Number(raw);
+  if (Number.isInteger(asNum) && asNum >= 1 && asNum <= list.steps.length) {
+    return list.steps[asNum - 1];
+  }
+  const numbered = list.steps.find((step) => step.id === `s${raw}`);
+  if (numbered) return numbered;
+  const needle = raw.toLowerCase();
+  return (
+    list.steps.find((step) => step.text.toLowerCase() === needle) ||
+    list.steps.find((step) => step.text.toLowerCase().includes(needle)) ||
+    null
+  );
+}
+
 function newId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -207,13 +265,14 @@ export function createPlanStore(seed) {
       const list =
         board.lists.find((l) => l.id === (listId || board.activeId)) || null;
       if (!list) return { ok: false, error: "unknown list" };
-      const step = list.steps.find((s) => s.id === stepId);
+      const step = findStep(list, stepId);
       if (!step) return { ok: false, error: `unknown step ${stepId}` };
-      if (!STEP_STATUS.has(status)) {
+      const nextStatus = normalizeStepStatus(status);
+      if (!STEP_STATUS.has(nextStatus)) {
         return { ok: false, error: "status must be pending|doing|done|blocked" };
       }
-      step.status = status;
-      if (status === "doing") list.status = "working";
+      step.status = nextStatus;
+      if (nextStatus === "doing") list.status = "working";
       if (list.steps.every((s) => s.status === "done")) list.status = "completed";
       list.updatedAt = Date.now();
       board.activeId = list.id;
@@ -250,14 +309,17 @@ export function createPlanStore(seed) {
       return { ok: true, board: this.snapshot() };
     },
     setListStatus(listId, status) {
-      const list = board.lists.find((l) => l.id === listId);
+      const list =
+        board.lists.find((l) => l.id === listId) ||
+        (!listId ? activeList() : null);
       if (!list) return { ok: false, error: "unknown list" };
-      if (!LIST_STATUS.has(status)) {
+      const nextStatus = normalizeListStatus(status);
+      if (!LIST_STATUS.has(nextStatus)) {
         return { ok: false, error: "bad list status" };
       }
-      list.status = status;
+      list.status = nextStatus;
       list.updatedAt = Date.now();
-      if (status === "active" || status === "working") board.activeId = list.id;
+      if (nextStatus === "active" || nextStatus === "working") board.activeId = list.id;
       emit();
       return { ok: true, board: this.snapshot() };
     },

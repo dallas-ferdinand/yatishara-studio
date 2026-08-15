@@ -7,6 +7,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import {
   catalogVersion,
   describeTool,
+  getTool,
   listToolsForSurface,
 } from "../../packages/studio-tools/src/catalog.js";
 import { authorizeTool } from "../../packages/studio-tools/src/policy.js";
@@ -38,6 +39,7 @@ import {
 } from "./agentVerify.mjs";
 import { createPlanStore } from "./agentPlan.mjs";
 import { createTrajectory } from "./agentTrajectory.mjs";
+import { searchTools, resolveInvokeName } from "./agentToolResolve.mjs";
 
 function textResult(payload) {
   const text =
@@ -271,6 +273,15 @@ export function createStudioPiTools(opts) {
     planStore.setOnChange(opts.onPlanChange);
   }
   const trajectory = opts.trajectory || createTrajectory();
+  let capabilityDead = false;
+  const isKnownStudioTool = (candidate) => {
+    const aliased = resolveStudioToolAlias(candidate, {});
+    return Boolean(getTool(aliased.toolName));
+  };
+  const knownStudioNames = () =>
+    listToolsForSurface("agent", { role }).map((t) => t.name);
+  const isCapabilityError = (error) =>
+    /invalid or expired agent capability/i.test(String(error || ""));
   const invokeOpts = () => ({
     signal: opts.abortSignal,
     // Leave headroom under STUDIO_AGENT_TURN_TIMEOUT_MS (default 10m).
@@ -279,6 +290,55 @@ export function createStudioPiTools(opts) {
 
   function prepareInvokeArgs(toolName, args) {
     return normalizeAgentGenerationArgs(toolName, args || {});
+  }
+
+  function dispatchPlan(params) {
+    const action = params.action;
+    let result;
+    if (action === "get") {
+      result = {
+        ok: true,
+        board: planStore.snapshot(),
+        plan: planStore.get(),
+      };
+    } else if (action === "clear") {
+      result = planStore.clear();
+    } else if (action === "create" || action === "set") {
+      result = planStore.create({
+        title: params.title || params.goal || "To-do",
+        steps: params.steps || [],
+        cancelActive: params.cancelActive !== false,
+      });
+    } else if (action === "update" || action === "update_step") {
+      result = planStore.updateStep(
+        params.listId || null,
+        String(params.stepId || params.id || ""),
+        String(params.status || ""),
+      );
+    } else if (action === "add_step") {
+      result = planStore.addStep(params.listId || null, params.text || "");
+    } else if (action === "remove_step") {
+      result = planStore.removeStep(
+        params.listId || null,
+        String(params.stepId || params.id || ""),
+      );
+    } else if (action === "set_list_status") {
+      result = planStore.setListStatus(
+        String(params.listId || params.id || ""),
+        String(params.status || ""),
+      );
+    } else if (action === "rename_list") {
+      result = planStore.renameList(
+        String(params.listId || params.id || ""),
+        params.title || params.goal || "",
+      );
+    } else {
+      result = { ok: false, error: "unknown plan action" };
+    }
+    return {
+      ...(result && typeof result === "object" ? result : { ok: true, result }),
+      action,
+    };
   }
 
   function attachTodo(payload) {
@@ -349,9 +409,10 @@ export function createStudioPiTools(opts) {
     promptGuidelines: [
       "Only Pi tools are catalog, describe, invoke, inspect, remember, skills, plan, ask.",
       "Always-on tools appear without q=. For anything else (post/share/move/send/trash/…), catalog with q= first.",
+      "catalog q= matches words (delete element → studio_trash). Use a returned name — never invent studio_*.",
       "Load a skill pack with skills before multi-step work.",
       "For 2+ step jobs: plan set first, update statuses as you go (todo reinjects automatically).",
-      "Never call studio_* as a top-level tool name.",
+      "Never call studio_* as a top-level tool name. describe/plan/skills are top-level — do not wrap them in invoke.",
     ],
     parameters: Type.Object({
       category: Type.Optional(Type.String()),
@@ -375,12 +436,19 @@ export function createStudioPiTools(opts) {
           tools = tools.filter((t) => t.category === params.category);
         }
         if (params.q) {
-          const needle = String(params.q).toLowerCase();
-          tools = tools.filter(
-            (t) =>
-              t.name.includes(needle) ||
-              t.description.toLowerCase().includes(needle),
-          );
+          const found = searchTools(tools, params.q, max);
+          return {
+            ok: true,
+            catalogVersion: catalogVersion(),
+            count: found.tools.length,
+            filtered: true,
+            mode: found.mode,
+            hint:
+              found.mode === "fuzzy"
+                ? `No exact match for "${params.q}". Closest tools below — invoke one of these names. Do not invent a studio_* name.`
+                : undefined,
+            tools: found.tools,
+          };
         } else if (!params.category) {
           const alwaysOn = new Set(ALWAYS_ON_TOOL_NAMES.length ? ALWAYS_ON_TOOL_NAMES : STARTER_TOOL_NAMES);
           tools = tools.filter((t) => alwaysOn.has(t.name));
@@ -411,16 +479,40 @@ export function createStudioPiTools(opts) {
     }),
     async execute(_toolCallId, params) {
       return trackPiTool("describe", params, async () => {
-        const info = describeTool(params.name);
+        let name = String(params.name || "").trim();
+        const knownNames = listToolsForSurface("agent", { role }).map((t) => t.name);
+        const isKnown = (candidate) => {
+          const aliased = resolveStudioToolAlias(candidate, {});
+          return Boolean(getTool(aliased.toolName));
+        };
+        if (name && !isKnown(name)) {
+          const resolved = resolveInvokeName(name, isKnown, knownNames);
+          if (resolved.kind === "repaired") name = resolved.name;
+          else if (resolved.kind === "local") {
+            return {
+              ok: false,
+              error: `${name} is a Pi tool (call it top-level). Not a Studio invoke name.`,
+              hint:
+                resolved.planAction
+                  ? `Use plan { action: "${resolved.planAction}" }`
+                  : `Call ${resolved.name} directly — do not wrap it in invoke.`,
+            };
+          }
+        }
+        const info = describeTool(resolveStudioToolAlias(name, {}).toolName) || describeTool(name);
         if (!info) {
+          const resolved = resolveInvokeName(name, isKnown, knownNames);
           return {
             ok: false,
             error: `Unknown Studio tool: ${params.name}. Call catalog with q= to find the right name.`,
+            suggestions: resolved.kind === "unknown" ? resolved.candidates : undefined,
           };
         }
-        const auth = authorizeTool(params.name, { surface: "agent", role, scopes });
-        const example = DESCRIBE_EXAMPLES[params.name];
-        const hot = HOT_SCHEMAS[params.name];
+        const aliasedName = resolveStudioToolAlias(name, {}).toolName;
+        const infoName = describeTool(aliasedName) ? aliasedName : name;
+        const auth = authorizeTool(infoName, { surface: "agent", role, scopes });
+        const example = DESCRIBE_EXAMPLES[infoName];
+        const hot = HOT_SCHEMAS[infoName];
         return {
           ok: auth.ok,
           ...(auth.ok ? {} : { error: auth.error }),
@@ -457,6 +549,7 @@ export function createStudioPiTools(opts) {
       "Pass arguments in invoke.args as a JSON object.",
       "Do the action — don't explain how unless the user asked how.",
       "Follow verifyHint in the result before claiming success.",
+      "describe / plan / skills / catalog are top-level Pi tools — never pass them as invoke.name.",
     ],
     parameters: Type.Object({
       name: Type.String({
@@ -479,7 +572,87 @@ export function createStudioPiTools(opts) {
         params.args && typeof params.args === "object" && !Array.isArray(params.args)
           ? params.args
           : {};
-      const aliased = resolveStudioToolAlias(rawName, rawArgs);
+      let aliased = resolveStudioToolAlias(rawName, rawArgs);
+      if (rawName && !getTool(aliased.toolName)) {
+        const resolved = resolveInvokeName(
+          rawName,
+          isKnownStudioTool,
+          knownStudioNames(),
+        );
+        if (resolved.kind === "local") {
+          const localName = resolved.name;
+          const localArgs =
+            localName === "plan"
+              ? { ...rawArgs, action: resolved.planAction || rawArgs.action }
+              : rawArgs;
+          return trackPiTool(localName, localArgs, async () => {
+            if (localName === "describe") {
+              const target = textValue(
+                rawArgs.name || rawArgs.tool || rawArgs.toolName,
+              );
+              if (!target) {
+                return {
+                  ok: false,
+                  error:
+                    "describe needs name (Studio tool id). Example: describe { name: \"studio_trash\" }",
+                };
+              }
+              const info =
+                describeTool(resolveStudioToolAlias(target, {}).toolName) ||
+                describeTool(target);
+              if (!info) {
+                return {
+                  ok: false,
+                  error: `Unknown Studio tool: ${target}. Call catalog with q= first.`,
+                };
+              }
+              return {
+                ok: true,
+                repairedFrom: rawName,
+                hint: "describe is a top-level Pi tool — call it directly next time.",
+                tool: {
+                  name: info.name,
+                  description: agentDescription(info),
+                  category: info.category,
+                  risk: info.risk,
+                  requiredArgs: HOT_SCHEMAS[info.name]?.required,
+                  exampleArgs: DESCRIBE_EXAMPLES[info.name],
+                },
+              };
+            }
+            if (localName === "plan") {
+              const action = String(localArgs.action || "get");
+              return dispatchPlan({ ...localArgs, action });
+            }
+            if (localName === "catalog") {
+              return {
+                ok: false,
+                error:
+                  "catalog is a top-level Pi tool. Call catalog { q: \"trash\" } — do not wrap it in invoke.",
+              };
+            }
+            return {
+              ok: false,
+              error: `${rawName} is a Pi tool. Call ${localName} at the top level — do not wrap it in invoke.`,
+            };
+          });
+        }
+        if (resolved.kind === "repaired") {
+          aliased = resolveStudioToolAlias(resolved.name, rawArgs);
+        } else if (resolved.kind === "unknown") {
+          trajectory.recordTool({
+            toolName: rawName,
+            ok: false,
+            error: `Unknown tool: ${rawName}`,
+          });
+          return textResult({
+            ok: false,
+            error: `Unknown tool: ${rawName}`,
+            suggestions: resolved.candidates,
+            hint: `Call catalog with q=${rawName.replace(/^studio_/, "").slice(0, 24)} and invoke a returned name. Do not invent studio_* names.`,
+          });
+        }
+      }
       const toolName = aliased.toolName;
       const toolArgs = aliased.args;
       const verbose = Boolean(params.verbose);
@@ -488,6 +661,19 @@ export function createStudioPiTools(opts) {
           ok: false,
           error:
             "invoke requires name (Studio tool id). Example: { name: \"studio_create_folder\", args: { name: \"X\" } }",
+        });
+      }
+      if (capabilityDead) {
+        trajectory.recordTool({
+          toolName,
+          ok: false,
+          error: "Invalid or expired agent capability",
+        });
+        return textResult({
+          ok: false,
+          toolName,
+          error: "Invalid or expired agent capability",
+          hint: "Auth died mid-turn. Stop calling tools and ask the user to send again.",
         });
       }
 
@@ -641,6 +827,9 @@ export function createStudioPiTools(opts) {
           );
         }
         result = salvageGenerationResult(toolName, result);
+        if (isCapabilityError(result?.error) || result?.status === 401) {
+          capabilityDead = true;
+        }
 
         // Stale/invented id → list CWD and auto-retry with a real id before the
         // failed step hits the chat UI ("Couldn't open script — not found").
@@ -827,6 +1016,7 @@ export function createStudioPiTools(opts) {
         return textResultWithTodo(compact);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        if (isCapabilityError(message)) capabilityDead = true;
         trajectory.recordTool({ toolName, ok: false, error: message });
         await opts.onAfterInvoke?.({
           toolCallId: trackId,
@@ -1137,54 +1327,7 @@ export function createStudioPiTools(opts) {
       cancelActive: Type.Optional(Type.Boolean()),
     }),
     async execute(_toolCallId, params) {
-      return trackPiTool("plan", params, async () => {
-        const action = params.action;
-        let result;
-        if (action === "get") {
-          result = {
-            ok: true,
-            board: planStore.snapshot(),
-            plan: planStore.get(),
-          };
-        } else if (action === "clear") {
-          result = planStore.clear();
-        } else if (action === "create" || action === "set") {
-          result = planStore.create({
-            title: params.title || params.goal || "To-do",
-            steps: params.steps || [],
-            cancelActive: params.cancelActive !== false,
-          });
-        } else if (action === "update" || action === "update_step") {
-          result = planStore.updateStep(
-            params.listId || null,
-            String(params.stepId || params.id || ""),
-            String(params.status || ""),
-          );
-        } else if (action === "add_step") {
-          result = planStore.addStep(params.listId || null, params.text || "");
-        } else if (action === "remove_step") {
-          result = planStore.removeStep(
-            params.listId || null,
-            String(params.stepId || params.id || ""),
-          );
-        } else if (action === "set_list_status") {
-          result = planStore.setListStatus(
-            String(params.listId || params.id || ""),
-            String(params.status || ""),
-          );
-        } else if (action === "rename_list") {
-          result = planStore.renameList(
-            String(params.listId || params.id || ""),
-            params.title || params.goal || "",
-          );
-        } else {
-          result = { ok: false, error: "unknown plan action" };
-        }
-        return {
-          ...(result && typeof result === "object" ? result : { ok: true, result }),
-          action,
-        };
-      });
+      return trackPiTool("plan", params, async () => dispatchPlan(params));
     },
   });
 

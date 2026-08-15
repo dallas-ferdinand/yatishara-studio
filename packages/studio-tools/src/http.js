@@ -26,6 +26,21 @@ export const STUDIO_TOOL_ALIASES = {
   studio_delete_asset: { tool: "studio_trash", kind: "asset" },
   studio_delete_folder: { tool: "studio_trash", kind: "folder" },
   studio_delete_element: { tool: "studio_trash", kind: "element" },
+  studio_list_folder: { tool: "studio_list_folders" },
+  studio_list_document: { tool: "studio_folder_contents" },
+  studio_list_documents: { tool: "studio_folder_contents" },
+  studio_list_assets: { tool: "studio_folder_contents" },
+  studio_list_scripts: { tool: "studio_folder_contents" },
+  studio_describe_asset: { tool: "studio_get_asset" },
+  studio_describe_document: { tool: "studio_get_document" },
+  studio_read_document: { tool: "studio_get_document" },
+  studio_open_document: { tool: "studio_get_document" },
+  studio_get_media: { tool: "studio_view_media" },
+  studio_list_frames: { tool: "studio_pull_frames" },
+  studio_extract_frames: { tool: "studio_pull_frames" },
+  studio_estimate: { tool: "studio_estimate_generation" },
+  studio_move: { tool: "studio_bulk_move" },
+  studio_rename_document: { tool: "studio_update_document" },
 };
 
 /**
