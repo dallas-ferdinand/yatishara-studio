@@ -37,6 +37,12 @@ const audioGenType = v.union(
   v.literal("sfx"),
   v.literal("music"),
 );
+const musicModelId = v.union(v.literal("music_v1"), v.literal("music_v2"));
+const musicWorkflow = v.union(
+  v.literal("composition_plan"),
+  v.literal("prompt"),
+  v.literal("extend"),
+);
 const generationTier = v.union(
   v.literal("image"),
   v.literal("pro_video"),
@@ -928,13 +934,9 @@ export const createQueuedJob = authedMutation({
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
     forceInstrumental: v.optional(v.boolean()),
-    musicWorkflow: v.optional(
-      v.union(
-        v.literal("composition_plan"),
-        v.literal("prompt"),
-        v.literal("extend"),
-      ),
-    ),
+    musicWorkflow: v.optional(musicWorkflow),
+    musicModelId: v.optional(musicModelId),
+    musicFinetuneId: v.optional(v.string()),
     musicCompositionPlanJson: v.optional(v.string()),
     musicStoreForInpainting: v.optional(v.boolean()),
     musicSourceSongId: v.optional(v.string()),
@@ -1040,6 +1042,8 @@ export const createQueuedJob = authedMutation({
       promptInfluence: args.promptInfluence,
       forceInstrumental: args.forceInstrumental,
       musicWorkflow: args.musicWorkflow,
+      musicModelId: args.musicModelId,
+      musicFinetuneId: args.musicFinetuneId,
       musicCompositionPlanJson: args.musicCompositionPlanJson,
       musicStoreForInpainting: args.musicStoreForInpainting,
       musicSourceSongId: args.musicSourceSongId,
@@ -1588,13 +1592,9 @@ export const prepareApiAudioGeneration = internalMutation({
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
     forceInstrumental: v.optional(v.boolean()),
-    musicWorkflow: v.optional(
-      v.union(
-        v.literal("composition_plan"),
-        v.literal("prompt"),
-        v.literal("extend"),
-      ),
-    ),
+    musicWorkflow: v.optional(musicWorkflow),
+    musicModelId: v.optional(musicModelId),
+    musicFinetuneId: v.optional(v.string()),
     musicCompositionPlanJson: v.optional(v.string()),
     musicStoreForInpainting: v.optional(v.boolean()),
     musicSourceSongId: v.optional(v.string()),
@@ -1635,7 +1635,9 @@ export const prepareApiAudioGeneration = internalMutation({
       args.audioType === "sfx"
         ? "elevenlabs/eleven_text_to_sound_v2"
         : args.audioType === "music"
-          ? "elevenlabs/music_v2"
+          ? args.musicModelId === "music_v1"
+            ? "elevenlabs/music_v1"
+            : "elevenlabs/music_v2"
           : "elevenlabs/eleven_v3";
     const billingTier = billingTierForMode("audio");
     const reservedCreditTransactionId = await reserveCreditsForUser(ctx, args.userId, {
@@ -1664,6 +1666,8 @@ export const prepareApiAudioGeneration = internalMutation({
       promptInfluence: args.promptInfluence,
       forceInstrumental: args.forceInstrumental,
       musicWorkflow: args.musicWorkflow,
+      musicModelId: args.musicModelId,
+      musicFinetuneId: args.musicFinetuneId,
       musicCompositionPlanJson: args.musicCompositionPlanJson,
       musicStoreForInpainting: args.musicStoreForInpainting,
       musicSourceSongId: args.musicSourceSongId,
@@ -1881,13 +1885,9 @@ export const getJobForAudio = internalQuery({
       audioLoop: v.optional(v.boolean()),
       promptInfluence: v.optional(v.number()),
       forceInstrumental: v.optional(v.boolean()),
-      musicWorkflow: v.optional(
-        v.union(
-          v.literal("composition_plan"),
-          v.literal("prompt"),
-          v.literal("extend"),
-        ),
-      ),
+      musicWorkflow: v.optional(musicWorkflow),
+      musicModelId: v.optional(musicModelId),
+      musicFinetuneId: v.optional(v.string()),
       musicCompositionPlanJson: v.optional(v.string()),
       musicStoreForInpainting: v.optional(v.boolean()),
       musicSourceSongId: v.optional(v.string()),
@@ -1914,6 +1914,8 @@ export const getJobForAudio = internalQuery({
       promptInfluence: job.promptInfluence,
       forceInstrumental: job.forceInstrumental,
       musicWorkflow: job.musicWorkflow,
+      musicModelId: job.musicModelId,
+      musicFinetuneId: job.musicFinetuneId,
       musicCompositionPlanJson: job.musicCompositionPlanJson,
       musicStoreForInpainting: job.musicStoreForInpainting,
       musicSourceSongId: job.musicSourceSongId,

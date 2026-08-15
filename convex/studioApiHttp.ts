@@ -1458,6 +1458,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         promptInfluence?: number;
         forceInstrumental?: boolean;
         musicWorkflow?: "composition_plan" | "prompt" | "extend";
+        musicModelId?: "music_v1" | "music_v2";
+        musicFinetuneId?: string;
         musicCompositionPlanJson?: string;
         musicStoreForInpainting?: boolean;
         musicSourceSongId?: string;
@@ -1516,6 +1518,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           promptInfluence: body.promptInfluence,
           forceInstrumental: body.forceInstrumental,
           musicWorkflow: body.musicWorkflow,
+          musicModelId: body.musicModelId,
+          musicFinetuneId: body.musicFinetuneId,
           musicCompositionPlanJson: body.musicCompositionPlanJson,
           musicStoreForInpainting: body.musicStoreForInpainting,
           musicSourceSongId: body.musicSourceSongId,

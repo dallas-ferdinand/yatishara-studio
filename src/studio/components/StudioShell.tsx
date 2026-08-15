@@ -56,6 +56,7 @@ import {
   KeyRound,
   LayoutGrid,
   LayoutList,
+  Layers,
   List,
   ListChecks,
   Loader2,
@@ -862,7 +863,11 @@ function serializeComposerContextsForStorage(contexts) {
       sfxDurationSeconds: ctx.sfxDurationSeconds,
       sfxPromptInfluence: ctx.sfxPromptInfluence,
       musicDurationSeconds: ctx.musicDurationSeconds,
+      musicDurationAuto: ctx.musicDurationAuto,
       musicInstrumental: ctx.musicInstrumental,
+      musicVariants: ctx.musicVariants,
+      musicModelId: ctx.musicModelId,
+      musicFinetuneId: ctx.musicFinetuneId,
       musicWorkflow: ctx.musicWorkflow,
       musicStoreForInpainting: ctx.musicStoreForInpainting,
       musicSourceSongId: ctx.musicSourceSongId,
@@ -926,7 +931,11 @@ function snapshotComposerContextFields({
   sfxDurationSeconds,
   sfxPromptInfluence,
   musicDurationSeconds,
+  musicDurationAuto,
   musicInstrumental,
+  musicVariants,
+  musicModelId,
+  musicFinetuneId,
   musicWorkflow,
   musicStoreForInpainting,
   musicSourceSongId,
@@ -958,7 +967,11 @@ function snapshotComposerContextFields({
     sfxDurationSeconds,
     sfxPromptInfluence,
     musicDurationSeconds,
+    musicDurationAuto,
     musicInstrumental,
+    musicVariants,
+    musicModelId,
+    musicFinetuneId,
     musicWorkflow,
     musicStoreForInpainting,
     musicSourceSongId,
@@ -1655,8 +1668,23 @@ export function StudioShell({
   const [musicDurationSeconds, setMusicDurationSeconds] = useState(
     () => initialComposerCtx.musicDurationSeconds ?? 30,
   );
+  const [musicDurationAuto, setMusicDurationAuto] = useState(
+    () => initialComposerCtx.musicDurationAuto ?? true,
+  );
   const [musicInstrumental, setMusicInstrumental] = useState(
     () => initialComposerCtx.musicInstrumental ?? true,
+  );
+  const [musicVariants, setMusicVariants] = useState(() =>
+    Math.min(2, Math.max(1, Number(initialComposerCtx.musicVariants) || 1)),
+  );
+  const [musicModelId, setMusicModelId] = useState(
+    () =>
+      (initialComposerCtx.musicModelId === "music_v1"
+        ? "music_v1"
+        : "music_v2") as "music_v1" | "music_v2",
+  );
+  const [musicFinetuneId, setMusicFinetuneId] = useState(
+    () => initialComposerCtx.musicFinetuneId ?? "",
   );
   const [musicWorkflow, setMusicWorkflow] = useState(
     () => initialComposerCtx.musicWorkflow ?? "composition_plan",
@@ -3690,7 +3718,9 @@ export function StudioShell({
                   ? undefined
                   : sfxDurationSeconds
                 : mode === "audio" && audioType === "music"
-                  ? musicDurationSeconds
+                  ? musicDurationAuto
+                    ? undefined
+                    : musicDurationSeconds
                   : undefined,
           hasReferenceInput:
             mode === "video" || mode === "image"
@@ -3774,7 +3804,11 @@ export function StudioShell({
       sfxDurationSeconds,
       sfxPromptInfluence,
       musicDurationSeconds,
+      musicDurationAuto,
       musicInstrumental,
+      musicVariants,
+      musicModelId,
+      musicFinetuneId,
       musicWorkflow,
       musicStoreForInpainting,
       musicSourceSongId,
@@ -3810,7 +3844,11 @@ export function StudioShell({
     sfxDurationSeconds,
     sfxPromptInfluence,
     musicDurationSeconds,
+    musicDurationAuto,
     musicInstrumental,
+    musicVariants,
+    musicModelId,
+    musicFinetuneId,
     musicWorkflow,
     musicStoreForInpainting,
     musicSourceSongId,
@@ -3847,7 +3885,11 @@ export function StudioShell({
       sfxDurationSeconds,
       sfxPromptInfluence,
       musicDurationSeconds,
+      musicDurationAuto,
       musicInstrumental,
+      musicVariants,
+      musicModelId,
+      musicFinetuneId,
       musicWorkflow,
       musicStoreForInpainting,
       musicSourceSongId,
@@ -3879,7 +3921,11 @@ export function StudioShell({
     setSfxDurationSeconds(next.sfxDurationSeconds ?? 5);
     setSfxPromptInfluence(next.sfxPromptInfluence ?? 0.3);
     setMusicDurationSeconds(next.musicDurationSeconds ?? 30);
+    setMusicDurationAuto(next.musicDurationAuto ?? true);
     setMusicInstrumental(next.musicInstrumental ?? true);
+    setMusicVariants(Math.min(2, Math.max(1, Number(next.musicVariants) || 1)));
+    setMusicModelId(next.musicModelId === "music_v1" ? "music_v1" : "music_v2");
+    setMusicFinetuneId(next.musicFinetuneId ?? "");
     setMusicWorkflow(next.musicWorkflow ?? "composition_plan");
     setMusicStoreForInpainting(next.musicStoreForInpainting ?? true);
     setMusicSourceSongId(next.musicSourceSongId ?? "");
@@ -8629,18 +8675,21 @@ export function StudioShell({
           throw new Error("Select a voice for the voiceover.");
         }
         const userPrompt = liveDraft.trim();
-        const estimatedCost = audioCreditCost({
-          audioType,
-          characterCount: audioType === "voiceover" ? userPrompt.length : undefined,
-          durationSeconds:
-            audioType === "sfx"
-              ? sfxDurationAuto
-                ? undefined
-                : sfxDurationSeconds
-              : audioType === "music"
-                ? musicDurationSeconds
-                : undefined,
-        });
+        const estimatedCost =
+          audioCreditCost({
+            audioType,
+            characterCount: audioType === "voiceover" ? userPrompt.length : undefined,
+            durationSeconds:
+              audioType === "sfx"
+                ? sfxDurationAuto
+                  ? undefined
+                  : sfxDurationSeconds
+                : audioType === "music"
+                  ? musicDurationAuto
+                    ? undefined
+                    : musicDurationSeconds
+                  : undefined,
+          }) * (audioType === "music" ? musicVariants : 1);
         if (entitlement && entitlement.creditBalance < estimatedCost) {
           openSettingsTab("billing");
           throw new Error(
@@ -8671,44 +8720,53 @@ export function StudioShell({
           boundThreadId: threadId,
         };
         setFlowPending(false);
-        void runAudioFlow({
-          threadId,
-          folderId: generationSaveFolderId(threadId),
-          userPrompt,
-          audioType,
-          elevenVoiceId: selectedVoice?.voiceId,
-          elevenVoiceName: selectedVoice?.name,
-          elevenPublicOwnerId: selectedVoice?.publicOwnerId,
-          durationSeconds:
-            audioType === "sfx" && !sfxDurationAuto
-              ? sfxDurationSeconds
-              : audioType === "music"
-                ? musicDurationSeconds
-                : undefined,
-          audioLoop: audioType === "sfx" ? sfxLoop : undefined,
-          promptInfluence: audioType === "sfx" ? sfxPromptInfluence : undefined,
-          forceInstrumental: audioType === "music" ? musicInstrumental : undefined,
-          musicWorkflow: audioType === "music" ? musicWorkflow : undefined,
-          musicStoreForInpainting:
-            audioType === "music" ? musicStoreForInpainting : undefined,
-          musicSourceSongId:
-            audioType === "music" && musicWorkflow === "extend"
-              ? musicSourceSongId.trim() || undefined
-              : undefined,
-        }).catch((error) => {
-          const raw =
-            error instanceof Error
-              ? error.message
-              : typeof error === "string"
-                ? error
-                : "";
-          // Job is already queued server-side; websocket blips shouldn't wipe the turn.
-          if (/connection lost while action|connection lost/i.test(raw)) {
-            return;
-          }
-          console.error("Studio audio action failed", error);
-          toast.error(friendlyConvexError(error, "Audio generation failed."));
-        });
+        const musicPayload =
+          audioType === "music"
+            ? {
+                durationSeconds: musicDurationAuto ? undefined : musicDurationSeconds,
+                forceInstrumental: musicInstrumental,
+                musicWorkflow,
+                musicModelId,
+                musicFinetuneId: musicFinetuneId.trim() || undefined,
+                musicStoreForInpainting,
+                musicSourceSongId:
+                  musicWorkflow === "extend"
+                    ? musicSourceSongId.trim() || undefined
+                    : undefined,
+              }
+            : {};
+        const variantCount = audioType === "music" ? musicVariants : 1;
+        for (let i = 0; i < variantCount; i += 1) {
+          void runAudioFlow({
+            threadId,
+            folderId: generationSaveFolderId(threadId),
+            userPrompt,
+            audioType,
+            elevenVoiceId: selectedVoice?.voiceId,
+            elevenVoiceName: selectedVoice?.name,
+            elevenPublicOwnerId: selectedVoice?.publicOwnerId,
+            durationSeconds:
+              audioType === "sfx" && !sfxDurationAuto
+                ? sfxDurationSeconds
+                : musicPayload.durationSeconds,
+            audioLoop: audioType === "sfx" ? sfxLoop : undefined,
+            promptInfluence: audioType === "sfx" ? sfxPromptInfluence : undefined,
+            ...musicPayload,
+          }).catch((error) => {
+            const raw =
+              error instanceof Error
+                ? error.message
+                : typeof error === "string"
+                  ? error
+                  : "";
+            // Job is already queued server-side; websocket blips shouldn't wipe the turn.
+            if (/connection lost while action|connection lost/i.test(raw)) {
+              return;
+            }
+            console.error("Studio audio action failed", error);
+            toast.error(friendlyConvexError(error, "Audio generation failed."));
+          });
+        }
         return;
       }
 
@@ -26588,8 +26646,16 @@ export function StudioShell({
             setSfxPromptInfluence={setSfxPromptInfluence}
             musicDurationSeconds={musicDurationSeconds}
             setMusicDurationSeconds={setMusicDurationSeconds}
+            musicDurationAuto={musicDurationAuto}
+            setMusicDurationAuto={setMusicDurationAuto}
             musicInstrumental={musicInstrumental}
             setMusicInstrumental={setMusicInstrumental}
+            musicVariants={musicVariants}
+            setMusicVariants={setMusicVariants}
+            musicModelId={musicModelId}
+            setMusicModelId={setMusicModelId}
+            musicFinetuneId={musicFinetuneId}
+            setMusicFinetuneId={setMusicFinetuneId}
             musicWorkflow={musicWorkflow}
             setMusicWorkflow={setMusicWorkflow}
             musicStoreForInpainting={musicStoreForInpainting}
@@ -27666,8 +27732,16 @@ function StudioComposer({
   setSfxPromptInfluence,
   musicDurationSeconds = 30,
   setMusicDurationSeconds,
+  musicDurationAuto = true,
+  setMusicDurationAuto,
   musicInstrumental = true,
   setMusicInstrumental,
+  musicVariants = 1,
+  setMusicVariants,
+  musicModelId = "music_v2",
+  setMusicModelId,
+  musicFinetuneId = "",
+  setMusicFinetuneId,
   musicWorkflow = "composition_plan",
   setMusicWorkflow,
   musicStoreForInpainting = true,
@@ -28134,6 +28208,8 @@ function StudioComposer({
     sfxDurationAuto,
     sfxDurationSeconds,
     musicDurationSeconds,
+    musicDurationAuto,
+    musicVariants,
   });
   const assistanceOn = Boolean(
     assistanceFeatureEnabled && assistanceEnabled && !isAudioMode,
@@ -28313,8 +28389,16 @@ function StudioComposer({
       setSfxPromptInfluence={setSfxPromptInfluence}
       musicDurationSeconds={musicDurationSeconds}
       setMusicDurationSeconds={setMusicDurationSeconds}
+      musicDurationAuto={musicDurationAuto}
+      setMusicDurationAuto={setMusicDurationAuto}
       musicInstrumental={musicInstrumental}
       setMusicInstrumental={setMusicInstrumental}
+      musicVariants={musicVariants}
+      setMusicVariants={setMusicVariants}
+      musicModelId={musicModelId}
+      setMusicModelId={setMusicModelId}
+      musicFinetuneId={musicFinetuneId}
+      setMusicFinetuneId={setMusicFinetuneId}
       musicWorkflow={musicWorkflow}
       setMusicWorkflow={setMusicWorkflow}
       musicStoreForInpainting={musicStoreForInpainting}
@@ -29206,8 +29290,16 @@ function StudioComposerControlStrip({
   setSfxPromptInfluence,
   musicDurationSeconds = 30,
   setMusicDurationSeconds,
+  musicDurationAuto = true,
+  setMusicDurationAuto,
   musicInstrumental = true,
   setMusicInstrumental,
+  musicVariants = 1,
+  setMusicVariants,
+  musicModelId = "music_v2",
+  setMusicModelId,
+  musicFinetuneId = "",
+  setMusicFinetuneId,
   musicWorkflow = "composition_plan",
   setMusicWorkflow,
   musicStoreForInpainting = true,
@@ -29309,70 +29401,125 @@ function StudioComposerControlStrip({
             ) : null}
             {audioType === "music" ? (
               <section className="studio-composer-options-section" aria-label="Music">
-                <span className="studio-composer-options-section-label">Music</span>
+                <StudioInlineSettingChipGroup
+                  label="Model"
+                  value={musicModelId}
+                  items={[
+                    { value: "music_v2", label: "v2", meta: "Current", icon: Music2 },
+                    { value: "music_v1", label: "v1", meta: "Legacy", icon: Music2 },
+                  ]}
+                  onChange={(value) => setMusicModelId?.(value)}
+                />
+                <StudioInlineSettingChipGroup
+                  label="Variants"
+                  value={String(musicVariants)}
+                  items={[
+                    { value: "1", label: "1", meta: "One take", icon: Layers },
+                    { value: "2", label: "2", meta: "Two takes", icon: Layers },
+                  ]}
+                  onChange={(value) => setMusicVariants?.(Number(value) === 2 ? 2 : 1)}
+                />
+                <StudioInlineSettingChipGroup
+                  label="Length"
+                  value={musicDurationAuto ? "auto" : String(musicDurationSeconds)}
+                  items={[
+                    { value: "auto", label: "Auto", meta: "Model picks", icon: Clock3 },
+                    { value: "30", label: "30s", icon: Clock3 },
+                    { value: "60", label: "1m", icon: Clock3 },
+                    { value: "120", label: "2m", icon: Clock3 },
+                    { value: "240", label: "4m", icon: Clock3 },
+                    { value: "360", label: "6m", icon: Clock3 },
+                    { value: "600", label: "10m", icon: Clock3 },
+                  ]}
+                  onChange={(value) => {
+                    if (value === "auto") {
+                      setMusicDurationAuto?.(true);
+                      return;
+                    }
+                    setMusicDurationAuto?.(false);
+                    setMusicDurationSeconds?.(Number(value));
+                  }}
+                />
+                <StudioInlineSettingChipGroup
+                  label="Lyrics"
+                  value={musicInstrumental ? "instrumental" : "auto"}
+                  items={[
+                    {
+                      value: "instrumental",
+                      label: "Instrumental",
+                      meta: "No vocals",
+                      icon: Music2,
+                    },
+                    {
+                      value: "auto",
+                      label: "Auto",
+                      meta: "Vocals ok",
+                      icon: Mic,
+                    },
+                  ]}
+                  onChange={(value) => setMusicInstrumental?.(value === "instrumental")}
+                />
+                <StudioInlineSettingChipGroup
+                  label="Workflow"
+                  value={musicWorkflow}
+                  items={[
+                    {
+                      value: "composition_plan",
+                      label: "Plan",
+                      meta: "Structured",
+                      icon: ListChecks,
+                    },
+                    {
+                      value: "prompt",
+                      label: "Quick",
+                      meta: "Prompt only",
+                      icon: Zap,
+                    },
+                    {
+                      value: "extend",
+                      label: "Extend",
+                      meta: "Stored song",
+                      icon: History,
+                    },
+                  ]}
+                  onChange={(value) =>
+                    setMusicWorkflow?.(
+                      value as "composition_plan" | "prompt" | "extend",
+                    )
+                  }
+                />
                 <div className="studio-audio-sfx-controls">
-                <label className="studio-voice-picker-check">
-                  <input
-                    type="checkbox"
-                    checked={musicInstrumental}
-                    onChange={(event) => setMusicInstrumental?.(event.target.checked)}
-                  />
-                  <span>Instrumental</span>
-                </label>
-                <label>
-                  <span>Duration</span>
-                  <select
-                    className="studio-voice-picker-select"
-                    value={String(musicDurationSeconds)}
-                    onChange={(event) =>
-                      setMusicDurationSeconds?.(Number(event.target.value))
-                    }
-                  >
-                    {[10, 15, 30, 45, 60, 90, 120, 180, 300, 420, 600].map((seconds) => (
-                      <option key={seconds} value={String(seconds)}>
-                        {seconds >= 60 ? `${seconds / 60}m` : `${seconds}s`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Workflow</span>
-                  <select
-                    className="studio-voice-picker-select"
-                    value={musicWorkflow}
-                    onChange={(event) =>
-                      setMusicWorkflow?.(
-                        event.target.value as "composition_plan" | "prompt" | "extend",
-                      )
-                    }
-                  >
-                    <option value="composition_plan">Structured plan</option>
-                    <option value="prompt">Quick prompt</option>
-                    <option value="extend">Extend stored song</option>
-                  </select>
-                </label>
-                <label className="studio-voice-picker-check">
-                  <input
-                    type="checkbox"
-                    checked={musicStoreForInpainting}
-                    onChange={(event) =>
-                      setMusicStoreForInpainting?.(event.target.checked)
-                    }
-                  />
-                  <span>Keep for extend</span>
-                </label>
-                {musicWorkflow === "extend" ? (
+                  <label className="studio-voice-picker-check">
+                    <input
+                      type="checkbox"
+                      checked={musicStoreForInpainting}
+                      onChange={(event) =>
+                        setMusicStoreForInpainting?.(event.target.checked)
+                      }
+                    />
+                    <span>Keep for extend</span>
+                  </label>
                   <label>
-                    <span>Song id</span>
+                    <span>Finetune id</span>
                     <input
                       className="studio-voice-picker-select"
-                      value={musicSourceSongId}
-                      placeholder="From Keep for extend"
-                      onChange={(event) => setMusicSourceSongId?.(event.target.value)}
+                      value={musicFinetuneId}
+                      placeholder="None"
+                      onChange={(event) => setMusicFinetuneId?.(event.target.value)}
                     />
                   </label>
-                ) : null}
-              </div>
+                  {musicWorkflow === "extend" ? (
+                    <label>
+                      <span>Song id</span>
+                      <input
+                        className="studio-voice-picker-select"
+                        value={musicSourceSongId}
+                        placeholder="From Keep for extend"
+                        onChange={(event) => setMusicSourceSongId?.(event.target.value)}
+                      />
+                    </label>
+                  ) : null}
+                </div>
               </section>
             ) : null}
           </>
@@ -37729,6 +37876,8 @@ function composerCreditCost({
   sfxDurationAuto = true,
   sfxDurationSeconds = 5,
   musicDurationSeconds = 30,
+  musicDurationAuto = true,
+  musicVariants = 1,
 }) {
   if (mode === "element") {
     return elementSheetCreditCost({
@@ -37746,7 +37895,7 @@ function composerCreditCost({
     });
   }
   if (mode === "audio") {
-    return audioCreditCost({
+    const unit = audioCreditCost({
       audioType,
       characterCount: audioType === "voiceover" ? characterCount : undefined,
       durationSeconds:
@@ -37755,9 +37904,12 @@ function composerCreditCost({
             ? undefined
             : sfxDurationSeconds
           : audioType === "music"
-            ? musicDurationSeconds
+            ? musicDurationAuto
+              ? undefined
+              : musicDurationSeconds
             : undefined,
     });
+    return unit * (audioType === "music" ? Math.min(2, Math.max(1, Number(musicVariants) || 1)) : 1);
   }
   return creditCostForGeneration({
     tier: mode === "video" ? "pro_video" : "image",

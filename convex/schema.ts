@@ -49,6 +49,8 @@ export const musicWorkflow = v.union(
   v.literal("extend"),
 );
 
+export const musicModelId = v.union(v.literal("music_v1"), v.literal("music_v2"));
+
 export const generationSource = v.union(v.literal("ui"), v.literal("api"));
 
 export const apiKeyScope = v.union(
@@ -750,6 +752,10 @@ export default defineSchema({
     forceInstrumental: v.optional(v.boolean()),
     /** Music workflow: composition_plan (default) | prompt | extend. */
     musicWorkflow: v.optional(musicWorkflow),
+    /** Eleven Music model: music_v1 | music_v2 (default). */
+    musicModelId: v.optional(musicModelId),
+    /** Optional music finetune id. */
+    musicFinetuneId: v.optional(v.string()),
     /** Optional pre-built composition plan JSON (music_v2 chunks). */
     musicCompositionPlanJson: v.optional(v.string()),
     /** Store song for later extend/inpaint (compose_detailed). */

@@ -24,6 +24,28 @@ export function clampMusicDurationSeconds(durationSeconds?: number | null): numb
   );
 }
 
+/** `null` = Auto (omit `music_length_ms`; model picks length). */
+export function resolveMusicLengthMs(
+  durationSeconds?: number | null,
+): number | null {
+  if (
+    durationSeconds == null ||
+    !Number.isFinite(durationSeconds) ||
+    Number(durationSeconds) <= 0
+  ) {
+    return null;
+  }
+  return clampMusicDurationSeconds(durationSeconds) * 1000;
+}
+
+export type ElevenMusicModelId = "music_v1" | "music_v2";
+
+export function resolveMusicModelId(
+  modelId?: string | null,
+): ElevenMusicModelId {
+  return modelId === "music_v1" ? "music_v1" : "music_v2";
+}
+
 const ELEVEN_API_BASE = "https://api.elevenlabs.io";
 
 /** Parse ELEVENLABS_API_KEYS (+ legacy ELEVENLABS_API_KEY). Deduped, order preserved. */
@@ -658,13 +680,20 @@ function isAudioRefChunk(
 export async function createMusicCompositionPlan(args: {
   prompt: string;
   durationSeconds?: number | null;
+  modelId?: ElevenMusicModelId | string | null;
 }): Promise<MusicCompositionPlan> {
   const prompt = args.prompt.trim();
   if (!prompt) throw new Error("Describe the music to generate.");
   if (prompt.length > 4000) {
     throw new Error("Music prompt must be 4000 characters or less.");
   }
-  const durationSeconds = clampMusicDurationSeconds(args.durationSeconds);
+  const lengthMs = resolveMusicLengthMs(args.durationSeconds);
+  const modelId = resolveMusicModelId(args.modelId);
+  const planBody: Record<string, unknown> = {
+    prompt,
+    model_id: modelId,
+  };
+  if (lengthMs != null) planBody.music_length_ms = lengthMs;
   return withElevenLabsApiKey(1, async (apiKey) => {
     const response = await fetch(`${ELEVEN_API_BASE}/v1/music/plan`, {
       method: "POST",
@@ -673,11 +702,7 @@ export async function createMusicCompositionPlan(args: {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({
-        prompt,
-        music_length_ms: durationSeconds * 1000,
-        model_id: "music_v2",
-      }),
+      body: JSON.stringify(planBody),
     });
     const text = await response.text();
     if (!response.ok) throwIfElevenLabsFailed(response.status, text);
@@ -866,12 +891,15 @@ async function postMusicCompose(args: {
  * Eleven Music compose — prompt and/or composition plan (`music_v2`).
  * Prefer `composeMusicDetailed` when you need songId / plan back.
  */
-export async function composeMusic(args: {
+function buildMusicComposeBody(args: {
   prompt?: string;
   compositionPlan?: MusicCompositionPlan;
   durationSeconds?: number | null;
   forceInstrumental?: boolean;
-}): Promise<ComposedMusicResult> {
+  storeForInpainting?: boolean;
+  modelId?: ElevenMusicModelId | string | null;
+  finetuneId?: string | null;
+}): Record<string, unknown> {
   const prompt = args.prompt?.trim() ?? "";
   const plan = args.compositionPlan;
   if (!plan && !prompt) throw new Error("Describe the music to generate.");
@@ -881,16 +909,36 @@ export async function composeMusic(args: {
   if (plan && prompt) {
     throw new Error("Use either a prompt or a composition plan, not both.");
   }
-  const body: Record<string, unknown> = { model_id: "music_v2" };
+  const body: Record<string, unknown> = {
+    model_id: resolveMusicModelId(args.modelId),
+  };
+  if (args.storeForInpainting != null) {
+    body.store_for_inpainting = Boolean(args.storeForInpainting);
+  }
+  const finetuneId = args.finetuneId?.trim();
+  if (finetuneId) body.finetune_id = finetuneId;
   if (plan) {
     body.composition_plan = plan;
   } else {
     body.prompt = prompt;
-    body.music_length_ms = clampMusicDurationSeconds(args.durationSeconds) * 1000;
+    const lengthMs = resolveMusicLengthMs(args.durationSeconds);
+    if (lengthMs != null) body.music_length_ms = lengthMs;
     if (args.forceInstrumental != null) {
       body.force_instrumental = Boolean(args.forceInstrumental);
     }
   }
+  return body;
+}
+
+export async function composeMusic(args: {
+  prompt?: string;
+  compositionPlan?: MusicCompositionPlan;
+  durationSeconds?: number | null;
+  forceInstrumental?: boolean;
+  modelId?: ElevenMusicModelId | string | null;
+  finetuneId?: string | null;
+}): Promise<ComposedMusicResult> {
+  const body = buildMusicComposeBody(args);
   return withElevenLabsApiKey(1, async (apiKey) =>
     postMusicCompose({ apiKey, body, detailed: false }),
   );
@@ -903,29 +951,13 @@ export async function composeMusicDetailed(args: {
   durationSeconds?: number | null;
   forceInstrumental?: boolean;
   storeForInpainting?: boolean;
+  modelId?: ElevenMusicModelId | string | null;
+  finetuneId?: string | null;
 }): Promise<ComposedMusicResult> {
-  const prompt = args.prompt?.trim() ?? "";
-  const plan = args.compositionPlan;
-  if (!plan && !prompt) throw new Error("Describe the music to generate.");
-  if (prompt && prompt.length > 4000) {
-    throw new Error("Music prompt must be 4000 characters or less.");
-  }
-  if (plan && prompt) {
-    throw new Error("Use either a prompt or a composition plan, not both.");
-  }
-  const body: Record<string, unknown> = {
-    model_id: "music_v2",
-    store_for_inpainting: Boolean(args.storeForInpainting),
-  };
-  if (plan) {
-    body.composition_plan = plan;
-  } else {
-    body.prompt = prompt;
-    body.music_length_ms = clampMusicDurationSeconds(args.durationSeconds) * 1000;
-    if (args.forceInstrumental != null) {
-      body.force_instrumental = Boolean(args.forceInstrumental);
-    }
-  }
+  const body = buildMusicComposeBody({
+    ...args,
+    storeForInpainting: Boolean(args.storeForInpainting),
+  });
   return withElevenLabsApiKey(1, async (apiKey) =>
     postMusicCompose({ apiKey, body, detailed: true }),
   );
@@ -940,16 +972,21 @@ export async function composeMusicFromPromptWithPlan(args: {
   durationSeconds?: number | null;
   forceInstrumental?: boolean;
   storeForInpainting?: boolean;
+  modelId?: ElevenMusicModelId | string | null;
+  finetuneId?: string | null;
 }): Promise<ComposedMusicResult & { sourcePlan: MusicCompositionPlan }> {
   const plan = await createMusicCompositionPlan({
     prompt: args.prompt,
     durationSeconds: args.durationSeconds,
+    modelId: args.modelId,
   });
   // force_instrumental only applies to prompt mode — plan already encodes vocals/styles.
   void args.forceInstrumental;
   const result = await composeMusicDetailed({
     compositionPlan: plan,
     storeForInpainting: args.storeForInpainting ?? true,
+    modelId: args.modelId,
+    finetuneId: args.finetuneId,
   });
   return { ...result, sourcePlan: plan, compositionPlan: result.compositionPlan ?? plan };
 }

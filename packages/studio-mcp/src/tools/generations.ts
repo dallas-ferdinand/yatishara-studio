@@ -575,7 +575,8 @@ Wait ≥65s between video calls (1 req/min gateway quota). For packs use studio_
 
 Voiceover: requires elevenVoiceId (from studio_explore_voices or studio_list_saved_voices). Prompt = spoken text (max ~3000 chars).
 SFX: prompt = sound description; optional durationSeconds 0.5–30 (omit = Auto ~5s).
-Music: prompt = track description; durationSeconds 3–600 (default 30); forceInstrumental defaults true.
+Music: prompt = track description; durationSeconds 3–600 or omit for Auto; forceInstrumental defaults true.
+Music model: musicModelId music_v1 | music_v2 (default v2). Optional musicFinetuneId.
 Music workflows: composition_plan (default — free plan then compose), prompt (quick), extend (needs musicSourceSongId from a Keep-for-extend track).
 musicStoreForInpainting defaults true so songs can be extended later.
 Async by default (wait=false) then polls up to 5 min for music.`,
@@ -586,7 +587,7 @@ Async by default (wait=false) then polls up to 5 min for music.`,
       elevenVoiceId: z.string().optional().describe("Required for voiceover"),
       elevenVoiceName: z.string().optional(),
       elevenPublicOwnerId: z.string().optional().describe("Library owner id; omit for account/premade voices"),
-      durationSeconds: z.number().optional().describe("SFX: 0.5–30; Music: 3–600"),
+      durationSeconds: z.number().optional().describe("SFX: 0.5–30; Music: 3–600 or omit Auto"),
       audioLoop: z.boolean().optional(),
       promptInfluence: z.number().optional().describe("SFX only: 0–1"),
       forceInstrumental: z.boolean().optional().describe("Music only; default true"),
@@ -594,6 +595,8 @@ Async by default (wait=false) then polls up to 5 min for music.`,
         .enum(["composition_plan", "prompt", "extend"])
         .optional()
         .describe("Music only; default composition_plan"),
+      musicModelId: z.enum(["music_v1", "music_v2"]).optional().describe("Music only; default music_v2"),
+      musicFinetuneId: z.string().optional().describe("Music only; optional finetune id"),
       musicCompositionPlanJson: z.string().optional().describe("Optional prebuilt music_v2 plan JSON"),
       musicStoreForInpainting: z.boolean().optional().describe("Music only; default true"),
       musicSourceSongId: z.string().optional().describe("Required for extend workflow"),
@@ -623,6 +626,8 @@ Async by default (wait=false) then polls up to 5 min for music.`,
           promptInfluence: args.promptInfluence,
           forceInstrumental: args.forceInstrumental,
           musicWorkflow: args.musicWorkflow,
+          musicModelId: args.musicModelId,
+          musicFinetuneId: args.musicFinetuneId,
           musicCompositionPlanJson: args.musicCompositionPlanJson,
           musicStoreForInpainting: args.musicStoreForInpainting,
           musicSourceSongId: args.musicSourceSongId,

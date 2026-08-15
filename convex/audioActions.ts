@@ -21,6 +21,7 @@ import {
   mapCategoryToUseCase,
   mapVoiceSort,
   normalizeVoicePageSize,
+  resolveMusicModelId,
   separateMusicStems,
   sliceVoicePage,
   soundGeneration,
@@ -74,6 +75,8 @@ const createQueuedJobRef = makeFunctionReference<
     promptInfluence?: number;
     forceInstrumental?: boolean;
     musicWorkflow?: "composition_plan" | "prompt" | "extend";
+    musicModelId?: "music_v1" | "music_v2";
+    musicFinetuneId?: string;
     musicCompositionPlanJson?: string;
     musicStoreForInpainting?: boolean;
     musicSourceSongId?: string;
@@ -133,6 +136,8 @@ const getJobRef = internalQueryRef<
     promptInfluence?: number;
     forceInstrumental?: boolean;
     musicWorkflow?: "composition_plan" | "prompt" | "extend";
+    musicModelId?: "music_v1" | "music_v2";
+    musicFinetuneId?: string;
     musicCompositionPlanJson?: string;
     musicStoreForInpainting?: boolean;
     musicSourceSongId?: string;
@@ -168,6 +173,8 @@ const prepareApiAudioGenerationRef = internalMutationRef<
     promptInfluence?: number;
     forceInstrumental?: boolean;
     musicWorkflow?: "composition_plan" | "prompt" | "extend";
+    musicModelId?: "music_v1" | "music_v2";
+    musicFinetuneId?: string;
     musicCompositionPlanJson?: string;
     musicStoreForInpainting?: boolean;
     musicSourceSongId?: string;
@@ -381,6 +388,8 @@ export const runAudioFlow = action({
         v.literal("extend"),
       ),
     ),
+    musicModelId: v.optional(v.union(v.literal("music_v1"), v.literal("music_v2"))),
+    musicFinetuneId: v.optional(v.string()),
     musicCompositionPlanJson: v.optional(v.string()),
     musicStoreForInpainting: v.optional(v.boolean()),
     musicSourceSongId: v.optional(v.string()),
@@ -397,16 +406,20 @@ export const runAudioFlow = action({
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to generate audio.");
 
+    const musicModel =
+      args.audioType === "music" ? resolveMusicModelId(args.musicModelId) : undefined;
     const resolvedModel =
       args.audioType === "sfx"
         ? "elevenlabs/eleven_text_to_sound_v2"
         : args.audioType === "music"
-          ? "elevenlabs/music_v2"
+          ? `elevenlabs/${musicModel}`
           : "elevenlabs/eleven_v3";
 
     const durationSeconds =
       args.audioType === "music"
-        ? clampMusicDurationSeconds(args.durationSeconds)
+        ? args.durationSeconds == null || !Number.isFinite(args.durationSeconds)
+          ? undefined
+          : clampMusicDurationSeconds(args.durationSeconds)
         : args.durationSeconds;
 
     const musicWorkflow =
@@ -430,6 +443,9 @@ export const runAudioFlow = action({
       forceInstrumental:
         args.audioType === "music" ? (args.forceInstrumental ?? true) : undefined,
       musicWorkflow,
+      musicModelId: musicModel,
+      musicFinetuneId:
+        args.audioType === "music" ? args.musicFinetuneId?.trim() || undefined : undefined,
       musicCompositionPlanJson:
         args.audioType === "music" ? args.musicCompositionPlanJson : undefined,
       musicStoreForInpainting:
@@ -471,6 +487,8 @@ export const runAudioForApi = internalAction({
         v.literal("extend"),
       ),
     ),
+    musicModelId: v.optional(v.union(v.literal("music_v1"), v.literal("music_v2"))),
+    musicFinetuneId: v.optional(v.string()),
     musicCompositionPlanJson: v.optional(v.string()),
     musicStoreForInpainting: v.optional(v.boolean()),
     musicSourceSongId: v.optional(v.string()),
@@ -498,7 +516,9 @@ export const runAudioForApi = internalAction({
 
     const durationSeconds =
       args.audioType === "music"
-        ? clampMusicDurationSeconds(args.durationSeconds)
+        ? args.durationSeconds == null || !Number.isFinite(args.durationSeconds)
+          ? undefined
+          : clampMusicDurationSeconds(args.durationSeconds)
         : args.durationSeconds;
 
     const prepared = await ctx.runMutation(prepareApiAudioGenerationRef, {
@@ -520,6 +540,12 @@ export const runAudioForApi = internalAction({
         args.audioType === "music"
           ? (args.musicWorkflow ?? "composition_plan")
           : undefined,
+      musicModelId:
+        args.audioType === "music"
+          ? resolveMusicModelId(args.musicModelId)
+          : undefined,
+      musicFinetuneId:
+        args.audioType === "music" ? args.musicFinetuneId?.trim() || undefined : undefined,
       musicCompositionPlanJson:
         args.audioType === "music" ? args.musicCompositionPlanJson : undefined,
       musicStoreForInpainting:
@@ -619,6 +645,8 @@ export const executeAudioJob = internalAction({
           musicResult = await composeMusicDetailed({
             compositionPlan: plan,
             storeForInpainting: store,
+            modelId: job.musicModelId,
+            finetuneId: job.musicFinetuneId,
           });
         } else if (workflow === "prompt") {
           musicResult = store
@@ -627,11 +655,15 @@ export const executeAudioJob = internalAction({
                 durationSeconds: job.durationSeconds,
                 forceInstrumental: job.forceInstrumental ?? true,
                 storeForInpainting: true,
+                modelId: job.musicModelId,
+                finetuneId: job.musicFinetuneId,
               })
             : await composeMusic({
                 prompt: job.userPrompt,
                 durationSeconds: job.durationSeconds,
                 forceInstrumental: job.forceInstrumental ?? true,
+                modelId: job.musicModelId,
+                finetuneId: job.musicFinetuneId,
               });
         } else {
           musicResult = await composeMusicFromPromptWithPlan({
@@ -639,6 +671,8 @@ export const executeAudioJob = internalAction({
             durationSeconds: job.durationSeconds,
             forceInstrumental: job.forceInstrumental ?? true,
             storeForInpainting: store,
+            modelId: job.musicModelId,
+            finetuneId: job.musicFinetuneId,
           });
         }
         const planJson = musicResult.compositionPlan
