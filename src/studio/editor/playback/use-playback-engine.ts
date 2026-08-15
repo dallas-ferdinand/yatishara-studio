@@ -447,6 +447,7 @@ class EngineConsumer implements FrameConsumer {
       })
       .then((blob) =>
         createImageBitmap(blob, {
+          // Decode straight; upload path premultiplies for GPU filter + over.
           premultiplyAlpha: "none",
           colorSpaceConversion: "default",
         }),

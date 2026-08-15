@@ -218,6 +218,7 @@ vec4 sampleFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform, float 
     // Transparent outside so under-lane text can show in letterbox / around PiP.
     return vec4(0.0);
   }
+  // Textures are uploaded premultiplied — keep PM so soft PNG edges don't glow.
   return texture(tex, local) * clamp(opacity, 0.0, 1.0);
 }
 
@@ -275,11 +276,13 @@ void main() {
         p
       );
     } else if (u_hasA && u_hasB) {
-      // Stack: A (top lane) over B (underlay) — PNG alpha reveals B.
+      // Stack: A (top) over B — Porter-Duff source-over on premultiplied RGBA.
+      // Straight-alpha "over" here reads as a soft white/coloured glow on PNGs.
       base = a + b * (1.0 - a.a);
     } else {
       base = a;
     }
+    // Premultiplied over opaque (or transparent) project background.
     layer = base + layer * (1.0 - base.a);
   }
 
@@ -334,7 +337,8 @@ function initialize(message: InitMessage): void {
     desynchronized: true,
     powerPreference: "high-performance",
     preserveDrawingBuffer: false,
-    premultipliedAlpha: false,
+    // Drawing buffer is premultiplied — matches upload + source-over shader math.
+    premultipliedAlpha: true,
   });
   if (!gl) throw new Error("WebGL2 compositor is unavailable.");
   const vertex = compileShader(gl, gl.VERTEX_SHADER, vertexSource);
@@ -383,7 +387,8 @@ function upload(
   context.activeTexture(unit);
   context.bindTexture(context.TEXTURE_2D, texture);
   context.pixelStorei(context.UNPACK_FLIP_Y_WEBGL, true);
-  context.pixelStorei(context.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  // Premultiply on upload so LINEAR filter + source-over don't fringe/glow PNGs.
+  context.pixelStorei(context.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
   context.texImage2D(
     context.TEXTURE_2D,
     0,
