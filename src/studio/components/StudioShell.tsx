@@ -1295,6 +1295,12 @@ function studioCursorResizeYUrl(accent) {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 7 14, ns-resize`;
 }
 
+function studioCursorResizeNeswUrl(accent) {
+  // Same left/right arrows, rotated 45° for the composer corner handle.
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><g transform='translate(16 16) rotate(45) translate(-14 -7)'>${studioCursorResizeXMarkup(accent)}</g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 16 16, nesw-resize`;
+}
+
 function studioCursorDragUrl(accent) {
   const glow = `<circle cx='12' cy='12' r='9' fill='none' stroke='${accent}' stroke-width='5' stroke-opacity='.22' filter='blur(2.5px)'/>`;
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'>${glow}<circle cx='12' cy='12' r='9' fill='none' stroke='${accent}' stroke-width='1.6'/></svg>`;
@@ -1318,6 +1324,7 @@ function applyStudioCursorTheme(element) {
   root.style.setProperty("--studio-cursor-text", studioCursorTextUrl(accent));
   root.style.setProperty("--studio-cursor-resize-x", studioCursorResizeXUrl(accent));
   root.style.setProperty("--studio-cursor-resize-y", studioCursorResizeYUrl(accent));
+  root.style.setProperty("--studio-cursor-resize-nesw", studioCursorResizeNeswUrl(accent));
   root.style.setProperty("--studio-cursor-drag", studioCursorDragUrl(accent));
   root.style.setProperty("--studio-cursor-grabbing", studioCursorGrabbingUrl(accent));
 }
@@ -6370,10 +6377,7 @@ export function StudioShell({
 
     let nextHtml;
     let nextDraft;
-    if (already && composerHtmlHasAttachments(baseHtml, nextAttachments)) {
-      nextHtml = baseHtml;
-      nextDraft = baseDraft;
-    } else if (liveEditor) {
+    if (liveEditor) {
       if (insertRange && liveEditor.contains(insertRange.startContainer)) {
         insertComposerAttachmentToken(liveEditor, attachment, insertRange);
       } else {
@@ -9897,6 +9901,11 @@ export function StudioShell({
           [role="separator"][aria-orientation="horizontal"]
         ) {
           cursor: var(--studio-cursor-resize-y, ns-resize) !important;
+        }
+        .studio-polish.is-custom-cursor :where(.studio-composer-resize-handle),
+        body.is-composer-resize-nesw,
+        body.is-composer-resize-nesw * {
+          cursor: var(--studio-cursor-resize-nesw, nesw-resize) !important;
         }
         body.is-drag-cursor,
         .studio-polish.is-custom-cursor [draggable="true"]:active {
@@ -17157,7 +17166,7 @@ export function StudioShell({
           border: 0;
           background: transparent;
           color: color-mix(in srgb, var(--mos-ink, currentColor) 38%, transparent);
-          cursor: ns-resize;
+          cursor: var(--studio-cursor-resize-nesw, nesw-resize);
           touch-action: none;
         }
         .studio-composer-resize-handle::before {
@@ -27775,6 +27784,7 @@ function StudioComposer({
       pointerId: event.pointerId,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.classList.add("is-composer-resize-nesw");
   }
 
   function moveComposerHeightDrag(event) {
@@ -27787,6 +27797,7 @@ function StudioComposer({
   }
 
   function endComposerHeightDrag() {
+    document.body.classList.remove("is-composer-resize-nesw");
     const drag = composerHeightDragRef.current;
     composerHeightDragRef.current = null;
     if (!drag) return;
@@ -28490,6 +28501,41 @@ function StudioComposer({
         ) : null}
         <div className="studio-composer-row">
           <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`} data-drop-target="composer">
+      {railAttachments.length ? (
+        <div className="studio-composer-media-rail" aria-label="Attached media">
+          {railAttachments.map((item) => {
+            const tag = `@${attachmentComposerTag(item)}`;
+            const liveKind = attachmentLiveMediaKind(item) ?? item.kind;
+            const thumb = attachmentChipPreviewUrl(item);
+            const videoSrc =
+              liveKind === "video"
+                ? item.mediaUrl ||
+                  item.sheetAsset?.mediaUrl ||
+                  (item.referenceAssets ?? []).find((ref) => ref?.mediaUrl)?.mediaUrl ||
+                  thumb
+                : null;
+            return (
+              <div key={item.id} className="studio-composer-media-tile">
+                <button
+                  type="button"
+                  className="studio-composer-media-tile-frame"
+                  title={`${tag} — remove the tag in the prompt to detach`}
+                  onClick={() => setPreviewAttachment(item)}
+                >
+                  {liveKind === "video" && videoSrc ? (
+                    <video src={videoSrc} muted playsInline preload="metadata" />
+                  ) : thumb ? (
+                    <img src={thumb} alt="" />
+                  ) : (
+                    <span className="studio-composer-media-tile-fallback">@</span>
+                  )}
+                  <span className="studio-composer-media-tile-tag">{tag}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       <div
         className="studio-composer-inputline"
         ref={inputLineRef}
@@ -30707,9 +30753,12 @@ function buildComposerEditorHtmlFromState(draft, attachments = []) {
     if (ch === "\uFFFC") {
       flush();
       const attachment = tokens[tokenIndex];
-      tokenIndex += 1;
       if (attachment) {
+        tokenIndex += 1;
         shell.appendChild(createComposerAttachmentToken(attachment));
+        shell.appendChild(document.createTextNode(" "));
+      } else if (tokens.length === 1) {
+        shell.appendChild(createComposerAttachmentToken(tokens[0]));
         shell.appendChild(document.createTextNode(" "));
       }
       continue;
@@ -30775,10 +30824,8 @@ function buildComposerHtmlWithAppendedAttachment(baseHtml, draft, existingAttach
     }
   }
 
-  if (!shell.querySelector(`[data-attachment-id="${CSS.escape(String(attachment.id))}"]`)) {
-    shell.appendChild(createComposerAttachmentToken(attachment));
-    shell.appendChild(document.createTextNode(" "));
-  }
+  shell.appendChild(createComposerAttachmentToken(attachment));
+  shell.appendChild(document.createTextNode(" "));
 
   return {
     editorHtml: shell.innerHTML,
@@ -31399,7 +31446,6 @@ function removeComposerTokensInSelection(editor, setAttachments) {
     }
   });
   if (!doomed.length) return false;
-  const ids = new Set(doomed.map((token) => token.getAttribute("data-attachment-id")).filter(Boolean));
   for (const token of doomed) {
     const after = token.nextSibling;
     token.remove();
@@ -31407,7 +31453,7 @@ function removeComposerTokensInSelection(editor, setAttachments) {
       after.remove();
     }
   }
-  setAttachments((items) => items.filter((item) => !ids.has(String(item.id))));
+  pruneComposerAttachmentsFromDom(editor, setAttachments);
   return true;
 }
 
