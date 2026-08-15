@@ -90,6 +90,31 @@ describe("HttpRangeSource", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps cached bytes when the signed URL token is refreshed", async () => {
+    const seen: string[] = [];
+    const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {
+      seen.push(String(url));
+      const range = new Headers(init?.headers).get("Range");
+      if (range === "bytes=0-0") return response([0], "bytes 0-0/2000000");
+      return response(new Array(524_288).fill(7), "bytes 0-524287/2000000");
+    }) as unknown as typeof fetch;
+
+    const source = new HttpRangeSource(
+      "https://cdn.test/proxy.mp4?token=old",
+      "asset",
+      { fetchImpl },
+    );
+    await source.readSample({ offset: 100, size: 20 });
+    const callsBefore = seen.length;
+
+    source.setUrl("https://cdn.test/proxy.mp4?token=new");
+    await source.readSample({ offset: 100, size: 20 });
+
+    expect(seen).toHaveLength(callsBefore);
+    expect(source.url).toContain("token=new");
+    expect(seen.every((url) => url.includes("token=old"))).toBe(true);
+  });
+
   it("evicts old aligned ranges under a hard memory budget", async () => {
     const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
       const range = new Headers(init?.headers).get("Range");

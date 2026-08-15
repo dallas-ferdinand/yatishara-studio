@@ -177,7 +177,7 @@ export class MediaDecoderClient {
     url: string,
     sourceTime: number,
     generation: number,
-    opts?: { speed?: number; aheadSec?: number },
+    opts?: { speed?: number; aheadSec?: number; exact?: boolean },
   ): Promise<DecodedFrame> {
     // One promise per call — never share a VideoFrame across consumers.
     return this.request({
@@ -188,6 +188,7 @@ export class MediaDecoderClient {
       generation,
       speed: opts?.speed ?? 1,
       aheadSec: opts?.aheadSec ?? (this.playingAssets.has(assetId) ? 0.75 : 0.5),
+      exact: opts?.exact ?? false,
     }) as Promise<DecodedFrame>;
   }
 

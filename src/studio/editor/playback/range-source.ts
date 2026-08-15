@@ -21,7 +21,7 @@ const DEFAULT_CACHE_BYTES = 96 * 1024 * 1024;
  * coalesces those reads into aligned HTTP ranges and enforces a hard LRU budget.
  */
 export class HttpRangeSource {
-  readonly url: string;
+  private urlValue: string;
   readonly identity: string;
   private readonly credentials: RequestCredentials;
   private readonly maxCacheBytes: number;
@@ -33,7 +33,7 @@ export class HttpRangeSource {
   private rangeSupported = true;
 
   constructor(url: string, identity: string, options: RangeSourceOptions = {}) {
-    this.url = url;
+    this.urlValue = url;
     this.identity = identity;
     // Bunny URLs are bearer-signed in the query string. Sending cookies turns
     // a wildcard CDN CORS response into a credentialed request and browsers
@@ -44,6 +44,19 @@ export class HttpRangeSource {
     // unbound function and invoking it as `this.fetchImpl(...)` changes `this`
     // to HttpRangeSource and Chromium throws "Illegal invocation".
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  }
+
+  get url(): string {
+    return this.urlValue;
+  }
+
+  /**
+   * Point at a re-signed URL for the same bytes. Signed CDN links rotate their
+   * query token; re-downloading the file for a new token is the difference
+   * between an instant scrub and a full reload.
+   */
+  setUrl(url: string): void {
+    this.urlValue = url;
   }
 
   get size(): number | null {

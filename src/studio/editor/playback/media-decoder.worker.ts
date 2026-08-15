@@ -21,6 +21,8 @@ type FrameMessage = {
   speed?: number;
   /** Seconds of source media to keep decoded ahead of the playhead. */
   aheadSec?: number;
+  /** Paused review needs the requested sample, not a nearby one. */
+  exact?: boolean;
 };
 
 type PlayMessage = {
@@ -76,10 +78,20 @@ type Incoming =
 
 type FrameWaiter = {
   targetIndex: number;
+  /** How many samples away from the target may satisfy this waiter. */
+  slack: number;
   resolve: (frame: VideoFrame) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 };
+
+/**
+ * How precise the answer has to be.
+ * - `play`: the pump owns the buffer; a one-sample neighbour is fine.
+ * - `exact`: paused review/frame-step — decode the requested sample.
+ * - `coarse`: mid-drag — any nearby cached sample, never wait on decode.
+ */
+type FrameMode = "play" | "exact" | "coarse";
 
 type Session = {
   assetId: string;
@@ -115,14 +127,27 @@ type Session = {
 const sessions = new Map<string, Session>();
 /** ~3s at 30fps so the pump buffer survives 1.5×–2× source advances. */
 const MAX_FRAMES_PER_ASSET = 90;
+/**
+ * Frames are held across seeks now, so the ceiling is global: decoders stall
+ * once too many outputs stay open, and idle clips must not hoard them.
+ * Two buffers' worth covers the active clip plus a transition partner.
+ */
+const MAX_TOTAL_FRAMES = 200;
+const PROTECTED_SESSIONS = 2;
 const MAX_DECODER_SESSIONS = 6;
 const DECODE_CHUNK = 24;
 const DEFAULT_AHEAD_SEC = 1.5;
 const FRAME_WAIT_MS = 1_200;
 /** Playpath wait — short; timeout falls back to nearest good frame, not a banner. */
 const PLAY_WAIT_MS = 280;
-/** Scrub may show a nearby cached sample (~0.5s at 30fps) while the target decodes. */
+/** Mid-drag may show a nearby cached sample (~0.5s at 30fps) instead of decoding. */
 const SCRUB_NEAREST_DISTANCE = 16;
+/**
+ * Paused review waits this long for the requested sample before showing a
+ * neighbour. Warm bytes + an open decoder answer in a few ms, so this only
+ * costs anything on a cold GOP.
+ */
+const EXACT_WAIT_MS = 200;
 
 function totalCacheBytes(): number {
   let total = 0;
@@ -168,6 +193,30 @@ function evictFrames(session: Session, aroundIndex: number): void {
   }
 }
 
+/** Reclaim from the least recently used clips before the decoder backs up. */
+function enforceGlobalFrameBudget(active: Session): void {
+  let total = 0;
+  for (const session of sessions.values()) total += session.frames.size;
+  if (total <= MAX_TOTAL_FRAMES) return;
+  const victims = [...sessions.values()]
+    .filter((session) => session !== active)
+    .sort((a, b) => a.touchedAt - b.touchedAt)
+    .slice(0, Math.max(0, sessions.size - PROTECTED_SESSIONS));
+  for (const victim of victims) {
+    if (total <= MAX_TOTAL_FRAMES) break;
+    const indexes = [...victim.frames.keys()].sort(
+      (a, b) =>
+        Math.abs(b - victim.playheadIndex) - Math.abs(a - victim.playheadIndex),
+    );
+    for (const index of indexes) {
+      if (total <= MAX_TOTAL_FRAMES) break;
+      victim.frames.get(index)?.close();
+      victim.frames.delete(index);
+      total -= 1;
+    }
+  }
+}
+
 function nearestFrame(
   session: Session,
   targetIndex: number,
@@ -194,10 +243,9 @@ function nearestFrameAny(session: Session, targetIndex: number): VideoFrame | nu
 
 function notifyWaiters(session: Session): void {
   if (!session.waiters.length) return;
-  const slack = session.pumping ? 1 : SCRUB_NEAREST_DISTANCE;
   const remaining: FrameWaiter[] = [];
   for (const waiter of session.waiters) {
-    const frame = nearestFrame(session, waiter.targetIndex, slack);
+    const frame = nearestFrame(session, waiter.targetIndex, waiter.slack);
     if (frame) {
       clearTimeout(waiter.timer);
       waiter.resolve(frame);
@@ -212,12 +260,14 @@ function waitForFrame(
   session: Session,
   targetIndex: number,
   timeoutMs: number,
+  slack = 1,
 ): Promise<VideoFrame> {
-  const existing = nearestFrame(session, targetIndex);
+  const existing = nearestFrame(session, targetIndex, slack);
   if (existing) return Promise.resolve(existing);
   return new Promise<VideoFrame>((resolve, reject) => {
     const waiter: FrameWaiter = {
       targetIndex,
+      slack,
       resolve,
       reject,
       timer: setTimeout(() => {
@@ -329,6 +379,7 @@ function createSession(assetId: string, url: string): Session {
         previous?.close();
         session.frames.set(index, frame);
         evictFrames(session, index);
+        enforceGlobalFrameBudget(session);
         notifyWaiters(session);
       },
       error: (error) => {
@@ -346,9 +397,27 @@ function createSession(assetId: string, url: string): Session {
   return session;
 }
 
+/** Same file when only the signed query token differs. */
+function sameMediaFile(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    const left = new URL(a, self.location?.href);
+    const right = new URL(b, self.location?.href);
+    return left.origin === right.origin && left.pathname === right.pathname;
+  } catch {
+    return false;
+  }
+}
+
 function getSession(assetId: string, url: string): Session {
   const existing = sessions.get(assetId);
-  if (existing?.url === url) {
+  if (existing && sameMediaFile(existing.url, url)) {
+    if (existing.url !== url) {
+      // Re-signed link for identical bytes — swap the URL and keep the demux
+      // index, byte cache, decoder, and decoded frames.
+      existing.url = url;
+      existing.demuxer.source.setUrl(url);
+    }
     existing.touchedAt = performance.now();
     return existing;
   }
@@ -543,7 +612,6 @@ async function runPump(session: Session): Promise<void> {
       // Recover with a keyframe at the playhead, then continue pumping.
       try {
         const resetDecoder = configureSessionDecoder(session);
-        closeFrames(session);
         const sync = session.demuxer.precedingSyncIndex(session.playheadIndex);
         const last = Math.min(
           track.samples.length - 1,
@@ -570,16 +638,20 @@ async function keyframeEnsure(
   session: Session,
   targetIndex: number,
   generation: number,
+  waitMs = FRAME_WAIT_MS,
+  slack = 1,
 ): Promise<VideoFrame> {
   const track = session.demuxer.videoTrack;
   if (!track) throw new Error("Decoder did not initialize.");
+  // Keep already decoded frames. VideoDecoder.reset() only clears the control
+  // queue — emitted VideoFrames stay valid until closed — so a backward seek
+  // must not cost the whole cache. Memory stays bounded by evictFrames().
   const resetDecoder = configureSessionDecoder(session);
-  closeFrames(session);
   session.generation = generation;
   const first = session.demuxer.precedingSyncIndex(targetIndex);
   const last = Math.min(track.samples.length - 1, targetIndex + DECODE_CHUNK);
   await feedSamples(session, resetDecoder, first, last, true);
-  return waitForFrame(session, targetIndex, FRAME_WAIT_MS);
+  return waitForFrame(session, targetIndex, waitMs, slack);
 }
 
 /**
@@ -592,6 +664,7 @@ async function ensureFrame(
   generation: number,
   speed = 1,
   aheadSec = DEFAULT_AHEAD_SEC,
+  mode: FrameMode = "play",
 ): Promise<VideoFrame> {
   await session.init;
   const decoder = session.decoder;
@@ -611,14 +684,28 @@ async function ensureFrame(
     session.generation = generation;
   }
 
-  const cached = nearestFrame(
-    session,
-    targetIndex,
-    session.pumping ? 1 : SCRUB_NEAREST_DISTANCE,
-  );
+  // How far off target a cached frame may be, and how long we may wait for the
+  // real one. Frame-by-frame review must not be answered with a neighbour.
+  const slack =
+    mode === "coarse" ? SCRUB_NEAREST_DISTANCE : mode === "exact" ? 0 : 1;
+  const waitMs =
+    mode === "play" ? PLAY_WAIT_MS : mode === "exact" ? EXACT_WAIT_MS : FRAME_WAIT_MS;
+
+  const cached = nearestFrame(session, targetIndex, slack);
   if (cached) {
     if (session.pumping) schedulePump(session);
     return cached;
+  }
+  if (mode === "coarse") {
+    // Mid-drag with nothing usable cached: seek without blocking the caller on
+    // the exact sample, so the next drag position isn't queued behind it.
+    return keyframeEnsure(
+      session,
+      targetIndex,
+      generation,
+      FRAME_WAIT_MS,
+      SCRUB_NEAREST_DISTANCE,
+    );
   }
 
   const canForward =
@@ -636,23 +723,18 @@ async function ensureFrame(
       if (first <= last) {
         await feedSamples(session, decoder, first, last, false);
       }
-      const frame = await waitForFrame(
-        session,
-        targetIndex,
-        session.pumping ? PLAY_WAIT_MS : FRAME_WAIT_MS,
-      );
+      const frame = await waitForFrame(session, targetIndex, waitMs, slack);
       if (session.pumping) schedulePump(session);
       return frame;
     }
 
     // Backward / cold / eviction — keyframe, then keep pumping if playing.
-    const frame = await keyframeEnsure(session, targetIndex, generation);
+    const frame = await keyframeEnsure(session, targetIndex, generation, waitMs, slack);
     if (session.pumping) schedulePump(session);
     return frame;
   } catch (error) {
     session.streamOpen = false;
     const resetDecoder = configureSessionDecoder(session);
-    closeFrames(session);
     session.generation = generation;
     const first = session.demuxer.precedingSyncIndex(targetIndex);
     const last = Math.min(track.samples.length - 1, targetIndex + DECODE_CHUNK);
@@ -688,6 +770,7 @@ async function decodeFrame(message: FrameMessage): Promise<void> {
     message.generation,
     message.speed ?? session.pumpSpeed,
     message.aheadSec ?? session.aheadSec,
+    session.pumping ? "play" : message.exact ? "exact" : "coarse",
   );
   const output = frame.clone();
   post(
@@ -773,7 +856,14 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     session.chain = session.chain
       .then(async () => {
         if (session.scrubToken !== token) return;
-        await ensureFrame(session, message.sourceTime, message.generation, 1, 0.35);
+        await ensureFrame(
+          session,
+          message.sourceTime,
+          message.generation,
+          1,
+          0.35,
+          "coarse",
+        );
       })
       .catch(() => undefined);
     return;
@@ -804,7 +894,14 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
         ) {
           return;
         }
-        await ensureFrame(session, message.sourceTime, message.generation);
+        await ensureFrame(
+          session,
+          message.sourceTime,
+          message.generation,
+          1,
+          DEFAULT_AHEAD_SEC,
+          "coarse",
+        );
       })
       .catch(() => undefined);
     return;
