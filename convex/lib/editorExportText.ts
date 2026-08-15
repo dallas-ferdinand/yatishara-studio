@@ -252,30 +252,43 @@ export function buildTextOverlayFilter(args: {
   };
 }
 
-/** Drop \r progress / stream banners so the last lines are the real error. */
+function isFfmpegChatter(line: string): boolean {
+  return (
+    /^(frame|fps|q|size|time|bitrate|speed|out_time)\s*=/i.test(line) ||
+    /^frame=\s*\d+/i.test(line) ||
+    /^Press \[q\]/i.test(line) ||
+    /^(Input|Output) #/i.test(line) ||
+    /^Stream mapping:/i.test(line) ||
+    /^Metadata:/i.test(line) ||
+    /^encoder\s*:/i.test(line) ||
+    /^Stream #\d/.test(line) ||
+    /^\[(libx264|aac|libmp3lame|out#|in#) @/i.test(line) ||
+    /H\.264\/MPEG-4 AVC codec/i.test(line) ||
+    /videolan\.org\/x264/i.test(line) ||
+    /^x264 \[info\]/i.test(line) ||
+    /^Command failed:/i.test(line)
+  );
+}
+
+function isFfmpegErrorLine(line: string): boolean {
+  return (
+    /error applying option/i.test(line) ||
+    /option not found/i.test(line) ||
+    /invalid argument/i.test(line) ||
+    /conversion failed/i.test(line) ||
+    /\b(error|failed|not found|no such|cannot|unable)\b/i.test(line)
+  );
+}
+
+/** Drop \r progress / codec banners so the last lines are the real error. */
 export function ffmpegUsefulStderr(stderr: string): string {
   const lines = String(stderr)
     .replace(/\r/g, "\n")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter(
-      (line) =>
-        !/^(frame|fps|q|size|time|bitrate|speed|out_time)\s*=/i.test(line) &&
-        !/^frame=\s*\d+/i.test(line) &&
-        !/^Press \[q\]/i.test(line) &&
-        !/^Output #/i.test(line) &&
-        !/^Input #/i.test(line) &&
-        !/^Stream mapping:/i.test(line) &&
-        !/^Metadata:/i.test(line) &&
-        !/^encoder\s*:/i.test(line) &&
-        !/^Stream #\d/.test(line),
-    );
-  const errors = lines.filter((line) =>
-    /error|failed|invalid|not found|no such|cannot|unable|conversion|option/i.test(
-      line,
-    ),
-  );
+    .filter((line) => !isFfmpegChatter(line));
+  const errors = lines.filter(isFfmpegErrorLine);
   return (errors.length ? errors : lines).slice(-4).join(" ");
 }
 
@@ -283,12 +296,13 @@ export function ffmpegFailMessage(error: unknown, fallback: string): string {
   if (!error || typeof error !== "object") return fallback;
   const err = error as { stderr?: string; message?: string };
   const stderr = String(err.stderr ?? "");
-  const last = ffmpegUsefulStderr(stderr);
-  if (/drawtext|fontfile|textfile|No such file|Invalid argument/i.test(stderr)) {
+  const message = String(err.message ?? "");
+  const last = ffmpegUsefulStderr(stderr) || ffmpegUsefulStderr(message);
+  if (/drawtext|fontfile|textfile|No such file|Invalid argument/i.test(stderr + message)) {
     return `Text overlay export failed. ${last || fallback}`;
   }
-  if (/maxBuffer/i.test(String(err.message ?? ""))) {
+  if (/maxBuffer/i.test(message)) {
     return "Export ran too long for the server log buffer. Retry — this was fixed.";
   }
-  return last || err.message || fallback;
+  return last || fallback;
 }

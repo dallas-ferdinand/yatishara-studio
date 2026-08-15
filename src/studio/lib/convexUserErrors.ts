@@ -215,6 +215,10 @@ const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
     match: /frame=\s*0|Could not mix audio onto the export/i,
     message: "Audio mix hit a muxer stall. Retry — this was fixed on the server.",
   },
+  {
+    match: /libx264 @|H\.264\/MPEG-4 AVC codec|options:\s*cabac=/i,
+    message: "Video encode failed. Retry export.",
+  },
 ];
 
 /**

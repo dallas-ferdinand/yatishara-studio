@@ -312,7 +312,7 @@ async function makeBlackSegment(
 ): Promise<void> {
   const vf = ["setsar=1", "format=yuv420p", ...textParts].join(",");
   try {
-    await execFileAsync("ffmpeg", [
+    await runFfmpeg([
       "-y",
       "-f",
       "lavfi",
@@ -484,7 +484,7 @@ async function renderClipSegment(args: {
       : ["-ss", String(args.clip.trimIn), "-t", String(sourceLen), "-i", args.sourcePath];
   try {
     if (audioFilter && sourceAudio.present) {
-      await execFileAsync("ffmpeg", [
+      await runFfmpeg([
         "-y",
         ...inputTrimArgs,
         "-vf",
@@ -494,7 +494,7 @@ async function renderClipSegment(args: {
         ...encodeArgs,
       ]);
     } else {
-      await execFileAsync("ffmpeg", [
+      await runFfmpeg([
         "-y",
         ...inputTrimArgs,
         "-f",
@@ -559,7 +559,7 @@ async function concatNormalizedSegments(
   const outputPath = join(tempDir, "video-composed.mp4");
   const vf = normalizeVf(width, height);
   if (segmentPaths.length === 1) {
-    await execFileAsync("ffmpeg", [
+    await runFfmpeg([
       "-y",
       "-i",
       segmentPaths[0]!,
@@ -584,7 +584,7 @@ async function concatNormalizedSegments(
     const listPath = join(tempDir, "concat.txt");
     const listBody = segmentPaths.map((path) => `file '${path.replace(/'/g, "'\\''")}'`).join("\n");
     await writeFile(listPath, listBody, "utf8");
-    await execFileAsync("ffmpeg", [
+    await runFfmpeg([
       "-y",
       "-f",
       "concat",
@@ -662,7 +662,7 @@ async function concatNormalizedSegments(
         `[0:v]${vf}[v0];[1:v]${vf}[v1];` +
         `[v0][v1]xfade=transition=${transitionName}:duration=${duration.toFixed(3)}:offset=${offset.toFixed(3)}[vout];` +
         transitionAudioMixFilter({ durationSec: duration, offsetSec: offset });
-      await execFileAsync("ffmpeg", [
+      await runFfmpeg([
         "-y",
         "-i",
         currentPath,
@@ -698,7 +698,7 @@ async function concatNormalizedSegments(
         `file '${currentPath.replace(/'/g, "'\\''")}'\nfile '${nextPath.replace(/'/g, "'\\''")}'\n`,
         "utf8",
       );
-      await execFileAsync("ffmpeg", [
+      await runFfmpeg([
         "-y",
         "-f",
         "concat",
@@ -728,7 +728,7 @@ async function concatNormalizedSegments(
     currentPath = outPath;
   }
 
-  await execFileAsync("ffmpeg", [
+  await runFfmpeg([
     "-y",
     "-i",
     currentPath,
@@ -870,7 +870,7 @@ async function runExportVideo(
   };
 
   try {
-    await execFileAsync("ffmpeg", ["-version"]);
+    await runFfmpeg(["-version"]);
     await execFileAsync("ffprobe", ["-version"]);
   } catch {
     const message =
@@ -1023,7 +1023,7 @@ async function runExportVideo(
           : audioFormat === "m4a"
             ? ["-vn", "-c:a", "aac", "-b:a", EXPORT_AUDIO_BITRATE]
             : ["-vn", "-c:a", "libmp3lame", "-b:a", EXPORT_AUDIO_BITRATE];
-      await execFileAsync("ffmpeg", ["-y", "-i", composedPath, ...codecArgs, audioOut]);
+      await runFfmpeg(["-y", "-i", composedPath, ...codecArgs, audioOut]);
       body = await readFile(audioOut);
       const rawName = (args.name || "export").replace(/\.(mp3|wav|m4a|mp4|mov|webm)$/i, "");
       filename = `${rawName.replace(/[^\w.-]+/g, "-").slice(0, 48) || "export"}${audioExportExt(audioFormat)}`;
@@ -1070,7 +1070,7 @@ async function runExportVideo(
     await report("Export ready", 100);
     return { assetId: prepared.assetId };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error ?? "Export failed");
+    const message = ffmpegFailMessage(error, "Export failed.");
     if (args.jobId) {
       try {
         await ctx.runMutation(internal.exportJobs.fail, { jobId: args.jobId, error: message });
@@ -1184,7 +1184,7 @@ async function runDownloadClipSegment(
   },
 ): Promise<{ url: string; filename: string; contentType: string }> {
   try {
-    await execFileAsync("ffmpeg", ["-version"]);
+    await runFfmpeg(["-version"]);
   } catch {
     throw new Error(
       "Clip download requires ffmpeg on the Convex action runtime.",
@@ -1250,11 +1250,11 @@ async function runDownloadClipSegment(
         "2",
         outPath,
       );
-      await execFileAsync("ffmpeg", audioArgs);
+      await runFfmpeg(audioArgs);
     } else if (await hasAudioStream(sourcePath)) {
       const vf = speedPts || "null";
       const af = naturalAf || "anull";
-      await execFileAsync("ffmpeg", [
+      await runFfmpeg([
         "-y",
         "-ss",
         String(trimIn),
@@ -1288,7 +1288,7 @@ async function runDownloadClipSegment(
       ]);
     } else {
       const vfSilent = speedPts || "null";
-      await execFileAsync("ffmpeg", [
+      await runFfmpeg([
         "-y",
         "-ss",
         String(trimIn),
@@ -1476,7 +1476,7 @@ export const processClipSpeed = action({
       throw new Error("Sign in to process clip speed.");
     }
     try {
-      await execFileAsync("ffmpeg", ["-version"]);
+      await runFfmpeg(["-version"]);
     } catch {
       throw new Error(
         "Speed process requires ffmpeg on the Convex action runtime.",
@@ -1552,11 +1552,11 @@ export const processClipSpeed = action({
           "2",
           outPath,
         );
-        await execFileAsync("ffmpeg", audioArgs);
+        await runFfmpeg(audioArgs);
       } else if (await hasAudioStream(sourcePath)) {
         const vf = speedPts || "null";
         const af = naturalAf || "anull";
-        await execFileAsync("ffmpeg", [
+        await runFfmpeg([
           "-y",
           "-ss",
           String(trimIn),
@@ -1590,7 +1590,7 @@ export const processClipSpeed = action({
         ]);
       } else {
         const vfSilent = speedPts || "null";
-        await execFileAsync("ffmpeg", [
+        await runFfmpeg([
           "-y",
           "-ss",
           String(trimIn),
@@ -1694,7 +1694,7 @@ export const renderNaturalSpeedAudio = action({
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to process audio speed.");
     try {
-      await execFileAsync("ffmpeg", ["-version"]);
+      await runFfmpeg(["-version"]);
     } catch {
       throw new Error("Natural speed requires ffmpeg on the Convex action runtime.");
     }
@@ -1738,7 +1738,7 @@ export const renderNaturalSpeedAudio = action({
       await downloadToFile(signedSource, sourcePath);
       const outPath = join(tempDir, "sped.wav");
       const naturalAf = buildNaturalSpeedAudioFilters(speed);
-      await execFileAsync("ffmpeg", [
+      await runFfmpeg([
         "-y",
         "-ss",
         String(trimIn),
@@ -1809,7 +1809,7 @@ export const pullFrameForApi = internalAction({
     expiresUnix: number;
   }> => {
     try {
-      await execFileAsync("ffmpeg", ["-version"]);
+      await runFfmpeg(["-version"]);
     } catch {
       throw new Error(
         "Frame pull requires ffmpeg on the Convex action runtime. Install ffmpeg on the action host, then retry.",
@@ -1874,7 +1874,7 @@ export const pullFrameForApi = internalAction({
       const sourcePath = join(tempDir, "source.bin");
       const framePath = join(tempDir, "frame.jpg");
       await downloadToFile(signedSource, sourcePath);
-      await execFileAsync("ffmpeg", [
+      await runFfmpeg([
         "-y",
         "-ss",
         String(seekTime),
@@ -1993,7 +1993,7 @@ export const sampleAssetFramesForApi = internalAction({
   }),
   handler: async (ctx, args): Promise<SampleAssetFramesResult> => {
     try {
-      await execFileAsync("ffmpeg", ["-version"]);
+      await runFfmpeg(["-version"]);
     } catch {
       throw new Error(
         "Frame pull requires ffmpeg on the Convex action runtime. Install ffmpeg on the action host, then retry.",
@@ -2066,7 +2066,7 @@ export const sampleAssetFramesForApi = internalAction({
 
       for (const seekTime of times) {
         const framePath = join(tempDir, `frame-${seekTime}.jpg`);
-        await execFileAsync("ffmpeg", [
+        await runFfmpeg([
           "-y",
           "-ss",
           String(seekTime),

@@ -132,6 +132,20 @@ describe("helpers", () => {
     );
   });
 
+  it("does not surface the libx264 banner as the error", () => {
+    const banner =
+      "[libx264 @ 0x585ffa0f2cc0] 264 - core 164 r3108 31e19f9 - H.264/MPEG-4 AVC codec - Copyleft 2003-2023 - http://www.videolan.org/x264.html - options: cabac=1 ref=2 deblock=1:0:0";
+    expect(ffmpegFailMessage({ stderr: banner }, "Export failed.")).toBe(
+      "Export failed.",
+    );
+    expect(
+      ffmpegFailMessage(
+        { message: `Command failed: ffmpeg -y -i clip.mp4\n${banner}`, stderr: banner },
+        "Export failed.",
+      ),
+    ).toBe("Export failed.");
+  });
+
   it("falls back when stderr is only progress", () => {
     expect(
       ffmpegFailMessage(
