@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyProject } from "../editorState";
 import type { EditorClip } from "../types";
-import { compileTimeline, sliceAt } from "./timeline-compiler";
+import { compileTimeline, playbackSignature, sliceAt } from "./timeline-compiler";
 
 function clip(
   id: string,
@@ -23,6 +23,59 @@ function clip(
       : undefined,
   };
 }
+
+describe("playbackSignature", () => {
+  function projectWith(clips: EditorClip[]) {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.clips = clips;
+    return project;
+  }
+
+  it("ignores cosmetic edits so a transform drag never restarts decode", () => {
+    const base = clip("a", 0, 4);
+    const before = playbackSignature(compileTimeline(projectWith([base])));
+    const dragged = playbackSignature(
+      compileTimeline(
+        projectWith([
+          { ...base, effects: { scale: 1.4, x: 0.2, y: -0.1, rotation: 12 } },
+        ]),
+      ),
+    );
+    expect(dragged).toBe(before);
+  });
+
+  it("changes when trim, position, speed, or volume changes", () => {
+    const base = clip("a", 0, 4);
+    const before = playbackSignature(compileTimeline(projectWith([base])));
+
+    expect(
+      playbackSignature(compileTimeline(projectWith([{ ...base, trimIn: 1 }]))),
+    ).not.toBe(before);
+    expect(
+      playbackSignature(compileTimeline(projectWith([{ ...base, startTime: 2 }]))),
+    ).not.toBe(before);
+    expect(
+      playbackSignature(
+        compileTimeline(projectWith([{ ...base, effects: { speed: 2 } }])),
+      ),
+    ).not.toBe(before);
+    expect(
+      playbackSignature(
+        compileTimeline(projectWith([{ ...base, effects: { volume: 0.3 } }])),
+      ),
+    ).not.toBe(before);
+  });
+
+  it("changes when a transition is added", () => {
+    const before = playbackSignature(
+      compileTimeline(projectWith([clip("a", 0, 2), clip("b", 2, 2)])),
+    );
+    const after = playbackSignature(
+      compileTimeline(projectWith([clip("a", 0, 2, true), clip("b", 2, 2)])),
+    );
+    expect(after).not.toBe(before);
+  });
+});
 
 describe("timeline compiler", () => {
   it("ignores draft effects.speed until Process bakes a new asset", () => {

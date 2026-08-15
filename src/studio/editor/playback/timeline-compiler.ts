@@ -158,6 +158,45 @@ export function compileTimeline(project: EditorProject): PlaybackPlan {
   };
 }
 
+/**
+ * Identity of everything that decides which bytes get decoded and which audio
+ * is mixed. Cosmetic edits — transform drags, text styling, colours — leave it
+ * unchanged, so the preview can repaint without restarting decode and audio.
+ */
+export function playbackSignature(plan: PlaybackPlan): string {
+  const parts: string[] = [];
+  for (const clip of [...plan.video, ...plan.audio]) {
+    const effects = clip.clip.effects ?? {};
+    parts.push(
+      [
+        clip.clipId,
+        clip.assetId ?? "",
+        clip.kind,
+        clip.timelineStart.toFixed(4),
+        clip.timelineEnd.toFixed(4),
+        clip.sourceStart.toFixed(4),
+        clip.sourceEnd.toFixed(4),
+        clip.volume,
+        clip.muted ? 1 : 0,
+        effects.speed ?? 1,
+        effects.audioFadeIn ?? 0,
+        effects.audioFadeOut ?? 0,
+      ].join(":"),
+    );
+  }
+  for (const transition of plan.transitions) {
+    parts.push(
+      [
+        transition.key,
+        transition.type,
+        transition.timelineStart.toFixed(4),
+        transition.timelineEnd.toFixed(4),
+      ].join(":"),
+    );
+  }
+  return parts.join("|");
+}
+
 function contains(start: number, end: number, time: number): boolean {
   return time >= start && time < end;
 }

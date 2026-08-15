@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { reportPerfMetric } from "@/lib/performance";
 import {
   normalizeClipTransform,
@@ -17,7 +17,7 @@ import {
   type DecodedFrame,
 } from "./media-decoder-client";
 import { FrameScheduler, type FrameConsumer, type SchedulerMetrics } from "./frame-scheduler";
-import { compileTimeline, sliceAt } from "./timeline-compiler";
+import { compileTimeline, playbackSignature, sliceAt } from "./timeline-compiler";
 import type { PlaybackPlan, RenderSlice } from "./timeline-compiler";
 import { TransportClock } from "./transport-clock";
 import { isLegacySystemFont, loadGoogleFont } from "../loadGoogleFont";
@@ -27,6 +27,13 @@ import {
   DEFAULT_PREVIEW_LOAD_QUALITY,
   playbackUrlForMedia,
 } from "../previewLoadQuality";
+
+/**
+ * A stall has to last this long before the preview admits to loading. The
+ * transport still holds at the first sign of underrun; this only governs the
+ * spinner, which used to blink on every sub-100ms decode.
+ */
+const BUFFER_SPINNER_DELAY_MS = 400;
 
 /** Transient decode waits — buffer/underrun / skip frame, never a red preview banner. */
 export function isSoftDecodeFailure(reason: unknown): boolean {
@@ -263,6 +270,9 @@ class EngineConsumer implements FrameConsumer {
             {
               speed: clipSpeed(sample.clip.clip.effects),
               aheadSec: this.playingRef.current ? 1.5 : 0.35,
+              // Paused review shows the sample under the playhead, not a
+              // neighbour — otherwise stepping frames never changes the image.
+              exact: !this.playingRef.current,
             },
           );
         } catch {
@@ -510,6 +520,9 @@ export function usePlaybackEngine(args: {
   const metricsTimerRef = useRef<number | null>(null);
   const scrubRafRef = useRef<number | null>(null);
   const pendingScrubRef = useRef<number | null>(null);
+  const scrubBusyRef = useRef(false);
+  const bufferSpinnerTimerRef = useRef<number | null>(null);
+  const playbackSignatureRef = useRef<string | null>(null);
   mediaRef.current = mediaById;
   previewLoadQualityRef.current = previewLoadQuality;
   playingRef.current = playing;
@@ -524,6 +537,10 @@ export function usePlaybackEngine(args: {
     if (metricsTimerRef.current != null) {
       window.clearInterval(metricsTimerRef.current);
       metricsTimerRef.current = null;
+    }
+    if (bufferSpinnerTimerRef.current != null) {
+      window.clearTimeout(bufferSpinnerTimerRef.current);
+      bufferSpinnerTimerRef.current = null;
     }
     const runtime = runtimeRef.current;
     runtimeRef.current = null;
@@ -597,6 +614,7 @@ export function usePlaybackEngine(args: {
         },
       });
       const plan = compileTimeline(projectRef.current);
+      playbackSignatureRef.current = playbackSignature(plan);
       const scheduler = new FrameScheduler(plan, clock, consumer, {
         loop: true,
         onTime: (time) => {
@@ -665,7 +683,19 @@ export function usePlaybackEngine(args: {
               bufferHold.hardStopTimer = null;
             }
           }
-          if (runtimeRef.current) setBuffering(value);
+          if (!value) {
+            if (bufferSpinnerTimerRef.current != null) {
+              window.clearTimeout(bufferSpinnerTimerRef.current);
+              bufferSpinnerTimerRef.current = null;
+            }
+            setBuffering(false);
+            return;
+          }
+          if (bufferSpinnerTimerRef.current != null) return;
+          bufferSpinnerTimerRef.current = window.setTimeout(() => {
+            bufferSpinnerTimerRef.current = null;
+            if (runtimeRef.current && playingRef.current) setBuffering(true);
+          }, BUFFER_SPINNER_DELAY_MS);
         },
         onEnded: () => callbacksRef.current.onPlayingChange(false),
         onError: (reason) => {
@@ -743,28 +773,40 @@ export function usePlaybackEngine(args: {
     runtime.plan = plan;
     runtime.scheduler.setPlan(plan);
     runtime.clock.setDuration(clockDuration(projectRef.current, playingRef.current));
-    runtime.audio.stopAll();
     const time = runtime.clock.currentTime();
     const slice = sliceAt(plan, time);
-    // Project edit invalidates decode generation — restart pumps if playing.
-    runtime.decoder.stopPlayback();
-    if (playingRef.current) {
-      startDecodePumps(runtime.decoder,
-        plan,
-        mediaRef.current,
-        time,
-        runtime.clock.generation, previewLoadQualityRef.current);
+    // Only a timeline change touches decode and audio. Dragging a transform or
+    // restyling text used to tear the pumps down on every pointer move, which
+    // read as the preview reloading constantly.
+    const signature = playbackSignature(plan);
+    const structural = signature !== playbackSignatureRef.current;
+    playbackSignatureRef.current = signature;
+    if (structural) {
+      runtime.audio.stopAll();
+      runtime.decoder.stopPlayback();
+      if (playingRef.current) {
+        startDecodePumps(
+          runtime.decoder,
+          plan,
+          mediaRef.current,
+          time,
+          runtime.clock.generation,
+          previewLoadQualityRef.current,
+        );
+      }
+      // Newly added audio beds decode async — resync once buffers land.
+      void runtime.audio.prepare(slice, mediaRef.current).then(() => {
+        if (!playingRef.current || runtimeRef.current !== runtime) return;
+        runtime.audio.sync(
+          sliceAt(runtime.plan, runtime.clock.currentTime()),
+          runtime.clock.generation,
+          mediaRef.current,
+          true,
+        );
+      });
     }
-    // Newly added audio beds decode async — resync once buffers land.
-    void runtime.audio.prepare(slice, mediaRef.current).then(() => {
-      if (!playingRef.current || runtimeRef.current !== runtime) return;
-      runtime.audio.sync(
-        sliceAt(runtime.plan, runtime.clock.currentTime()),
-        runtime.clock.generation,
-        mediaRef.current,
-        true,
-      );
-    });
+    // While playing the scheduler repaints every frame from the new plan.
+    if (playingRef.current) return;
     void runtime.scheduler.renderNow(time).catch((reason) => {
       if (isSoftDecodeFailure(reason)) return;
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -837,6 +879,58 @@ export function usePlaybackEngine(args: {
     }
   }, [playing]);
 
+  /**
+   * Keep one seek in flight and retarget it on completion. Firing a seek per
+   * animation frame queues work behind the decoder, so a fast drag ends up
+   * painting positions the playhead left seconds ago.
+   */
+  const drainScrub = useCallback(async () => {
+    if (scrubBusyRef.current) return;
+    scrubBusyRef.current = true;
+    try {
+      while (true) {
+        const runtime = runtimeRef.current;
+        const time = pendingScrubRef.current;
+        if (!runtime || time == null || playingRef.current) return;
+        pendingScrubRef.current = null;
+        // Paused seek keeps decode generation so cached frames stay paintable.
+        runtime.clock.seek(time);
+        runtime.audio.stopAll();
+        emittedTimeRef.current = time;
+        const slice = sliceAt(runtime.plan, time);
+        for (const sample of slice.video) {
+          const assetId = sample.clip.assetId;
+          if (!assetId) continue;
+          const media = mediaRef.current.get(assetId);
+          const url = playbackUrlForMedia(media, previewLoadQualityRef.current);
+          if (!media || media.kind !== "video" || !url) continue;
+          runtime.decoder.scrub({
+            assetId,
+            url,
+            sourceTime: sample.sourceTime,
+            generation: runtime.clock.generation,
+          });
+        }
+        const paint = async () => {
+          try {
+            await runtime.scheduler.renderNow(time);
+          } catch (reason) {
+            if (!isSoftDecodeFailure(reason)) {
+              setError(reason instanceof Error ? reason.message : String(reason));
+            }
+          }
+        };
+        await paint();
+        if (pendingScrubRef.current != null) continue;
+        // Settled here. A cold seek can time out and paint a neighbouring
+        // sample; the real one has usually landed by now, so repaint once.
+        await paint();
+      }
+    } finally {
+      scrubBusyRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
@@ -847,33 +941,9 @@ export function usePlaybackEngine(args: {
     if (scrubRafRef.current != null) return;
     scrubRafRef.current = window.requestAnimationFrame(() => {
       scrubRafRef.current = null;
-      const rt = runtimeRef.current;
-      const time = pendingScrubRef.current;
-      if (!rt || time == null || playingRef.current) return;
-      // Paused seek keeps decode generation so cached frames stay paintable.
-      rt.clock.seek(time);
-      rt.audio.stopAll();
-      emittedTimeRef.current = time;
-      const slice = sliceAt(rt.plan, time);
-      for (const sample of slice.video) {
-        const assetId = sample.clip.assetId;
-        if (!assetId) continue;
-        const media = mediaRef.current.get(assetId);
-        const url = playbackUrlForMedia(media, previewLoadQualityRef.current);
-        if (!media || media.kind !== "video" || !url) continue;
-        rt.decoder.scrub({
-          assetId,
-          url,
-          sourceTime: sample.sourceTime,
-          generation: rt.clock.generation,
-        });
-      }
-      void rt.scheduler.renderNow(time).catch((reason) => {
-        if (isSoftDecodeFailure(reason)) return;
-        setError(reason instanceof Error ? reason.message : String(reason));
-      });
+      void drainScrub();
     });
-  }, [playhead, playing]);
+  }, [playhead, playing, drainScrub]);
 
   useEffect(() => {
     return () => {
@@ -885,7 +955,21 @@ export function usePlaybackEngine(args: {
   }, []);
 
   // Proxy URLs, signed URLs, and preview load quality can change after hydrate.
-  // Restart decode pumps / scrub so the chosen 720/1080 proxy is used.
+  // Restart decode pumps / scrub so the chosen 720/1080 proxy is used. Keyed on
+  // the URLs themselves: any other asset-row change (thumbnails, renames,
+  // Convex re-delivery) must not interrupt decoding.
+  const playbackUrlSignature = useMemo(() => {
+    const parts: string[] = [];
+    for (const media of mediaById.values()) {
+      parts.push(
+        `${media.assetId}:${media.kind}:${
+          playbackUrlForMedia(media, previewLoadQuality) ?? ""
+        }`,
+      );
+    }
+    return parts.sort().join("|");
+  }, [mediaById, previewLoadQuality]);
+
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
@@ -934,7 +1018,7 @@ export function usePlaybackEngine(args: {
         setError(reason instanceof Error ? reason.message : String(reason));
       });
     }
-  }, [mediaById, previewLoadQuality]);
+  }, [playbackUrlSignature]);
 
   useEffect(() => {
     runtimeRef.current?.audio.setNaturalAudioUrls(naturalAudioByClipId);
