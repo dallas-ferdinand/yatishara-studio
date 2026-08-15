@@ -94,6 +94,7 @@ import {
   Zap,
   Bell,
   Bot,
+  GripHorizontal,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
@@ -236,6 +237,7 @@ import {
   attachmentLiveMediaKind,
   attachmentShowsImageOnlyChip,
   generationReferenceInputs,
+  resolveGenerationReferenceInputs,
   splitVideoGenerationInputs,
   tooSmallSeedanceImageMessage,
   elementMediaAssetId,
@@ -5000,7 +5002,7 @@ export function StudioShell({
     beginInlineRename(entry.studioId, { pinToTop: false });
   }
 
-  async function createInlineStudioItem(kind) {
+  async function createInlineStudioItem(kind, options = {}) {
     if (isTrashNav) {
       toast.error("Can't create items in Trash.");
       return;
@@ -5122,7 +5124,11 @@ export function StudioShell({
           if (el.deletedAt || el.type === "style_sheet") continue;
           taken.add(el.name);
         }
-        const stem = uniqueElementStem(taken);
+        const requested = composerElementTag(options?.name ?? "");
+        const stem =
+          requested && requested !== "ref" && !taken.has(requested)
+            ? requested
+            : uniqueElementStem(taken);
         const createType =
           ["character", "prop", "location", "doc"].includes(elementType)
             ? elementType
@@ -5136,7 +5142,7 @@ export function StudioShell({
           {
             _id: id,
             name: stem,
-            type: "prop",
+            type: createType,
             folderId: parentFolder._id,
             updatedAt: wallClockMs(),
           },
@@ -8688,18 +8694,31 @@ export function StudioShell({
           toast.error(tooSmall);
           throw new Error(tooSmall);
         }
-        const wantsMedia = attachments.some(
-          (item) =>
-            item.kind === "image" ||
-            item.kind === "video" ||
-            item.studioKind === "element",
+      }
+      const wantsMedia = attachments.some(
+        (item) =>
+          item.kind === "image" ||
+          item.kind === "video" ||
+          item.studioKind === "element",
+      );
+      let liveGenerationReferences = generationReferences;
+      if (wantsMedia && liveGenerationReferences.length === 0) {
+        liveGenerationReferences = await resolveGenerationReferenceInputs(
+          attachments,
+          attachmentMediaUrls,
+          async (assetId, kind) =>
+            convex.query(api.assets.signedReadUrl, {
+              assetId,
+              expiresUnix: wallClockUnixSeconds() + 60 * 60 * 12,
+              ...(kind === "image" ? { quality: 100 } : {}),
+            }),
         );
-        if (wantsMedia && generationReferences.length === 0) {
-          const message =
-            "Reference media isn't ready — originals haven't signed yet. Wait a moment and retry.";
-          toast.error(message);
-          throw new Error(message);
-        }
+      }
+      if (wantsMedia && liveGenerationReferences.length === 0) {
+        const message =
+          "Reference media isn't ready — originals haven't signed yet. Wait a moment and retry.";
+        toast.error(message);
+        throw new Error(message);
       }
 
       let threadId = reuseThreadId;
@@ -8739,11 +8758,11 @@ export function StudioShell({
         videoModel: genMode === "video" ? videoModel : undefined,
         folderId: generationSaveFolderId(threadId),
         referenceUrls: genMode === "image"
-          ? generationReferences
+          ? liveGenerationReferences
               .filter((reference) => reference.kind === "image")
               .map((reference) => reference.url)
           : undefined,
-        referenceInputs: genMode === "video" ? generationReferences : undefined,
+        referenceInputs: genMode === "video" ? liveGenerationReferences : undefined,
         skipPromptEnhancement,
         referenceIntent,
         hasRawImageReference: composerReferenceFlags.hasRawImageReference,
@@ -26429,7 +26448,7 @@ export function StudioShell({
             expiresUnix={assetUrlExpiresUnix}
             onHydratePromptPaste={resolvePromptScriptHydration}
             mentionItems={composerMentionItems}
-            onCreateElement={(values) => createLibraryElement(values)}
+            onCreateElementTab={(name) => void createInlineStudioItem("element", { name })}
           />
         ) : null}
       </main>
@@ -27470,7 +27489,7 @@ function StudioComposer({
   expiresUnix,
   onHydratePromptPaste,
   mentionItems = [],
-  onCreateElement,
+  onCreateElementTab,
 }) {
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const enhanceComposerDraft = useAction(api.composerEnhanceActions.enhanceComposerDraft);
@@ -27483,11 +27502,6 @@ function StudioComposer({
   const [selectionHighlights, setSelectionHighlights] = useState([]);
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [mentionQuery, setMentionQuery] = useState(null);
-  const [createElementOpen, setCreateElementOpen] = useState(false);
-  const [createElementName, setCreateElementName] = useState("");
-  const [createElementDescription, setCreateElementDescription] = useState("");
-  const [createElementFile, setCreateElementFile] = useState(null);
-  const [createElementBusy, setCreateElementBusy] = useState(false);
   const [presetGridOpen, setPresetGridOpen] = useState(false);
   const [videoTypeGridOpen, setVideoTypeGridOpen] = useState(false);
   const [voicePickerOpen, setVoicePickerOpen] = useState(false);
@@ -28366,41 +28380,6 @@ function StudioComposer({
               onSelect={(voice) => setSelectedVoice?.(voice)}
               onClose={() => setVoicePickerOpen(false)}
             />
-          </div>
-        ) : null}
-        {railAttachments.length ? (
-          <div className="studio-composer-media-rail" aria-label="Attached media">
-            {railAttachments.map((item) => {
-              const tag = `@${attachmentComposerTag(item)}`;
-              const liveKind = attachmentLiveMediaKind(item) ?? item.kind;
-              const thumb = attachmentChipPreviewUrl(item);
-              const videoSrc =
-                liveKind === "video"
-                  ? item.mediaUrl ||
-                    item.sheetAsset?.mediaUrl ||
-                    (item.referenceAssets ?? []).find((ref) => ref?.mediaUrl)?.mediaUrl ||
-                    thumb
-                  : null;
-              return (
-                <div key={item.id} className="studio-composer-media-tile">
-                  <button
-                    type="button"
-                    className="studio-composer-media-tile-frame"
-                    title={`${tag} — remove the tag in the prompt to detach`}
-                    onClick={() => setPreviewAttachment(item)}
-                  >
-                    {liveKind === "video" && videoSrc ? (
-                      <video src={videoSrc} muted playsInline preload="metadata" />
-                    ) : thumb ? (
-                      <img src={thumb} alt="" />
-                    ) : (
-                      <span className="studio-composer-media-tile-fallback">@</span>
-                    )}
-                    <span className="studio-composer-media-tile-tag">{tag}</span>
-                  </button>
-                </div>
-              );
-            })}
           </div>
         ) : null}
         {mentionQuery ? (
