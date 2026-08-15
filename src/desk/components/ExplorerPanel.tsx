@@ -66,6 +66,7 @@ function UploadProgressPill({ upload, destLabelText, onDismiss, onRetry }) {
   let label = target;
   if (upload.status === "error") label = upload.error ?? "Upload failed";
   if (upload.status === "done") label = `Done · ${target}`;
+  if (upload.status === "queued") label = `Waiting · ${target}`;
   if (upload.status === "uploading") {
     if (byteLabel) label = `${target} · ${byteLabel}`;
     else if (progress > 0 && progress < 100) label = `${target} · ${progress}%`;
@@ -204,6 +205,7 @@ export function ExplorerPanel({
   onDropFiles,
   onAttachEntry,
   onRetryUpload,
+  onRetryFailedUploads,
   onDismissUpload,
   onDeleteFile,
   onRenameFile,
@@ -840,6 +842,32 @@ export function ExplorerPanel({
         />
         {uploadQueue.length || downloads.length ? (
           <div className="cursor-explorer-uploads shrink-0" aria-live="polite">
+            {(() => {
+              const failed = uploadQueue.filter((u) => u.status === "error");
+              const queued = uploadQueue.filter((u) => u.status === "queued").length;
+              const active = uploadQueue.filter((u) => u.status === "uploading").length;
+              if (!failed.length && uploadQueue.length < 2 && !queued) return null;
+              return (
+                <div className="cursor-explorer-upload-summary">
+                  <span>
+                    {failed.length
+                      ? `${failed.length} of ${uploadQueue.length} failed`
+                      : queued
+                        ? `${active} uploading · ${queued} waiting`
+                        : `${uploadQueue.length} files`}
+                  </span>
+                  {failed.length && onRetryFailedUploads ? (
+                    <button
+                      type="button"
+                      className="desk-upload-pill-btn is-primary"
+                      onClick={onRetryFailedUploads}
+                    >
+                      Retry failed
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })()}
             {uploadQueue.map((u) => {
               const dest = destLabel(u.destDir);
               return (

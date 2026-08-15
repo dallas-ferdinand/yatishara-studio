@@ -617,6 +617,12 @@ export function Shell({
     [onUploadJobChange],
   );
 
+  const retryFailedExplorerUploads = useCallback(() => {
+    for (const job of listExplorerUploadJobs()) {
+      if (job.status === "error") void retryExplorerUpload(job, onUploadJobChange);
+    }
+  }, [onUploadJobChange]);
+
   const dismissExplorerUpload = useCallback(
     (id, status) => {
       if (status === "uploading") {
@@ -1174,6 +1180,7 @@ export function Shell({
         uploadQueue={explorerUploads}
         onDropFiles={handleExplorerDrop}
         onRetryUpload={retryExplorerUploadById}
+        onRetryFailedUploads={retryFailedExplorerUploads}
         onDismissUpload={dismissExplorerUpload}
         onDeleteFile={deleteExplorerFile}
         onRenameFile={renameExplorerFile}
@@ -1198,6 +1205,7 @@ export function Shell({
       handleExplorerDrop,
       onAttachExplorerEntry,
       retryExplorerUploadById,
+      retryFailedExplorerUploads,
       dismissExplorerUpload,
       deleteExplorerFile,
       renameExplorerFile,

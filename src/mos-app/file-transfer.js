@@ -135,6 +135,7 @@ export function putWorkspaceFile(relPath, file, workspaceId = "mercuryos", { onP
 
 export function joinWorkspacePath(dir, filename) {
   const base = String(dir ?? "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-  const name = String(filename ?? "").replace(/\\/g, "/").split("/").pop() ?? "";
-  return base ? `${base}/${name}` : name;
+  const rel = String(filename ?? "").replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!rel) return base;
+  return base ? `${base}/${rel}` : rel;
 }
