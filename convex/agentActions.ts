@@ -370,6 +370,30 @@ export const sendTurn = action({
       { threadId: args.threadId, ownerId, limit: 32 },
     );
 
+    const folderRows = await ctx.runQuery(internal.agentMessages.listFoldersForOwner, {
+      ownerId,
+    });
+    const folderById = new Map(folderRows.map((row) => [String(row._id), row]));
+    const folderPathFor = (folderId?: string | null): string | undefined => {
+      if (!folderId) return undefined;
+      const visited = new Set<string>();
+      const names: string[] = [];
+      let cursor = folderId;
+      while (cursor && !visited.has(cursor)) {
+        visited.add(cursor);
+        const row = folderById.get(cursor);
+        if (!row) break;
+        names.unshift(row.name);
+        cursor = row.parentId ? String(row.parentId) : "";
+      }
+      return names.length ? `/${names.join("/")}` : undefined;
+    };
+
+    let workingScratchJson = await ctx.runQuery(
+      internal.agentThreads.getWorkingScratchInternal,
+      { threadId: args.threadId },
+    );
+
     // Build cue anchors from cwd, attachments, continue, and scratch ids.
     const cueParts: string[] = [];
     if (args.currentFolderId) {
@@ -406,29 +430,6 @@ export const sendTurn = action({
       ownerId,
       threadId: args.threadId,
     });
-    let workingScratchJson = await ctx.runQuery(
-      internal.agentThreads.getWorkingScratchInternal,
-      { threadId: args.threadId },
-    );
-
-    const folderRows = await ctx.runQuery(internal.agentMessages.listFoldersForOwner, {
-      ownerId,
-    });
-    const folderById = new Map(folderRows.map((row) => [String(row._id), row]));
-    const folderPathFor = (folderId?: string | null): string | undefined => {
-      if (!folderId) return undefined;
-      const visited = new Set<string>();
-      const names: string[] = [];
-      let cursor = folderId;
-      while (cursor && !visited.has(cursor)) {
-        visited.add(cursor);
-        const row = folderById.get(cursor);
-        if (!row) break;
-        names.unshift(row.name);
-        cursor = row.parentId ? String(row.parentId) : "";
-      }
-      return names.length ? `/${names.join("/")}` : undefined;
-    };
 
     if (args.currentFolderId) {
       await ctx.runMutation(internal.agentThreads.patchWorkingScratchInternal, {

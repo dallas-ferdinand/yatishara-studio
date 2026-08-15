@@ -634,16 +634,17 @@ async function runPiTurn(body, abortSignal) {
 
     // Trajectory coach from last turn (stored in Convex workingScratchJson.lastTrajectory).
     let lastTrajectoryBlock = "";
-    let lastTrajectory: object | null = null;
+    let lastTrajectory = null;
     if (workingScratchJson) {
       try {
         const scratch =
           typeof workingScratchJson === "string"
             ? JSON.parse(workingScratchJson)
             : workingScratchJson;
-        lastTrajectory = scratch?.lastTrajectory && typeof scratch.lastTrajectory === "object"
-          ? scratch.lastTrajectory
-          : null;
+        lastTrajectory =
+          scratch?.lastTrajectory && typeof scratch.lastTrajectory === "object"
+            ? scratch.lastTrajectory
+            : null;
       } catch {
         lastTrajectory = null;
       }
