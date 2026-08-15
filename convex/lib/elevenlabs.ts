@@ -267,12 +267,13 @@ export function isAccountVoiceOwnerId(publicOwnerId?: string | null): boolean {
 }
 
 /**
- * Free ElevenLabs plans cannot TTS library/shared voices via API.
- * Set ELEVENLABS_LIBRARY_VOICES_ENABLED=true after upgrading the provider plan.
+ * Paid Studio ElevenLabs key can TTS the shared voice library.
+ * Set ELEVENLABS_LIBRARY_VOICES_ENABLED=false only to lock back to premade.
  */
 export function libraryVoicesAvailable(): boolean {
   const raw = process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED?.trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes";
+  if (raw === "0" || raw === "false" || raw === "no" || raw === "off") return false;
+  return true;
 }
 
 /** Clamp explore page size (API/MCP/UI). */
@@ -300,8 +301,8 @@ export function sliceVoicePage<T>(
 }
 
 /**
- * On free plans only true premade voices work. Copied library / professional
- * voices still sit in /v1/voices but TTS returns paid_plan_required.
+ * When library access is off, only true premade voices work. Copied library /
+ * professional voices still sit in /v1/voices but TTS returns paid_plan_required.
  */
 export function voiceUsableOnCurrentPlan(category?: string | null): boolean {
   if (libraryVoicesAvailable()) return true;

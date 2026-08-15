@@ -64,10 +64,15 @@
   align-items: center;
   gap: 5px;
   flex: 1 1 auto;
+  align-self: center;
   min-width: 0;
+  height: 28px;
   margin: 0;
-  padding: 0 0 0 8px;
-  border: 0;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border, rgba(255, 255, 255, 0.18)) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, #000 22%, transparent);
   color: var(--color-cursor-muted, var(--mos-muted));
 }
 
@@ -685,6 +690,7 @@
   color: color-mix(in srgb, var(--cursor-accent, #2563eb) 70%, #0f172a);
 }
 
+[data-appearance="light"] .studio-voice-picker-sidebar-search,
 [data-appearance="light"] .studio-voice-picker-search,
 [data-appearance="light"] .studio-voice-picker-icon-square,
 [data-appearance="light"] .studio-voice-picker-filter-chip,

@@ -57,9 +57,11 @@ describe("isAccountVoiceOwnerId", () => {
 });
 
 describe("libraryVoicesAvailable", () => {
-  it("defaults to false unless env enables library voices", () => {
+  it("defaults to on; env can lock back to premade-only", () => {
     const prev = process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED;
     delete process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED;
+    expect(libraryVoicesAvailable()).toBe(true);
+    process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED = "false";
     expect(libraryVoicesAvailable()).toBe(false);
     process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED = "true";
     expect(libraryVoicesAvailable()).toBe(true);
@@ -71,11 +73,11 @@ describe("libraryVoicesAvailable", () => {
 describe("voiceUsableOnCurrentPlan", () => {
   it("allows only premade voices when library access is off", () => {
     const prev = process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED;
-    delete process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED;
+    process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED = "false";
     expect(voiceUsableOnCurrentPlan("premade")).toBe(true);
     expect(voiceUsableOnCurrentPlan("professional")).toBe(false);
     expect(voiceUsableOnCurrentPlan(undefined)).toBe(false);
-    process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED = "true";
+    delete process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED;
     expect(voiceUsableOnCurrentPlan("professional")).toBe(true);
     if (prev === undefined) delete process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED;
     else process.env.ELEVENLABS_LIBRARY_VOICES_ENABLED = prev;

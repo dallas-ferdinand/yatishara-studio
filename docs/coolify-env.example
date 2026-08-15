@@ -24,8 +24,8 @@ DEEPGRAM_MODEL=nova-3
 DEEPGRAM_LANGUAGE=en
 # Audio gen (voiceover eleven_v3 / sound effects) — set on Convex backend secrets.
 ELEVENLABS_API_KEY=
-# true after ElevenLabs plan upgrade (library/shared voices via API)
-ELEVENLABS_LIBRARY_VOICES_ENABLED=
+# Paid key has the shared library. Set false only to lock back to premade.
+ELEVENLABS_LIBRARY_VOICES_ENABLED=true
 GATEWAY_IMAGE_MODEL_ID=dola-seedream-5-0-pro-260628
 GATEWAY_VIDEO_MODEL_ID=dreamina-seedance-2-5-260628
 GUIDED_VIDEO_ASSISTANCE_ENABLED=1
