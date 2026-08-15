@@ -191,14 +191,21 @@ export class CompositorClient {
     });
   }
 
-  updateTransform(transform: [number, number, number, number]): void {
+  updateTransform(
+    transform: [number, number, number, number],
+    target: "a" | "b" = "a",
+  ): void {
     if (this.disposed) return;
     // Transform-only redraws are tiny (no decode or texture upload). Send the
     // pointer's latest transform immediately; adding a main-thread rAF here
     // made the pixels trail the selection overlay by an extra frame.
     void this.ready.then(() => {
       if (!this.disposed) {
-        this.worker.postMessage({ type: "transform", transformA: transform });
+        this.worker.postMessage({
+          type: "transform",
+          target,
+          transformA: transform,
+        });
       }
     });
   }

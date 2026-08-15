@@ -1912,11 +1912,13 @@
   z-index: 1;
   image-rendering: auto;
   pointer-events: none;
+  background: #000;
 }
 
 .studio-editor-preview-poster {
   z-index: 0;
   object-fit: contain;
+  pointer-events: none;
 }
 
 .studio-editor-preview-hit {

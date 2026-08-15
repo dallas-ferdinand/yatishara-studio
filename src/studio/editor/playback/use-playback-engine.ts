@@ -484,7 +484,10 @@ export type PlaybackEngineState = {
     width: number;
     height: number;
   } | null;
-  previewTransform: (transform: ClipTransform) => void;
+  previewTransform: (
+    transform: ClipTransform,
+    target?: "a" | "b",
+  ) => void;
   previewTextTransform: (clipId: string, transform: ClipTransform) => void;
   setMasterVolume: (volume: number) => void;
   metrics: () => SchedulerMetrics | null;
@@ -1058,13 +1061,16 @@ export function usePlaybackEngine(args: {
     error,
     supported: capabilities.supported,
     sourceSize,
-    previewTransform: (transform) => {
-      runtimeRef.current?.compositor.updateTransform([
-        transform.scale,
-        transform.x,
-        transform.y,
-        transform.rotation,
-      ]);
+    previewTransform: (transform, target = "a") => {
+      runtimeRef.current?.compositor.updateTransform(
+        [
+          transform.scale,
+          transform.x,
+          transform.y,
+          transform.rotation,
+        ],
+        target,
+      );
     },
     previewTextTransform: (clipId: string, transform: ClipTransform) => {
       const compositor = runtimeRef.current?.compositor;

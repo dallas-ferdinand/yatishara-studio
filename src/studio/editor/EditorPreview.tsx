@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { CursorSelect } from "@/desk/components/CursorSelect";
 import {
   DEFAULT_PREVIEW_LOAD_QUALITY,
@@ -117,14 +117,28 @@ export function EditorPreview({
   } | null>(null);
   const frame = exportSizeForRatio(project.frameRatio);
   const timelineDuration = timelineViewDuration(project, playhead);
-  // Top timeline video lane (lowest track index) at the playhead.
+  // Prefer the selected picture clip when it is under the playhead so resize /
+  // drag targets the clip the user picked (not only the top lane).
   let activeClip: EditorClip | null = null;
-  for (const track of project.tracks) {
-    if (track.kind !== "video") continue;
-    const clip = clipAtPlayhead(project, track.id, playhead);
-    if (clip) {
-      activeClip = clip;
-      break;
+  if (selectedClipId) {
+    const selected = project.clips.find((clip) => clip.id === selectedClipId);
+    if (
+      selected &&
+      (selected.kind === "video" || selected.kind === "image") &&
+      playhead >= selected.startTime &&
+      playhead < selected.startTime + clipDuration(selected)
+    ) {
+      activeClip = selected;
+    }
+  }
+  if (!activeClip) {
+    for (const track of project.tracks) {
+      if (track.kind !== "video") continue;
+      const clip = clipAtPlayhead(project, track.id, playhead);
+      if (clip) {
+        activeClip = clip;
+        break;
+      }
     }
   }
   const posterUrl = activeClip?.assetId
@@ -156,6 +170,23 @@ export function EditorPreview({
     activeClip?.assetId && engine.sourceSize?.assetId === activeClip.assetId
       ? engine.sourceSize
       : null;
+
+  const transformTarget = useMemo((): "a" | "b" => {
+    if (!activeClip) return "a";
+    const stacked: Array<{ id: string; trackIndex: number }> = [];
+    project.tracks.forEach((track, trackIndex) => {
+      if (track.kind !== "video") return;
+      const clip = clipAtPlayhead(project, track.id, playhead);
+      if (!clip || (clip.kind !== "video" && clip.kind !== "image")) return;
+      stacked.push({ id: clip.id, trackIndex });
+    });
+    stacked.sort((a, b) => a.trackIndex - b.trackIndex);
+    if (stacked.length <= 1) return "a";
+    const topId = stacked[0]?.id;
+    const underId = stacked[stacked.length - 1]?.id;
+    if (activeClip.id === underId && activeClip.id !== topId) return "b";
+    return "a";
+  }, [activeClip, playhead, project]);
 
   let activeTextClip: EditorClip | null = null;
   if (selectedClipId) {
@@ -462,6 +493,7 @@ export function EditorPreview({
               canvasHeight={frame.height}
               selected={selectedClipId === activeClip.id}
               playing={playing}
+              transformTarget={transformTarget}
               onSelect={(clipId) => {
                 onSelectClip(clipId);
                 if (playing) onPlayingChange(false);

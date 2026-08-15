@@ -50,6 +50,7 @@ type TransformTuple = [number, number, number, number];
 
 type TransformMessage = {
   type: "transform";
+  target?: "a" | "b";
   transformA: TransformTuple;
 };
 
@@ -331,13 +332,15 @@ function initialize(message: InitMessage): void {
   canvas.width = message.width;
   canvas.height = message.height;
   gl = canvas.getContext("webgl2", {
-    alpha: true,
+    // Opaque frame — transparent WebGL alpha punched clicks through the canvas
+    // and made resize/drag feel broken. PNG cutouts still reveal underlay video
+    // via dual-texture source-over inside this opaque buffer.
+    alpha: false,
     antialias: false,
     depth: false,
     desynchronized: true,
     powerPreference: "high-performance",
     preserveDrawingBuffer: false,
-    // Drawing buffer is premultiplied — matches upload + source-over shader math.
     premultipliedAlpha: true,
   });
   if (!gl) throw new Error("WebGL2 compositor is unavailable.");
@@ -777,8 +780,9 @@ function redrawCompositor(): void {
 function updateTransform(message: TransformMessage): void {
   if (!gl || !program || !canvas) return;
   gl.useProgram(program);
+  const name = message.target === "b" ? "u_bTransform" : "u_aTransform";
   gl.uniform4f(
-    uniform("u_aTransform"),
+    uniform(name),
     message.transformA[0],
     message.transformA[1],
     message.transformA[2],

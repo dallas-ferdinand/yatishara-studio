@@ -25,7 +25,9 @@ type PreviewTransformOverlayProps = {
   playing: boolean;
   onSelect: (clipId: string | null) => void;
   onUpdateClip: (clipId: string, patch: Partial<EditorClip>) => void;
-  onPreviewTransform: (transform: ClipTransform) => void;
+  onPreviewTransform: (transform: ClipTransform, target?: "a" | "b") => void;
+  /** Which compositor texture this clip occupies while stacked (top=A, under=B). */
+  transformTarget?: "a" | "b";
   onTogglePlay: () => void;
 };
 
@@ -233,6 +235,7 @@ export function PreviewTransformOverlay({
   onSelect,
   onUpdateClip,
   onPreviewTransform,
+  transformTarget = "a",
   onTogglePlay,
 }: PreviewTransformOverlayProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -250,6 +253,7 @@ export function PreviewTransformOverlay({
     transform: normalizeClipTransform(clip.effects),
     rect: { left: 0, top: 0, width: 1, height: 1 },
     onPreviewTransform,
+    transformTarget,
     onUpdateClip,
     onSelect,
     onTogglePlay,
@@ -278,6 +282,7 @@ export function PreviewTransformOverlay({
     transform,
     rect,
     onPreviewTransform,
+    transformTarget,
     onUpdateClip,
     onSelect,
     onTogglePlay,
@@ -394,7 +399,7 @@ export function PreviewTransformOverlay({
       latest.sourceH,
     );
     applyGuidesImmediately({ x: null, y: null });
-    latest.onPreviewTransform(next);
+    latest.onPreviewTransform(next, latest.transformTarget);
     commit(next);
     setHoverCursor(point);
     try {
@@ -448,7 +453,7 @@ export function PreviewTransformOverlay({
       );
       applyGuidesRef.current(nextGuides);
       applyBoxRef.current(next);
-      latest.onPreviewTransform(next);
+      latest.onPreviewTransform(next, latest.transformTarget);
     };
     const onWindowUp = (event: PointerEvent) => {
       if (!dragRef.current || event.pointerId !== dragRef.current.pointerId) {
@@ -551,7 +556,7 @@ export function PreviewTransformOverlay({
           event.preventDefault();
           event.stopPropagation();
           const reset = { scale: 1, x: 0, y: 0, rotation: 0 };
-          onPreviewTransform(reset);
+          onPreviewTransform(reset, transformTarget);
           commit(reset);
         }}
       />
