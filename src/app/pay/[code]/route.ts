@@ -5,19 +5,9 @@ import { wamCheckoutTotalCents } from "../../../studio/lib/money";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const BOT_RE =
-  /facebookexternalhit|Facebot|Twitterbot|Slackbot|TelegramBot|Discordbot|LinkedInBot|Iframely|SkypeUriPreview/i;
-
 /** Solid white + dark mark — light logo vanishes on WhatsApp's white card. */
 const PAY_OG_IMAGE_URL =
   "https://link.yatishara.com/branding/yatishara-logo-dark-on-white-192.png";
-
-function isLinkPreviewBot(userAgent: string | null) {
-  const ua = String(userAgent || "");
-  if (BOT_RE.test(ua)) return true;
-  if (/WhatsApp/i.test(ua) && !/Mozilla/i.test(ua)) return true;
-  return false;
-}
 
 function esc(s: string) {
   return s
@@ -40,16 +30,20 @@ function htmlPage(title: string, body: string, status = 404) {
   );
 }
 
-function payPreviewHtml(opts: {
+function paySplashHtml(opts: {
   amountCents: number;
   kind: "course" | "topup";
   canonicalUrl: string;
+  payHref: string;
 }) {
   const charged = wamCheckoutTotalCents(opts.amountCents);
   const amount = (Math.max(0, charged) / 100).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+  const amountShort = Number.isInteger(charged / 100)
+    ? String(charged / 100)
+    : (charged / 100).toFixed(2);
   const brand = "Yatishara Studio";
   const title = `Pay ${brand} $${amount} TTD`;
   const description =
@@ -73,10 +67,39 @@ function payPreviewHtml(opts: {
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
 <meta name="twitter:image" content="${esc(image)}">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #f4f1ea; color: #141414; padding: 1.5rem;
+  }
+  .card {
+    width: min(26rem, 100%); background: #fff; border-radius: 1.25rem;
+    padding: 1.75rem 1.5rem 1.5rem; text-align: center;
+    box-shadow: 0 18px 50px rgba(20, 16, 8, .08);
+  }
+  img { width: 72px; height: 72px; object-fit: contain; margin: 0 auto .85rem; display: block; }
+  .brand { margin: 0; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: #6b675e; }
+  h1 { margin: .55rem 0 0; font-size: 2rem; letter-spacing: -.03em; }
+  .desc { margin: .55rem 0 1.35rem; color: #4a463d; line-height: 1.4; font-size: .95rem; }
+  .pay {
+    display: block; width: 100%; text-decoration: none; color: #fff; background: #111;
+    border-radius: 999px; padding: .95rem 1rem; font-weight: 650; font-size: 1.05rem;
+  }
+  .hint { margin: .85rem 0 0; font-size: .78rem; color: #7a756a; }
+</style>
 </head>
-<body style="font-family:system-ui,sans-serif;padding:2rem;max-width:28rem;line-height:1.45;color:#111">
-<h1 style="font-size:1.2rem;margin:0 0 .5rem">${esc(title)}</h1>
-<p style="margin:0;color:#444">${esc(description)}</p>
+<body>
+<main class="card">
+<img src="${esc(image)}" alt="${esc(brand)}">
+<p class="brand">${esc(brand)}</p>
+<h1>$${esc(amount)}</h1>
+<p class="desc">${esc(description)}</p>
+<a class="pay" href="${esc(opts.payHref)}">Pay $${esc(amountShort)} with Wam</a>
+<p class="hint">Card or Wam wallet · secure checkout</p>
+</main>
 </body>
 </html>`;
   return new Response(html, {
@@ -131,15 +154,13 @@ async function resolvePay(
         410,
       );
     }
-    if (isLinkPreviewBot(request.headers.get("user-agent"))) {
-      const origin = new URL(request.url).origin;
-      return payPreviewHtml({
-        amountCents: resolved.amountCents,
-        kind: resolved.kind,
-        canonicalUrl: `${origin}/pay/${code}`,
-      });
-    }
-    return Response.redirect(resolved.checkoutUrl, 302);
+    const origin = new URL(request.url).origin;
+    return paySplashHtml({
+      amountCents: resolved.amountCents,
+      kind: resolved.kind,
+      canonicalUrl: `${origin}/pay/${code}`,
+      payHref: `${origin}/pay/${code}/go`,
+    });
   } catch {
     return htmlPage(
       "Payment unavailable",
