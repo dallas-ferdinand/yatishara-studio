@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { buildAgentTurns, extractOutcome } from "./agentStepUtils";
+import {
+  buildAgentTurns,
+  extractOutcome,
+  foldableCompletedIds,
+  foldSettledSteps,
+  type DisplayStep,
+} from "./agentStepUtils";
+
+function step(partial: Partial<DisplayStep> & Pick<DisplayStep, "id" | "toolName" | "status">): DisplayStep {
+  return {
+    kind: "read",
+    title: partial.toolName ?? "step",
+    ...partial,
+  };
+}
 
 describe("buildAgentTurns optimistic send", () => {
   it("does not blank the previous turn while the new user row is still syncing", () => {
@@ -110,5 +124,36 @@ describe("buildAgentTurns optimistic send", () => {
     expect(outcome?.label).toMatch(/Seedance 2\.5/);
     expect(outcome?.label).toMatch(/Seedance 2\.0/);
     expect(outcome?.label).not.toMatch(/legacy|pipeline|older/i);
+  });
+});
+
+describe("foldSettledSteps", () => {
+  it("folds every completed tool into compact summary chips", () => {
+    const steps = [
+      step({ id: "1", toolName: "studio_workspace_tree", status: "completed" }),
+      step({ id: "2", toolName: "studio_get_document", status: "completed" }),
+      step({ id: "3", toolName: "remember", status: "completed" }),
+    ];
+    const folded = foldSettledSteps(steps, new Set(foldableCompletedIds(steps)));
+    expect(folded).toHaveLength(1);
+    expect(folded[0]?.isGroupSummary).toBe(true);
+    expect(folded[0]?.summarySegments).toEqual([
+      "Explored workspace",
+      "Read 1 script",
+      "Used memory",
+    ]);
+  });
+
+  it("folds a leftover last live tool after the turn is done", () => {
+    const steps = [
+      step({ id: "1", toolName: "studio_workspace_tree", status: "completed" }),
+      step({ id: "2", toolName: "remember", status: "started" }),
+    ];
+    const ids = foldableCompletedIds(steps, { includeActive: true });
+    expect(ids).toEqual(["1", "2"]);
+    const folded = foldSettledSteps(steps, new Set(ids), { includeActive: true });
+    expect(folded.every((row) => row.isGroupSummary || row.status === "summary")).toBe(true);
+    expect(folded.some((row) => row.id === "2")).toBe(false);
+    expect(folded[0]?.summarySegments).toEqual(["Explored workspace", "Used memory"]);
   });
 });

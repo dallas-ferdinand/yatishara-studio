@@ -98,7 +98,7 @@ export type DisplayStep = {
   subtitle?: string;
   status: AgentToolCallRow["status"] | "summary";
   durationMs?: number;
-  /** Epoch ms when the tool finished — used for 2s settle-into-summary. */
+  /** Epoch ms when the tool finished — used for brief settle-into-summary. */
   finishedAt?: number;
   argsJson?: string;
   resultJson?: string;
@@ -623,13 +623,11 @@ function toolCallToStep(
   };
 }
 
-/** Bucket a completed step into a human summary segment key. */
-export function summaryBucketForStep(step: DisplayStep): string | null {
+/** Name/kind bucket — ignores live vs completed so a finished turn can fold leftovers. */
+export function summaryBucketKey(step: DisplayStep): string | null {
   if (
     step.status === "failed" ||
     step.status === "pending_approval" ||
-    step.status === "started" ||
-    step.status === "queued" ||
     step.status === "summary" ||
     step.kind === "error" ||
     step.kind === "approval"
@@ -669,6 +667,20 @@ export function summaryBucketForStep(step: DisplayStep): string | null {
   return "other";
 }
 
+/** Bucket a completed (or optionally leftover live) step into a summary key. */
+export function summaryBucketForStep(
+  step: DisplayStep,
+  opts?: { includeActive?: boolean },
+): string | null {
+  if (
+    !opts?.includeActive &&
+    (step.status === "started" || step.status === "queued")
+  ) {
+    return null;
+  }
+  return summaryBucketKey(step);
+}
+
 function formatSummarySegments(counts: Record<string, number>): string[] {
   const parts: string[] = [];
   const push = (n: number, one: string, many: string) => {
@@ -699,6 +711,7 @@ function formatSummarySegments(counts: Record<string, number>): string[] {
 export function foldSettledSteps(
   steps: DisplayStep[],
   settledIds: ReadonlySet<string>,
+  opts?: { includeActive?: boolean },
 ): DisplayStep[] {
   const foldable: DisplayStep[] = [];
   const kept: DisplayStep[] = [];
@@ -706,10 +719,12 @@ export function foldSettledSteps(
 
   for (const step of steps) {
     if (step.isGroupSummary) continue;
-    const bucket = summaryBucketForStep(step);
+    const bucket = summaryBucketForStep(step, opts);
     const canFold =
       Boolean(bucket) &&
-      step.status === "completed" &&
+      (step.status === "completed" ||
+        (opts?.includeActive &&
+          (step.status === "started" || step.status === "queued"))) &&
       settledIds.has(step.id);
     if (canFold) {
       foldable.push(step);
@@ -723,7 +738,7 @@ export function foldSettledSteps(
 
   const counts: Record<string, number> = {};
   for (const step of foldable) {
-    const bucket = summaryBucketForStep(step);
+    const bucket = summaryBucketForStep(step, opts);
     if (!bucket) continue;
     counts[bucket] = (counts[bucket] || 0) + 1;
   }
@@ -751,10 +766,20 @@ export function foldSettledSteps(
   return out;
 }
 
-/** Ids that are eligible to fold once settled (completed, non-critical). */
-export function foldableCompletedIds(steps: DisplayStep[]): string[] {
+/** Ids that are eligible to fold once settled (completed, or leftovers after the turn). */
+export function foldableCompletedIds(
+  steps: DisplayStep[],
+  opts?: { includeActive?: boolean },
+): string[] {
   return steps
-    .filter((step) => summaryBucketForStep(step) && step.status === "completed")
+    .filter((step) => {
+      if (!summaryBucketForStep(step, opts)) return false;
+      if (step.status === "completed") return true;
+      return Boolean(
+        opts?.includeActive &&
+          (step.status === "started" || step.status === "queued"),
+      );
+    })
     .map((step) => step.id);
 }
 

@@ -43,28 +43,23 @@
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
+  align-items: baseline;
+  column-gap: 7px;
+  row-gap: 1px;
   width: 100%;
   min-width: 0;
 }
 
 .studio-agent-step-summary-chip {
-  display: inline-flex;
-  align-items: center;
+  display: inline;
   max-width: 100%;
   padding: 0;
-  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 58%, transparent);
-  font-size: 12px;
+  color: color-mix(in srgb, var(--mos-ink, var(--color-cursor-text)) 52%, transparent);
+  font-size: 11px;
   font-weight: 450;
-  line-height: 1.25;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
   white-space: nowrap;
-}
-
-.studio-agent-step-summary-chip + .studio-agent-step-summary-chip::before {
-  content: "·";
-  margin-right: 8px;
-  opacity: 0.45;
 }
 
 /* Thinking always owns its own row — never sits beside tool chips. */

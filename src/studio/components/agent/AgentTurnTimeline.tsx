@@ -38,7 +38,7 @@ import {
 import { isMediaInspectTool } from "./agentToolTitles";
 import "./agent-steps.css";
 
-const SETTLE_MS = 2000;
+const SETTLE_MS = 600;
 
 /** Follow a Create generation job until the asset lands in chat. */
 function AgentPendingGenerationCard({
@@ -319,23 +319,41 @@ function TurnBlock({
     (step) => !isMediaInspectTool(step.toolName),
   );
 
-  // Historical turns: fold immediately. Live turns: settle each completed step after 2s.
+  const hasActiveTool = baseSteps.some(
+    (step) =>
+      step.status === "started" ||
+      step.status === "queued" ||
+      step.status === "pending_approval",
+  );
+  // Turn finished (or reply already landed with no live tools): fold every leftover row now.
+  const foldTurnNow = !turn.isLive || (Boolean(turn.assistantText) && !hasActiveTool);
+
+  // Historical / finished turns: fold immediately. Live: brief settle, then fold.
   const [settledIds, setSettledIds] = useState<Set<string>>(() =>
-    turn.isLive ? new Set() : new Set(foldableCompletedIds(baseSteps)),
+    foldTurnNow
+      ? new Set(foldableCompletedIds(baseSteps, { includeActive: true }))
+      : new Set(),
   );
 
   useEffect(() => {
-    if (!turn.isLive) {
-      setSettledIds(new Set(foldableCompletedIds(baseSteps)));
+    if (foldTurnNow) {
+      setSettledIds(new Set(foldableCompletedIds(baseSteps, { includeActive: true })));
       return;
     }
     const timers: ReturnType<typeof setTimeout>[] = [];
     const foldable = foldableCompletedIds(baseSteps);
+    const lastFoldable = foldable[foldable.length - 1];
+    const onlyLastLeft =
+      foldable.length > 0 &&
+      !hasActiveTool &&
+      foldable.every((id) => id === lastFoldable || settledIds.has(id));
     for (const id of foldable) {
       if (settledIds.has(id)) continue;
       const step = baseSteps.find((s) => s.id === id);
       const finishedAt = step?.finishedAt ?? Date.now();
-      const wait = Math.max(0, SETTLE_MS - (Date.now() - finishedAt));
+      const wait = onlyLastLeft
+        ? 0
+        : Math.max(0, SETTLE_MS - (Date.now() - finishedAt));
       timers.push(
         setTimeout(() => {
           setSettledIds((prev) => {
@@ -352,13 +370,14 @@ function TurnBlock({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settle from step ids + finishedAt
   }, [
-    turn.isLive,
+    foldTurnNow,
+    hasActiveTool,
     baseSteps.map((s) => `${s.id}:${s.status}:${s.finishedAt ?? 0}`).join("|"),
   ]);
 
   const visibleSteps = useMemo(
-    () => foldSettledSteps(baseSteps, settledIds),
-    [baseSteps, settledIds],
+    () => foldSettledSteps(baseSteps, settledIds, { includeActive: foldTurnNow }),
+    [baseSteps, foldTurnNow, settledIds],
   );
   const inspectThinking = turn.steps.some(
     (step) =>
