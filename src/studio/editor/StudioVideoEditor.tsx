@@ -5,7 +5,7 @@ import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../../../convex/_generated/api";
-import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { friendlyConvexError, isExportActionBlip } from "@/studio/lib/convexUserErrors";
 import {
   downloadMediaAsWav,
   downloadMediaUrl,
@@ -221,6 +221,29 @@ export function StudioVideoEditor({
     api.exportJobs.get,
     exportJobId ? { jobId: exportJobId } : "skip",
   );
+  const openedExportJobRef = useRef(null);
+
+  useEffect(() => {
+    if (!exportJob) return;
+    if (exportJob.status === "running") return;
+    setExporting(false);
+    if (exportJob.status === "done") {
+      setExportProgressLocal(100);
+      setExportPhaseLocal("Export ready");
+      setExportResultName((name) => name || "export");
+      onStatus?.("Export ready.");
+      if (exportJob.resultAssetId && openedExportJobRef.current !== exportJob._id) {
+        openedExportJobRef.current = exportJob._id;
+        onOpenAsset?.(exportJob.resultAssetId);
+      }
+      return;
+    }
+    if (exportJob.status === "error") {
+      const message = friendlyConvexError(exportJob.error, exportJob.error || "Export failed.");
+      setExportError(message);
+      onStatus?.(message);
+    }
+  }, [exportJob, onOpenAsset, onStatus]);
 
   // Timeline clips may reference assets outside the open folder (explorer drag,
   // MCP append). Resolve those IDs so beds aren't silent for missing media map entries.
@@ -877,11 +900,16 @@ export function StudioVideoEditor({
       onStatus?.("Export ready.");
       if (result?.assetId) onOpenAsset?.(result.assetId);
       setExportJobId(null);
+      setExporting(false);
     } catch (error) {
+      if (isExportActionBlip(error)) {
+        setExportPhaseLocal("Still rendering…");
+        onStatus?.("Export is still running. Hang on.");
+        return;
+      }
       const message = friendlyConvexError(error, "Export failed.");
       setExportError(message);
       onStatus?.(message);
-    } finally {
       setExporting(false);
     }
   }, [

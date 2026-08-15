@@ -113,7 +113,7 @@ const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
   },
   {
     match: /connection lost while action|connection lost/i,
-    message: "Connection blipped. Try again.",
+    message: "Export is still running. Hang on — don't hit Export again.",
   },
   {
     match: /cdn blocked the request|bunny cors/i,
@@ -288,4 +288,15 @@ export function friendlyConvexError(
   }
 
   return fallback;
+}
+
+/** Convex dropped the websocket while a long action kept running on the server. */
+export function isExportActionBlip(error: unknown): boolean {
+  const raw =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : extractConvexErrorMessage(error);
+  return /connection lost while action|connection lost/i.test(raw);
 }
