@@ -71,7 +71,9 @@ const assetReturn = v.object({
   editProxyError: v.optional(v.string()),
   editProxyUpdatedAt: v.optional(v.number()),
   sourceGenerationJobId: v.optional(v.id("generationJobs")),
+  elevenMusicSongId: v.optional(v.string()),
   sourceListingId: v.optional(v.id("assetListings")),
+  purgedAt: v.optional(v.number()),
   licenseKind: v.optional(
     v.union(v.literal("purchased_network"), v.literal("listed_network")),
   ),
