@@ -17884,7 +17884,7 @@ export function StudioShell({
           justify-content: flex-start;
           min-height: 0;
           align-items: stretch;
-          margin: 0 8px 8px;
+          margin: 0 8px 4px;
           padding: 8px 14px 6px 10px;
           overflow: hidden;
           border-radius: 12px;
@@ -18369,7 +18369,7 @@ export function StudioShell({
           flex-wrap: nowrap;
           gap: 8px;
           margin-top: auto;
-          padding: 4px 8px 6px;
+          padding: 2px 8px 6px;
           min-width: 0;
           overflow: visible;
         }
