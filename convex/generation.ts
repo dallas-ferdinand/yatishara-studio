@@ -928,6 +928,17 @@ export const createQueuedJob = authedMutation({
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
     forceInstrumental: v.optional(v.boolean()),
+    musicWorkflow: v.optional(
+      v.union(
+        v.literal("composition_plan"),
+        v.literal("prompt"),
+        v.literal("extend"),
+      ),
+    ),
+    musicCompositionPlanJson: v.optional(v.string()),
+    musicStoreForInpainting: v.optional(v.boolean()),
+    musicSourceSongId: v.optional(v.string()),
+    musicKeepMs: v.optional(v.number()),
     /**
      * Per-job save folder (current Files browse folder). Defaults to thread.linkedFolderId.
      * Does not rewrite thread.linkedFolderId — browsing or generating elsewhere must not
@@ -1028,6 +1039,11 @@ export const createQueuedJob = authedMutation({
       audioLoop: args.audioLoop,
       promptInfluence: args.promptInfluence,
       forceInstrumental: args.forceInstrumental,
+      musicWorkflow: args.musicWorkflow,
+      musicCompositionPlanJson: args.musicCompositionPlanJson,
+      musicStoreForInpainting: args.musicStoreForInpainting,
+      musicSourceSongId: args.musicSourceSongId,
+      musicKeepMs: args.musicKeepMs,
       reservedCreditTransactionId,
       skipPromptEnhancement: args.skipPromptEnhancement,
       source: "ui",
@@ -1572,6 +1588,17 @@ export const prepareApiAudioGeneration = internalMutation({
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
     forceInstrumental: v.optional(v.boolean()),
+    musicWorkflow: v.optional(
+      v.union(
+        v.literal("composition_plan"),
+        v.literal("prompt"),
+        v.literal("extend"),
+      ),
+    ),
+    musicCompositionPlanJson: v.optional(v.string()),
+    musicStoreForInpainting: v.optional(v.boolean()),
+    musicSourceSongId: v.optional(v.string()),
+    musicKeepMs: v.optional(v.number()),
   },
   returns: v.object({
     threadId: v.id("generationThreads"),
@@ -1636,6 +1663,11 @@ export const prepareApiAudioGeneration = internalMutation({
       audioLoop: args.audioLoop,
       promptInfluence: args.promptInfluence,
       forceInstrumental: args.forceInstrumental,
+      musicWorkflow: args.musicWorkflow,
+      musicCompositionPlanJson: args.musicCompositionPlanJson,
+      musicStoreForInpainting: args.musicStoreForInpainting,
+      musicSourceSongId: args.musicSourceSongId,
+      musicKeepMs: args.musicKeepMs,
       reservedCreditTransactionId,
       source: "api",
       apiKeyId: args.apiKeyId,
@@ -1849,6 +1881,19 @@ export const getJobForAudio = internalQuery({
       audioLoop: v.optional(v.boolean()),
       promptInfluence: v.optional(v.number()),
       forceInstrumental: v.optional(v.boolean()),
+      musicWorkflow: v.optional(
+        v.union(
+          v.literal("composition_plan"),
+          v.literal("prompt"),
+          v.literal("extend"),
+        ),
+      ),
+      musicCompositionPlanJson: v.optional(v.string()),
+      musicStoreForInpainting: v.optional(v.boolean()),
+      musicSourceSongId: v.optional(v.string()),
+      musicKeepMs: v.optional(v.number()),
+      elevenMusicSongId: v.optional(v.string()),
+      musicPlanResultJson: v.optional(v.string()),
       resolvedModel: v.optional(v.string()),
     }),
   ),
@@ -1868,6 +1913,13 @@ export const getJobForAudio = internalQuery({
       audioLoop: job.audioLoop,
       promptInfluence: job.promptInfluence,
       forceInstrumental: job.forceInstrumental,
+      musicWorkflow: job.musicWorkflow,
+      musicCompositionPlanJson: job.musicCompositionPlanJson,
+      musicStoreForInpainting: job.musicStoreForInpainting,
+      musicSourceSongId: job.musicSourceSongId,
+      musicKeepMs: job.musicKeepMs,
+      elevenMusicSongId: job.elevenMusicSongId,
+      musicPlanResultJson: job.musicPlanResultJson,
       resolvedModel: job.resolvedModel,
     };
   },
@@ -2191,6 +2243,7 @@ export const createGeneratedAsset = internalMutation({
       mimeType: args.mimeType,
       storageStatus: "pending",
       sourceGenerationJobId: job._id,
+      elevenMusicSongId: job.elevenMusicSongId,
       createdAt: now,
       updatedAt: now,
     });
@@ -2202,6 +2255,25 @@ export const createGeneratedAsset = internalMutation({
     });
     await ctx.db.patch(assetId, { bunnyPath, updatedAt: now });
     return { assetId, bunnyPath };
+  },
+});
+
+/** Persist ElevenLabs music song id + plan onto the job before asset create. */
+export const patchMusicJobResult = internalMutation({
+  args: {
+    jobId: v.id("generationJobs"),
+    elevenMusicSongId: v.optional(v.string()),
+    musicPlanResultJson: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await requireJob(ctx, args.jobId);
+    await ctx.db.patch(job._id, {
+      elevenMusicSongId: args.elevenMusicSongId,
+      musicPlanResultJson: args.musicPlanResultJson,
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });
 

@@ -861,6 +861,9 @@ function serializeComposerContextsForStorage(contexts) {
       sfxPromptInfluence: ctx.sfxPromptInfluence,
       musicDurationSeconds: ctx.musicDurationSeconds,
       musicInstrumental: ctx.musicInstrumental,
+      musicWorkflow: ctx.musicWorkflow,
+      musicStoreForInpainting: ctx.musicStoreForInpainting,
+      musicSourceSongId: ctx.musicSourceSongId,
       ...(ctx.boundThreadId ? { boundThreadId: ctx.boundThreadId } : {}),
     };
   }
@@ -922,6 +925,9 @@ function snapshotComposerContextFields({
   sfxPromptInfluence,
   musicDurationSeconds,
   musicInstrumental,
+  musicWorkflow,
+  musicStoreForInpainting,
+  musicSourceSongId,
   previous,
 }) {
   return {
@@ -951,6 +957,9 @@ function snapshotComposerContextFields({
     sfxPromptInfluence,
     musicDurationSeconds,
     musicInstrumental,
+    musicWorkflow,
+    musicStoreForInpainting,
+    musicSourceSongId,
   };
 }
 
@@ -1646,6 +1655,15 @@ export function StudioShell({
   );
   const [musicInstrumental, setMusicInstrumental] = useState(
     () => initialComposerCtx.musicInstrumental ?? true,
+  );
+  const [musicWorkflow, setMusicWorkflow] = useState(
+    () => initialComposerCtx.musicWorkflow ?? "composition_plan",
+  );
+  const [musicStoreForInpainting, setMusicStoreForInpainting] = useState(
+    () => initialComposerCtx.musicStoreForInpainting ?? true,
+  );
+  const [musicSourceSongId, setMusicSourceSongId] = useState(
+    () => initialComposerCtx.musicSourceSongId ?? "",
   );
   /** Direct = verbatim handoff; Styled = backend enhancement sticks style + script + elements. */
   /** Style sheets retired from Create — always send prompt as written (Enhance is explicit). */
@@ -3755,6 +3773,9 @@ export function StudioShell({
       sfxPromptInfluence,
       musicDurationSeconds,
       musicInstrumental,
+      musicWorkflow,
+      musicStoreForInpainting,
+      musicSourceSongId,
       previous: composerContextsRef.current[key],
     });
     window.clearTimeout(composerPersistTimerRef.current);
@@ -3788,6 +3809,9 @@ export function StudioShell({
     sfxPromptInfluence,
     musicDurationSeconds,
     musicInstrumental,
+    musicWorkflow,
+    musicStoreForInpainting,
+    musicSourceSongId,
   ]);
 
   useEffect(() => {
@@ -3822,6 +3846,9 @@ export function StudioShell({
       sfxPromptInfluence,
       musicDurationSeconds,
       musicInstrumental,
+      musicWorkflow,
+      musicStoreForInpainting,
+      musicSourceSongId,
       previous: composerContextsRef.current[prevKey],
     });
     writePersistedComposerContexts(
@@ -3851,6 +3878,9 @@ export function StudioShell({
     setSfxPromptInfluence(next.sfxPromptInfluence ?? 0.3);
     setMusicDurationSeconds(next.musicDurationSeconds ?? 30);
     setMusicInstrumental(next.musicInstrumental ?? true);
+    setMusicWorkflow(next.musicWorkflow ?? "composition_plan");
+    setMusicStoreForInpainting(next.musicStoreForInpainting ?? true);
+    setMusicSourceSongId(next.musicSourceSongId ?? "");
     composerKeyRef.current = composerContextKey;
     requestAnimationFrame(() => {
       const el = editorRef.current;
@@ -8656,6 +8686,13 @@ export function StudioShell({
           audioLoop: audioType === "sfx" ? sfxLoop : undefined,
           promptInfluence: audioType === "sfx" ? sfxPromptInfluence : undefined,
           forceInstrumental: audioType === "music" ? musicInstrumental : undefined,
+          musicWorkflow: audioType === "music" ? musicWorkflow : undefined,
+          musicStoreForInpainting:
+            audioType === "music" ? musicStoreForInpainting : undefined,
+          musicSourceSongId:
+            audioType === "music" && musicWorkflow === "extend"
+              ? musicSourceSongId.trim() || undefined
+              : undefined,
         }).catch((error) => {
           const raw =
             error instanceof Error
@@ -26496,6 +26533,12 @@ export function StudioShell({
             setMusicDurationSeconds={setMusicDurationSeconds}
             musicInstrumental={musicInstrumental}
             setMusicInstrumental={setMusicInstrumental}
+            musicWorkflow={musicWorkflow}
+            setMusicWorkflow={setMusicWorkflow}
+            musicStoreForInpainting={musicStoreForInpainting}
+            setMusicStoreForInpainting={setMusicStoreForInpainting}
+            musicSourceSongId={musicSourceSongId}
+            setMusicSourceSongId={setMusicSourceSongId}
             elementType={elementType}
             setElementType={setElementType}
             presets={presets}
@@ -27568,6 +27611,12 @@ function StudioComposer({
   setMusicDurationSeconds,
   musicInstrumental = true,
   setMusicInstrumental,
+  musicWorkflow = "composition_plan",
+  setMusicWorkflow,
+  musicStoreForInpainting = true,
+  setMusicStoreForInpainting,
+  musicSourceSongId = "",
+  setMusicSourceSongId,
   elementType,
   setElementType,
   presets,
@@ -28205,6 +28254,12 @@ function StudioComposer({
       setMusicDurationSeconds={setMusicDurationSeconds}
       musicInstrumental={musicInstrumental}
       setMusicInstrumental={setMusicInstrumental}
+      musicWorkflow={musicWorkflow}
+      setMusicWorkflow={setMusicWorkflow}
+      musicStoreForInpainting={musicStoreForInpainting}
+      setMusicStoreForInpainting={setMusicStoreForInpainting}
+      musicSourceSongId={musicSourceSongId}
+      setMusicSourceSongId={setMusicSourceSongId}
     />
   );
 
@@ -29073,6 +29128,12 @@ function StudioComposerControlStrip({
   setMusicDurationSeconds,
   musicInstrumental = true,
   setMusicInstrumental,
+  musicWorkflow = "composition_plan",
+  setMusicWorkflow,
+  musicStoreForInpainting = true,
+  setMusicStoreForInpainting,
+  musicSourceSongId = "",
+  setMusicSourceSongId,
 }) {
   const scriptTypeItems = (scriptTypes ?? []).map((item) => ({
     value: item.slug,
@@ -29181,13 +29242,50 @@ function StudioComposerControlStrip({
                       setMusicDurationSeconds?.(Number(event.target.value))
                     }
                   >
-                    {[10, 15, 30, 45, 60, 90, 120, 180, 300].map((seconds) => (
+                    {[10, 15, 30, 45, 60, 90, 120, 180, 300, 420, 600].map((seconds) => (
                       <option key={seconds} value={String(seconds)}>
                         {seconds >= 60 ? `${seconds / 60}m` : `${seconds}s`}
                       </option>
                     ))}
                   </select>
                 </label>
+                <label>
+                  <span>Workflow</span>
+                  <select
+                    className="studio-voice-picker-select"
+                    value={musicWorkflow}
+                    onChange={(event) =>
+                      setMusicWorkflow?.(
+                        event.target.value as "composition_plan" | "prompt" | "extend",
+                      )
+                    }
+                  >
+                    <option value="composition_plan">Structured plan</option>
+                    <option value="prompt">Quick prompt</option>
+                    <option value="extend">Extend stored song</option>
+                  </select>
+                </label>
+                <label className="studio-voice-picker-check">
+                  <input
+                    type="checkbox"
+                    checked={musicStoreForInpainting}
+                    onChange={(event) =>
+                      setMusicStoreForInpainting?.(event.target.checked)
+                    }
+                  />
+                  <span>Keep for extend</span>
+                </label>
+                {musicWorkflow === "extend" ? (
+                  <label>
+                    <span>Song id</span>
+                    <input
+                      className="studio-voice-picker-select"
+                      value={musicSourceSongId}
+                      placeholder="From Keep for extend"
+                      onChange={(event) => setMusicSourceSongId?.(event.target.value)}
+                    />
+                  </label>
+                ) : null}
               </div>
             ) : null}
           </>

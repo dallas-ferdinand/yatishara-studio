@@ -23,10 +23,10 @@ describe("audio generation pricing (2× ElevenLabs COGS)", () => {
     expect(estimateSfxUsd(30)).toBeCloseTo(0.06, 8);
   });
 
-  it("estimates music USD at $0.15 / minute with 30s default and 5min clamp", () => {
+  it("estimates music USD at $0.15 / minute with 30s default and 10min clamp", () => {
     expect(estimateMusicUsd(undefined)).toBeCloseTo((30 / 60) * 0.15, 8);
     expect(estimateMusicUsd(60)).toBeCloseTo(0.15, 8);
-    expect(estimateMusicUsd(600)).toBeCloseTo((300 / 60) * 0.15, 8);
+    expect(estimateMusicUsd(900)).toBeCloseTo((600 / 60) * 0.15, 8);
   });
 
   it("bills voiceover at 2× COGS with half-TTD rounding into credits", () => {

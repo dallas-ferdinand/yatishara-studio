@@ -1390,6 +1390,51 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       return finish(jsonResponse(estimate));
     }
 
+    if (request.method === "POST" && route === "audio/stems") {
+      const auth = await authFor("generate", "write");
+      if (auth instanceof Response) return finish(auth);
+      const body = await readJsonBody<{ assetId?: Id<"assets"> }>(request);
+      if (!body.assetId) {
+        return finish(errorResponse("assetId is required"));
+      }
+      const asset = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+        userId: auth.userId,
+        assetId: body.assetId,
+      });
+      if (!asset?.bunnyPath || asset.kind !== "audio") {
+        return finish(errorResponse("Audio asset not found", 404));
+      }
+      const prepared = await ctx.runMutation(internal.generation.prepareApiAudioGeneration, {
+        userId: auth.userId,
+        folderId: asset.folderId,
+        apiKeyId: auth.apiKeyId,
+        userPrompt: `Stem separation: ${asset.name}`,
+        title: `Stems — ${asset.name}`.slice(0, 64),
+        audioType: "music",
+        durationSeconds: 30,
+        musicWorkflow: "prompt",
+        forceInstrumental: true,
+      });
+      await ctx.scheduler.runAfter(0, internal.audioActions.executeStemSeparationJob, {
+        jobId: prepared.jobId,
+        assetId: body.assetId,
+        userId: auth.userId,
+      });
+      return finish(
+        jsonResponse(
+          {
+            id: prepared.jobId,
+            threadId: prepared.threadId,
+            status: "queued",
+            mode: "audio",
+            audioType: "music",
+            folderId: asset.folderId,
+          },
+          202,
+        ),
+      );
+    }
+
     if (request.method === "POST" && route === "generations") {
       const auth = await authFor("generate", "write");
       if (auth instanceof Response) return finish(auth);
@@ -1412,6 +1457,11 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         audioLoop?: boolean;
         promptInfluence?: number;
         forceInstrumental?: boolean;
+        musicWorkflow?: "composition_plan" | "prompt" | "extend";
+        musicCompositionPlanJson?: string;
+        musicStoreForInpainting?: boolean;
+        musicSourceSongId?: string;
+        musicKeepMs?: number;
         referenceAssetIds?: Id<"assets">[];
         referenceElementIds?: Id<"elements">[];
         /** Storyboard / opening still for video — Seedance first_frame. Characters live here, not in face-sheet refs. */
@@ -1465,6 +1515,11 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           audioLoop: body.audioLoop,
           promptInfluence: body.promptInfluence,
           forceInstrumental: body.forceInstrumental,
+          musicWorkflow: body.musicWorkflow,
+          musicCompositionPlanJson: body.musicCompositionPlanJson,
+          musicStoreForInpainting: body.musicStoreForInpainting,
+          musicSourceSongId: body.musicSourceSongId,
+          musicKeepMs: body.musicKeepMs,
           wait,
         });
 

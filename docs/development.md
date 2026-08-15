@@ -62,7 +62,7 @@ Generation:
 - `GATEWAY_DM_IMPROVE_MODEL_ID` — Messages DM Improve wand (default: `dola-seed-2-1-turbo-260628`)
 - `GATEWAY_IMAGE_MODEL_ID` — image generation (default: `dola-seedream-5-0-pro-260628`)
 - `GATEWAY_VIDEO_MODEL_ID` — video generation (default: `dreamina-seedance-2-5-260628`)
-- `ELEVENLABS_API_KEY` — Studio-only ElevenLabs key (voiceover `eleven_v3`, SFX, music `music_v2`); Convex secrets + `.env.local`. Keep `ELEVENLABS_API_KEYS` as a single-entry array matching that key. Do not sync MercuryOS multi-account pool keys here.
+- `ELEVENLABS_API_KEY` — Studio-only ElevenLabs key (voiceover `eleven_v3`, SFX, music `music_v2` with composition plans / extend / stems); Convex secrets + `.env.local`. Keep `ELEVENLABS_API_KEYS` as a single-entry array matching that key. Do not sync MercuryOS multi-account pool keys here.
 - `GUIDED_VIDEO_ASSISTANCE_ENABLED` — set `0`/`false` to hide Assistance UI (default on)
 
 Storage, video, and push:

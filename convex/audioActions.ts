@@ -6,11 +6,14 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
-import { putObject } from "./lib/bunny";
+import { putObject, signBunnyCdnUrl } from "./lib/bunny";
 import {
   addSharedVoice,
   clampMusicDurationSeconds,
   composeMusic,
+  composeMusicDetailed,
+  composeMusicFromPromptWithPlan,
+  extendStoredMusic,
   isAccountVoiceOwnerId,
   libraryVoicesAvailable,
   listAccountVoices,
@@ -18,11 +21,13 @@ import {
   mapCategoryToUseCase,
   mapVoiceSort,
   normalizeVoicePageSize,
+  separateMusicStems,
   sliceVoicePage,
   soundGeneration,
   textToSpeechV3,
   VOICE_UNAVAILABLE_USER_MESSAGE,
   voiceUsableOnCurrentPlan,
+  type MusicCompositionPlan,
   type SharedVoice,
   type SharedVoiceSort,
 } from "./lib/elevenlabs";
@@ -68,6 +73,11 @@ const createQueuedJobRef = makeFunctionReference<
     audioLoop?: boolean;
     promptInfluence?: number;
     forceInstrumental?: boolean;
+    musicWorkflow?: "composition_plan" | "prompt" | "extend";
+    musicCompositionPlanJson?: string;
+    musicStoreForInpainting?: boolean;
+    musicSourceSongId?: string;
+    musicKeepMs?: number;
     folderId?: Id<"folders">;
   },
   Id<"generationJobs">
@@ -122,9 +132,25 @@ const getJobRef = internalQueryRef<
     audioLoop?: boolean;
     promptInfluence?: number;
     forceInstrumental?: boolean;
+    musicWorkflow?: "composition_plan" | "prompt" | "extend";
+    musicCompositionPlanJson?: string;
+    musicStoreForInpainting?: boolean;
+    musicSourceSongId?: string;
+    musicKeepMs?: number;
+    elevenMusicSongId?: string;
+    musicPlanResultJson?: string;
     resolvedModel?: string;
   } | null
 >("generation:getJobForAudio");
+
+const patchMusicJobResultRef = internalMutationRef<
+  {
+    jobId: Id<"generationJobs">;
+    elevenMusicSongId?: string;
+    musicPlanResultJson?: string;
+  },
+  null
+>("generation:patchMusicJobResult");
 
 const prepareApiAudioGenerationRef = internalMutationRef<
   {
@@ -141,6 +167,11 @@ const prepareApiAudioGenerationRef = internalMutationRef<
     audioLoop?: boolean;
     promptInfluence?: number;
     forceInstrumental?: boolean;
+    musicWorkflow?: "composition_plan" | "prompt" | "extend";
+    musicCompositionPlanJson?: string;
+    musicStoreForInpainting?: boolean;
+    musicSourceSongId?: string;
+    musicKeepMs?: number;
   },
   { threadId: Id<"generationThreads">; jobId: Id<"generationJobs"> }
 >("generation:prepareApiAudioGeneration");
@@ -343,6 +374,17 @@ export const runAudioFlow = action({
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
     forceInstrumental: v.optional(v.boolean()),
+    musicWorkflow: v.optional(
+      v.union(
+        v.literal("composition_plan"),
+        v.literal("prompt"),
+        v.literal("extend"),
+      ),
+    ),
+    musicCompositionPlanJson: v.optional(v.string()),
+    musicStoreForInpainting: v.optional(v.boolean()),
+    musicSourceSongId: v.optional(v.string()),
+    musicKeepMs: v.optional(v.number()),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -367,6 +409,11 @@ export const runAudioFlow = action({
         ? clampMusicDurationSeconds(args.durationSeconds)
         : args.durationSeconds;
 
+    const musicWorkflow =
+      args.audioType === "music"
+        ? (args.musicWorkflow ?? "composition_plan")
+        : undefined;
+
     const jobId = await ctx.runMutation(createQueuedJobRef, {
       threadId: args.threadId,
       mode: "audio",
@@ -382,6 +429,16 @@ export const runAudioFlow = action({
       promptInfluence: args.promptInfluence,
       forceInstrumental:
         args.audioType === "music" ? (args.forceInstrumental ?? true) : undefined,
+      musicWorkflow,
+      musicCompositionPlanJson:
+        args.audioType === "music" ? args.musicCompositionPlanJson : undefined,
+      musicStoreForInpainting:
+        args.audioType === "music"
+          ? (args.musicStoreForInpainting ?? true)
+          : undefined,
+      musicSourceSongId:
+        args.audioType === "music" ? args.musicSourceSongId : undefined,
+      musicKeepMs: args.audioType === "music" ? args.musicKeepMs : undefined,
       folderId: args.folderId,
     });
 
@@ -407,6 +464,17 @@ export const runAudioForApi = internalAction({
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
     forceInstrumental: v.optional(v.boolean()),
+    musicWorkflow: v.optional(
+      v.union(
+        v.literal("composition_plan"),
+        v.literal("prompt"),
+        v.literal("extend"),
+      ),
+    ),
+    musicCompositionPlanJson: v.optional(v.string()),
+    musicStoreForInpainting: v.optional(v.boolean()),
+    musicSourceSongId: v.optional(v.string()),
+    musicKeepMs: v.optional(v.number()),
     wait: v.optional(v.boolean()),
   },
   returns: v.object({
@@ -448,6 +516,19 @@ export const runAudioForApi = internalAction({
       promptInfluence: args.promptInfluence,
       forceInstrumental:
         args.audioType === "music" ? (args.forceInstrumental ?? true) : undefined,
+      musicWorkflow:
+        args.audioType === "music"
+          ? (args.musicWorkflow ?? "composition_plan")
+          : undefined,
+      musicCompositionPlanJson:
+        args.audioType === "music" ? args.musicCompositionPlanJson : undefined,
+      musicStoreForInpainting:
+        args.audioType === "music"
+          ? (args.musicStoreForInpainting ?? true)
+          : undefined,
+      musicSourceSongId:
+        args.audioType === "music" ? args.musicSourceSongId : undefined,
+      musicKeepMs: args.audioType === "music" ? args.musicKeepMs : undefined,
     });
 
     await ctx.scheduler.runAfter(0, internal.audioActions.executeAudioJob, {
@@ -501,11 +582,78 @@ export const executeAudioJob = internalAction({
           promptInfluence: job.promptInfluence,
         });
       } else if (audioType === "music") {
-        audio = await composeMusic({
-          prompt: job.userPrompt,
-          durationSeconds: job.durationSeconds,
-          forceInstrumental: job.forceInstrumental ?? true,
-        });
+        const workflow = job.musicWorkflow ?? "composition_plan";
+        const store = job.musicStoreForInpainting ?? true;
+        let plan: MusicCompositionPlan | undefined;
+        if (job.musicCompositionPlanJson?.trim()) {
+          try {
+            plan = JSON.parse(job.musicCompositionPlanJson) as MusicCompositionPlan;
+          } catch {
+            throw new Error("Invalid music composition plan JSON.");
+          }
+        }
+        let musicResult;
+        if (workflow === "extend") {
+          const songId = job.musicSourceSongId?.trim();
+          if (!songId) throw new Error("Select a stored music track to extend.");
+          const keepMs =
+            job.musicKeepMs != null && Number.isFinite(job.musicKeepMs)
+              ? Math.max(50, Math.floor(job.musicKeepMs))
+              : Math.max(
+                  50,
+                  Math.floor((job.durationSeconds ?? 30) * 1000 * 0.66),
+                );
+          const extendMs = Math.max(
+            3000,
+            Math.floor(clampMusicDurationSeconds(job.durationSeconds) * 1000) -
+              keepMs,
+          );
+          musicResult = await extendStoredMusic({
+            songId,
+            keepMs,
+            extendMs: Math.max(3000, extendMs),
+            prompt: job.userPrompt,
+            storeForInpainting: store,
+          });
+        } else if (plan) {
+          musicResult = await composeMusicDetailed({
+            compositionPlan: plan,
+            storeForInpainting: store,
+          });
+        } else if (workflow === "prompt") {
+          musicResult = store
+            ? await composeMusicDetailed({
+                prompt: job.userPrompt,
+                durationSeconds: job.durationSeconds,
+                forceInstrumental: job.forceInstrumental ?? true,
+                storeForInpainting: true,
+              })
+            : await composeMusic({
+                prompt: job.userPrompt,
+                durationSeconds: job.durationSeconds,
+                forceInstrumental: job.forceInstrumental ?? true,
+              });
+        } else {
+          musicResult = await composeMusicFromPromptWithPlan({
+            prompt: job.userPrompt,
+            durationSeconds: job.durationSeconds,
+            forceInstrumental: job.forceInstrumental ?? true,
+            storeForInpainting: store,
+          });
+        }
+        const planJson = musicResult.compositionPlan
+          ? JSON.stringify(musicResult.compositionPlan)
+          : "sourcePlan" in musicResult && musicResult.sourcePlan
+            ? JSON.stringify(musicResult.sourcePlan)
+            : undefined;
+        if (musicResult.songId || planJson) {
+          await ctx.runMutation(patchMusicJobResultRef, {
+            jobId,
+            elevenMusicSongId: musicResult.songId,
+            musicPlanResultJson: planJson,
+          });
+        }
+        audio = { data: musicResult.data, mediaType: musicResult.mediaType };
       } else {
         const voiceId = job.elevenVoiceId?.trim();
         if (!voiceId) throw new Error("Select a voice for the voiceover.");
@@ -573,6 +721,116 @@ export const executeAudioJob = internalAction({
         jobId,
         stage: "failed",
         error: message,
+      });
+      return null;
+    }
+  },
+});
+
+/**
+ * Separate stems from an existing Studio audio asset (ElevenLabs stem-separation).
+ * Saves the provider result into the same folder via a queued audio job.
+ */
+export const separateStemsFromAsset = action({
+  args: {
+    assetId: v.id("assets"),
+  },
+  returns: v.object({ jobId: v.id("generationJobs") }),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to separate stems.");
+    const asset = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+      userId,
+      assetId: args.assetId,
+    });
+    if (!asset?.bunnyPath) throw new Error("Audio asset not found.");
+    if (asset.kind !== "audio") throw new Error("Stem separation requires an audio file.");
+
+    const prepared = await ctx.runMutation(prepareApiAudioGenerationRef, {
+      userId,
+      folderId: asset.folderId,
+      userPrompt: `Stem separation: ${asset.name}`,
+      title: `Stems — ${asset.name}`.slice(0, 64),
+      audioType: "music",
+      durationSeconds: 30,
+      musicWorkflow: "prompt",
+      forceInstrumental: true,
+    });
+    await ctx.scheduler.runAfter(0, internal.audioActions.executeStemSeparationJob, {
+      jobId: prepared.jobId,
+      assetId: args.assetId,
+      userId,
+    });
+    return { jobId: prepared.jobId };
+  },
+});
+
+export const executeStemSeparationJob = internalAction({
+  args: {
+    jobId: v.id("generationJobs"),
+    assetId: v.id("assets"),
+    userId: v.id("users"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    try {
+      await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "generating" });
+      const asset = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+        userId: args.userId,
+        assetId: args.assetId,
+      });
+      if (!asset?.bunnyPath) throw new Error("Audio asset not found.");
+      const url = await signBunnyCdnUrl(
+        asset.bunnyPath,
+        Math.floor(Date.now() / 1000) + 60 * 60,
+      );
+      const downloaded = await fetch(url);
+      if (!downloaded.ok) {
+        throw new Error(`Could not download audio for stem separation (${downloaded.status}).`);
+      }
+      const bytes = new Uint8Array(await downloaded.arrayBuffer());
+      const stems = await separateMusicStems({
+        fileBytes: bytes,
+        fileName: asset.name,
+        mimeType: "audio/mpeg",
+      });
+      await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "saving" });
+      const ext = stems.mediaType.includes("zip")
+        ? "zip"
+        : stems.mediaType.includes("wav")
+          ? "wav"
+          : "mp3";
+      const assetId = await saveAudioAsset(ctx, {
+        jobId: args.jobId,
+        name: generationAssetFileName({
+          kind: "music",
+          prompt: `stems ${asset.name}`,
+          uniqueId: args.jobId,
+          extension: ext,
+        }),
+        mediaType: stems.mediaType.includes("zip")
+          ? "application/zip"
+          : stems.mediaType,
+        body: stems.data,
+      });
+      await ctx.runMutation(completeWithOutputsRef, {
+        jobId: args.jobId,
+        assetIds: [assetId],
+      });
+      return null;
+    } catch (error) {
+      const raw =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Stem separation failed";
+      await ctx.runMutation(markStageRef, {
+        jobId: args.jobId,
+        stage: "failed",
+        error: /stem|forbidden|enterprise|permission/i.test(raw)
+          ? raw
+          : friendlyGenerationErrorText(raw),
       });
       return null;
     }

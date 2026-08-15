@@ -7,10 +7,12 @@
  * key 1 → key 2 → …; errors only when every key is empty or fails quota.
  */
 
-/** Self-serve Music API length: 3s–5min (API allows up to 10min; we bill/cap at 5). */
+/** Self-serve Music API length: 3s–10min (matches ElevenLabs music_length_ms 3_000–600_000). */
 export const ELEVEN_MUSIC_MIN_DURATION_SECONDS = 3;
-export const ELEVEN_MUSIC_MAX_DURATION_SECONDS = 300;
+export const ELEVEN_MUSIC_MAX_DURATION_SECONDS = 600;
 export const ELEVEN_MUSIC_DEFAULT_DURATION_SECONDS = 30;
+/** Default MP3 for music_v2 (v1's mp3_44100_128 400s compose). */
+export const ELEVEN_MUSIC_OUTPUT_FORMAT = "mp3_48000_192";
 
 export function clampMusicDurationSeconds(durationSeconds?: number | null): number {
   if (durationSeconds == null || !Number.isFinite(durationSeconds)) {
@@ -610,45 +612,392 @@ export async function soundGeneration(args: {
   });
 }
 
-/** Eleven Music compose — prompt mode (`music_v2`). */
-export async function composeMusic(args: {
+export type MusicContextAdherence = "low" | "medium" | "high";
+export type MusicConditionStrength = "low" | "medium" | "high" | "xhigh";
+
+export type MusicGenerationChunk = {
+  text: string;
+  duration_ms: number;
+  positive_styles: string[];
+  negative_styles?: string[];
+  context_adherence?: MusicContextAdherence;
+  conditioning_ref?: {
+    song_id: string;
+    range: { start_ms: number; end_ms: number };
+  } | null;
+  condition_strength?: MusicConditionStrength | null;
+};
+
+export type MusicAudioRefChunk = {
+  song_id: string;
+  range: { start_ms: number; end_ms: number };
+};
+
+export type MusicCompositionPlan = {
+  chunks: Array<MusicGenerationChunk | MusicAudioRefChunk>;
+};
+
+export type ComposedMusicResult = {
+  data: Uint8Array;
+  mediaType: string;
+  songId?: string;
+  compositionPlan?: MusicCompositionPlan | Record<string, unknown>;
+  songMetadata?: Record<string, unknown>;
+};
+
+function isAudioRefChunk(
+  chunk: MusicGenerationChunk | MusicAudioRefChunk,
+): chunk is MusicAudioRefChunk {
+  return (
+    typeof (chunk as MusicAudioRefChunk).song_id === "string" &&
+    !(chunk as MusicGenerationChunk).text
+  );
+}
+
+/** Free (rate-limited) plan from prompt — then pass into compose. */
+export async function createMusicCompositionPlan(args: {
   prompt: string;
   durationSeconds?: number | null;
-  forceInstrumental?: boolean;
-}): Promise<{ data: Uint8Array; mediaType: string }> {
+}): Promise<MusicCompositionPlan> {
   const prompt = args.prompt.trim();
   if (!prompt) throw new Error("Describe the music to generate.");
   if (prompt.length > 4000) {
     throw new Error("Music prompt must be 4000 characters or less.");
   }
   const durationSeconds = clampMusicDurationSeconds(args.durationSeconds);
-  const body: Record<string, unknown> = {
-    prompt,
-    model_id: "music_v2",
-    music_length_ms: durationSeconds * 1000,
-  };
-  if (args.forceInstrumental != null) {
-    body.force_instrumental = Boolean(args.forceInstrumental);
-  }
   return withElevenLabsApiKey(1, async (apiKey) => {
+    const response = await fetch(`${ELEVEN_API_BASE}/v1/music/plan`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        prompt,
+        music_length_ms: durationSeconds * 1000,
+        model_id: "music_v2",
+      }),
+    });
+    const text = await response.text();
+    if (!response.ok) throwIfElevenLabsFailed(response.status, text);
+    const parsed = JSON.parse(text) as MusicCompositionPlan;
+    if (!parsed?.chunks || !Array.isArray(parsed.chunks) || parsed.chunks.length === 0) {
+      throw new Error("ElevenLabs returned an empty composition plan.");
+    }
+    return parsed;
+  });
+}
+
+/**
+ * Build an extend/inpaint plan: keep [0, keepMs) from songId, generate a new
+ * trailing section from the prompt styles.
+ */
+export function buildMusicExtendPlan(args: {
+  songId: string;
+  keepMs: number;
+  extendMs: number;
+  prompt: string;
+  positiveStyles?: string[];
+}): MusicCompositionPlan {
+  const songId = args.songId.trim();
+  if (!songId) throw new Error("Select a stored music track to extend.");
+  const keepMs = Math.max(50, Math.floor(args.keepMs));
+  const extendMs = Math.max(
+    3000,
+    Math.min(120_000, Math.floor(args.extendMs)),
+  );
+  const text = args.prompt.trim() || "[Extension]\nContinue the track";
+  const styles =
+    args.positiveStyles && args.positiveStyles.length > 0
+      ? args.positiveStyles
+      : [
+          "great production quality",
+          "natural continuation",
+          "consistent mix",
+          "same genre",
+          "same tempo feel",
+          "same instrumentation family",
+        ];
+  return {
+    chunks: [
+      {
+        song_id: songId,
+        range: { start_ms: 0, end_ms: keepMs },
+      },
+      {
+        text,
+        duration_ms: extendMs,
+        positive_styles: styles,
+        negative_styles: [],
+        context_adherence: "high",
+        conditioning_ref: {
+          song_id: songId,
+          range: {
+            start_ms: Math.max(0, keepMs - Math.min(keepMs, 15_000)),
+            end_ms: keepMs,
+          },
+        },
+        condition_strength: "high",
+      },
+    ],
+  };
+}
+
+function parseMultipartMusicResponse(
+  body: Uint8Array,
+  contentType: string | null,
+): { json: Record<string, unknown>; audio: Uint8Array; mediaType: string } {
+  const ct = contentType ?? "";
+  const boundaryMatch = /boundary="?([^";]+)"?/i.exec(ct);
+  if (!boundaryMatch) {
+    // Some gateways may return raw audio; treat whole body as mp3.
+    return { json: {}, audio: body, mediaType: "audio/mpeg" };
+  }
+  const boundary = boundaryMatch[1]!;
+  const marker = new TextEncoder().encode(`--${boundary}`);
+  const parts: Uint8Array[] = [];
+  let start = indexOfBytes(body, marker);
+  while (start >= 0) {
+    let next = indexOfBytes(body, marker, start + marker.length);
+    const sliceEnd = next < 0 ? body.length : next;
+    let part = body.subarray(start + marker.length, sliceEnd);
+    if (part.length >= 2 && part[0] === 0x0d && part[1] === 0x0a) {
+      part = part.subarray(2);
+    }
+    // Drop closing --
+    if (part.length >= 2 && part[0] === 0x2d && part[1] === 0x2d) break;
+    parts.push(part);
+    start = next;
+  }
+
+  let json: Record<string, unknown> = {};
+  let audio: Uint8Array | null = null;
+  let mediaType = "audio/mpeg";
+  const headerSep = new TextEncoder().encode("\r\n\r\n");
+  for (const part of parts) {
+    const sep = indexOfBytes(part, headerSep);
+    if (sep < 0) continue;
+    const headerText = new TextDecoder().decode(part.subarray(0, sep));
+    let payload = part.subarray(sep + headerSep.length);
+    // Trim trailing CRLF before next boundary remnant
+    while (
+      payload.length >= 2 &&
+      payload[payload.length - 2] === 0x0d &&
+      payload[payload.length - 1] === 0x0a
+    ) {
+      payload = payload.subarray(0, payload.length - 2);
+    }
+    if (/content-type:\s*application\/json/i.test(headerText)) {
+      try {
+        json = JSON.parse(new TextDecoder().decode(payload)) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        json = {};
+      }
+    } else if (/content-type:\s*audio\//i.test(headerText)) {
+      const mt = /content-type:\s*([^\r\n;]+)/i.exec(headerText);
+      mediaType = mt?.[1]?.trim() || "audio/mpeg";
+      audio = payload;
+    }
+  }
+  if (!audio) throw new Error("ElevenLabs music response missing audio part.");
+  return { json, audio, mediaType };
+}
+
+function indexOfBytes(haystack: Uint8Array, needle: Uint8Array, from = 0): number {
+  if (needle.length === 0) return from;
+  outer: for (let i = from; i <= haystack.length - needle.length; i += 1) {
+    for (let j = 0; j < needle.length; j += 1) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+async function postMusicCompose(args: {
+  apiKey: string;
+  body: Record<string, unknown>;
+  detailed: boolean;
+}): Promise<ComposedMusicResult> {
+  const path = args.detailed ? "/v1/music/detailed" : "/v1/music";
+  const response = await fetch(
+    `${ELEVEN_API_BASE}${path}?output_format=${ELEVEN_MUSIC_OUTPUT_FORMAT}`,
+    {
+      method: "POST",
+      headers: {
+        "xi-api-key": args.apiKey,
+        "Content-Type": "application/json",
+        Accept: args.detailed ? "*/*" : "audio/mpeg",
+      },
+      body: JSON.stringify(args.body),
+    },
+  );
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throwIfElevenLabsFailed(response.status, detail);
+  }
+  const songId = response.headers.get("song-id") ?? undefined;
+  const contentType = response.headers.get("content-type");
+  const buffer = new Uint8Array(await response.arrayBuffer());
+  if (args.detailed || (contentType ?? "").includes("multipart/")) {
+    const parsed = parseMultipartMusicResponse(buffer, contentType);
+    const plan =
+      (parsed.json.composition_plan as MusicCompositionPlan | undefined) ??
+      undefined;
+    const meta =
+      (parsed.json.song_metadata as Record<string, unknown> | undefined) ??
+      undefined;
+    return {
+      data: parsed.audio,
+      mediaType: parsed.mediaType,
+      songId,
+      compositionPlan: plan,
+      songMetadata: meta,
+    };
+  }
+  return { data: buffer, mediaType: "audio/mpeg", songId };
+}
+
+/**
+ * Eleven Music compose — prompt and/or composition plan (`music_v2`).
+ * Prefer `composeMusicDetailed` when you need songId / plan back.
+ */
+export async function composeMusic(args: {
+  prompt?: string;
+  compositionPlan?: MusicCompositionPlan;
+  durationSeconds?: number | null;
+  forceInstrumental?: boolean;
+}): Promise<ComposedMusicResult> {
+  const prompt = args.prompt?.trim() ?? "";
+  const plan = args.compositionPlan;
+  if (!plan && !prompt) throw new Error("Describe the music to generate.");
+  if (prompt && prompt.length > 4000) {
+    throw new Error("Music prompt must be 4000 characters or less.");
+  }
+  if (plan && prompt) {
+    throw new Error("Use either a prompt or a composition plan, not both.");
+  }
+  const body: Record<string, unknown> = { model_id: "music_v2" };
+  if (plan) {
+    body.composition_plan = plan;
+  } else {
+    body.prompt = prompt;
+    body.music_length_ms = clampMusicDurationSeconds(args.durationSeconds) * 1000;
+    if (args.forceInstrumental != null) {
+      body.force_instrumental = Boolean(args.forceInstrumental);
+    }
+  }
+  return withElevenLabsApiKey(1, async (apiKey) =>
+    postMusicCompose({ apiKey, body, detailed: false }),
+  );
+}
+
+/** Detailed compose — returns audio + composition plan + optional songId. */
+export async function composeMusicDetailed(args: {
+  prompt?: string;
+  compositionPlan?: MusicCompositionPlan;
+  durationSeconds?: number | null;
+  forceInstrumental?: boolean;
+  storeForInpainting?: boolean;
+}): Promise<ComposedMusicResult> {
+  const prompt = args.prompt?.trim() ?? "";
+  const plan = args.compositionPlan;
+  if (!plan && !prompt) throw new Error("Describe the music to generate.");
+  if (prompt && prompt.length > 4000) {
+    throw new Error("Music prompt must be 4000 characters or less.");
+  }
+  if (plan && prompt) {
+    throw new Error("Use either a prompt or a composition plan, not both.");
+  }
+  const body: Record<string, unknown> = {
+    model_id: "music_v2",
+    store_for_inpainting: Boolean(args.storeForInpainting),
+  };
+  if (plan) {
+    body.composition_plan = plan;
+  } else {
+    body.prompt = prompt;
+    body.music_length_ms = clampMusicDurationSeconds(args.durationSeconds) * 1000;
+    if (args.forceInstrumental != null) {
+      body.force_instrumental = Boolean(args.forceInstrumental);
+    }
+  }
+  return withElevenLabsApiKey(1, async (apiKey) =>
+    postMusicCompose({ apiKey, body, detailed: true }),
+  );
+}
+
+/**
+ * Prompt → (free) composition plan → detailed compose with that plan.
+ * Default Studio music path for structured sections/styles.
+ */
+export async function composeMusicFromPromptWithPlan(args: {
+  prompt: string;
+  durationSeconds?: number | null;
+  forceInstrumental?: boolean;
+  storeForInpainting?: boolean;
+}): Promise<ComposedMusicResult & { sourcePlan: MusicCompositionPlan }> {
+  const plan = await createMusicCompositionPlan({
+    prompt: args.prompt,
+    durationSeconds: args.durationSeconds,
+  });
+  // force_instrumental only applies to prompt mode — plan already encodes vocals/styles.
+  void args.forceInstrumental;
+  const result = await composeMusicDetailed({
+    compositionPlan: plan,
+    storeForInpainting: args.storeForInpainting ?? true,
+  });
+  return { ...result, sourcePlan: plan, compositionPlan: result.compositionPlan ?? plan };
+}
+
+/** Extend a stored song (inpainting plan). Enterprise-tier on some accounts. */
+export async function extendStoredMusic(args: {
+  songId: string;
+  keepMs: number;
+  extendMs: number;
+  prompt: string;
+  storeForInpainting?: boolean;
+}): Promise<ComposedMusicResult> {
+  const plan = buildMusicExtendPlan(args);
+  return composeMusicDetailed({
+    compositionPlan: plan,
+    storeForInpainting: args.storeForInpainting ?? true,
+  });
+}
+
+/** Stem separation — returns multipart/zip bytes depending on provider. */
+export async function separateMusicStems(args: {
+  fileBytes: Uint8Array;
+  fileName?: string;
+  mimeType?: string;
+}): Promise<{ data: Uint8Array; mediaType: string }> {
+  if (!args.fileBytes.byteLength) throw new Error("Audio file is empty.");
+  return withElevenLabsApiKey(1, async (apiKey) => {
+    const form = new FormData();
+    const blob = new Blob([Buffer.from(args.fileBytes)], {
+      type: args.mimeType || "audio/mpeg",
+    });
+    form.append("file", blob, args.fileName || "track.mp3");
     const response = await fetch(
-      // v2 default is mp3_48000_192; 44100_128 is a v1 format and 400s compose.
-      `${ELEVEN_API_BASE}/v1/music?output_format=mp3_48000_192`,
+      `${ELEVEN_API_BASE}/v1/music/stem-separation?output_format=${ELEVEN_MUSIC_OUTPUT_FORMAT}`,
       {
         method: "POST",
-        headers: {
-          "xi-api-key": apiKey,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg",
-        },
-        body: JSON.stringify(body),
+        headers: { "xi-api-key": apiKey },
+        body: form,
       },
     );
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
       throwIfElevenLabsFailed(response.status, detail);
     }
-    const buffer = new Uint8Array(await response.arrayBuffer());
-    return { data: buffer, mediaType: "audio/mpeg" };
+    const mediaType = response.headers.get("content-type") || "application/zip";
+    const data = new Uint8Array(await response.arrayBuffer());
+    return { data, mediaType };
   });
 }
+
+export { isAudioRefChunk };

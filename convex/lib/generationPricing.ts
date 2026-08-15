@@ -737,9 +737,9 @@ export const ELEVEN_SFX_AUTO_DURATION_SECONDS = 5;
 export const ELEVEN_MUSIC_USD_PER_MINUTE = 0.15;
 /** Default music length when duration is omitted (ads). */
 export const ELEVEN_MUSIC_DEFAULT_DURATION_SECONDS = 30;
-/** Self-serve Music API billable range (3s–5min). */
+/** Self-serve Music API billable range (3s–10min). */
 export const ELEVEN_MUSIC_MIN_DURATION_SECONDS = 3;
-export const ELEVEN_MUSIC_MAX_DURATION_SECONDS = 300;
+export const ELEVEN_MUSIC_MAX_DURATION_SECONDS = 600;
 
 export function estimateVoiceoverUsd(characterCount: number): number {
   const chars = Math.max(0, Math.ceil(Number(characterCount) || 0));

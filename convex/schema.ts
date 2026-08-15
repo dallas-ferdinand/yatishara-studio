@@ -42,6 +42,13 @@ export const audioGenType = v.union(
   v.literal("music"),
 );
 
+/** Music create path: structured plan (default), plain prompt, or extend/inpaint. */
+export const musicWorkflow = v.union(
+  v.literal("composition_plan"),
+  v.literal("prompt"),
+  v.literal("extend"),
+);
+
 export const generationSource = v.union(v.literal("ui"), v.literal("api"));
 
 export const apiKeyScope = v.union(
@@ -393,6 +400,8 @@ export default defineSchema({
     editProxyError: v.optional(v.string()),
     editProxyUpdatedAt: v.optional(v.number()),
     sourceGenerationJobId: v.optional(v.id("generationJobs")),
+    /** ElevenLabs music song id (store_for_inpainting) for extend/stems. */
+    elevenMusicSongId: v.optional(v.string()),
     /** Creative Network listing this copy was purchased from. */
     sourceListingId: v.optional(v.id("assetListings")),
     /** When set, trash/delete/move-out is blocked (pay-once Network license). */
@@ -739,6 +748,20 @@ export default defineSchema({
     promptInfluence: v.optional(v.number()),
     /** Music: force instrumental output (ElevenLabs force_instrumental). */
     forceInstrumental: v.optional(v.boolean()),
+    /** Music workflow: composition_plan (default) | prompt | extend. */
+    musicWorkflow: v.optional(musicWorkflow),
+    /** Optional pre-built composition plan JSON (music_v2 chunks). */
+    musicCompositionPlanJson: v.optional(v.string()),
+    /** Store song for later extend/inpaint (compose_detailed). */
+    musicStoreForInpainting: v.optional(v.boolean()),
+    /** Source song id when extending / inpainting. */
+    musicSourceSongId: v.optional(v.string()),
+    /** Milliseconds of source song to keep when extending. */
+    musicKeepMs: v.optional(v.number()),
+    /** Result song id from store_for_inpainting / detailed compose. */
+    elevenMusicSongId: v.optional(v.string()),
+    /** Result / source composition plan JSON after music gen. */
+    musicPlanResultJson: v.optional(v.string()),
     externalTaskId: v.optional(v.string()),
     error: v.optional(v.string()),
     reservedCreditTransactionId: v.optional(v.id("creditTransactions")),

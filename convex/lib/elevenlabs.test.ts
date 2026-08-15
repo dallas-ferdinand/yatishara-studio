@@ -106,13 +106,40 @@ describe("sliceVoicePage", () => {
 });
 
 describe("clampMusicDurationSeconds", () => {
-  it("defaults to 30s and clamps to 3–300", async () => {
+  it("defaults to 30s and clamps to 3–600", async () => {
     const { clampMusicDurationSeconds } = await import("./elevenlabs");
     expect(clampMusicDurationSeconds(undefined)).toBe(30);
     expect(clampMusicDurationSeconds(null)).toBe(30);
     expect(clampMusicDurationSeconds(1)).toBe(3);
     expect(clampMusicDurationSeconds(45)).toBe(45);
-    expect(clampMusicDurationSeconds(900)).toBe(300);
+    expect(clampMusicDurationSeconds(900)).toBe(600);
+  });
+});
+
+describe("buildMusicExtendPlan", () => {
+  it("builds an extend/inpaint composition plan", async () => {
+    const { buildMusicExtendPlan } = await import("./elevenlabs");
+    const plan = buildMusicExtendPlan({
+      songId: "song_abc",
+      keepMs: 20_000,
+      extendMs: 10_000,
+      prompt: "[Outro]\nFade soft pad",
+    });
+    expect(plan.chunks).toHaveLength(2);
+    expect(plan.chunks[0]).toEqual({
+      song_id: "song_abc",
+      range: { start_ms: 0, end_ms: 20_000 },
+    });
+    const gen = plan.chunks[1] as {
+      text: string;
+      duration_ms: number;
+      positive_styles: string[];
+      conditioning_ref?: { song_id: string };
+    };
+    expect(gen.text).toContain("Outro");
+    expect(gen.duration_ms).toBe(10_000);
+    expect(gen.conditioning_ref?.song_id).toBe("song_abc");
+    expect(gen.positive_styles.length).toBeGreaterThan(3);
   });
 });
 

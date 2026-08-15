@@ -598,6 +598,9 @@ const getJobRunContextRef = internalQueryRef<
   {
     job: {
       _id: Id<"generationJobs">;
+      ownerId: Id<"users">;
+      threadId: Id<"generationThreads">;
+      saveFolderId: Id<"folders">;
       userPrompt: string;
       mode: "image" | "video";
       resolvedModel: string;
@@ -619,6 +622,26 @@ const getJobRunContextRef = internalQueryRef<
     };
   }
 >("generation:getJobRunContext");
+
+const runAudioForApiRef = internalActionRef<
+  {
+    userId: Id<"users">;
+    folderId: Id<"folders">;
+    prompt: string;
+    audioType: "voiceover" | "sfx" | "music";
+    durationSeconds?: number;
+    forceInstrumental?: boolean;
+    musicWorkflow?: "composition_plan" | "prompt" | "extend";
+    musicStoreForInpainting?: boolean;
+    wait?: boolean;
+  },
+  { jobId: Id<"generationJobs">; threadId: Id<"generationThreads"> }
+>("audioActions:runAudioForApi");
+
+function clampAssistanceAudioDuration(durationSeconds?: number): number {
+  if (durationSeconds == null || !Number.isFinite(durationSeconds)) return 30;
+  return Math.max(3, Math.min(600, Math.round(durationSeconds)));
+}
 
 const setEnhancedPromptRef = internalMutationRef<
   {
@@ -2003,6 +2026,49 @@ export const runAssistedApprovedJob = internalAction({
         referenceInputs,
         skipClaim: true,
       });
+
+      // Also queue ElevenLabs music/SFX beds when the reviewed audio plan asks for them.
+      const payload =
+        snapshot.brief.payload && typeof snapshot.brief.payload === "object"
+          ? (snapshot.brief.payload as AssistedBriefPayload)
+          : null;
+      const jobCtx = await ctx.runQuery(getJobRunContextRef, { jobId: args.jobId });
+      const saveFolderId = jobCtx.job.saveFolderId;
+      const ownerId = jobCtx.job.ownerId;
+      if (payload && saveFolderId) {
+        const durationSeconds = clampAssistanceAudioDuration(
+          plan.settings.durationSeconds,
+        );
+        if (payload.audio.music === "include") {
+          const mood = payload.audio.musicMood?.trim();
+          await ctx.scheduler.runAfter(0, runAudioForApiRef, {
+            userId: ownerId,
+            folderId: saveFolderId,
+            prompt:
+              mood ||
+              `Instrumental background music for a ${durationSeconds}s ${plan.mode} ad. Clean mix, no vocals.`,
+            audioType: "music",
+            durationSeconds,
+            forceInstrumental: true,
+            musicWorkflow: "composition_plan",
+            musicStoreForInpainting: true,
+            wait: false,
+          });
+        }
+        if (payload.audio.sfx === "include") {
+          const notes = payload.audio.sfxNotes?.trim();
+          await ctx.scheduler.runAfter(0, runAudioForApiRef, {
+            userId: ownerId,
+            folderId: saveFolderId,
+            prompt:
+              notes ||
+              "Subtle whoosh and soft UI click accents timed for a short ad, clean and not noisy.",
+            audioType: "sfx",
+            durationSeconds: Math.min(8, Math.max(2, Math.round(durationSeconds / 4))),
+            wait: false,
+          });
+        }
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Approved generation could not start";

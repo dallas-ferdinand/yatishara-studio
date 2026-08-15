@@ -575,8 +575,10 @@ Wait ≥65s between video calls (1 req/min gateway quota). For packs use studio_
 
 Voiceover: requires elevenVoiceId (from studio_explore_voices or studio_list_saved_voices). Prompt = spoken text (max ~3000 chars).
 SFX: prompt = sound description; optional durationSeconds 0.5–30 (omit = Auto ~5s).
-Music: prompt = track description; durationSeconds 3–300 (default 30); forceInstrumental defaults true.
-Async by default (wait=false) then polls up to 3 min (music may need longer — raise wait or poll).`,
+Music: prompt = track description; durationSeconds 3–600 (default 30); forceInstrumental defaults true.
+Music workflows: composition_plan (default — free plan then compose), prompt (quick), extend (needs musicSourceSongId from a Keep-for-extend track).
+musicStoreForInpainting defaults true so songs can be extended later.
+Async by default (wait=false) then polls up to 5 min for music.`,
     {
       prompt: z.string(),
       audioType: z.enum(["voiceover", "sfx", "music"]),
@@ -584,10 +586,18 @@ Async by default (wait=false) then polls up to 3 min (music may need longer — 
       elevenVoiceId: z.string().optional().describe("Required for voiceover"),
       elevenVoiceName: z.string().optional(),
       elevenPublicOwnerId: z.string().optional().describe("Library owner id; omit for account/premade voices"),
-      durationSeconds: z.number().optional().describe("SFX: 0.5–30; Music: 3–300"),
+      durationSeconds: z.number().optional().describe("SFX: 0.5–30; Music: 3–600"),
       audioLoop: z.boolean().optional(),
       promptInfluence: z.number().optional().describe("SFX only: 0–1"),
       forceInstrumental: z.boolean().optional().describe("Music only; default true"),
+      musicWorkflow: z
+        .enum(["composition_plan", "prompt", "extend"])
+        .optional()
+        .describe("Music only; default composition_plan"),
+      musicCompositionPlanJson: z.string().optional().describe("Optional prebuilt music_v2 plan JSON"),
+      musicStoreForInpainting: z.boolean().optional().describe("Music only; default true"),
+      musicSourceSongId: z.string().optional().describe("Required for extend workflow"),
+      musicKeepMs: z.number().optional().describe("Extend: ms of source to keep"),
       wait: z.boolean().optional().describe("Default false (poll). Set true for sync wait on server."),
       compact: z.boolean().optional(),
     },
@@ -612,12 +622,33 @@ Async by default (wait=false) then polls up to 3 min (music may need longer — 
           audioLoop: args.audioLoop,
           promptInfluence: args.promptInfluence,
           forceInstrumental: args.forceInstrumental,
+          musicWorkflow: args.musicWorkflow,
+          musicCompositionPlanJson: args.musicCompositionPlanJson,
+          musicStoreForInpainting: args.musicStoreForInpainting,
+          musicSourceSongId: args.musicSourceSongId,
+          musicKeepMs: args.musicKeepMs,
         }),
       });
       if (wait) return jsonResult(queued, args.compact);
       const jobId = (queued as { id: string }).id;
       const result = await pollGeneration(jobId, { timeoutMs: pollMs });
       return jsonResult({ ...queued, ...result }, args.compact);
+    },
+  );
+
+  server.tool(
+    "studio_separate_music_stems",
+    "Separate an existing Studio audio asset into stems via ElevenLabs. May require a higher ElevenLabs plan.",
+    {
+      assetId: z.string(),
+      compact: z.boolean().optional(),
+    },
+    async (args) => {
+      const result = await studioFetch("/audio/stems", {
+        method: "POST",
+        body: JSON.stringify({ assetId: args.assetId }),
+      });
+      return jsonResult(result, args.compact);
     },
   );
 }
