@@ -28,6 +28,40 @@ type ExportAudioEffects = {
   audioFadeOut?: number;
 };
 
+type ExportAudioBedClip = {
+  id: string;
+  trackId: string;
+  assetId?: string;
+  kind: string;
+  startTime: number;
+  trimIn?: number;
+  trimOut?: number;
+  effects?: ExportAudioEffects;
+};
+
+/**
+ * All audible audio-lane beds for export (every unmuted Audio 1/2/… lane).
+ * Separate-audio / detached beds often land on Audio 2+ — must not drop them.
+ */
+export function collectExportAudioBeds<T extends ExportAudioBedClip>(project: {
+  tracks: Array<{ id: string; kind: string; muted?: boolean }>;
+  clips: T[];
+}): T[] {
+  const unmutedAudioTrackIds = new Set(
+    project.tracks
+      .filter((track) => track.kind === "audio" && !track.muted)
+      .map((track) => track.id),
+  );
+  return project.clips
+    .filter((clip) => {
+      if (clip.kind !== "audio" || !clip.assetId) return false;
+      if (!unmutedAudioTrackIds.has(clip.trackId)) return false;
+      const volume = Math.max(0, Math.min(2, clip.effects?.volume ?? 1));
+      return volume > 0.001;
+    })
+    .sort((a, b) => a.startTime - b.startTime);
+}
+
 export function timelineDurationSec(
   clip: {
     trimIn?: number;

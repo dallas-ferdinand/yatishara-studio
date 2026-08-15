@@ -15,6 +15,7 @@ import { putObject, signBunnyCdnUrl } from "./lib/bunny";
 import { ffmpegTransitionFor } from "./lib/editorEffectContract";
 import {
   bedClipAudioFilters,
+  collectExportAudioBeds,
   timelineDurationSec,
   videoClipAudioFilter,
 } from "./lib/editorExportAudio";
@@ -702,8 +703,10 @@ async function mixAudioTrack(args: {
     const bunnyPath = await getAssetBunnyPath(clip.assetId as Id<"assets">);
     if (!bunnyPath) continue;
     const url = await signBunnyCdnUrl(bunnyPath, expiresUnix);
-    const sourcePath = join(tempDir, `audio-source-${index}.mp3`);
+    // Detached beds reuse the video asset — keep a neutral extension; ffmpeg probes content.
+    const sourcePath = join(tempDir, `audio-source-${index}.bin`);
     await downloadToFile(url, sourcePath);
+    if (!(await hasAudioStream(sourcePath))) continue;
     audioInputs.push("-i", sourcePath);
     const delayMs = Math.max(0, Math.round(clip.startTime * 1000));
     const duration = clipDuration(clip);
@@ -796,7 +799,6 @@ async function runExportVideo(
     renderResolution,
   );
   const videoTrack = project.tracks.find((track) => track.kind === "video");
-  const audioTrack = project.tracks.find((track) => track.kind === "audio");
   if (!videoTrack) {
     const message = "No video track in project.";
     if (args.jobId) {
@@ -824,12 +826,8 @@ async function runExportVideo(
     (end, clip) => Math.max(end, clip.startTime + clip.duration),
     0,
   );
-  const audioClips =
-    audioTrack?.id && !audioTrack.muted
-      ? project.clips
-          .filter((clip) => clip.trackId === audioTrack.id && clip.assetId)
-          .sort((a, b) => a.startTime - b.startTime)
-      : [];
+  // Every unmuted Audio lane (Separate audio often lands on Audio 2+).
+  const audioClips = collectExportAudioBeds(project);
 
   const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60;
   const tempDir = await mkdtemp(join(tmpdir(), "studio-edit-"));

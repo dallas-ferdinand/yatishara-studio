@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { videoClipAudioFilter } from "./editorExportAudio";
+import {
+  collectExportAudioBeds,
+  videoClipAudioFilter,
+} from "./editorExportAudio";
 
 describe("export audio mute / volume / fade", () => {
   it("silences muted video tracks", () => {
@@ -63,5 +66,69 @@ describe("export audio mute / volume / fade", () => {
     );
     expect(af).not.toContain("atempo=");
     expect(af).toContain("aresample=44100");
+  });
+});
+
+describe("collectExportAudioBeds", () => {
+  const project = {
+    tracks: [
+      { id: "track-video", kind: "video" },
+      { id: "track-audio", kind: "audio" },
+      { id: "track-audio-2", kind: "audio" },
+      { id: "track-audio-3", kind: "audio", muted: true },
+    ],
+    clips: [
+      {
+        id: "v1",
+        kind: "video",
+        trackId: "track-video",
+        assetId: "a-video",
+        startTime: 0,
+      },
+      {
+        id: "bed1",
+        kind: "audio",
+        trackId: "track-audio",
+        assetId: "a-bed1",
+        startTime: 2,
+      },
+      {
+        id: "detached",
+        kind: "audio",
+        trackId: "track-audio-2",
+        assetId: "a-video",
+        startTime: 0,
+        effects: { volume: 1 },
+      },
+      {
+        id: "muted-lane",
+        kind: "audio",
+        trackId: "track-audio-3",
+        assetId: "a-muted",
+        startTime: 0,
+      },
+      {
+        id: "silent-bed",
+        kind: "audio",
+        trackId: "track-audio",
+        assetId: "a-silent",
+        startTime: 1,
+        effects: { volume: 0 },
+      },
+    ],
+  };
+
+  it("includes detached beds on Audio 2+, not only the first Audio lane", () => {
+    expect(collectExportAudioBeds(project).map((c) => c.id)).toEqual([
+      "detached",
+      "bed1",
+    ]);
+  });
+
+  it("skips muted lanes and near-zero volume beds", () => {
+    const ids = collectExportAudioBeds(project).map((c) => c.id);
+    expect(ids).not.toContain("muted-lane");
+    expect(ids).not.toContain("silent-bed");
+    expect(ids).not.toContain("v1");
   });
 });
