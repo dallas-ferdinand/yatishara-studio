@@ -66,6 +66,9 @@ type RenderMessage = {
   requestId: number;
   frameA?: VideoFrame;
   frameB?: VideoFrame;
+  /** Same key as last upload → keep GPU texture (PNG stills / paused scrub). */
+  textureKeyA?: string;
+  textureKeyB?: string;
   transformA?: TransformTuple;
   transformB?: TransformTuple;
   /** Per-clip picture opacity (edge fade in/out). Defaults to 1. */
@@ -301,6 +304,10 @@ let textureA: WebGLTexture | null = null;
 let textureB: WebGLTexture | null = null;
 let textureTextUnder: WebGLTexture | null = null;
 let textureTextOver: WebGLTexture | null = null;
+let uploadedAKey: string | null = null;
+let uploadedBKey: string | null = null;
+let lastASize: [number, number] = [1, 1];
+let lastBSize: [number, number] = [1, 1];
 let textCanvas: OffscreenCanvas | null = null;
 let lastTextsUnder: RenderMessage["textsUnder"] = [];
 let lastTextsOver: RenderMessage["textsOver"] = [];
@@ -388,10 +395,21 @@ function upload(
   texture: WebGLTexture,
   unit: number,
   frame?: VideoFrame,
-): void {
-  if (!frame) return;
+  cacheKey?: string,
+  slot: "a" | "b" = "a",
+): boolean {
+  if (!frame) {
+    if (slot === "a") uploadedAKey = null;
+    else uploadedBKey = null;
+    return false;
+  }
   context.activeTexture(unit);
   context.bindTexture(context.TEXTURE_2D, texture);
+  const prev = slot === "a" ? uploadedAKey : uploadedBKey;
+  if (cacheKey && cacheKey === prev) {
+    // Texture already holds these pixels — skip UNPACK_PREMULTIPLY + texImage2D.
+    return true;
+  }
   context.pixelStorei(context.UNPACK_FLIP_Y_WEBGL, true);
   // Premultiply on upload so LINEAR filter + source-over don't fringe/glow PNGs.
   context.pixelStorei(context.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
@@ -403,6 +421,14 @@ function upload(
     context.UNSIGNED_BYTE,
     frame,
   );
+  if (slot === "a") {
+    uploadedAKey = cacheKey ?? null;
+    lastASize = [frame.displayWidth, frame.displayHeight];
+  } else {
+    uploadedBKey = cacheKey ?? null;
+    lastBSize = [frame.displayWidth, frame.displayHeight];
+  }
+  return true;
 }
 
 function uniform(name: string): WebGLUniformLocation | null {
@@ -723,15 +749,23 @@ function render(message: RenderMessage): void {
   const a = message.frameA;
   const b = message.frameB;
   try {
-    upload(gl, textureA, gl.TEXTURE0, a);
-    upload(gl, textureB, gl.TEXTURE1, b);
+    const hasA = upload(gl, textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
+    const hasB = upload(gl, textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
     lastTextsUnder = message.textsUnder;
     lastTextsOver = message.textsOver;
     uploadTextLayer(textureTextUnder, gl.TEXTURE2, lastTextsUnder);
     uploadTextLayer(textureTextOver, gl.TEXTURE3, lastTextsOver);
     gl.useProgram(program);
-    gl.uniform2f(uniform("u_aSize"), a?.displayWidth ?? 1, a?.displayHeight ?? 1);
-    gl.uniform2f(uniform("u_bSize"), b?.displayWidth ?? 1, b?.displayHeight ?? 1);
+    gl.uniform2f(
+      uniform("u_aSize"),
+      hasA ? (a?.displayWidth ?? lastASize[0]) : 1,
+      hasA ? (a?.displayHeight ?? lastASize[1]) : 1,
+    );
+    gl.uniform2f(
+      uniform("u_bSize"),
+      hasB ? (b?.displayWidth ?? lastBSize[0]) : 1,
+      hasB ? (b?.displayHeight ?? lastBSize[1]) : 1,
+    );
     gl.uniform2f(uniform("u_canvasSize"), canvas.width, canvas.height);
     const transformA = message.transformA ?? [1, 0, 0, 0];
     const transformB = message.transformB ?? [1, 0, 0, 0];
@@ -759,8 +793,8 @@ function render(message: RenderMessage): void {
       Number.isFinite(message.opacityB) ? Number(message.opacityB) : 1,
     );
     gl.uniform1i(uniform("u_effect"), transitionShaderIdFor(message.transition));
-    gl.uniform1i(uniform("u_hasA"), a ? 1 : 0);
-    gl.uniform1i(uniform("u_hasB"), b ? 1 : 0);
+    gl.uniform1i(uniform("u_hasA"), hasA ? 1 : 0);
+    gl.uniform1i(uniform("u_hasB"), hasB ? 1 : 0);
     gl.uniform4fv(uniform("u_background"), message.background);
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -844,6 +878,8 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     } else if (message.type === "render") {
       render(message);
     } else if (message.type === "dispose") {
+      uploadedAKey = null;
+      uploadedBKey = null;
       gl?.getExtension("WEBGL_lose_context")?.loseContext();
       close();
     }

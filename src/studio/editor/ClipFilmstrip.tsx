@@ -53,11 +53,25 @@ export function ClipFilmstrip({ media, label, widthPx, trimIn = 0, trimOut = 4 }
       };
     }
 
-    // Images / CDN thumbs: one paint, never swap to decoded frames.
+    // Images: downscale once for the strip — never CSS-paint the full PNG.
+    if (media.kind === "image") {
+      void resolveClipFilmstrip(media, {
+        trimIn,
+        trimOut,
+        count: 1,
+      }).then((result) => {
+        if (cancelled) return;
+        setFrames(result.frames ?? []);
+        setReady(true);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // CDN video thumbs: one paint when already an image URL.
     const instantThumb =
-      (media.thumbnailUrl && isImageThumbUrl(media.thumbnailUrl) && media.thumbnailUrl) ||
-      (media.kind === "image" && (media.thumbnailUrl || media.url)) ||
-      null;
+      (media.thumbnailUrl && isImageThumbUrl(media.thumbnailUrl) && media.thumbnailUrl) || null;
     if (instantThumb && media.kind !== "video") {
       setFrames([instantThumb]);
       setReady(true);

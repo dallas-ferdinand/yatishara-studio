@@ -26,6 +26,7 @@ import { playbackEndTime } from "../editorState";
 import {
   DEFAULT_PREVIEW_LOAD_QUALITY,
   playbackUrlForMedia,
+  previewImageMaxEdge,
 } from "../previewLoadQuality";
 import { previewTransitionWhilePlaying } from "./preview-transition-play";
 
@@ -186,6 +187,8 @@ type Prepared = {
   generation: number;
   frameA?: VideoFrame;
   frameB?: VideoFrame;
+  textureKeyA?: string;
+  textureKeyB?: string;
 };
 
 class EngineConsumer implements FrameConsumer {
@@ -255,16 +258,22 @@ class EngineConsumer implements FrameConsumer {
         const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
         if (!media || !url) return null;
         if (media.kind === "image") {
-          const frame = await this.imageFrame(assetId, url);
+          const frame = await this.imageFrame(
+            assetId,
+            url,
+            this.previewLoadQualityRef.current,
+          );
           return {
             assetId,
             sourceTime: sample.sourceTime,
             generation,
+            // Still cache key — compositor skips tex upload when unchanged.
+            textureKey: `image:${assetId}`,
             frame: frame.clone(),
           };
         }
         try {
-          return await this.decoder.requestFrame(
+          const decoded = await this.decoder.requestFrame(
             assetId,
             url,
             sample.sourceTime,
@@ -279,6 +288,12 @@ class EngineConsumer implements FrameConsumer {
               soft: playing && index > 0,
             },
           );
+          if (!decoded) return null;
+          return {
+            ...decoded,
+            // Same sample → skip compositor re-upload (big for scrub stickiness).
+            textureKey: `video:${assetId}:${sample.sourceTime.toFixed(3)}`,
+          };
         } catch {
           // Skip broken/slow samples — underrun/buffer; never throw into a
           // red "Frame decode timeout." overlay.
@@ -331,6 +346,8 @@ class EngineConsumer implements FrameConsumer {
       generation,
       frameA,
       frameB,
+      textureKeyA: valid[0]?.textureKey,
+      textureKeyB: valid[1]?.textureKey,
     };
 
     // Pre-roll an upcoming transition partner from MP4 sample offsets.
@@ -393,6 +410,8 @@ class EngineConsumer implements FrameConsumer {
     await this.compositor.render({
       frameA: prepared.frameA,
       frameB: prepared.frameB,
+      textureKeyA: prepared.textureKeyA,
+      textureKeyB: prepared.textureKeyB,
       transformA: transformTuple(sampleA?.clip.clip.effects),
       transformB: transformTuple(sampleB?.clip.clip.effects),
       opacityA: opacityFor(sampleA),
@@ -430,16 +449,27 @@ class EngineConsumer implements FrameConsumer {
 
   dispose(): void {
     this.closePrepared();
+    this.clearImageFrames();
+  }
+
+  /** Drop cached stills when preview quality / signed URLs change. */
+  clearImageFrames(): void {
     for (const frame of this.imageFrames.values()) frame.close();
     this.imageFrames.clear();
     this.imageLoads.clear();
   }
 
-  private imageFrame(assetId: string, url: string): Promise<VideoFrame> {
-    const cached = this.imageFrames.get(assetId);
+  private imageFrame(
+    assetId: string,
+    url: string,
+    quality: number,
+  ): Promise<VideoFrame> {
+    const cacheKey = `${assetId}@${previewImageMaxEdge(quality)}:${url}`;
+    const cached = this.imageFrames.get(cacheKey);
     if (cached) return Promise.resolve(cached);
-    const pending = this.imageLoads.get(assetId);
+    const pending = this.imageLoads.get(cacheKey);
     if (pending) return pending;
+    const maxEdge = previewImageMaxEdge(quality);
     const request = fetch(url, { credentials: "omit" })
       .then((response) => {
         if (!response.ok) throw new Error(`Image preview failed (${response.status}).`);
@@ -450,20 +480,36 @@ class EngineConsumer implements FrameConsumer {
           // Decode straight; upload path premultiplies for GPU filter + over.
           premultiplyAlpha: "none",
           colorSpaceConversion: "default",
+        }).then(async (full) => {
+          const scale = Math.min(1, maxEdge / Math.max(full.width, full.height, 1));
+          if (scale >= 0.999) return full;
+          try {
+            const scaled = await createImageBitmap(full, {
+              resizeWidth: Math.max(1, Math.round(full.width * scale)),
+              resizeHeight: Math.max(1, Math.round(full.height * scale)),
+              // Medium is much cheaper than high for multi‑megapixel PNGs.
+              resizeQuality: "medium",
+              premultiplyAlpha: "none",
+            });
+            full.close();
+            return scaled;
+          } catch {
+            return full;
+          }
         }),
       )
       .then((bitmap) => {
         const frame = new VideoFrame(bitmap, { timestamp: 0 });
         bitmap.close();
-        this.imageFrames.set(assetId, frame);
-        this.imageLoads.delete(assetId);
+        this.imageFrames.set(cacheKey, frame);
+        this.imageLoads.delete(cacheKey);
         return frame;
       })
       .catch((error) => {
-        this.imageLoads.delete(assetId);
+        this.imageLoads.delete(cacheKey);
         throw error;
       });
-    this.imageLoads.set(assetId, request);
+    this.imageLoads.set(cacheKey, request);
     return request;
   }
 
@@ -996,6 +1042,7 @@ export function usePlaybackEngine(args: {
     const time = runtime.clock.currentTime();
     const slice = sliceAt(runtime.plan, time);
     runtime.decoder.stopPlayback();
+    runtime.consumer.clearImageFrames();
     if (playingRef.current) {
       startDecodePumps(
         runtime.decoder,

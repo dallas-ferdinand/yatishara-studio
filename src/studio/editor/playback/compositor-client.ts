@@ -72,6 +72,9 @@ export class CompositorClient {
   async render(args: {
     frameA?: VideoFrame;
     frameB?: VideoFrame;
+    /** Stable key → skip GPU re-upload when pixels unchanged (PNG stills). */
+    textureKeyA?: string;
+    textureKeyB?: string;
     transformA?: [number, number, number, number];
     transformB?: [number, number, number, number];
     opacityA?: number;
@@ -176,6 +179,8 @@ export class CompositorClient {
           requestId,
           frameA,
           frameB,
+          textureKeyA: args.textureKeyA,
+          textureKeyB: args.textureKeyB,
           transformA: args.transformA ?? [1, 0, 0, 0],
           transformB: args.transformB ?? [1, 0, 0, 0],
           opacityA: args.opacityA ?? 1,

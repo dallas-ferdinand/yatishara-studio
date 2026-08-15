@@ -8,6 +8,8 @@ export type DecodedFrame = {
   sourceTime: number;
   generation: number;
   frame: VideoFrame;
+  /** When set, compositor can keep the GPU texture across paints (stills). */
+  textureKey?: string;
 };
 
 export type MediaDecoderMetrics = {

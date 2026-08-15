@@ -35,6 +35,11 @@ export function prefersHighPreviewProxy(quality: number): boolean {
   return quality >= 80;
 }
 
+/** Longest edge for stills in the live preview compositor (keeps PNG alpha). */
+export function previewImageMaxEdge(quality: number = DEFAULT_PREVIEW_LOAD_QUALITY): number {
+  return prefersHighPreviewProxy(quality) ? 1920 : 1280;
+}
+
 /** Pick the CDN URL the editor preview should decode for this media. */
 export function playbackUrlForMedia(
   media: Pick<EditorMediaItem, "kind" | "url" | "proxyUrl" | "proxyHighUrl"> | null | undefined,
@@ -48,6 +53,7 @@ export function playbackUrlForMedia(
     return media.proxyUrl ?? media.proxyHighUrl ?? media.url;
   }
   // Prefer original bytes for images so PNG alpha survives (no WebP thumb proxy).
+  // Decode path downscales to previewImageMaxEdge — do not pull filmstrip thumbs here.
   if (media.kind === "image") {
     return media.url ?? media.proxyUrl;
   }

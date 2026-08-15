@@ -207,14 +207,71 @@ export function resolveClipPoster(media) {
   return Promise.resolve(null);
 }
 
+/** Timeline strip: never paint a multi‑MB original PNG as a CSS background. */
+const FILMSTRIP_IMAGE_MAX_EDGE = 320;
+const imageFilmstripCache = new Map();
+
+export async function resolveImageFilmstripSrc(media) {
+  if (!media) return null;
+  const optimizedThumb =
+    (media.thumbnailUrl && isImageThumbUrl(media.thumbnailUrl) && media.thumbnailUrl) || null;
+  // Bunny/optimizer thumbs are already small — use as-is.
+  if (optimizedThumb && /[?&](width|blur)=/i.test(optimizedThumb)) {
+    return optimizedThumb;
+  }
+  if (optimizedThumb && optimizedThumb !== media.url) {
+    return optimizedThumb;
+  }
+  const url = optimizedThumb || media.url || null;
+  if (!url) return null;
+  const cacheKey = `${media.assetId || url}:${FILMSTRIP_IMAGE_MAX_EDGE}`;
+  const hit = imageFilmstripCache.get(cacheKey);
+  if (hit) return hit;
+  try {
+    const response = await fetch(url, { credentials: "omit", mode: "cors" });
+    if (!response.ok) return url;
+    const blob = await response.blob();
+    const full = await createImageBitmap(blob, { premultiplyAlpha: "none" });
+    const scale = Math.min(1, FILMSTRIP_IMAGE_MAX_EDGE / Math.max(full.width, full.height, 1));
+    let bitmap = full;
+    if (scale < 0.999) {
+      bitmap = await createImageBitmap(full, {
+        resizeWidth: Math.max(1, Math.round(full.width * scale)),
+        resizeHeight: Math.max(1, Math.round(full.height * scale)),
+        resizeQuality: "low",
+        premultiplyAlpha: "none",
+      });
+      full.close();
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return url;
+    }
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const out = await new Promise((resolve) => {
+      canvas.toBlob(
+        (b) => resolve(b ? URL.createObjectURL(b) : url),
+        "image/webp",
+        0.72,
+      );
+    });
+    imageFilmstripCache.set(cacheKey, out);
+    return out;
+  } catch {
+    return url;
+  }
+}
+
 export async function resolveClipFilmstrip(media, { trimIn, trimOut, count }) {
   if (!media) return { frames: [], fallback: null };
 
   if (media.kind === "image") {
-    const src =
-      (media.thumbnailUrl && isImageThumbUrl(media.thumbnailUrl) && media.thumbnailUrl) ||
-      media.url ||
-      null;
+    const src = await resolveImageFilmstripSrc(media);
     return { frames: src ? [src] : [], fallback: src };
   }
 
