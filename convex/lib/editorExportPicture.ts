@@ -49,3 +49,15 @@ export function clipSourceInputArgs(args: {
   }
   return ["-ss", String(args.trimIn), "-t", String(args.sourceLen), "-i", args.sourcePath];
 }
+
+/** Even-pixel contain so yuv420p never dies on odd scaled sizes (common on generated plates). */
+export function safeContainVf(width: number, height: number, fps = 30): string {
+  const w = Math.max(2, width - (width % 2));
+  const h = Math.max(2, height - (height % 2));
+  return (
+    `scale=${w}:${h}:force_original_aspect_ratio=decrease,` +
+    `scale=trunc(iw/2)*2:trunc(ih/2)*2,` +
+    `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:black,` +
+    `fps=${fps},setsar=1,format=yuv420p`
+  );
+}

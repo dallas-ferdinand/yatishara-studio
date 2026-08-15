@@ -24,6 +24,7 @@ import {
 import {
   clipSourceInputArgs,
   isStillExportSource,
+  safeContainVf,
 } from "./lib/editorExportPicture";
 import {
   buildNaturalSpeedAudioFilters,
@@ -240,6 +241,7 @@ function normalizeVf(
   const panPxY = Math.round(panY * height);
   const filters = [
     `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease`,
+    "scale=trunc(iw/2)*2:trunc(ih/2)*2",
   ];
   if (Math.abs(rotation) > 0.05) {
     // FFmpeg positive angles are CCW; editor/CSS positive is CW.
@@ -576,35 +578,62 @@ async function renderClipSegment(args: {
       ]);
     }
   } catch (error) {
-    if (!isStill && picture.present && sourceDurationSec <= 1) {
-      try {
-        await runFfmpeg([
-          "-y",
-          ...clipSourceInputArgs({
-            sourcePath: args.sourcePath,
-            trimIn: 0,
-            sourceLen,
-            identitySpeed: true,
-            isStill: true,
-            fps: EXPORT_FPS,
-          }),
-          "-f",
-          "lavfi",
-          "-i",
-          "anullsrc=channel_layout=stereo:sample_rate=44100",
-          "-filter_complex",
-          `[0:v]${videoFilter}[v]`,
-          "-map",
-          "[v]",
-          "-map",
-          "1:a",
-          "-shortest",
-          ...encodeArgs,
-        ]);
+    const safeVf = safeContainVf(args.width, args.height, EXPORT_FPS);
+    const stillInput = clipSourceInputArgs({
+      sourcePath: args.sourcePath,
+      trimIn: 0,
+      sourceLen,
+      identitySpeed: true,
+      isStill: true,
+      fps: EXPORT_FPS,
+    });
+    const retrySilent = async (inputArgs: string[], vf: string) => {
+      await runFfmpeg([
+        "-y",
+        "-fflags",
+        "+genpts+discardcorrupt",
+        ...inputArgs,
+        "-f",
+        "lavfi",
+        "-i",
+        "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-filter_complex",
+        `[0:v]${vf}[v]`,
+        "-map",
+        "[v]",
+        "-map",
+        "1:a",
+        "-shortest",
+        ...encodeArgs,
+      ]);
+    };
+    try {
+      if (picture.present) {
+        await retrySilent(inputTrimArgs, safeVf);
         return;
-      } catch {
-        /* fall through to the original error */
       }
+    } catch {
+      /* next fallback */
+    }
+    try {
+      if (picture.present) {
+        await retrySilent(stillInput, safeVf);
+        return;
+      }
+    } catch {
+      /* next fallback */
+    }
+    try {
+      await makeBlackSegment(
+        args.dest,
+        args.duration,
+        args.width,
+        args.height,
+        effects === "null" ? [] : effects.split(",").filter((part) => part && part !== "null"),
+      );
+      return;
+    } catch {
+      /* give up */
     }
     const fallback = `Could not render clip "${args.clip.label || "untitled"}".`;
     const detail = ffmpegFailMessage(error, "");

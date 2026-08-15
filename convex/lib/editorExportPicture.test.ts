@@ -3,6 +3,7 @@ import {
   clipSourceInputArgs,
   isStillExportSource,
   isStillImageCodec,
+  safeContainVf,
 } from "./editorExportPicture";
 
 describe("isStillImageCodec", () => {
@@ -59,5 +60,12 @@ describe("clipSourceInputArgs", () => {
         isStill: false,
       }),
     ).toEqual(["-ss", "1.25", "-i", "/tmp/clip.bin"]);
+  });
+});
+
+describe("safeContainVf", () => {
+  it("forces even dimensions for yuv420p", () => {
+    expect(safeContainVf(1920, 1080)).toContain("scale=trunc(iw/2)*2:trunc(ih/2)*2");
+    expect(safeContainVf(1920, 1080)).toContain("pad=1920:1080");
   });
 });
