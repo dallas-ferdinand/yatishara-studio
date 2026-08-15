@@ -17201,12 +17201,18 @@ export function StudioShell({
           display: flex;
           align-self: stretch;
           min-height: var(--studio-composer-min-height);
-          height: auto;
-          max-height: calc(
+          height: calc(
             var(--studio-composer-box-max-height, min(42vh, 280px))
             + var(--studio-composer-rail-reserve, 0px)
           );
-          flex: 0 1 auto;
+          max-height: min(
+            72vh,
+            calc(
+              var(--studio-composer-box-max-height, min(42vh, 280px))
+              + var(--studio-composer-rail-reserve, 0px)
+            )
+          );
+          flex: 0 0 auto;
           flex-direction: column;
           min-width: 0;
           border: 0 !important;
@@ -17792,11 +17798,11 @@ export function StudioShell({
           --studio-composer-chip-media-size: 14px;
           --studio-composer-chip-icon-size: 7px;
           --studio-composer-chip-lift: 0px;
-          flex: 0 1 auto;
-          align-self: auto;
+          flex: 1 1 auto;
+          align-self: stretch;
           width: 100%;
           height: auto;
-          min-height: var(--studio-composer-line-size) !important;
+          min-height: 0 !important;
           max-height: 100%;
           overflow-x: hidden;
           overflow-y: auto;
@@ -17872,7 +17878,7 @@ export function StudioShell({
           align-items: stretch;
           margin: 0 8px 8px;
           padding: 8px 14px 6px 10px;
-          overflow: auto;
+          overflow: hidden;
           border-radius: 12px;
           background: var(--studio-composer-glass-strong, color-mix(in srgb, var(--mos-bg, #05080f) 28%, transparent));
         }
@@ -27696,10 +27702,10 @@ function StudioComposer({
   useEffect(() => {
     const root = composerShellRef.current;
     if (!root) return;
-    if (!isMobile && composerMaxHeight) {
+    if (!isMobile) {
       root.style.setProperty(
         "--studio-composer-box-max-height",
-        `${composerMaxHeight}px`,
+        `${composerMaxHeight ?? 280}px`,
       );
     } else {
       root.style.removeProperty("--studio-composer-box-max-height");
