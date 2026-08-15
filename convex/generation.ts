@@ -96,7 +96,7 @@ function parseHistoryReferenceLine(line: string) {
   const trimmed = String(line ?? "").trim();
   const match = trimmed.match(/^-\s*@(.+?)(?:\s*\|\s*(.+))?$/);
   if (!match) return null;
-  const label = match[1].trim();
+  const label = match[1].trim().replace(/^@/, "").replace(/,+$/g, "");
   if (!label || label === "[object Object]") return null;
   const metaParts = String(match[2] ?? "")
     .split("|")

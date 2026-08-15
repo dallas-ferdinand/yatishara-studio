@@ -7,15 +7,21 @@ export type MentionCandidate = {
   mediaKind?: "image" | "video" | "audio";
 };
 
+/** Commas after `@chip,` are separators, not part of the tag. */
+export function stripTrailingAtCommas(value: string): string {
+  return String(value ?? "").replace(/,+$/g, "");
+}
+
 /** `@query` at end of text before caret. Ignores email-style `name@host`. */
 export function composerAtQuery(
   textBeforeCaret: string,
 ): { query: string; from: number } | null {
   const text = String(textBeforeCaret ?? "");
-  const match = text.match(/@([A-Za-z0-9._-]*)$/);
+  const trimmed = stripTrailingAtCommas(text);
+  const match = trimmed.match(/@([A-Za-z0-9._-]*)$/);
   if (!match || match.index == null) return null;
   const from = match.index;
-  if (from > 0 && /[A-Za-z0-9]/.test(text.charAt(from - 1))) return null;
+  if (from > 0 && /[A-Za-z0-9]/.test(trimmed.charAt(from - 1))) return null;
   return { query: match[1] ?? "", from };
 }
 

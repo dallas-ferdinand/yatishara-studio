@@ -1241,7 +1241,7 @@ export function StudioAgentPane({
                   const text = plainTextFromClipboard(event.clipboardData);
                   if (!text) return;
                   ensureSelectionInEditor(editor);
-                  if (looksLikePromptScript(text)) {
+                  if (looksLikePromptScript(text) || /@[A-Za-z0-9._-]{2,}/.test(text)) {
                     void (async () => {
                       try {
                         const hydrated = await hydrateAgentPromptPaste(text);

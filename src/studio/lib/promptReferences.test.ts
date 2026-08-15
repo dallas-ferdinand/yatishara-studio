@@ -99,6 +99,31 @@ References:
     expect(hydrated.draftWithMarkers).not.toContain("@product-shot");
   });
 
+  it("hydrates @tag, with a trailing comma", () => {
+    const md = `@product-shot, Hypermotion ad on a table.`;
+    const hydrated = hydrateComposerFromText(md, [], [
+      {
+        _id: "el1",
+        name: "product-shot",
+        type: "prop",
+        thumbnailUrl: "https://cdn/t",
+      },
+    ]);
+    expect(hydrated.attachments).toHaveLength(1);
+    expect(hydrated.attachments[0]?.label).toBe("product-shot");
+    expect(hydrated.draftWithMarkers).toBe("\uFFFC, Hypermotion ad on a table.");
+  });
+
+  it("parses reference lines that trail a comma after the @tag", () => {
+    const md = `Shot.
+
+References:
+- @bottle,
+`;
+    const parsed = parsePromptDocument(md);
+    expect(parsed.references[0]?.label).toBe("bottle");
+  });
+
   it("places a mid-prompt @tag chip where the tag was, not at the start", () => {
     const md = `A woman holds @bottle in the kitchen.`;
     const hydrated = hydrateComposerFromText(md, [], [

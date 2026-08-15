@@ -144,7 +144,7 @@ export function parseReferenceLine(line: string): PromptReference | null {
 
   const match = trimmed.match(/^-\s*@(.+?)(?:\s*\|\s*(.+))?$/);
   if (!match) return null;
-  const label = match[1].trim().replace(/^@/, "");
+  const label = match[1].trim().replace(/^@/, "").replace(/,+$/g, "");
   const meta = parseReferenceMeta(match[2] ?? "");
   return { label, ...meta };
 }
@@ -474,7 +474,7 @@ export function ensureAtMentionsInBody(
   let out = String(body ?? "").trim();
   const missing: string[] = [];
   for (const ref of references) {
-    const label = String(ref.label || "").trim().replace(/^@/, "");
+    const label = String(ref.label || "").trim().replace(/^@/, "").replace(/,+$/g, "");
     if (!label || /[^a-zA-Z0-9._-]/.test(label)) continue;
     const re = new RegExp(`@${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
     if (!re.test(out)) missing.push(`@${label}`);

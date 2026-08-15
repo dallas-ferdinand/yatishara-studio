@@ -9,6 +9,14 @@ describe("composerMentions", () => {
     });
     expect(composerAtQuery("@")).toEqual({ query: "", from: 0 });
     expect(composerAtQuery("email dallas@host")).toBeNull();
+    expect(composerAtQuery("hold @chip,")).toEqual({
+      query: "chip",
+      from: 5,
+    });
+    expect(composerAtQuery("@product-shot,")).toEqual({
+      query: "product-shot",
+      from: 0,
+    });
   });
 
   it("filters candidates by tag", () => {

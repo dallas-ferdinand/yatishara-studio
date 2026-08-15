@@ -28707,6 +28707,18 @@ function StudioComposer({
                 pickMentionItem(mentionHits[0]);
                 return;
               }
+              if (event.key === ",") {
+                const q = String(mentionQuery.query ?? "").toLowerCase();
+                const exact = mentionHits.find(
+                  (item) => String(item.tag ?? "").toLowerCase() === q,
+                );
+                if (exact && q.length >= 2) {
+                  event.preventDefault();
+                  pickMentionItem(exact);
+                  insertPlainTextAtSelection(",");
+                  return;
+                }
+              }
             }
             if (
               (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
@@ -31186,8 +31198,10 @@ function deleteComposerAtQuery(editor, atQuery) {
   }
   if (node.nodeType !== Node.TEXT_NODE) return;
   const before = (node.nodeValue ?? "").slice(0, offset);
-  if (!before.endsWith(needle)) return;
-  const start = offset - needle.length;
+  const commaTrail = before.match(/,+$/)?.[0] ?? "";
+  const core = commaTrail ? before.slice(0, before.length - commaTrail.length) : before;
+  if (!core.endsWith(needle)) return;
+  const start = offset - commaTrail.length - needle.length;
   node.deleteData(start, needle.length);
   const next = document.createRange();
   next.setStart(node, start);
