@@ -8,7 +8,7 @@ import { detectActionLane, agentDescription, STARTER_TOOL_NAMES } from "../agent
 import { compactObservation, maskOlderObservations, observationByteBudget } from "../agentCompact.mjs";
 import { validateHotToolArgs, HOT_SCHEMAS } from "../agentSchemas.mjs";
 import { listSkills, getSkill, matchSkills } from "../agentSkills.mjs";
-import { verifyHintFor, autoVerifyTool, autoVerifyArgs } from "../agentVerify.mjs";
+import { verifyHintFor, autoVerifyTool, autoVerifyArgs, isVerifyFailure } from "../agentVerify.mjs";
 import { createPlanStore } from "../agentPlan.mjs";
 import { createTrajectory } from "../agentTrajectory.mjs";
 
@@ -199,6 +199,48 @@ test("compact observations shrink fat payloads", () => {
   assert.equal(compact.data.assetId, "abc");
   assert.ok(!JSON.stringify(compact).includes("base64"));
   assert.ok(compact.verifyHint === undefined || typeof compact.verifyHint === "string");
+});
+
+test("get_document compact keeps nested contentMarkdown so create verify can pass", () => {
+  const compact = compactObservation("studio_get_document", {
+    ok: true,
+    data: {
+      document: {
+        id: "doc_abc",
+        title: "Script — Flyer",
+        folderId: "fold_1",
+        contentMarkdown: "```text\nA sealed flyer prompt body that is long enough.\n```",
+      },
+    },
+  });
+  assert.equal(compact.ok, true);
+  assert.equal(compact.data.documentId, "doc_abc");
+  assert.match(String(compact.data.contentMarkdown), /sealed flyer/);
+  assert.equal(
+    isVerifyFailure("studio_get_document", compact, {}, { ok: true, status: 201 }),
+    false,
+  );
+});
+
+test("isVerifyFailure does not fail when compacted get dropped the body but kept the id", () => {
+  assert.equal(
+    isVerifyFailure(
+      "studio_get_document",
+      { ok: true, data: { documentId: "doc_abc", title: "Script — Flyer" } },
+      {},
+      { ok: true, status: 201 },
+    ),
+    false,
+  );
+  assert.equal(
+    isVerifyFailure(
+      "studio_get_document",
+      { ok: true, data: { documentId: "doc_abc", contentMarkdown: "" } },
+      {},
+      { ok: true },
+    ),
+    true,
+  );
 });
 
 test("compactObservation keeps document id from nested document payload", () => {

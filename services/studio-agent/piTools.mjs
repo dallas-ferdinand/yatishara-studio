@@ -964,14 +964,32 @@ export function createStudioPiTools(opts) {
               );
               verified = compactObservation(autoName, vRes);
               if (isVerifyFailure(autoName, verified, invokeArgs, result)) {
-                ok = false;
-                verified = {
-                  ...verified,
-                  ok: false,
-                  error:
-                    verified?.error ||
-                    `verify_failed:${autoName} — do not claim success; repair args and retry once`,
-                };
+                const writeLanded =
+                  toolName === "studio_create_document" &&
+                  result?.ok !== false &&
+                  (result?.status === 201 ||
+                    Boolean(result?.data?.document) ||
+                    Boolean(result?.data?.documentId) ||
+                    Boolean(result?.data?.id) ||
+                    Boolean(result?.data?._id));
+                if (writeLanded) {
+                  // Create already persisted. Do not flip the chip to failed or
+                  // the model recreates a second Script and bills the user twice.
+                  verified = {
+                    ...verified,
+                    warning:
+                      "Document created — keep this id. Do not studio_create_document again.",
+                  };
+                } else {
+                  ok = false;
+                  verified = {
+                    ...verified,
+                    ok: false,
+                    error:
+                      verified?.error ||
+                      `verify_failed:${autoName} — do not claim success; repair args and retry once`,
+                  };
+                }
               }
             } catch (error) {
               ok = false;

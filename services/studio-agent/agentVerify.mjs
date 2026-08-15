@@ -173,8 +173,16 @@ export function isVerifyFailure(verifyTool, verified, args, actResult) {
     return data.shared === false || data.isShared === false;
   }
   if (verifyTool === "studio_get_document") {
-    const body = String(data.contentMarkdown ?? data.content ?? "");
-    // Empty Script after create = fail hard.
+    const nested =
+      data.document && typeof data.document === "object" ? data.document : {};
+    const rawBody = data.contentMarkdown ?? data.content ?? nested.contentMarkdown ?? nested.content;
+    const body = String(rawBody ?? "");
+    const hasId = Boolean(
+      data.documentId || data.id || data._id || nested.id || nested._id,
+    );
+    // Compacted get_document used to drop contentMarkdown — missing body is
+    // not proof the Script is empty. Only fail when we can see an empty string.
+    if (rawBody == null && hasId) return false;
     if (!body.trim()) return true;
     return false;
   }

@@ -185,12 +185,14 @@ function flattenNestedPayload(toolName, data) {
       (typeof doc.id === "string" && doc.id) ||
       (typeof data.documentId === "string" && data.documentId) ||
       null;
+    const contentMarkdown = doc.contentMarkdown ?? next.contentMarkdown;
     next = {
       ...next,
       ...(id ? { id, _id: id, documentId: id } : {}),
       folderId: doc.folderId ?? next.folderId,
       title: doc.title ?? next.title,
       name: doc.title ?? next.name,
+      ...(contentMarkdown != null ? { contentMarkdown } : {}),
     };
   }
 
