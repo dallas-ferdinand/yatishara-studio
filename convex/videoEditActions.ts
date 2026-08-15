@@ -1,6 +1,7 @@
 "use node";
 
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,6 +34,14 @@ import {
   type ExportAudioFormat,
   type ExportResolution,
 } from "./lib/editorExport";
+import {
+  buildTextOverlayFilter,
+  collectExportTextClips,
+  ffmpegFailMessage,
+  isLegacySystemFont,
+  textFontFile,
+  type ExportTextClip,
+} from "./lib/editorExportText";
 import { clipAtPlayhead } from "./lib/editorProjectOps";
 
 const execFileAsync = promisify(execFile);
@@ -108,101 +117,58 @@ function clipDuration(clip: EditorClip): number {
   return timelineDurationSec(clip);
 }
 
-function escapeDrawtext(value: string): string {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/:/g, "\\:")
-    .replace(/'/g, "\\'")
-    .replace(/\n/g, " ");
-}
-
-function hexToFfmpegColor(hex?: string, alpha = 1): string {
-  const raw = (hex ?? "#ffffff").replace("#", "");
-  const a = Math.max(0, Math.min(1, alpha));
-  if (raw.length === 6) {
-    if (a >= 0.999) return `0x${raw}`;
-    const aa = Math.round(a * 255).toString(16).padStart(2, "0");
-    return `0x${raw}${aa}`;
-  }
-  return a >= 0.999 ? "white" : `white@${a.toFixed(3)}`;
-}
-
-function applyTextCase(text: string, mode?: TextClipContent["textCase"]): string {
-  if (mode === "upper") return text.toUpperCase();
-  if (mode === "lower") return text.toLowerCase();
-  if (mode === "title") {
-    return text.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
-  }
-  return text;
-}
-
-function isLegacySystemFont(family: string | undefined): boolean {
-  return (
-    !family ||
-    family === "system" ||
-    family === "sans" ||
-    family === "serif" ||
-    family === "mono" ||
-    family === "display"
-  );
-}
-
 function xfadeTransition(type: string): string {
   return ffmpegTransitionFor(type);
 }
 
-const DEJAVU_DIR = "/usr/share/fonts/truetype/dejavu";
-
-function textFontFile(content: TextClipContent | undefined): string | null {
-  const family = content?.fontFamily ?? "system";
-  const bold = Boolean(content?.bold) || family === "display";
-  const italic = Boolean(content?.italic);
-  if (family === "mono") {
-    if (bold && italic) return `${DEJAVU_DIR}/DejaVuSansMono-BoldOblique.ttf`;
-    if (bold) return `${DEJAVU_DIR}/DejaVuSansMono-Bold.ttf`;
-    if (italic) return `${DEJAVU_DIR}/DejaVuSansMono-Oblique.ttf`;
-    return `${DEJAVU_DIR}/DejaVuSansMono.ttf`;
+async function resolveExportFontFile(
+  content: ExportTextClip["text"],
+  fontCacheDir: string,
+): Promise<string | null> {
+  const family = content?.fontFamily;
+  if (!isLegacySystemFont(family) && family) {
+    const google = await resolveGoogleFontFile(family, Boolean(content?.bold), fontCacheDir);
+    if (google) return google;
   }
-  if (family === "serif") {
-    if (bold) return `${DEJAVU_DIR}/DejaVuSerif-Bold.ttf`;
-    return `${DEJAVU_DIR}/DejaVuSerif.ttf`;
-  }
-  // system / sans / display
-  if (bold) return `${DEJAVU_DIR}/DejaVuSans-Bold.ttf`;
-  return `${DEJAVU_DIR}/DejaVuSans.ttf`;
+  const bundled = textFontFile(content);
+  if (bundled && existsSync(bundled)) return bundled;
+  return await resolveGoogleFontFile(family || "Inter", Boolean(content?.bold), fontCacheDir);
 }
 
-function normalizeTextPose(effects: ClipEffects | undefined): {
-  scale: number;
-  x: number;
-  y: number;
-  rotation: number;
-} {
-  const hasPose =
-    Boolean(effects) &&
-    (effects?.x !== undefined ||
-      effects?.y !== undefined ||
-      effects?.scale !== undefined ||
-      effects?.rotation !== undefined);
-  if (!hasPose) {
-    return { scale: 1, x: 0, y: 0.32, rotation: 0 };
+async function buildTextOverlayParts(
+  textClips: ExportTextClip[],
+  segmentStart: number,
+  segmentDuration: number,
+  fontCacheDir: string,
+): Promise<string[]> {
+  const parts: string[] = [];
+  for (const [index, textClip] of textClips.entries()) {
+    const fontfile = await resolveExportFontFile(textClip.text, fontCacheDir);
+    const textFileName = join(
+      fontCacheDir,
+      `overlay-${textClip.id || index}-${segmentStart.toFixed(3)}.txt`,
+    );
+    const built = buildTextOverlayFilter({
+      clip: textClip,
+      segmentStart,
+      segmentDuration,
+      fontfile,
+      textFileName,
+    });
+    if (!built) continue;
+    await writeFile(textFileName, built.textFileBody, "utf8");
+    parts.push(built.filter);
   }
-  return {
-    scale: Math.min(4, Math.max(0.2, Number(effects?.scale) || 1)),
-    x: Math.min(1.5, Math.max(-1.5, Number(effects?.x) || 0)),
-    y: Math.min(1.5, Math.max(-1.5, Number(effects?.y) || 0)),
-    rotation: Number(effects?.rotation) || 0,
-  };
+  return parts;
 }
 
 async function buildSegmentVideoFilters(
   clip: EditorClip,
   duration: number,
-  textClips: EditorClip[],
+  textClips: ExportTextClip[],
   fontCacheDir: string,
 ): Promise<string> {
   const parts: string[] = [];
-  // Per-clip picture fades (independent of transitions between clips).
   const dur = Math.max(0.05, duration);
   let fadeIn = Math.max(0, Number(clip.effects?.fadeIn) || 0);
   let fadeOut = Math.max(0, Number(clip.effects?.fadeOut) || 0);
@@ -220,98 +186,7 @@ async function buildSegmentVideoFilters(
     const st = Math.max(0, dur - fadeOut);
     parts.push(`fade=t=out:st=${st.toFixed(3)}:d=${fadeOut.toFixed(3)}:curve=qsin`);
   }
-
-  const clipStart = clip.startTime;
-  const clipEnd = clip.startTime + duration;
-  for (const textClip of textClips) {
-    const rawText = textClip.text?.text?.trim();
-    if (!rawText) continue;
-    const textStart = textClip.startTime;
-    const textEnd = textClip.startTime + clipDuration(textClip);
-    if (textEnd <= clipStart || textStart >= clipEnd) continue;
-
-    const localStart = Math.max(0, textStart - clipStart);
-    const localEnd = Math.min(duration, textEnd - clipStart);
-    const content = textClip.text;
-    const text = applyTextCase(rawText, content?.textCase);
-    const pose = normalizeTextPose(textClip.effects);
-    const fontSize = Math.max(12, Math.min(600, Math.round((content?.fontSize ?? 42) * pose.scale)));
-    const styleAlpha = Math.max(0, Math.min(1, Number(content?.opacity) ?? 1));
-    const color = hexToFfmpegColor(content?.color, styleAlpha);
-    const align = content?.align ?? "center";
-    const vAlign = content?.verticalAlign ?? "middle";
-    const strokeWidth = Math.max(0, Math.round(Number(content?.strokeWidth) || 0));
-    const strokeColor = hexToFfmpegColor(content?.strokeColor ?? "#000000", styleAlpha);
-    let fontfile = textFontFile(content);
-    if (!isLegacySystemFont(content?.fontFamily) && content?.fontFamily) {
-      const google = await resolveGoogleFontFile(
-        content.fontFamily,
-        Boolean(content.bold),
-        fontCacheDir,
-      );
-      if (google) fontfile = google;
-    }
-    const anchorX = `w*(0.5+${pose.x.toFixed(4)})`;
-    const anchorY = `h*(0.5+${pose.y.toFixed(4)})`;
-    let xExpr =
-      align === "left"
-        ? anchorX
-        : align === "right"
-          ? `${anchorX}-text_w`
-          : `${anchorX}-text_w/2`;
-    const yExpr =
-      vAlign === "top"
-        ? anchorY
-        : vAlign === "bottom"
-          ? `${anchorY}-text_h`
-          : `${anchorY}-text_h/2`;
-    if (content?.flipX) {
-      xExpr =
-        align === "left"
-          ? `${anchorX}-text_w`
-          : align === "right"
-            ? anchorX
-            : `${anchorX}-text_w/2`;
-    }
-    const opts = [
-      `text='${escapeDrawtext(text)}'`,
-      `fontsize=${fontSize}`,
-      `fontcolor=${color}`,
-      `x=${xExpr}`,
-      `y=${yExpr}`,
-      `enable='between(t\,${localStart.toFixed(3)}\,${localEnd.toFixed(3)})'`,
-    ];
-    if (fontfile) {
-      opts.push(`fontfile='${fontfile.replace(/'/g, "\\'")}'`);
-    }
-    if (strokeWidth > 0) {
-      opts.push(`borderw=${strokeWidth}`);
-      opts.push(`bordercolor=${strokeColor}`);
-    }
-    if (content?.backgroundColor) {
-      const pad = Math.max(0, Math.round(Number(content.backgroundPadding) || 8));
-      opts.push("box=1");
-      opts.push(`boxcolor=${hexToFfmpegColor(content.backgroundColor, styleAlpha)}`);
-      opts.push(`boxborderw=${pad}`);
-    }
-    if (content?.shadowColor) {
-      opts.push(`shadowcolor=${hexToFfmpegColor(content.shadowColor, styleAlpha)}`);
-      opts.push(`shadowx=${Math.round(Number(content.shadowOffsetX) || 0)}`);
-      opts.push(`shadowy=${Math.round(Number(content.shadowOffsetY) || 2)}`);
-    } else if (content?.glow) {
-      opts.push(
-        `shadowcolor=${hexToFfmpegColor(content.glowColor ?? "#ffffff", styleAlpha * 0.7)}`,
-      );
-      opts.push("shadowx=0");
-      opts.push("shadowy=0");
-    }
-    if (Math.abs(pose.rotation) > 0.05) {
-      const rad = (-pose.rotation * Math.PI) / 180;
-      opts.push(`angle=${rad.toFixed(5)}`);
-    }
-    parts.push(`drawtext=${opts.join(":")}`);
-  }
-
+  parts.push(...(await buildTextOverlayParts(textClips, clip.startTime, duration, fontCacheDir)));
   return parts.length ? parts.join(",") : "null";
 }
 
@@ -396,40 +271,46 @@ async function makeBlackSegment(
   duration: number,
   width: number,
   height: number,
+  textParts: string[] = [],
 ): Promise<void> {
-  await execFileAsync("ffmpeg", [
-    "-y",
-    "-f",
-    "lavfi",
-    "-i",
-    `color=c=black:s=${width}x${height}:r=${EXPORT_FPS}`,
-    "-f",
-    "lavfi",
-    "-i",
-    "anullsrc=channel_layout=stereo:sample_rate=44100",
-    "-t",
-    String(Math.max(0.05, duration)),
-    "-vf",
-    "setsar=1,format=yuv420p",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "fast",
-    "-crf",
-    "22",
-    "-pix_fmt",
-    "yuv420p",
-    "-c:a",
-    "aac",
-    "-ar",
-    "44100",
-    "-ac",
-    "2",
-    "-shortest",
-    "-movflags",
-    "+faststart",
-    dest,
-  ]);
+  const vf = ["setsar=1", "format=yuv420p", ...textParts].join(",");
+  try {
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      `color=c=black:s=${width}x${height}:r=${EXPORT_FPS}`,
+      "-f",
+      "lavfi",
+      "-i",
+      "anullsrc=channel_layout=stereo:sample_rate=44100",
+      "-t",
+      String(Math.max(0.05, duration)),
+      "-vf",
+      vf,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "fast",
+      "-crf",
+      "22",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-ar",
+      "44100",
+      "-ac",
+      "2",
+      "-shortest",
+      "-movflags",
+      "+faststart",
+      dest,
+    ]);
+  } catch (error) {
+    throw new Error(ffmpegFailMessage(error, "Could not render a blank timeline segment."));
+  }
 }
 
 async function hasAudioStream(path: string): Promise<boolean> {
@@ -474,7 +355,7 @@ async function renderClipSegment(args: {
   dest: string;
   clip: EditorClip;
   duration: number;
-  textClips: EditorClip[];
+  textClips: ExportTextClip[];
   width: number;
   height: number;
   fontCacheDir: string;
@@ -520,52 +401,69 @@ async function renderClipSegment(args: {
     isIdentitySpeed(clipSpeedFromEffects(args.clip.effects))
       ? ["-ss", String(args.clip.trimIn), "-i", args.sourcePath]
       : ["-ss", String(args.clip.trimIn), "-t", String(sourceLen), "-i", args.sourcePath];
-  if (audioFilter && (await hasAudioStream(args.sourcePath))) {
-    await execFileAsync("ffmpeg", [
-      "-y",
-      ...inputTrimArgs,
-      "-vf",
-      videoFilter,
-      "-af",
-      audioFilter,
-      ...encodeArgs,
-    ]);
-  } else {
-    await execFileAsync("ffmpeg", [
-      "-y",
-      ...inputTrimArgs,
-      "-f",
-      "lavfi",
-      "-i",
-      "anullsrc=channel_layout=stereo:sample_rate=44100",
-      "-filter_complex",
-      `[0:v]${videoFilter}[v]`,
-      "-map",
-      "[v]",
-      "-map",
-      "1:a",
-      "-shortest",
-      ...encodeArgs,
-    ]);
+  try {
+    if (audioFilter && (await hasAudioStream(args.sourcePath))) {
+      await execFileAsync("ffmpeg", [
+        "-y",
+        ...inputTrimArgs,
+        "-vf",
+        videoFilter,
+        "-af",
+        audioFilter,
+        ...encodeArgs,
+      ]);
+    } else {
+      await execFileAsync("ffmpeg", [
+        "-y",
+        ...inputTrimArgs,
+        "-f",
+        "lavfi",
+        "-i",
+        "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-filter_complex",
+        `[0:v]${videoFilter}[v]`,
+        "-map",
+        "[v]",
+        "-map",
+        "1:a",
+        "-shortest",
+        ...encodeArgs,
+      ]);
+    }
+  } catch (error) {
+    throw new Error(
+      ffmpegFailMessage(error, `Could not render clip "${args.clip.label || "untitled"}".`),
+    );
   }
 }
 
-function timelineSegments(clips: EditorClip[]): Array<
-  | { type: "gap"; duration: number }
+function timelineSegments(
+  clips: EditorClip[],
+  coverUntil = 0,
+): Array<
+  | { type: "gap"; duration: number; startTime: number }
   | { type: "clip"; clip: EditorClip; duration: number }
 > {
   const sorted = [...clips].sort((a, b) => a.startTime - b.startTime);
   const segments: Array<
-    { type: "gap"; duration: number } | { type: "clip"; clip: EditorClip; duration: number }
+    | { type: "gap"; duration: number; startTime: number }
+    | { type: "clip"; clip: EditorClip; duration: number }
   > = [];
   let cursor = 0;
   for (const clip of sorted) {
     const duration = clipDuration(clip);
     if (clip.startTime > cursor + 0.02) {
-      segments.push({ type: "gap", duration: clip.startTime - cursor });
+      segments.push({
+        type: "gap",
+        duration: clip.startTime - cursor,
+        startTime: cursor,
+      });
     }
     segments.push({ type: "clip", clip, duration });
     cursor = Math.max(cursor, clip.startTime + duration);
+  }
+  if (coverUntil > cursor + 0.02) {
+    segments.push({ type: "gap", duration: coverUntil - cursor, startTime: cursor });
   }
   return segments;
 }
@@ -882,7 +780,6 @@ async function runExportVideo(
   );
   const videoTrack = project.tracks.find((track) => track.kind === "video");
   const audioTrack = project.tracks.find((track) => track.kind === "audio");
-  const textTrack = project.tracks.find((track) => track.kind === "text");
   if (!videoTrack) {
     const message = "No video track in project.";
     if (args.jobId) {
@@ -903,9 +800,13 @@ async function runExportVideo(
   }
 
   const textClips =
-    exportKind === "video" && textTrack?.id
-      ? project.clips.filter((clip) => clip.trackId === textTrack.id && clip.kind === "text")
+    exportKind === "video"
+      ? collectExportTextClips(project.clips, clipDuration)
       : [];
+  const textCoverUntil = textClips.reduce(
+    (end, clip) => Math.max(end, clip.startTime + clip.duration),
+    0,
+  );
   const audioClips =
     audioTrack?.id && !audioTrack.muted
       ? project.clips
@@ -922,11 +823,23 @@ async function runExportVideo(
 
   try {
     await report("Preparing clips…", 5);
-    const segments = timelineSegments(clips);
+    const segments = timelineSegments(clips, textCoverUntil);
     for (const [index, segment] of segments.entries()) {
       const segmentPath = join(tempDir, `segment-${index}.mp4`);
       if (segment.type === "gap") {
-        await makeBlackSegment(segmentPath, segment.duration, exportWidth, exportHeight);
+        const textParts = await buildTextOverlayParts(
+          textClips,
+          segment.startTime,
+          segment.duration,
+          fontCacheDir,
+        );
+        await makeBlackSegment(
+          segmentPath,
+          segment.duration,
+          exportWidth,
+          exportHeight,
+          textParts,
+        );
         transitionClips.push(null);
       } else {
         const asset = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
