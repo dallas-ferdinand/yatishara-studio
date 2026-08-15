@@ -20178,10 +20178,32 @@ export function StudioShell({
           max-width: 110px;
         }
         .studio-composer-options-section.is-voice-embedded {
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          min-height: 0;
           gap: 0;
+          overflow: hidden;
         }
         .studio-composer-options-section.is-voice-embedded .studio-composer-options-section-label {
           display: none;
+        }
+        .studio-composer-options-body.is-voice-fill,
+        .studio-composer-options-stack.is-voice-fill {
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: hidden;
+          gap: 0;
+        }
+        .studio-composer-options-body.is-voice-fill {
+          padding: 0;
+        }
+        .studio-composer-options-panel.is-overlay.is-voice-sheet {
+          /* Fill the fixed overlay band (header → composer). */
+          display: flex;
+          flex-direction: column;
         }
         .studio-music-lyrics-input {
           width: 100%;
@@ -28676,7 +28698,7 @@ function StudioComposer({
         ) : null}
         {composerOptionsOpen ? (
           <div
-            className="studio-composer-options-panel is-overlay is-settings"
+            className={`studio-composer-options-panel is-overlay is-settings${isAudioMode && audioType === "voiceover" ? " is-voice-sheet" : ""}`}
             role="region"
             aria-label={isAudioMode ? "Audio settings" : "Generation settings"}
             style={
@@ -29383,8 +29405,16 @@ function StudioComposerControlStrip({
   const showReferenceIntent = hasComposerReferences && !isElementMode && mode !== "audio";
 
   return (
-    <div className={layout === "panel" ? "studio-composer-options-body" : "studio-composer-controls"}>
-      <div className="studio-composer-options-stack">
+    <div
+      className={
+        layout === "panel"
+          ? `studio-composer-options-body${mode === "audio" && audioType === "voiceover" ? " is-voice-fill" : ""}`
+          : "studio-composer-controls"
+      }
+    >
+      <div
+        className={`studio-composer-options-stack${mode === "audio" && audioType === "voiceover" ? " is-voice-fill" : ""}`}
+      >
         {isElementMode ? (
           <StudioInlineSettingChipGroup
             label="Type"

@@ -12,10 +12,136 @@
 
 .studio-voice-picker.is-embedded {
   flex: 1 1 auto;
-  min-height: 220px;
-  max-height: min(52vh, 420px);
+  min-height: 0;
+  max-height: none;
+  height: 100%;
   padding: 0;
-  gap: 10px;
+  gap: 0;
+}
+
+.studio-voice-picker-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.studio-voice-picker.is-embedded .studio-voice-picker-controls {
+  gap: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) 70%, transparent);
+}
+
+.studio-voice-picker-chrome {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  flex: 0 0 auto;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  padding: 0 8px 0 4px;
+  box-sizing: border-box;
+}
+
+.studio-voice-picker-head-tabs {
+  flex: 0 0 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 2px;
+}
+
+.studio-voice-picker-chrome-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  align-self: stretch;
+  margin: 0 0 0 4px;
+  background: var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+.studio-voice-picker-sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 0 8px;
+  border: 0;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-voice-picker-sidebar-search > svg {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+
+.studio-voice-picker-sidebar-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-cursor-text, var(--mos-ink));
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 0;
+  outline: none;
+}
+
+.studio-voice-picker-sidebar-search input::placeholder {
+  color: var(--color-cursor-muted, var(--mos-muted));
+  opacity: 0.8;
+}
+
+.studio-voice-picker-sidebar-search-clear {
+  appearance: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mos-ink, #111) 8%, transparent);
+  color: var(--color-cursor-muted, var(--mos-muted));
+  cursor: pointer;
+}
+
+.studio-voice-picker-sidebar-search-clear:hover {
+  color: var(--color-cursor-text-bright, var(--mos-ink));
+}
+
+.studio-voice-picker-icon-square.is-compact {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  align-self: center;
+}
+
+.studio-voice-picker-toolbar.is-filters-only {
+  padding: 0;
+}
+
+.studio-voice-picker.is-embedded .studio-voice-picker-toolbar.is-embedded-filters {
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+.studio-voice-picker.is-embedded .studio-voice-picker-filter-chip {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.studio-voice-picker.is-embedded .studio-voice-picker-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 8px 10px;
 }
 
 .studio-composer-options-panel:has(.studio-voice-picker) {
