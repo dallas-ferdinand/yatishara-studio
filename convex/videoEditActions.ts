@@ -22,6 +22,10 @@ import {
   videoClipAudioFilter,
 } from "./lib/editorExportAudio";
 import {
+  clipSourceInputArgs,
+  isStillExportSource,
+} from "./lib/editorExportPicture";
+import {
   buildNaturalSpeedAudioFilters,
   buildSpeedSetptsFilter,
   clipSpeedFromEffects,
@@ -118,7 +122,7 @@ type EditorClip = {
   trimIn: number;
   trimOut: number;
   label: string;
-  kind: "video" | "audio" | "text";
+  kind: "video" | "audio" | "text" | "image";
   effects?: ClipEffects;
   transitionOut?: { type: string; duration: number };
   text?: TextClipContent;
@@ -386,7 +390,9 @@ async function hasAudioStream(path: string): Promise<boolean> {
   return (await probeAudioStream(path)).present;
 }
 
-async function hasVideoStream(path: string): Promise<boolean> {
+async function probePictureStream(
+  path: string,
+): Promise<{ present: boolean; codec?: string; nbFrames?: number }> {
   try {
     const { stdout } = await execFileAsync("ffprobe", [
       "-v",
@@ -394,15 +400,27 @@ async function hasVideoStream(path: string): Promise<boolean> {
       "-select_streams",
       "v:0",
       "-show_entries",
-      "stream=index",
+      "stream=codec_name,nb_frames",
       "-of",
       "csv=p=0",
       path,
     ]);
-    return stdout.trim().length > 0;
+    const line = stdout.trim().split(/\r?\n/)[0] ?? "";
+    if (!line.length) return { present: false };
+    const [codec, framesRaw] = line.split(",");
+    const nbFrames = Number(framesRaw);
+    return {
+      present: true,
+      codec: codec || undefined,
+      nbFrames: Number.isFinite(nbFrames) && nbFrames > 0 ? nbFrames : undefined,
+    };
   } catch {
-    return false;
+    return { present: false };
   }
+}
+
+async function hasVideoStream(path: string): Promise<boolean> {
+  return (await probePictureStream(path)).present;
 }
 
 async function probeMediaDurationSeconds(path: string): Promise<number> {
@@ -468,6 +486,16 @@ async function renderClipSegment(args: {
   ];
 
   const sourceAudio = await probeAudioStream(args.sourcePath);
+  const picture = await probePictureStream(args.sourcePath);
+  const sourceDurationSec = picture.present
+    ? await probeMediaDurationSeconds(args.sourcePath)
+    : 0;
+  const isStill = isStillExportSource({
+    kind: args.clip.kind,
+    codec: picture.codec,
+    nbFrames: picture.nbFrames,
+    sourceDurationSec,
+  });
   const audioFilter = videoClipAudioFilter(
     args.clip,
     Boolean(args.muteAudio),
@@ -478,19 +506,55 @@ async function renderClipSegment(args: {
   // probe first: silent / muted sources must get anullsrc or concat/xfade
   // graphs fail with "Stream specifier ':a' matches no streams".
   const sourceLen = sourceTrim(args.clip);
-  const inputTrimArgs =
-    isIdentitySpeed(clipSpeedFromEffects(args.clip.effects))
-      ? ["-ss", String(args.clip.trimIn), "-i", args.sourcePath]
-      : ["-ss", String(args.clip.trimIn), "-t", String(sourceLen), "-i", args.sourcePath];
+  const inputTrimArgs = clipSourceInputArgs({
+    sourcePath: args.sourcePath,
+    trimIn: args.clip.trimIn,
+    sourceLen,
+    identitySpeed: isIdentitySpeed(clipSpeedFromEffects(args.clip.effects)),
+    isStill,
+    fps: EXPORT_FPS,
+  });
+  const useSourceAudio = Boolean(audioFilter && sourceAudio.present && picture.present && !isStill);
   try {
-    if (audioFilter && sourceAudio.present) {
+    if (!picture.present) {
+      // Audio-only asset parked on a video lane — hold black, keep the bed.
+      const extraVf = effects === "null" ? [] : effects.split(",").filter((part) => part && part !== "null");
+      if (audioFilter && sourceAudio.present) {
+        await runFfmpeg([
+          "-y",
+          "-f",
+          "lavfi",
+          "-i",
+          `color=c=black:s=${args.width}x${args.height}:r=${EXPORT_FPS}`,
+          "-i",
+          args.sourcePath,
+          "-filter_complex",
+          `[0:v]${["setsar=1", "format=yuv420p", ...extraVf].join(",")}[v];[1:a]${audioFilter}[a]`,
+          "-map",
+          "[v]",
+          "-map",
+          "[a]",
+          ...encodeArgs,
+        ]);
+      } else {
+        await makeBlackSegment(
+          args.dest,
+          args.duration,
+          args.width,
+          args.height,
+          extraVf,
+        );
+      }
+      return;
+    }
+    if (useSourceAudio) {
       await runFfmpeg([
         "-y",
         ...inputTrimArgs,
         "-vf",
         videoFilter,
         "-af",
-        audioFilter,
+        audioFilter!,
         ...encodeArgs,
       ]);
     } else {
@@ -512,9 +576,41 @@ async function renderClipSegment(args: {
       ]);
     }
   } catch (error) {
-    throw new Error(
-      ffmpegFailMessage(error, `Could not render clip "${args.clip.label || "untitled"}".`),
-    );
+    if (!isStill && picture.present && sourceDurationSec <= 1) {
+      try {
+        await runFfmpeg([
+          "-y",
+          ...clipSourceInputArgs({
+            sourcePath: args.sourcePath,
+            trimIn: 0,
+            sourceLen,
+            identitySpeed: true,
+            isStill: true,
+            fps: EXPORT_FPS,
+          }),
+          "-f",
+          "lavfi",
+          "-i",
+          "anullsrc=channel_layout=stereo:sample_rate=44100",
+          "-filter_complex",
+          `[0:v]${videoFilter}[v]`,
+          "-map",
+          "[v]",
+          "-map",
+          "1:a",
+          "-shortest",
+          ...encodeArgs,
+        ]);
+        return;
+      } catch {
+        /* fall through to the original error */
+      }
+    }
+    const fallback = `Could not render clip "${args.clip.label || "untitled"}".`;
+    const detail = ffmpegFailMessage(error, "");
+    const raw = error && typeof error === "object" ? String((error as { stderr?: string }).stderr ?? "") : "";
+    if (raw) console.error(`export clip render failed (${args.clip.label}): ${raw.slice(0, 800)}`);
+    throw new Error(detail && detail !== fallback ? `${fallback} ${detail}` : fallback);
   }
 }
 

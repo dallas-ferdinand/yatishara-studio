@@ -275,7 +275,10 @@ function isFfmpegErrorLine(line: string): boolean {
     /error applying option/i.test(line) ||
     /option not found/i.test(line) ||
     /invalid argument/i.test(line) ||
+    /invalid data/i.test(line) ||
     /conversion failed/i.test(line) ||
+    /matches no streams/i.test(line) ||
+    /nothing was written/i.test(line) ||
     /\b(error|failed|not found|no such|cannot|unable)\b/i.test(line)
   );
 }
