@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EXPORT_RESOLUTION,
+  exportH264Args,
   exportSizeForRatioAndResolution,
+  isHeavyExportFrame,
   normalizeExportResolution,
 } from "./editorExport";
 
@@ -27,5 +29,21 @@ describe("exportSizeForRatioAndResolution", () => {
       width: 1080,
       height: 1080,
     });
+  });
+});
+
+describe("exportH264Args", () => {
+  it("uses level 5.2 and a lighter preset at 4K", () => {
+    expect(isHeavyExportFrame(3840, 2160)).toBe(true);
+    expect(isHeavyExportFrame(2160, 3840)).toBe(true);
+    expect(isHeavyExportFrame(2160, 2160)).toBe(true);
+    expect(isHeavyExportFrame(1920, 1080)).toBe(false);
+    const args = exportH264Args(3840, 2160);
+    expect(args).toContain("veryfast");
+    expect(args).toEqual(expect.arrayContaining(["-level", "5.2"]));
+    expect(args).toEqual(expect.arrayContaining(["-threads", "2"]));
+    expect(exportH264Args(1920, 1080)).toEqual(
+      expect.arrayContaining(["-preset", "fast", "-level", "4.1"]),
+    );
   });
 });

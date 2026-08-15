@@ -101,6 +101,39 @@ export function exportSizeForRatioAndResolution(
   return SIZE_BY_RATIO[frameRatio][tier];
 }
 
+/** 4K (and 4K-square) needs a higher H.264 level and a lighter stitch. */
+export function isHeavyExportFrame(width: number, height: number): boolean {
+  return width * height > 1920 * 1080;
+}
+
+/** libx264 flags so 4K is legal (level 5.2) and does not OOM the action host. */
+export function exportH264Args(width: number, height: number): string[] {
+  const heavy = isHeavyExportFrame(width, height);
+  const args = [
+    "-c:v",
+    "libx264",
+    "-preset",
+    heavy ? "veryfast" : "fast",
+    "-crf",
+    heavy ? "23" : "22",
+    "-profile:v",
+    "high",
+    "-level",
+    heavy ? "5.2" : "4.1",
+    "-pix_fmt",
+    "yuv420p",
+  ];
+  if (heavy) {
+    args.push(
+      "-threads",
+      "2",
+      "-x264-params",
+      "rc-lookahead=10:sync-lookahead=0",
+    );
+  }
+  return args;
+}
+
 export function audioExportMime(format: ExportAudioFormat): string {
   if (format === "wav") return "audio/wav";
   if (format === "m4a") return "audio/mp4";

@@ -37,7 +37,9 @@ import {
   DEFAULT_EXPORT_RESOLUTION,
   audioExportExt,
   audioExportMime,
+  exportH264Args,
   exportSizeForRatioAndResolution,
+  isHeavyExportFrame,
   normalizeExportAudioFormat,
   normalizeExportResolution,
   type ExportAudioFormat,
@@ -333,14 +335,7 @@ async function makeBlackSegment(
       String(Math.max(0.05, duration)),
       "-vf",
       vf,
-      "-c:v",
-      "libx264",
-      "-preset",
-      "fast",
-      "-crf",
-      "22",
-      "-pix_fmt",
-      "yuv420p",
+      ...exportH264Args(width, height),
       "-c:a",
       "aac",
       "-ar",
@@ -467,14 +462,7 @@ async function renderClipSegment(args: {
   const encodeArgs = [
     "-t",
     String(args.duration),
-    "-c:v",
-    "libx264",
-    "-preset",
-    "fast",
-    "-crf",
-    "22",
-    "-pix_fmt",
-    "yuv420p",
+    ...exportH264Args(args.width, args.height),
     "-c:a",
     "aac",
     "-b:a",
@@ -735,14 +723,7 @@ async function concatSegmentsHardCut(
     "[vout]",
     "-map",
     "[aout]",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "fast",
-    "-crf",
-    "22",
-    "-pix_fmt",
-    "yuv420p",
+    ...exportH264Args(width, height),
     "-c:a",
     "aac",
     "-b:a",
@@ -757,6 +738,22 @@ async function concatSegmentsHardCut(
   ]);
 }
 
+async function stitchPairwiseHardCut(
+  segmentPaths: string[],
+  dest: string,
+  tempDir: string,
+  width: number,
+  height: number,
+): Promise<void> {
+  let current = segmentPaths[0]!;
+  for (let i = 1; i < segmentPaths.length; i += 1) {
+    const outPath = join(tempDir, `pair-cut-${i}.mp4`);
+    await concatSegmentsHardCut([current, segmentPaths[i]!], outPath, width, height);
+    current = outPath;
+  }
+  await runFfmpeg(["-y", "-i", current, "-c", "copy", "-movflags", "+faststart", dest]);
+}
+
 async function concatNormalizedSegments(
   segmentPaths: string[],
   transitionClips: Array<EditorClip | null>,
@@ -765,7 +762,11 @@ async function concatNormalizedSegments(
   height: number,
 ): Promise<string> {
   const outputPath = join(tempDir, "video-composed.mp4");
-  const vf = normalizeVf(width, height);
+  // Segments are already canvas-sized. Re-running normalizeVf at 4K
+  // (scale+crop+pad+xfade) OOMs the action host; 1080 can afford the safety pass.
+  const vf = isHeavyExportFrame(width, height)
+    ? `fps=${EXPORT_FPS},setsar=1,format=yuv420p`
+    : normalizeVf(width, height);
   const padded: string[] = [];
   for (const [index, path] of segmentPaths.entries()) {
     padded.push(
@@ -794,7 +795,11 @@ async function concatNormalizedSegments(
   );
 
   if (!hasTransition) {
-    await concatSegmentsHardCut(padded, outputPath, width, height);
+    if (isHeavyExportFrame(width, height)) {
+      await stitchPairwiseHardCut(padded, outputPath, tempDir, width, height);
+    } else {
+      await concatSegmentsHardCut(padded, outputPath, width, height);
+    }
     return outputPath;
   }
 
@@ -839,14 +844,7 @@ async function concatNormalizedSegments(
             "[vout]",
             "-map",
             "[aout]",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "fast",
-            "-crf",
-            "22",
-            "-pix_fmt",
-            "yuv420p",
+            ...exportH264Args(width, height),
             "-c:a",
             "aac",
             "-b:a",
@@ -885,7 +883,11 @@ async function concatNormalizedSegments(
     return outputPath;
   } catch (error) {
     try {
-      await concatSegmentsHardCut(padded, outputPath, width, height);
+      if (isHeavyExportFrame(width, height)) {
+        await stitchPairwiseHardCut(padded, outputPath, tempDir, width, height);
+      } else {
+        await concatSegmentsHardCut(padded, outputPath, width, height);
+      }
       return outputPath;
     } catch {
       throw new Error(
