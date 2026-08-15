@@ -1,5 +1,19 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import { internalQuery } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+
+export const getForOwner = internalQuery({
+  args: { ownerId: v.id("users") },
+  returns: v.object({ autoApprove: v.boolean() }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("agentPreferences")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .unique();
+    return { autoApprove: Boolean(row?.autoApprove) };
+  },
+});
 
 export const getMine = authedQuery({
   args: {},
@@ -33,14 +47,36 @@ export const setMine = authedMutation({
         autoApprove: args.autoApprove,
         updatedAt: now,
       });
-      return null;
+    } else {
+      await ctx.db.insert("agentPreferences", {
+        ownerId: ctx.user._id,
+        autoApprove: args.autoApprove,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
-    await ctx.db.insert("agentPreferences", {
-      ownerId: ctx.user._id,
-      autoApprove: args.autoApprove,
-      createdAt: now,
-      updatedAt: now,
-    });
+    if (args.autoApprove) {
+      await ctx.runMutation(internal.agentApprovals.approvePendingForOwner, {
+        ownerId: ctx.user._id,
+      });
+    }
     return null;
+  },
+});
+
+/** Run leftover approval cards when YOLO is already on (Continue / refresh). */
+export const flushPendingIfYolo = authedMutation({
+  args: { threadId: v.optional(v.id("agentThreads")) },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("agentPreferences")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
+      .unique();
+    if (!row?.autoApprove) return 0;
+    return await ctx.runMutation(internal.agentApprovals.approvePendingForOwner, {
+      ownerId: ctx.user._id,
+      threadId: args.threadId,
+    });
   },
 });

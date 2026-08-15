@@ -73,6 +73,45 @@ export const listForThread = authedQuery({
   },
 });
 
+/** YOLO: approve + execute every pending card for this owner (optionally one thread). */
+export const approvePendingForOwner = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.optional(v.id("agentThreads")),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const rows = args.threadId
+      ? await ctx.db
+          .query("agentApprovals")
+          .withIndex("by_thread_and_status", (q) =>
+            q.eq("threadId", args.threadId!).eq("status", "pending"),
+          )
+          .collect()
+      : await ctx.db
+          .query("agentApprovals")
+          .withIndex("by_owner_and_status", (q) =>
+            q.eq("ownerId", args.ownerId).eq("status", "pending"),
+          )
+          .collect();
+    const now = Date.now();
+    let count = 0;
+    for (const row of rows) {
+      if (row.ownerId !== args.ownerId || row.status !== "pending") continue;
+      await ctx.db.patch(row._id, {
+        status: "approved",
+        decidedAt: now,
+        updatedAt: now,
+      });
+      await ctx.scheduler.runAfter(0, internal.agentApprovalsNode.execute, {
+        approvalId: row._id,
+      });
+      count += 1;
+    }
+    return count;
+  },
+});
+
 export const decide = authedMutation({
   args: {
     approvalId: v.id("agentApprovals"),

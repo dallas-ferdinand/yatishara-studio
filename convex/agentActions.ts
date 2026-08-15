@@ -255,6 +255,17 @@ export const sendTurn = action({
     });
     if (!thread) throw new Error("Agent thread not found");
 
+    const prefs = await ctx.runQuery(internal.agentPreferences.getForOwner, {
+      ownerId,
+    });
+    const autoApprove = Boolean(args.autoApprove) || Boolean(prefs?.autoApprove);
+    if (autoApprove) {
+      await ctx.runMutation(internal.agentApprovals.approvePendingForOwner, {
+        ownerId,
+        threadId: args.threadId,
+      });
+    }
+
     const message = args.message.trim();
     const attachments = Array.isArray(args.attachments) ? args.attachments.slice(0, 12) : [];
     if (!message && attachments.length === 0) throw new Error("Type a message or attach something first");
@@ -647,7 +658,7 @@ export const sendTurn = action({
           workingScratchJson: workingScratchJson || undefined,
           role,
           scopes,
-          autoApprove: Boolean(args.autoApprove),
+          autoApprove,
           capabilityToken,
           studioApiBase: apiBase,
           callbackBase,

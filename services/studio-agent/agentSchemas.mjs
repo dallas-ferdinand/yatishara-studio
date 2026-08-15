@@ -121,6 +121,34 @@ export function coerceHotToolArgs(toolName, args) {
     if (alias) input.folderId = alias;
   }
 
+  if (toolName === "studio_trash" || toolName === "studio_restore") {
+    const kindFromCollection = {
+      documents: "document",
+      assets: "asset",
+      folders: "folder",
+      elements: "element",
+    };
+    if (!input.kind && input.collection) {
+      const mapped = kindFromCollection[String(input.collection).toLowerCase()];
+      if (mapped) input.kind = mapped;
+    }
+    if (!input.id) {
+      const alias =
+        input.documentId ??
+        input.assetId ??
+        input.folderId ??
+        input.elementId ??
+        input._id;
+      if (alias) input.id = alias;
+    }
+    if (!input.kind) {
+      if (input.documentId) input.kind = "document";
+      else if (input.assetId) input.kind = "asset";
+      else if (input.folderId) input.kind = "folder";
+      else if (input.elementId) input.kind = "element";
+    }
+  }
+
   return input;
 }
 
