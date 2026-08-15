@@ -9051,6 +9051,8 @@ export function StudioShell({
           --studio-chat-column-max: min(92%, 36rem);
           --studio-chat-bubble-max: 90%;
           --studio-composer-min-height: 96px;
+          --studio-composer-rail-tile: 48px;
+          --studio-composer-rail-reserve: calc(var(--studio-composer-rail-tile) + 12px);
           --studio-composer-side-width: 0px;
           --studio-mode-switcher-width: 0px;
           --studio-generate-column-width: 0px;
@@ -17197,7 +17199,10 @@ export function StudioShell({
           align-self: stretch;
           min-height: var(--studio-composer-min-height);
           height: auto;
-          max-height: var(--studio-composer-box-max-height, min(42vh, 280px));
+          max-height: calc(
+            var(--studio-composer-box-max-height, min(42vh, 280px))
+            + var(--studio-composer-rail-reserve, 0px)
+          );
           flex: 0 1 auto;
           flex-direction: column;
           min-width: 0;
@@ -17212,8 +17217,8 @@ export function StudioShell({
             background 1000ms cubic-bezier(0.45, 0, 0.2, 1);
           padding: 0 !important;
         }
-        .studio-composer .cursor-composer-box:has(.studio-composer-media-rail) {
-          max-height: var(--studio-composer-box-max-height, min(52vh, 380px));
+        .studio-composer .cursor-composer-box:not(:has(.studio-composer-media-rail)) {
+          --studio-composer-rail-reserve: 0px;
         }
         .studio-composer .cursor-composer-box::before {
           content: "";
@@ -17857,7 +17862,7 @@ export function StudioShell({
         .studio-composer-inputline {
           position: relative;
           display: flex;
-          flex: 1 1 auto;
+          flex: 1 0 auto;
           flex-direction: column;
           justify-content: flex-start;
           min-height: 0;
@@ -17876,20 +17881,23 @@ export function StudioShell({
         }
         .studio-composer-media-rail {
           display: flex;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
           flex: 0 0 auto;
-          gap: 8px;
-          padding: 10px 10px 0;
+          gap: 6px;
+          padding: 8px 10px 0;
+          overflow-x: auto;
+          overflow-y: hidden;
         }
         .studio-composer-media-tile {
           position: relative;
-          width: 88px;
+          flex: 0 0 auto;
+          width: var(--studio-composer-rail-tile, 48px);
         }
         .studio-composer-media-tile-frame {
           position: relative;
           display: block;
-          width: 88px;
-          height: 88px;
+          width: var(--studio-composer-rail-tile, 48px);
+          height: var(--studio-composer-rail-tile, 48px);
           padding: 0;
           border: 1px solid var(--color-cursor-border-soft);
           border-radius: 10px;
@@ -17917,7 +17925,7 @@ export function StudioShell({
           right: 0;
           bottom: 0;
           z-index: 1;
-          padding: 14px 6px 6px;
+          padding: 10px 4px 4px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -27776,8 +27784,10 @@ function StudioComposer({
     if (isMobile) return;
     event.preventDefault();
     const box = event.currentTarget.closest(".cursor-composer-box");
-    const startH =
-      box?.getBoundingClientRect().height ?? composerMaxHeight ?? 280;
+    const rail = box?.querySelector(".studio-composer-media-rail");
+    const boxH = box?.getBoundingClientRect().height;
+    const railH = rail?.getBoundingClientRect().height ?? 0;
+    const startH = (boxH != null ? boxH - railH : composerMaxHeight) ?? 280;
     composerHeightDragRef.current = {
       startY: event.clientY,
       startH,
