@@ -67,6 +67,7 @@ import {
   Shrink,
   MessageCircle,
   Mic,
+  Music2,
   Package,
   Palette,
   Pencil,
@@ -85,6 +86,7 @@ import {
   Store,
   Library,
   Upload,
+  Volume2,
   Wand2,
   X,
   XCircle,
@@ -20012,6 +20014,55 @@ export function StudioShell({
           color: var(--color-cursor-text-bright);
           border-bottom: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 70%, transparent);
         }
+        .studio-composer-options-head.is-audio-tabs {
+          align-items: stretch;
+          padding-bottom: 6px;
+        }
+        .studio-composer-audio-type-tabs {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          min-width: 0;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+        .studio-composer-audio-type-tabs::-webkit-scrollbar {
+          display: none;
+        }
+        .studio-composer-audio-type-tab {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          flex: 0 0 auto;
+          min-height: 28px;
+          padding: 0 10px;
+          border: 1px solid transparent;
+          border-radius: 999px;
+          background: transparent;
+          color: var(--color-cursor-muted);
+          font: inherit;
+          font-size: 12px;
+          font-weight: 650;
+          white-space: nowrap;
+          cursor: pointer;
+          transition:
+            color 160ms ease,
+            border-color 160ms ease,
+            background 160ms ease;
+        }
+        .studio-composer-audio-type-tab svg {
+          width: 14px;
+          height: 14px;
+          flex: 0 0 auto;
+        }
+        .studio-composer-audio-type-tab:hover {
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-composer-audio-type-tab.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+          color: var(--color-cursor-text-bright);
+        }
         .studio-composer-options-title {
           display: inline-flex;
           align-items: center;
@@ -20028,6 +20079,12 @@ export function StudioShell({
           height: 17px;
           flex: 0 0 auto;
           color: var(--color-cursor-text-bright);
+        }
+        .studio-composer-audio-settings-btn {
+          max-width: 168px;
+        }
+        .studio-composer-audio-settings-btn strong {
+          max-width: 110px;
         }
         .studio-composer-options-back {
           display: inline-flex;
@@ -27777,6 +27834,10 @@ function StudioComposer({
   }, [composerMaxHeight, isMobile]);
   const isElementMode = mode === "element";
   const isAudioMode = mode === "audio";
+  const activeAudioTypeOption =
+    AUDIO_TYPE_OPTIONS.find((item) => item.value === audioType) ??
+    AUDIO_TYPE_OPTIONS[0];
+  const ActiveAudioTypeIcon = activeAudioTypeOption.icon;
   const elementReferenceCounts = useMemo(() => {
     const media = attachments.filter(
       (attachment) =>
@@ -28474,7 +28535,7 @@ function StudioComposer({
           <div
             className="studio-composer-options-panel is-overlay is-settings"
             role="region"
-            aria-label="Generation settings"
+            aria-label={isAudioMode ? "Audio settings" : "Generation settings"}
             style={
               overlayPanelBox
                 ? {
@@ -28486,11 +28547,43 @@ function StudioComposer({
                 : undefined
             }
           >
-            <div className="studio-composer-options-head">
-              <strong className="studio-composer-options-title">
-                <SlidersHorizontal aria-hidden="true" />
-                <span>Settings</span>
-              </strong>
+            <div
+              className={`studio-composer-options-head${isAudioMode ? " is-audio-tabs" : ""}`}
+            >
+              {isAudioMode ? (
+                <nav
+                  className="studio-composer-audio-type-tabs"
+                  role="tablist"
+                  aria-label="Audio type"
+                >
+                  {AUDIO_TYPE_OPTIONS.map((item) => {
+                    const Icon = item.icon;
+                    const active = audioType === item.value;
+                    return (
+                      <button
+                        key={item.value}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className={`studio-composer-audio-type-tab${active ? " is-active" : ""}`}
+                        title={item.meta}
+                        onClick={() => {
+                          setAudioType?.(item.value);
+                          setVoicePickerOpen(false);
+                        }}
+                      >
+                        <Icon aria-hidden="true" />
+                        <span>{item.tabLabel}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              ) : (
+                <strong className="studio-composer-options-title">
+                  <SlidersHorizontal aria-hidden="true" />
+                  <span>Settings</span>
+                </strong>
+              )}
               <button
                 type="button"
                 className="studio-composer-options-close"
@@ -28923,54 +29016,41 @@ function StudioComposer({
         <div className="studio-composer-toolbar-left">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
           {!isAudioMode ? <StudioUploadButton inputRef={uploadInputRef} /> : null}
-          <button
-            type="button"
-            className={`studio-composer-circle-btn studio-composer-options-btn${composerOptionsOpen ? " is-open" : ""}`}
-            title="Generation settings"
-            aria-label="Generation settings"
-            aria-expanded={composerOptionsOpen}
-            onClick={() => {
-              setPresetGridOpen(false);
-              setVideoTypeGridOpen(false);
-              setVoicePickerOpen(false);
-              setComposerOptionsOpen((open) => !open);
-            }}
-          >
-            <SlidersHorizontal size={14} strokeWidth={2.25} aria-hidden="true" />
-          </button>
           {isAudioMode ? (
-            <StudioInlineSettingSelect
-              icon={AudioLines}
-              label="Audio type"
-              value={audioType}
-              items={AUDIO_TYPE_OPTIONS}
-              onChange={(value) => {
-                setAudioType?.(value);
-              }}
-              hideLabel
-            />
-          ) : null}
-          {isAudioMode && audioType === "voiceover" ? (
             <button
               type="button"
-              className={`studio-audio-voice-chip${selectedVoice ? "" : " is-empty"}${voicePickerOpen ? " is-open" : ""}`}
-              title={selectedVoice ? `Voice: ${selectedVoice.name}` : "Choose voice"}
+              className={`studio-inline-setting-trigger studio-composer-audio-settings-btn${composerOptionsOpen ? " is-open" : ""}`}
+              title={`${activeAudioTypeOption.label} settings`}
+              aria-label={`${activeAudioTypeOption.label} settings`}
+              aria-expanded={composerOptionsOpen}
               onClick={() => {
-                setComposerOptionsOpen(false);
                 setPresetGridOpen(false);
                 setVideoTypeGridOpen(false);
-                setVoicePickerOpen((open) => !open);
+                setVoicePickerOpen(false);
+                setComposerOptionsOpen((open) => !open);
               }}
             >
-              {selectedVoice ? (
-                <StudioOrbAvatar
-                  seed={orbSeedForVoice(selectedVoice.voiceId, selectedVoice.name)}
-                  className="studio-audio-voice-chip-orb"
-                />
-              ) : null}
-              <span>{shortVoiceChipLabel(selectedVoice?.name)}</span>
+              <ActiveAudioTypeIcon size={12} strokeWidth={2.25} aria-hidden="true" />
+              <strong>{activeAudioTypeOption.label}</strong>
+              <ChevronDown size={11} strokeWidth={2.4} aria-hidden="true" />
             </button>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              className={`studio-composer-circle-btn studio-composer-options-btn${composerOptionsOpen ? " is-open" : ""}`}
+              title="Generation settings"
+              aria-label="Generation settings"
+              aria-expanded={composerOptionsOpen}
+              onClick={() => {
+                setPresetGridOpen(false);
+                setVideoTypeGridOpen(false);
+                setVoicePickerOpen(false);
+                setComposerOptionsOpen((open) => !open);
+              }}
+            >
+              <SlidersHorizontal size={14} strokeWidth={2.25} aria-hidden="true" />
+            </button>
+          )}
         </div>
         <div className="studio-composer-actions">
           <button
@@ -29160,7 +29240,8 @@ function StudioComposerControlStrip({
         ) : mode === "audio" ? (
           <>
             {audioType === "voiceover" ? (
-              <div className="studio-composer-options-stack">
+              <section className="studio-composer-options-section" aria-label="Voice">
+                <span className="studio-composer-options-section-label">Voice</span>
                 <button
                   type="button"
                   className={`studio-audio-voice-chip${selectedVoice ? "" : " is-empty"}`}
@@ -29174,10 +29255,12 @@ function StudioComposerControlStrip({
                   ) : null}
                   <span>{shortVoiceChipLabel(selectedVoice?.name)}</span>
                 </button>
-              </div>
+              </section>
             ) : null}
             {audioType === "sfx" ? (
-              <div className="studio-audio-sfx-controls">
+              <section className="studio-composer-options-section" aria-label="SFX">
+                <span className="studio-composer-options-section-label">SFX</span>
+                <div className="studio-audio-sfx-controls">
                 <label className="studio-voice-picker-check">
                   <input
                     type="checkbox"
@@ -29222,9 +29305,12 @@ function StudioComposerControlStrip({
                   />
                 </label>
               </div>
+              </section>
             ) : null}
             {audioType === "music" ? (
-              <div className="studio-audio-sfx-controls">
+              <section className="studio-composer-options-section" aria-label="Music">
+                <span className="studio-composer-options-section-label">Music</span>
+                <div className="studio-audio-sfx-controls">
                 <label className="studio-voice-picker-check">
                   <input
                     type="checkbox"
@@ -29287,6 +29373,7 @@ function StudioComposerControlStrip({
                   </label>
                 ) : null}
               </div>
+              </section>
             ) : null}
           </>
         ) : (
@@ -30689,9 +30776,27 @@ const ELEMENT_TYPE_OPTIONS = [
 ];
 
 const AUDIO_TYPE_OPTIONS = [
-  { value: "voiceover", label: "Voiceover", meta: "ElevenLabs v3" },
-  { value: "sfx", label: "Sound effects", meta: "Text to sound" },
-  { value: "music", label: "Music", meta: "Eleven Music v2" },
+  {
+    value: "voiceover",
+    label: "Voiceover",
+    tabLabel: "Voice",
+    meta: "ElevenLabs v3",
+    icon: Mic,
+  },
+  {
+    value: "music",
+    label: "Music",
+    tabLabel: "Music",
+    meta: "Eleven Music v2",
+    icon: Music2,
+  },
+  {
+    value: "sfx",
+    label: "SFX",
+    tabLabel: "SFX",
+    meta: "Text to sound",
+    icon: Volume2,
+  },
 ];
 
 function CreateStudioTab({ target, onCancel, onCreate }) {
