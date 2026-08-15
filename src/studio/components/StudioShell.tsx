@@ -33942,27 +33942,52 @@ function StudioAssetPreview({ entry, initialScale, hideName }) {
     thumbnailDisplayUrl(entry.thumbnailUrl, entry.thumbnailLqipUrl) ?? mediaUrl;
   const videoPosterUrl = isVideoFileUrl(thumbUrl) ? undefined : thumbUrl;
   const downloadAsset = () => {
-    if (kind === "image" && entry.studioId) {
-      void (async () => {
+    void (async () => {
+      // Prefer same-origin CDN proxy via downloadMediaUrl (forces Save As).
+      if (entry.studioId) {
         try {
           const url = await convex.query(api.assets.signedReadUrl, {
             assetId: entry.studioId,
             expiresUnix: Math.floor(Date.now() / 1000) + 60 * 60,
-            quality: 100,
+            ...(kind === "image" ? { quality: 100 } : {}),
           });
           if (url) {
-            await downloadMediaUrl(url, entry.name ?? "download");
-            return;
+            const ok = await downloadMediaUrl(url, entry.name ?? "download");
+            if (ok) return;
           }
         } catch {
-          /* fall through to preview URL */
+          /* fall through */
         }
-        if (mediaUrl) await downloadMediaUrl(mediaUrl, entry.name ?? "download");
-      })();
-      return;
-    }
-    if (!mediaUrl) return;
-    void downloadMediaUrl(mediaUrl, entry.name ?? "download");
+      }
+
+      if (mediaUrl) {
+        const ok = await downloadMediaUrl(mediaUrl, entry.name ?? "download");
+        if (ok) return;
+      }
+
+      // Last resort: Files download path (may fall back to opening the signed URL).
+      if (entry.studioId) {
+        const selectionKind =
+          entry.studioKind === "document" ||
+          entry.studioKind === "element" ||
+          entry.studioKind === "videoEdit"
+            ? entry.studioKind
+            : "asset";
+        if (selectionKind !== "videoEdit") {
+          try {
+            await downloadStudioFile({
+              convex,
+              selection: { kind: selectionKind, id: entry.studioId },
+            });
+            return;
+          } catch {
+            /* fall through */
+          }
+        }
+      }
+
+      toast.error("Could not download this file. Try again.");
+    })();
   };
   if (!mediaUrl && needsImagePreviewSign) {
     return (

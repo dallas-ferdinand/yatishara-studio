@@ -257,6 +257,28 @@ export async function downloadStudioEntry(args: {
     if (!/cdn blocked the request|bunny cors|failed to fetch/i.test(message)) {
       throw error;
     }
+    // Same-origin proxy forces Save As when Bunny CORS blocks browser fetch.
+    if (typeof window !== "undefined" && file.url) {
+      const params = new URLSearchParams({
+        url: file.url,
+        filename: fileName,
+      });
+      const anchor = document.createElement("a");
+      anchor.href = `/api/cdn-download?${params.toString()}`;
+      anchor.download = fileName;
+      anchor.rel = "noopener";
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      args.onProgress?.({
+        loaded: total || 1,
+        total: total || 1,
+        fileName,
+        phase: "downloading",
+      });
+      return fileName;
+    }
     // Browser may still navigate/save via download attribute when fetch CORS fails.
     saveViaAnchor(file.url, fileName);
     args.onProgress?.({

@@ -89,6 +89,30 @@ function triggerBlobDownload(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 2_000);
 }
 
+function isRemoteHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+/** Same-origin proxy so <a download> actually saves (Bunny is cross-origin). */
+function cdnDownloadProxyUrl(url: string, filename: string): string {
+  const params = new URLSearchParams({
+    url,
+    filename,
+  });
+  return `/api/cdn-download?${params.toString()}`;
+}
+
+function triggerAnchorDownload(href: string, filename: string) {
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
 /** Encode a mono/stereo AudioBuffer slice as a 16-bit PCM WAV blob. */
 export function audioBufferToWavBlob(
   buffer: AudioBuffer,
@@ -297,10 +321,36 @@ export async function downloadVideoSegment(
   return true;
 }
 
-/** Trigger a real file download (works for cross-origin CDN URLs with CORS). */
+/** Trigger a real file download. Prefer same-origin CDN proxy (forces Save As). */
 export async function downloadMediaUrl(url: string, filename = "download") {
   if (!url) return false;
   const safeName = safeDownloadName(filename);
+  const named = withDownloadExt(safeName, "", url);
+
+  // blob: / data: — save locally without proxy.
+  if (url.startsWith("blob:") || url.startsWith("data:")) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) return false;
+      const blob = await response.blob();
+      triggerBlobDownload(blob, withDownloadExt(safeName, blob.type, url));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Cross-origin Bunny / CDN: browser ignores <a download> and CORS fetch often fails
+  // for video. Same-origin proxy streams with Content-Disposition: attachment.
+  if (typeof window !== "undefined" && isRemoteHttpUrl(url)) {
+    try {
+      triggerAnchorDownload(cdnDownloadProxyUrl(url, named), named);
+      return true;
+    } catch {
+      /* fall through */
+    }
+  }
+
   try {
     const response = await fetch(url, { mode: "cors", credentials: "omit" });
     if (!response.ok) throw new Error(`Download failed (${response.status})`);
