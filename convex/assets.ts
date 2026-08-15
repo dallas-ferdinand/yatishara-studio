@@ -331,14 +331,21 @@ const LIST_BY_IDS_CAP = 48;
 
 export const listByIds = authedQuery({
   args: {
-    assetIds: v.array(v.id("assets")),
+    // Strings, not v.id("assets") — callers leak generationJobs / elements / docs.
+    assetIds: v.array(v.string()),
     expiresUnix: v.optional(v.number()),
     quality: v.optional(v.union(v.literal("thumb"), v.literal("preview"))),
   },
   returns: v.array(assetReturn),
   handler: async (ctx, args) => {
     // Cap to stay under self-hosted isolate 1s (Bunny signing dominates).
-    const uniqueIds = [...new Set(args.assetIds)].slice(0, LIST_BY_IDS_CAP);
+    const uniqueIds = [
+      ...new Set(
+        args.assetIds
+          .map((raw) => ctx.db.normalizeId("assets", String(raw || "")))
+          .filter((id): id is Id<"assets"> => Boolean(id)),
+      ),
+    ].slice(0, LIST_BY_IDS_CAP);
     const results: Doc<"assets">[] = [];
     for (const assetId of uniqueIds) {
       const asset = await ctx.db.get("assets", assetId);

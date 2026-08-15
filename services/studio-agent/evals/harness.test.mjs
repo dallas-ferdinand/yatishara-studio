@@ -262,6 +262,22 @@ test("compactObservation keeps document id from nested document payload", () => 
   assert.equal(compact.data.title, "Script — Degreaser");
 });
 
+test("compactObservation demotes queued generate id to jobId", () => {
+  const compact = compactObservation("studio_generate_image", {
+    ok: true,
+    data: {
+      id: "job_queued_1",
+      status: "queued",
+      stillRendering: true,
+      folderId: "fold_1",
+    },
+  });
+  assert.equal(compact.data.jobId, "job_queued_1");
+  assert.equal(compact.data.stillRendering, true);
+  assert.equal(compact.data.id, undefined);
+  assert.equal(compact.data.assetId, undefined);
+});
+
 test("compactObservation keeps assetId from nested asset payload", () => {
   const compact = compactObservation("studio_generate_image", {
     ok: true,

@@ -111,6 +111,9 @@ const FIELD_HINTS = {
     "url",
     "id",
     "_id",
+    "stillRendering",
+    "jobId",
+    "status",
   ],
   studio_generate_video: [
     "assetId",
@@ -125,6 +128,8 @@ const FIELD_HINTS = {
     "url",
     "id",
     "_id",
+    "stillRendering",
+    "jobId",
   ],
   studio_generate_audio: [
     "assetId",
@@ -138,6 +143,8 @@ const FIELD_HINTS = {
     "url",
     "id",
     "_id",
+    "stillRendering",
+    "jobId",
   ],
   studio_estimate_generation: [
     "credits",
@@ -314,7 +321,22 @@ export function compactObservation(toolName, result, extra = {}) {
       }
     }
     if (Object.keys(picked).length) {
-      return { ...base, data: rewriteMoneyFields(picked) };
+      const dataOut = rewriteMoneyFields(picked);
+      if (/^studio_generate_(image|video|audio)$/.test(name)) {
+        const status = String(dataOut.status || "").toLowerCase();
+        const queued =
+          Boolean(dataOut.stillRendering) ||
+          status === "queued" ||
+          status === "running" ||
+          status === "pending";
+        if (queued && !dataOut.assetId) {
+          dataOut.jobId = dataOut.jobId || dataOut.id || dataOut._id;
+          dataOut.stillRendering = true;
+          delete dataOut.id;
+          delete dataOut._id;
+        }
+      }
+      return { ...base, data: dataOut };
     }
   }
 

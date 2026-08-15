@@ -343,11 +343,17 @@ export function extractGeneratedMedia(
       ? (root.data as Record<string, unknown>)
       : root;
 
-  const stillRendering = Boolean(payload.stillRendering);
+  const status = String(payload.status || "").toLowerCase();
+  const stillRendering = Boolean(
+    payload.stillRendering ||
+      status === "queued" ||
+      status === "running" ||
+      status === "pending",
+  );
   const generationJobId =
-    (typeof payload.id === "string" && payload.id) ||
     (typeof payload.jobId === "string" && payload.jobId) ||
-    (typeof payload._id === "string" && payload._id) ||
+    (stillRendering && typeof payload.id === "string" && payload.id) ||
+    (stillRendering && typeof payload._id === "string" && payload._id) ||
     undefined;
 
   const out: AgentMediaPreview[] = [];
@@ -383,6 +389,46 @@ export function extractGeneratedMedia(
     });
   };
 
+  if (Array.isArray(payload.jobs)) {
+    for (const job of payload.jobs) {
+      if (!job || typeof job !== "object") continue;
+      const row = job as Record<string, unknown>;
+      const nested =
+        row.data && typeof row.data === "object"
+          ? (row.data as Record<string, unknown>)
+          : row;
+      const nestedStatus = String(nested.status || row.status || "").toLowerCase();
+      const nestedQueued = Boolean(
+        nested.stillRendering ||
+          nestedStatus === "queued" ||
+          nestedStatus === "running" ||
+          nestedStatus === "pending",
+      );
+      const nestedAssetId =
+        (typeof nested.assetId === "string" && nested.assetId) ||
+        (typeof row.assetId === "string" && row.assetId) ||
+        undefined;
+      const nestedJobId =
+        (typeof nested.jobId === "string" && nested.jobId) ||
+        (typeof row.jobId === "string" && row.jobId) ||
+        (nestedQueued && typeof nested.id === "string" && nested.id) ||
+        undefined;
+      if (nestedAssetId) {
+        pushAsset({ ...nested, assetId: nestedAssetId });
+      } else if (nestedQueued && nestedJobId) {
+        out.push({
+          generationJobId: nestedJobId,
+          stillRendering: true,
+          kind:
+            String(row.mode || nested.kind || "").includes("video")
+              ? "video"
+              : String(row.mode || "").includes("audio")
+                ? "audio"
+                : "image",
+        });
+      }
+    }
+  }
   if (Array.isArray(payload.assets)) {
     for (const item of payload.assets) {
       if (item && typeof item === "object") pushAsset(item as Record<string, unknown>);

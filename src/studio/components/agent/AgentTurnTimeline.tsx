@@ -678,7 +678,13 @@ function collectAssetIds(
     }
     for (const step of turn.steps) {
       for (const media of step.media ?? []) {
-        if (media.assetId) ids.add(media.assetId);
+        if (
+          media.assetId &&
+          !media.stillRendering &&
+          media.assetId !== media.generationJobId
+        ) {
+          ids.add(media.assetId);
+        }
       }
     }
   }
