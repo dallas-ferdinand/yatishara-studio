@@ -27,6 +27,7 @@ import {
   DEFAULT_PREVIEW_LOAD_QUALITY,
   playbackUrlForMedia,
 } from "../previewLoadQuality";
+import { previewTransitionWhilePlaying } from "./preview-transition-play";
 
 /**
  * A stall has to last this long before the preview admits to loading. The
@@ -245,8 +246,9 @@ class EngineConsumer implements FrameConsumer {
     const audioReady = this.audio.prepare(slice, this.mediaRef.current).then(() => {
       this.onAudioReady();
     });
+    const playing = this.playingRef.current;
     const decoded = await Promise.all(
-      slice.video.map(async (sample): Promise<DecodedFrame | null> => {
+      slice.video.map(async (sample, index): Promise<DecodedFrame | null> => {
         const assetId = sample.clip.assetId;
         if (!assetId) return null;
         const media = this.mediaRef.current.get(assetId);
@@ -269,10 +271,12 @@ class EngineConsumer implements FrameConsumer {
             generation,
             {
               speed: clipSpeed(sample.clip.clip.effects),
-              aheadSec: this.playingRef.current ? 1.5 : 0.35,
+              aheadSec: playing ? 1.5 : 0.35,
               // Paused review shows the sample under the playhead, not a
               // neighbour — otherwise stepping frames never changes the image.
-              exact: !this.playingRef.current,
+              exact: !playing,
+              // Outgoing stays hard; incoming partner must not stall play.
+              soft: playing && index > 0,
             },
           );
         } catch {
@@ -393,7 +397,13 @@ class EngineConsumer implements FrameConsumer {
       transformB: transformTuple(sampleB?.clip.clip.effects),
       opacityA: opacityFor(sampleA),
       opacityB: opacityFor(sampleB),
-      transition: slice.transition?.type,
+      // Live play: blur/zoom are multi-tap GPU passes on two 720/1080 frames —
+      // approximate as crossfade so the clock doesn't hitch. Scrub/paused keeps
+      // the real shader; export uses FFmpeg.
+      transition: previewTransitionWhilePlaying(
+        slice.transition?.type,
+        this.playingRef.current,
+      ),
       progress: slice.transition?.progress,
       textsUnder,
       textsOver,

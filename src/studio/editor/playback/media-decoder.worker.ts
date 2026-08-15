@@ -23,6 +23,12 @@ type FrameMessage = {
   aheadSec?: number;
   /** Paused review needs the requested sample, not a nearby one. */
   exact?: boolean;
+  /**
+   * Transition partner / non-critical leg during play: return a cached
+   * neighbour immediately (or miss) — never block the display clock on a
+   * cold keyframe seek.
+   */
+  soft?: boolean;
 };
 
 type PlayMessage = {
@@ -90,8 +96,9 @@ type FrameWaiter = {
  * - `play`: the pump owns the buffer; a one-sample neighbour is fine.
  * - `exact`: paused review/frame-step — decode the requested sample.
  * - `coarse`: mid-drag — any nearby cached sample, never wait on decode.
+ * - `soft`: transition partner during play — cache hit only; never block.
  */
-type FrameMode = "play" | "exact" | "coarse";
+type FrameMode = "play" | "exact" | "coarse" | "soft";
 
 type Session = {
   assetId: string;
@@ -687,7 +694,11 @@ async function ensureFrame(
   // How far off target a cached frame may be, and how long we may wait for the
   // real one. Frame-by-frame review must not be answered with a neighbour.
   const slack =
-    mode === "coarse" ? SCRUB_NEAREST_DISTANCE : mode === "exact" ? 0 : 1;
+    mode === "coarse" || mode === "soft"
+      ? SCRUB_NEAREST_DISTANCE
+      : mode === "exact"
+        ? 0
+        : 1;
   const waitMs =
     mode === "play" ? PLAY_WAIT_MS : mode === "exact" ? EXACT_WAIT_MS : FRAME_WAIT_MS;
 
@@ -695,6 +706,29 @@ async function ensureFrame(
   if (cached) {
     if (session.pumping) schedulePump(session);
     return cached;
+  }
+  if (mode === "soft") {
+    // Keep the partner decoder warming, but never stall the display clock.
+    extendPumpTarget(session, sourceTime, speed, aheadSec);
+    if (session.pumping) {
+      schedulePump(session);
+    } else {
+      session.chain = session.chain
+        .then(() =>
+          keyframeEnsure(
+            session,
+            targetIndex,
+            generation,
+            FRAME_WAIT_MS,
+            SCRUB_NEAREST_DISTANCE,
+          ),
+        )
+        .then(() => undefined)
+        .catch(() => undefined);
+    }
+    const loose = nearestFrameAny(session, targetIndex);
+    if (loose) return loose;
+    throw new Error("Soft frame miss.");
   }
   if (mode === "coarse") {
     // Mid-drag with nothing usable cached: seek without blocking the caller on
@@ -770,7 +804,15 @@ async function decodeFrame(message: FrameMessage): Promise<void> {
     message.generation,
     message.speed ?? session.pumpSpeed,
     message.aheadSec ?? session.aheadSec,
-    session.pumping ? "play" : message.exact ? "exact" : "coarse",
+    session.pumping
+      ? message.soft
+        ? "soft"
+        : "play"
+      : message.exact
+        ? "exact"
+        : message.soft
+          ? "soft"
+          : "coarse",
   );
   const output = frame.clone();
   post(

@@ -307,10 +307,10 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
     });
   };
   for (const clip of plan.video) {
-    if (clip.timelineStart > time && clip.timelineStart <= time + 2) enqueuePreload(clip);
+    if (clip.timelineStart > time && clip.timelineStart <= time + 3.5) enqueuePreload(clip);
   }
   for (const upcoming of plan.transitions) {
-    if (upcoming.timelineStart > time && upcoming.timelineStart <= time + 2) {
+    if (upcoming.timelineStart > time && upcoming.timelineStart <= time + 3.5) {
       const incoming = plan.clipsById.get(upcoming.incomingClipId);
       if (incoming) enqueuePreload(incoming);
     }

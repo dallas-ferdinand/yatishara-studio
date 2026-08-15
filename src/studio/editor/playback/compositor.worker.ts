@@ -222,16 +222,13 @@ vec4 sampleFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform, float 
 }
 
 vec4 blurFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform, float radius, float opacity) {
+  // 5-tap cross — enough for scrub preview without the old 9-tap hitch.
   vec2 px = radius / max(sourceSize, vec2(1.0));
-  vec4 color = sampleFrame(tex, uv, sourceSize, transform, opacity) * 0.2;
-  color += sampleFrame(tex, uv + vec2(px.x, 0.0), sourceSize, transform, opacity) * 0.12;
-  color += sampleFrame(tex, uv - vec2(px.x, 0.0), sourceSize, transform, opacity) * 0.12;
-  color += sampleFrame(tex, uv + vec2(0.0, px.y), sourceSize, transform, opacity) * 0.12;
-  color += sampleFrame(tex, uv - vec2(0.0, px.y), sourceSize, transform, opacity) * 0.12;
-  color += sampleFrame(tex, uv + px, sourceSize, transform, opacity) * 0.08;
-  color += sampleFrame(tex, uv - px, sourceSize, transform, opacity) * 0.08;
-  color += sampleFrame(tex, uv + vec2(px.x, -px.y), sourceSize, transform, opacity) * 0.08;
-  color += sampleFrame(tex, uv + vec2(-px.x, px.y), sourceSize, transform, opacity) * 0.08;
+  vec4 color = sampleFrame(tex, uv, sourceSize, transform, opacity) * 0.36;
+  color += sampleFrame(tex, uv + vec2(px.x, 0.0), sourceSize, transform, opacity) * 0.16;
+  color += sampleFrame(tex, uv - vec2(px.x, 0.0), sourceSize, transform, opacity) * 0.16;
+  color += sampleFrame(tex, uv + vec2(0.0, px.y), sourceSize, transform, opacity) * 0.16;
+  color += sampleFrame(tex, uv - vec2(0.0, px.y), sourceSize, transform, opacity) * 0.16;
   return color;
 }
 
