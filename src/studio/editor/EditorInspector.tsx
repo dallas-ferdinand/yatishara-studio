@@ -443,6 +443,52 @@ export function EditorModeRail({
   );
 }
 
+function ExportProgressPill({
+  status,
+  label,
+  progress,
+  onDismiss,
+}) {
+  const pct =
+    status === "done" || status === "error"
+      ? 100
+      : Math.max(0, Math.min(100, Number(progress) || 0));
+  return (
+    <div
+      className={`desk-upload-pill desk-upload-pill--${status}`}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct}
+      aria-label={label}
+      title={label}
+    >
+      <div className="desk-upload-pill-track">
+        <div
+          className={`desk-upload-pill-fill${status === "uploading" && pct < 2 ? " is-indeterminate" : ""}`}
+          style={status === "uploading" && pct < 2 ? undefined : { width: `${pct}%` }}
+        />
+        <div className="desk-upload-pill-content">
+          <span className="desk-upload-pill-text">{label}</span>
+          {onDismiss ? (
+            <div className="desk-upload-pill-actions">
+              <button
+                type="button"
+                className="desk-upload-pill-btn desk-upload-pill-dismiss"
+                aria-label="Dismiss"
+                title="Dismiss"
+                onClick={onDismiss}
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ExportPanel({
   project,
   exportKind,
@@ -453,6 +499,8 @@ function ExportPanel({
   exporting,
   exportProgress,
   exportPhase,
+  exportError,
+  exportResultName,
   canExportVideo,
   canExportAudio,
   canExportStudio,
@@ -462,6 +510,7 @@ function ExportPanel({
   onAudioFormatChange,
   onFilenameChange,
   onExport,
+  onDismissExport,
   onUpdateProject,
 }) {
   const frameRatio = normalizeFrameRatio(project.frameRatio);
@@ -631,15 +680,28 @@ function ExportPanel({
           </InspectorSection>
         ) : null}
 
-        {exporting ? (
+        {exporting || exportError || exportResultName ? (
           <div className="studio-editor-export-progress" aria-live="polite">
-            <div className="studio-editor-export-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={exportProgress ?? 0}>
-              <span style={{ width: `${Math.max(4, exportProgress ?? 0)}%` }} />
-            </div>
-            <p className="studio-editor-export-progress-label">
-              {exportPhase || "Exporting…"}
-              {typeof exportProgress === "number" ? ` · ${Math.round(exportProgress)}%` : ""}
-            </p>
+            <ExportProgressPill
+              status={
+                exportError ? "error" : exporting ? "uploading" : "done"
+              }
+              progress={exportProgress}
+              label={
+                exportError
+                  ? exportError
+                  : exporting
+                    ? `${exportPhase || "Exporting…"}${
+                        typeof exportProgress === "number" && exportProgress > 0
+                          ? ` · ${Math.round(exportProgress)}%`
+                          : ""
+                      }`
+                    : `Done · ${exportResultName || placeholder}`
+              }
+              onDismiss={
+                exporting ? undefined : onDismissExport
+              }
+            />
           </div>
         ) : null}
 
@@ -809,6 +871,8 @@ export function EditorInspector({
   exporting = false,
   exportProgress = 0,
   exportPhase = "",
+  exportError = "",
+  exportResultName = "",
   canExportVideo = false,
   canExportAudio = false,
   canExportStudio = false,
@@ -818,6 +882,7 @@ export function EditorInspector({
   onExportAudioFormatChange,
   onExportFilenameChange,
   onExport,
+  onDismissExport,
 }) {
   const joint = jointByKey(project, jointKey);
   const jointLeft = joint ? leftClipForJoint(project, joint) : null;
@@ -844,6 +909,8 @@ export function EditorInspector({
             exporting={exporting}
             exportProgress={exportProgress}
             exportPhase={exportPhase}
+            exportError={exportError}
+            exportResultName={exportResultName}
             canExportVideo={canExportVideo}
             canExportAudio={canExportAudio}
             canExportStudio={canExportStudio}
@@ -853,6 +920,7 @@ export function EditorInspector({
             onAudioFormatChange={onExportAudioFormatChange}
             onFilenameChange={onExportFilenameChange}
             onExport={onExport}
+            onDismissExport={onDismissExport}
             onUpdateProject={onUpdateProject}
           />
         </div>
