@@ -9050,7 +9050,7 @@ export function StudioShell({
           /* Message column only — composer stays full width */
           --studio-chat-column-max: min(92%, 36rem);
           --studio-chat-bubble-max: 90%;
-          --studio-composer-min-height: 96px;
+          --studio-composer-min-height: 118px;
           --studio-composer-rail-tile: 48px;
           --studio-composer-rail-reserve: calc(var(--studio-composer-rail-tile) + 12px);
           --studio-composer-side-width: 0px;
@@ -27478,7 +27478,7 @@ export function StudioShell({
 }
 
 const CREATE_COMPOSER_MAX_HEIGHT_KEY = "ys-create-composer-max-height";
-const CREATE_COMPOSER_MAX_HEIGHT_MIN = 160;
+const CREATE_COMPOSER_MAX_HEIGHT_MIN = 118;
 
 function clampCreateComposerMaxHeight(px) {
   const max = Math.round((typeof window !== "undefined" ? window.innerHeight : 800) * 0.72);
