@@ -13,7 +13,9 @@ import {
   defaultInsertIndex,
   ensureMainTextTrackAboveVideo,
   insertTrackAt,
+  jointsBetweenClipIds,
   mainTextTrack,
+  normalizeClipSelection,
   pinAudioTracksBelow,
   pruneEmptyTracks,
 } from "./editorTimelineUtils";
@@ -174,6 +176,7 @@ export function createInitialState(project: EditorProject): EditorState {
     ui: {
       playhead: 0,
       selectedClipId: null,
+      selectedClipIds: [],
       selectedJointKey: null,
       pixelsPerSecond: DEFAULT_PPS,
       playing: false,
@@ -225,7 +228,8 @@ function withEdit(state: EditorState, nextProject: EditorProject): EditorState {
 export type EditorAction =
   | { type: "undo" }
   | { type: "redo" }
-  | { type: "select_clip"; clipId: string | null }
+  | { type: "select_clip"; clipId: string | null; additive?: boolean }
+  | { type: "select_clips"; clipIds: string[] }
   | { type: "select_joint"; jointKey: string | null }
   | { type: "set_playhead"; time: number }
   | { type: "set_playing"; playing: boolean }
@@ -246,6 +250,8 @@ export type EditorAction =
       jointKey: string;
       transition: EditorClip["transitionOut"];
       live?: boolean;
+      /** Apply the same transition to every joint key (multi-select). */
+      jointKeys?: string[];
     }
   | { type: "move_clip"; clipId: string; startTime: number; trackId?: string; live?: boolean }
   | {
@@ -357,15 +363,63 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         future: state.future.slice(1),
       };
     }
-    case "select_clip":
+    case "select_clip": {
+      if (action.clipId == null) {
+        return {
+          ...state,
+          ui: {
+            ...state.ui,
+            selectedClipId: null,
+            selectedClipIds: [],
+            selectedJointKey: null,
+          },
+        };
+      }
+      if (action.additive) {
+        const existing = state.ui.selectedClipIds?.length
+          ? state.ui.selectedClipIds
+          : state.ui.selectedClipId
+            ? [state.ui.selectedClipId]
+            : [];
+        const nextIds = existing.includes(action.clipId)
+          ? existing.filter((id) => id !== action.clipId)
+          : [...existing, action.clipId];
+        const normalized = normalizeClipSelection(
+          nextIds.includes(action.clipId) ? action.clipId : nextIds[nextIds.length - 1] ?? null,
+          nextIds,
+        );
+        return {
+          ...state,
+          ui: {
+            ...state.ui,
+            ...normalized,
+            selectedJointKey: null,
+          },
+        };
+      }
       return {
         ...state,
         ui: {
           ...state.ui,
-          selectedClipId: action.clipId,
+          ...normalizeClipSelection(action.clipId, [action.clipId]),
           selectedJointKey: null,
         },
       };
+    }
+    case "select_clips": {
+      const normalized = normalizeClipSelection(
+        action.clipIds[action.clipIds.length - 1] ?? null,
+        action.clipIds,
+      );
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          ...normalized,
+          selectedJointKey: null,
+        },
+      };
+    }
     case "select_joint":
       return {
         ...state,
@@ -373,6 +427,7 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           ...state.ui,
           selectedJointKey: action.jointKey,
           selectedClipId: null,
+          selectedClipIds: [],
           editorMode: action.jointKey ? "transition" : state.ui.editorMode,
           inspectorOpen: action.jointKey ? true : state.ui.inspectorOpen,
         },
@@ -396,7 +451,19 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, ui: { ...state.ui, pixelsPerSecond: action.pixelsPerSecond } };
     case "set_inspector_open":
       return { ...state, ui: { ...state.ui, inspectorOpen: action.open } };
-    case "set_editor_mode":
+    case "set_editor_mode": {
+      const clipIds =
+        state.ui.selectedClipIds?.length
+          ? state.ui.selectedClipIds
+          : state.ui.selectedClipId
+            ? [state.ui.selectedClipId]
+            : [];
+      let selectedJointKey =
+        action.mode === "transition" ? state.ui.selectedJointKey : null;
+      if (action.mode === "transition" && !selectedJointKey) {
+        const joints = jointsBetweenClipIds(state.project, clipIds);
+        selectedJointKey = joints[0]?.key ?? null;
+      }
       return {
         ...state,
         ui: {
@@ -404,9 +471,10 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           editorMode: action.mode,
           sidePanel: "inspect",
           inspectorOpen: true,
-          selectedJointKey: action.mode === "transition" ? state.ui.selectedJointKey : null,
+          selectedJointKey,
         },
       };
+    }
     case "set_side_panel":
       return {
         ...state,
@@ -432,18 +500,37 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           },
         };
       }
-      if (!state.ui.selectedClipId) return state;
-      const deleted = state.project.clips.find((clip) => clip.id === state.ui.selectedClipId);
-      const prev = deleted ? previousAdjacentClip(state.project.clips, deleted) : null;
-      let clips = state.project.clips
-        .filter((clip) => clip.id !== state.ui.selectedClipId)
-        .map((clip) => (prev && clip.id === prev.id ? clearTransitionOut(clip) : clip));
-      if (deleted && isMainStoryTrack(state.project, deleted.trackId)) {
-        clips = collapseTrackLeft(clips, deleted.trackId);
+      const deleteIds = new Set(
+        state.ui.selectedClipIds?.length
+          ? state.ui.selectedClipIds
+          : state.ui.selectedClipId
+            ? [state.ui.selectedClipId]
+            : [],
+      );
+      if (!deleteIds.size) return state;
+      const deletedClips = state.project.clips.filter((clip) => deleteIds.has(clip.id));
+      let clips = state.project.clips.filter((clip) => !deleteIds.has(clip.id));
+      // Clear transitions that pointed into deleted clips / from remaining left neighbors.
+      for (const deleted of deletedClips) {
+        const prev = previousAdjacentClip(state.project.clips, deleted);
+        if (prev && !deleteIds.has(prev.id)) {
+          clips = clips.map((clip) => (clip.id === prev.id ? clearTransitionOut(clip) : clip));
+        }
+      }
+      const touchedTracks = new Set(deletedClips.map((c) => c.trackId));
+      for (const trackId of touchedTracks) {
+        if (isMainStoryTrack(state.project, trackId)) {
+          clips = collapseTrackLeft(clips, trackId);
+        }
       }
       return {
         ...withEdit(state, { ...state.project, clips }),
-        ui: { ...state.ui, selectedClipId: null, playing: false },
+        ui: {
+          ...state.ui,
+          selectedClipId: null,
+          selectedClipIds: [],
+          playing: false,
+        },
       };
     }
     case "duplicate_selected": {
@@ -538,9 +625,10 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       return withHistory(state, next);
     }
     case "set_joint_transition": {
-      const [leftId] = action.jointKey.split("::");
+      const keys = [...new Set([action.jointKey, ...(action.jointKeys ?? [])].filter(Boolean))];
+      const leftIds = new Set(keys.map((key) => key.split("::")[0]!).filter(Boolean));
       const clips = state.project.clips.map((clip) =>
-        clip.id === leftId ? { ...clip, transitionOut: action.transition } : clip,
+        leftIds.has(clip.id) ? { ...clip, transitionOut: action.transition } : clip,
       );
       const nextProject = { ...state.project, clips };
       return action.live ? withLive(state, nextProject) : withHistory(state, nextProject);
@@ -567,7 +655,11 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         .concat([left, right]);
       return {
         ...withEdit(state, { ...state.project, clips }),
-        ui: { ...state.ui, selectedClipId: right.id, playing: false },
+        ui: {
+          ...state.ui,
+          ...normalizeClipSelection(right.id, [right.id]),
+          playing: false,
+        },
       };
     }
     case "add_clip": {

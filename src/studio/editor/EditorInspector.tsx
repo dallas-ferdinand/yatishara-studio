@@ -374,10 +374,13 @@ function parseNumberInput(raw, { scale = 1, suffix = "" } = {}) {
   return n / scale;
 }
 
-function modeAvailability({ modeId, joint }) {
+function modeAvailability({ modeId, joint, canTransition }) {
   if (modeId === "transition") {
-    if (!joint) {
-      return { enabled: false, reason: "Select a cut between two clips to apply a transition" };
+    if (!joint && !canTransition) {
+      return {
+        enabled: false,
+        reason: "Select adjacent clips (or a cut) to apply a transition",
+      };
     }
     return { enabled: true, reason: null };
   }
@@ -399,6 +402,7 @@ export function EditorModeRail({
   onModeChange,
   onOpenExport,
   joint,
+  canTransition = false,
 }) {
   const exportActive = sidePanel === "export";
   return (
@@ -406,7 +410,11 @@ export function EditorModeRail({
       {EDITOR_MODES.map((mode) => {
         const Icon = MODE_ICONS[mode.icon] ?? MousePointer2;
         const active = !exportActive && editorMode === mode.id;
-        const { enabled, reason } = modeAvailability({ modeId: mode.id, joint });
+        const { enabled, reason } = modeAvailability({
+          modeId: mode.id,
+          joint,
+          canTransition,
+        });
         return (
           <button
             key={mode.id}
@@ -857,6 +865,7 @@ export function EditorInspector({
   clip,
   media,
   jointKey,
+  jointKeys = null,
   project,
   playhead,
   onUpdateClip,
@@ -886,7 +895,15 @@ export function EditorInspector({
 }) {
   const joint = jointByKey(project, jointKey);
   const jointLeft = joint ? leftClipForJoint(project, joint) : null;
-  const showTransition = Boolean(joint) && (editorMode === "transition" || editorMode === "select");
+  const applyJointKeys =
+    Array.isArray(jointKeys) && jointKeys.length > 0
+      ? jointKeys
+      : jointKey
+        ? [jointKey]
+        : [];
+  const showTransition =
+    applyJointKeys.length > 0 && (editorMode === "transition" || editorMode === "select");
+  const multiTransitionCount = applyJointKeys.length;
   const showAudio = Boolean(clip) && (clip.kind === "audio" || clip.kind === "video");
   const showVideo = Boolean(clip) && (clip.kind === "video" || clip.kind === "image");
   /** Picture edge fades — video/image only (audio fades live in Audio panel). */
@@ -941,7 +958,11 @@ export function EditorInspector({
           {showTransition ? (
             <InspectorSection
               title="Transitions"
-              hint="Applied between adjacent clips in preview and export."
+              hint={
+                multiTransitionCount > 1
+                  ? `Applies to ${multiTransitionCount} cuts between selected clips.`
+                  : "Applied between adjacent clips in preview and export."
+              }
             >
               <div className="studio-editor-transition-list">
                 {TRANSITION_LIBRARY.map((template) => {
@@ -952,11 +973,11 @@ export function EditorInspector({
                       key={template.id}
                       template={template}
                       active={active}
-                      disabled={!joint}
+                      disabled={!applyJointKeys.length}
                       onClick={() => {
-                        if (!joint) return;
+                        if (!applyJointKeys.length) return;
                         onSetJointTransition(
-                          joint.key,
+                          applyJointKeys[0],
                           template.id === "none"
                             ? undefined
                             : { type: template.id, duration: template.duration },
@@ -980,14 +1001,17 @@ export function EditorInspector({
                   }
                   formatValue={(v) => `${Number(v).toFixed(2)}s`}
                   parseInput={(raw) => parseNumberInput(raw, { suffix: "s" })}
-                  onValueChange={(next) =>
-                    onUpdateClip(jointLeft.id, {
-                      transitionOut: {
-                        type: jointLeft.transitionOut!.type,
-                        duration: next || 0.5,
-                      },
-                    })
-                  }
+                  onValueChange={(next) => {
+                    const duration = next || 0.5;
+                    const type = jointLeft.transitionOut!.type;
+                    for (const key of applyJointKeys) {
+                      const leftId = key.split("::")[0];
+                      if (!leftId) continue;
+                      onUpdateClip(leftId, {
+                        transitionOut: { type, duration },
+                      });
+                    }
+                  }}
                 />
               ) : null}
             </InspectorSection>

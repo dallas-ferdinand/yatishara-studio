@@ -48,6 +48,37 @@ export function leftClipForJoint(project: EditorProject, joint: TransitionJoint)
   return project.clips.find((clip) => clip.id === joint.leftClipId) ?? null;
 }
 
+/** Joints whose both sides are in `clipIds` (adjacent on the same track). */
+export function jointsBetweenClipIds(
+  project: EditorProject,
+  clipIds: readonly string[] | null | undefined,
+): TransitionJoint[] {
+  const idSet = new Set((clipIds ?? []).filter(Boolean));
+  if (idSet.size < 2) return [];
+  const out: TransitionJoint[] = [];
+  for (const track of project.tracks) {
+    if (track.kind !== "video") continue;
+    for (const joint of transitionJointsOnTrack(project, track.id)) {
+      if (idSet.has(joint.leftClipId) && idSet.has(joint.rightClipId)) {
+        out.push(joint);
+      }
+    }
+  }
+  return out;
+}
+
+/** Normalize selection: primary id + full id list (primary last for “most recent”). */
+export function normalizeClipSelection(
+  clipId: string | null | undefined,
+  clipIds?: readonly string[] | null,
+): { selectedClipId: string | null; selectedClipIds: string[] } {
+  const ids = [...new Set((clipIds ?? []).filter(Boolean))];
+  if (clipId && !ids.includes(clipId)) ids.push(clipId);
+  if (!ids.length && clipId) ids.push(clipId);
+  const primary = ids.length ? (clipId && ids.includes(clipId) ? clipId : ids[ids.length - 1]!) : null;
+  return { selectedClipId: primary, selectedClipIds: primary ? ids : [] };
+}
+
 export function tracksByKind(project: EditorProject, kind: EditorClip["kind"]) {
   return project.tracks.filter((track) => track.kind === kind);
 }

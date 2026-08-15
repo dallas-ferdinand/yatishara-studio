@@ -30,7 +30,7 @@ import {
 import { quantizeToFrame } from "./projectContract";
 import { readOverlaySnapEnabled, writeOverlaySnapEnabled } from "./editorSnap";
 import { useEditorHotkeys } from "./useEditorHotkeys";
-import { jointByKey } from "./editorTimelineUtils";
+import { jointByKey, jointsBetweenClipIds } from "./editorTimelineUtils";
 import {
   DEFAULT_EXPORT_AUDIO_FORMAT,
   DEFAULT_EXPORT_KIND,
@@ -533,8 +533,23 @@ export function StudioVideoEditor({
   }, [hydrated, mediaById, state.project.clips]);
 
   const timelineDuration = Math.max(state.project.duration, projectEndTime(state.project));
-  const selectedClip = state.project.clips.find((clip) => clip.id === state.ui.selectedClipId) ?? null;
+  const selectedClipIds =
+    state.ui.selectedClipIds?.length > 0
+      ? state.ui.selectedClipIds
+      : state.ui.selectedClipId
+        ? [state.ui.selectedClipId]
+        : [];
+  const selectedClip =
+    state.project.clips.find((clip) => clip.id === state.ui.selectedClipId) ?? null;
   const selectedJoint = jointByKey(state.project, state.ui.selectedJointKey);
+  const selectionJoints = jointsBetweenClipIds(state.project, selectedClipIds);
+  const transitionJointKeys =
+    selectionJoints.length > 0
+      ? selectionJoints.map((j) => j.key)
+      : selectedJoint
+        ? [selectedJoint.key]
+        : [];
+  const canUseTransitions = transitionJointKeys.length > 0;
   const canExportVideo = state.project.clips.some((clip) => clip.kind === "video" && clip.assetId);
   const canExportAudio = canExportVideo;
   const canExportStudio = Boolean(localProjectId);
@@ -549,10 +564,10 @@ export function StudioVideoEditor({
 
   // If the selection that a tool needs goes away, fall back to select mode.
   useEffect(() => {
-    if (state.ui.editorMode === "transition" && !selectedJoint) {
+    if (state.ui.editorMode === "transition" && !canUseTransitions) {
       dispatch({ type: "set_editor_mode", mode: "select" });
     }
-  }, [selectedJoint, state.ui.editorMode]);
+  }, [canUseTransitions, state.ui.editorMode]);
 
   const splitAt = quantizeToFrame(state.ui.playhead);
   const canSplit = clipCanSplitAt(selectedClip, splitAt);
@@ -962,7 +977,9 @@ export function StudioVideoEditor({
                   canUndo={state.past.length > 0}
                   canRedo={state.future.length > 0}
                   canSplit={canSplit}
-                  hasSelection={Boolean(state.ui.selectedClipId || state.ui.selectedJointKey)}
+                  hasSelection={Boolean(
+                    selectedClipIds.length || state.ui.selectedJointKey,
+                  )}
                   pixelsPerSecond={state.ui.pixelsPerSecond}
                   onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
                   onUndo={() => dispatch({ type: "undo" })}
@@ -981,7 +998,9 @@ export function StudioVideoEditor({
                   playhead={state.ui.playhead}
                   pixelsPerSecond={state.ui.pixelsPerSecond}
                   selectedClipId={state.ui.selectedClipId}
+                  selectedClipIds={selectedClipIds}
                   selectedJointKey={state.ui.selectedJointKey}
+                  selectedJointKeys={transitionJointKeys}
                   editorMode={state.ui.editorMode}
                   mediaById={mediaById}
                   overlaySnapEnabled={overlaySnapEnabled}
@@ -989,7 +1008,22 @@ export function StudioVideoEditor({
                   onSplitClip={(clipId) =>
                     dispatch({ type: "split_at_playhead", clipId })
                   }
-                  onSelectClip={(clipId) => dispatch({ type: "select_clip", clipId })}
+                  onSelectClip={(clipIdOrIds, opts) => {
+                    if (Array.isArray(clipIdOrIds) || opts?.replace) {
+                      const ids = Array.isArray(clipIdOrIds)
+                        ? clipIdOrIds
+                        : clipIdOrIds
+                          ? [clipIdOrIds]
+                          : [];
+                      dispatch({ type: "select_clips", clipIds: ids });
+                      return;
+                    }
+                    dispatch({
+                      type: "select_clip",
+                      clipId: clipIdOrIds,
+                      additive: Boolean(opts?.additive),
+                    });
+                  }}
                   onSelectJoint={(jointKey) => dispatch({ type: "select_joint", jointKey })}
                   onSetPlayhead={(time) => {
                     if (state.ui.playing) dispatch({ type: "set_playing", playing: false });
@@ -1125,13 +1159,19 @@ export function StudioVideoEditor({
                     ? mediaById.get(selectedClip.assetId) ?? null
                     : null
                 }
-                jointKey={selectedJoint?.key ?? null}
+                jointKey={selectedJoint?.key ?? transitionJointKeys[0] ?? null}
+                jointKeys={transitionJointKeys}
                 project={state.project}
                 playhead={state.ui.playhead}
                 onUpdateClip={(clipId, patch) => dispatch({ type: "update_clip", clipId, patch })}
                 onUpdateProject={(patch) => dispatch({ type: "update_project", patch })}
                 onSetJointTransition={(jointKey, transition) =>
-                  dispatch({ type: "set_joint_transition", jointKey, transition })
+                  dispatch({
+                    type: "set_joint_transition",
+                    jointKey,
+                    jointKeys: transitionJointKeys,
+                    transition,
+                  })
                 }
                 onAddTextClip={(opts) => {
                   dispatch({ type: "set_editor_mode", mode: "text" });
@@ -1178,6 +1218,7 @@ export function StudioVideoEditor({
             onModeChange={(mode) => dispatch({ type: "set_editor_mode", mode })}
             onOpenExport={() => dispatch({ type: "set_side_panel", panel: "export" })}
             joint={selectedJoint}
+            canTransition={canUseTransitions}
           />
         </div>
       </div>

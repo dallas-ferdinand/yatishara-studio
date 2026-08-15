@@ -429,7 +429,10 @@ function TimelineClipBlock({
     }
     event.preventDefault();
     event.stopPropagation();
-    onSelect(clip.id);
+    const additive = Boolean(event.ctrlKey || event.metaKey);
+    onSelect(clip.id, { additive });
+    // Ctrl/Cmd+click toggles selection only — do not start a drag.
+    if (additive && mode === "move") return;
     const startX = event.clientX;
     const startY = event.clientY;
     const originStart = clip.startTime;
@@ -1196,7 +1199,9 @@ export function EditorTimeline({
   playhead,
   pixelsPerSecond,
   selectedClipId,
+  selectedClipIds = [],
   selectedJointKey,
+  selectedJointKeys = [],
   editorMode: _editorMode,
   mediaById,
   onSelectClip,
@@ -1232,6 +1237,7 @@ export function EditorTimeline({
   /** Full-height lane slot preview: insert new lane or reorder existing lane. */
   const [lanePreview, setLanePreview] = useState(null);
   const [pickup, setPickup] = useState(null);
+  const [marquee, setMarquee] = useState(null);
   const [externalDrag, setExternalDrag] = useState(false);
   const [panning, setPanning] = useState(false);
   const [scrubbing, setScrubbing] = useState(false);
@@ -1566,6 +1572,130 @@ export function EditorTimeline({
     [beginTimelinePan, onSetPlayhead, pixelsPerSecond, project.duration, timeFromClientX],
   );
 
+  /**
+   * Empty-lane pointer: small drag → marquee multi-select; click / tiny move → scrub playhead.
+   */
+  const beginLanePointer = useCallback(
+    (event, track) => {
+      if (event.button === 1 || event.altKey) {
+        beginTimelinePan(event);
+        return;
+      }
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      const laneEl = event.currentTarget;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const laneRect = laneEl.getBoundingClientRect();
+      const startLocal = {
+        x: startX - laneRect.left,
+        y: startY - laneRect.top,
+      };
+      let mode = null; // null | "marquee" | "scrub"
+      let lastMarquee = null;
+
+      const toMarquee = (clientX, clientY) => {
+        const rect = laneEl.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        const left = Math.min(startLocal.x, x);
+        const top = Math.min(startLocal.y, y);
+        const width = Math.abs(x - startLocal.x);
+        const height = Math.abs(y - startLocal.y);
+        return { trackId: track.id, left, top, width, height };
+      };
+
+      const clipsInMarquee = (box) => {
+        const t0 = box.left / Math.max(pixelsPerSecond, 1);
+        const t1 = (box.left + box.width) / Math.max(pixelsPerSecond, 1);
+        const y0 = box.top;
+        const y1 = box.top + box.height;
+        const laneH = laneEl.clientHeight || 1;
+        return project.clips
+          .filter((clip) => {
+            if (clip.trackId !== track.id) return false;
+            const start = clip.startTime;
+            const end = start + clipDuration(clip);
+            if (end < Math.min(t0, t1) || start > Math.max(t0, t1)) return false;
+            // Vertical: full lane height counts when box crosses mid-band.
+            if (y1 < 0 || y0 > laneH) return false;
+            return true;
+          })
+          .map((clip) => clip.id);
+      };
+
+      laneEl.setPointerCapture?.(event.pointerId);
+
+      const onMove = (moveEvent) => {
+        const dist = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+        if (mode == null && dist < 5) return;
+        if (mode == null) {
+          mode = "marquee";
+          onSelectJoint?.(null);
+        }
+        if (mode === "marquee") {
+          lastMarquee = toMarquee(moveEvent.clientX, moveEvent.clientY);
+          setMarquee(lastMarquee);
+        }
+      };
+
+      const onUp = (upEvent) => {
+        try {
+          laneEl.releasePointerCapture?.(upEvent.pointerId);
+        } catch {
+          /* ignore */
+        }
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        setMarquee(null);
+
+        if (mode === "marquee" && lastMarquee) {
+          const ids = clipsInMarquee(lastMarquee);
+          if (ids.length) onSelectClip(ids, { replace: true });
+          else {
+            onSelectClip(null);
+            onSelectJoint?.(null);
+          }
+          return;
+        }
+
+        // Click / tiny move: clear selection + scrub playhead like before.
+        onSelectClip(null);
+        onSelectJoint?.(null);
+        const clamp = (time) =>
+          quantizeToFrame(Math.max(0, Math.min(project.duration, time)));
+        onSetPlayhead(clamp(timeFromClientX(upEvent.clientX, laneEl)));
+      };
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [
+      beginTimelinePan,
+      onSelectClip,
+      onSelectJoint,
+      onSetPlayhead,
+      pixelsPerSecond,
+      project.clips,
+      project.duration,
+      timeFromClientX,
+    ],
+  );
+
+  const selectedIdSet = useMemo(() => {
+    const ids =
+      selectedClipIds?.length > 0
+        ? selectedClipIds
+        : selectedClipId
+          ? [selectedClipId]
+          : [];
+    return new Set(ids);
+  }, [selectedClipId, selectedClipIds]);
+
   const onTrackDragOver = useCallback(
     (event, track) => {
       if (!isTimelineDropDrag(event)) return;
@@ -1828,11 +1958,21 @@ export function EditorTimeline({
                     ) {
                       return;
                     }
-                    onSelectClip(null);
-                    onSelectJoint?.(null);
-                    beginPlayheadScrub(event, "lane");
+                    beginLanePointer(event, track);
                   }}
                 >
+                  {marquee && marquee.trackId === track.id ? (
+                    <div
+                      className="studio-editor-marquee"
+                      style={{
+                        left: marquee.left,
+                        top: marquee.top,
+                        width: marquee.width,
+                        height: marquee.height,
+                      }}
+                      aria-hidden="true"
+                    />
+                  ) : null}
                   {trackRipple && !pickup ? (
                     <div className="studio-editor-ripple-layer" aria-hidden="true">
                       {trackRipple.placements.map((placement) => {
@@ -1879,7 +2019,7 @@ export function EditorTimeline({
                           key={clip.id}
                           clip={clip}
                           pps={pixelsPerSecond}
-                          selected={clip.id === selectedClipId}
+                          selected={selectedIdSet.has(clip.id)}
                           media={media}
                           project={project}
                           playhead={playhead}
@@ -1899,13 +2039,13 @@ export function EditorTimeline({
                           renameToken={
                             renameRequest?.clipId === clip.id ? renameRequest.token : undefined
                           }
-                          onSelect={(id) => {
+                          onSelect={(id, opts) => {
                             onSelectJoint?.(null);
-                            onSelectClip(id);
+                            onSelectClip(id, opts);
                             // Text rows are thin and sat under insert hit bands — selecting a
                             // text clip must not invent a new one at the playhead. Keep the
                             // playhead on the clip so canvas preview stays in sync.
-                            if (clip.kind === "text") {
+                            if (clip.kind === "text" && !opts?.additive) {
                               const end = clip.startTime + clipDuration(clip);
                               if (playhead < clip.startTime || playhead >= end) {
                                 onSetPlayhead(
@@ -1941,7 +2081,10 @@ export function EditorTimeline({
                           leftClip={project.clips.find((c) => c.id === joint.leftClipId)}
                           rightClip={project.clips.find((c) => c.id === joint.rightClipId)}
                           pps={pixelsPerSecond}
-                          selected={selectedJointKey === joint.key}
+                          selected={
+                            selectedJointKey === joint.key ||
+                            selectedJointKeys.includes(joint.key)
+                          }
                           onSelect={onSelectJoint}
                           onSetTransition={onSetJointTransition}
                         />

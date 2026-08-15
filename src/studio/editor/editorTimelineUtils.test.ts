@@ -255,3 +255,68 @@ describe("reorder_tracks cross-kind", () => {
     expect(state.project.tracks[0]?.kind).toBe("text");
   });
 });
+
+import { jointsBetweenClipIds, normalizeClipSelection } from "./editorTimelineUtils";
+
+describe("jointsBetweenClipIds", () => {
+  it("returns joints only for adjacent selected video clips", () => {
+    const project: EditorProject = {
+      name: "T",
+      folderId: "f",
+      duration: 20,
+      frameRatio: "16:9",
+      tracks: [
+        { id: "track-v1", kind: "video", label: "V1" },
+        { id: "track-audio", kind: "audio", label: "Audio" },
+      ],
+      clips: [
+        {
+          id: "a",
+          assetId: "1",
+          trackId: "track-v1",
+          startTime: 0,
+          trimIn: 0,
+          trimOut: 2,
+          label: "A",
+          kind: "video",
+        },
+        {
+          id: "b",
+          assetId: "2",
+          trackId: "track-v1",
+          startTime: 2,
+          trimIn: 0,
+          trimOut: 2,
+          label: "B",
+          kind: "video",
+        },
+        {
+          id: "c",
+          assetId: "3",
+          trackId: "track-v1",
+          startTime: 5,
+          trimIn: 0,
+          trimOut: 2,
+          label: "C",
+          kind: "video",
+        },
+      ],
+    };
+    expect(jointsBetweenClipIds(project, ["a", "b"]).map((j) => j.key)).toEqual(["a::b"]);
+    expect(jointsBetweenClipIds(project, ["a", "c"])).toEqual([]);
+    expect(jointsBetweenClipIds(project, ["a", "b", "c"]).map((j) => j.key)).toEqual(["a::b"]);
+  });
+});
+
+describe("normalizeClipSelection", () => {
+  it("keeps primary as most recent", () => {
+    expect(normalizeClipSelection("b", ["a", "b"])).toEqual({
+      selectedClipId: "b",
+      selectedClipIds: ["a", "b"],
+    });
+    expect(normalizeClipSelection(null, [])).toEqual({
+      selectedClipId: null,
+      selectedClipIds: [],
+    });
+  });
+});

@@ -161,6 +161,8 @@ export type EditorProject = {
 export type EditorUiState = {
   playhead: number;
   selectedClipId: string | null;
+  /** Multi-select (ctrl/cmd + marquee). Includes selectedClipId when set. */
+  selectedClipIds: string[];
   selectedJointKey: string | null;
   pixelsPerSecond: number;
   playing: boolean;
