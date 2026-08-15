@@ -202,7 +202,10 @@ vec2 containedSize(vec2 sourceSize) {
 }
 
 vec4 sampleFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform, float opacity) {
-  vec2 objectSize = containedSize(sourceSize) * max(transform.x, 0.05);
+  vec2 objectSize = containedSize(sourceSize) * max(transform.x, 0.0);
+  if (objectSize.x < 1e-5 || objectSize.y < 1e-5) {
+    return vec4(0.0);
+  }
   // CSS/editor Y grows downward; WebGL UV Y grows upward after texture flip.
   vec2 objectCenter = vec2(0.5 + transform.y, 0.5 - transform.z);
   vec2 delta = uv - objectCenter;

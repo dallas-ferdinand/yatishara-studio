@@ -57,6 +57,7 @@ type ClipEffects = {
   x?: number;
   y?: number;
   rotation?: number;
+  opacity?: number;
 };
 
 type TextClipContent = {
@@ -203,7 +204,10 @@ function normalizeVf(
   const panX = Number.isFinite(effects?.x) ? Number(effects?.x) : 0;
   const panY = Number.isFinite(effects?.y) ? Number(effects?.y) : 0;
   const rotation = Number.isFinite(effects?.rotation) ? Number(effects?.rotation) : 0;
-  const safeScale = Math.min(4, Math.max(0.2, scale || 1));
+  const safeScale = Math.min(4, Math.max(0, Number.isFinite(scale) ? scale : 1));
+  if (safeScale < 0.005) {
+    return `scale=2:2,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black,fps=${EXPORT_FPS},setsar=1,format=yuv420p`;
+  }
   const scaledW = Math.max(2, Math.round(width * safeScale));
   const scaledH = Math.max(2, Math.round(height * safeScale));
   const panPxX = Math.round(panX * width);
@@ -223,6 +227,17 @@ function normalizeVf(
     "setsar=1",
     "format=yuv420p",
   );
+  const opacity = Number(effects?.opacity);
+  const safeOpacity = Number.isFinite(opacity)
+    ? Math.min(1, Math.max(0, opacity))
+    : 1;
+  if (safeOpacity < 0.999) {
+    filters.splice(
+      filters.length - 1,
+      0,
+      `lutrgb=r='val*${safeOpacity.toFixed(4)}':g='val*${safeOpacity.toFixed(4)}':b='val*${safeOpacity.toFixed(4)}'`,
+    );
+  }
   return filters.join(",");
 }
 

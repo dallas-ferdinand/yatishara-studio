@@ -403,19 +403,21 @@
 .studio-editor-inspector-body {
   flex: 1;
   overflow: auto;
-  padding: 0;
+  padding: 10px 10px 16px;
   font-size: 0.82rem;
   line-height: 1.4;
+  background: var(--mos-bg, var(--mos-panel));
 }
 
 .studio-editor-inspector-section {
-  margin: 0;
-  padding: 12px 14px 16px;
-  border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border));
+  margin: 0 0 10px;
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
 }
 
 .studio-editor-inspector-section:last-child {
-  border-bottom: 0;
+  margin-bottom: 0;
 }
 
 .studio-editor-inspector-section-head {
@@ -423,7 +425,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.35rem;
+  margin: 0 2px 8px;
 }
 
 .studio-editor-inspector-section-head h4 {
@@ -496,17 +498,17 @@
   color: #4b5563;
 }
 
-.studio-editor-inspector-hint {
-  margin: 0 0 0.7rem;
-  font-size: 0.72rem;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  line-height: 1.35;
-}
-
 .studio-editor-inspector-section-body {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 8px;
+}
+
+.studio-editor-inspector-hint {
+  margin: 0 2px 8px;
+  font-size: 0.72rem;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  line-height: 1.35;
 }
 
 .studio-editor-slider-row {

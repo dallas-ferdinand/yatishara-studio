@@ -26,6 +26,8 @@ export type EditorClipEffects = {
   x?: number;
   y?: number;
   rotation?: number;
+  /** Static picture opacity 0–1. Default 1. */
+  opacity?: number;
 };
 
 export type EditorClipTransition = {

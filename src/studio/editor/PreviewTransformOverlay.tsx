@@ -196,13 +196,22 @@ function applyHandleDelta(
       ? horizontalFactor
       : verticalFactor;
   const nextScale = clamp(
-    start.scale * factor,
+    start.scale <= 1e-6
+      ? Math.max(0, factor - 1)
+      : start.scale * factor,
     CLIP_TRANSFORM_LIMITS.scaleMin,
     CLIP_TRANSFORM_LIMITS.scaleMax,
   );
-  const appliedFactor = nextScale / start.scale;
-  const widthDelta = startRect.width * (appliedFactor - 1);
-  const heightDelta = startRect.height * (appliedFactor - 1);
+  const appliedFactor =
+    start.scale <= 1e-6 ? 1 : nextScale / start.scale;
+  const widthDelta =
+    start.scale <= 1e-6
+      ? nextScale * Math.max(startRect.width, 0.12)
+      : startRect.width * (appliedFactor - 1);
+  const heightDelta =
+    start.scale <= 1e-6
+      ? nextScale * Math.max(startRect.height, 0.12)
+      : startRect.height * (appliedFactor - 1);
   return {
     ...start,
     scale: nextScale,
@@ -399,8 +408,19 @@ export function PreviewTransformOverlay({
       latest.sourceH,
     );
     applyGuidesImmediately({ x: null, y: null });
-    latest.onPreviewTransform(next, latest.transformTarget);
-    commit(next);
+    const moved =
+      Math.abs(next.scale - drag.start.scale) > 1e-4 ||
+      Math.abs(next.x - drag.start.x) > 1e-4 ||
+      Math.abs(next.y - drag.start.y) > 1e-4 ||
+      Math.abs(next.rotation - drag.start.rotation) > 0.05;
+    // Click-to-select must not write effects — a no-op commit rebuilds the
+    // playback graph and the image flashes at 100% for a frame.
+    if (moved) {
+      latest.onPreviewTransform(next, latest.transformTarget);
+      commit(next);
+    } else {
+      latest.onPreviewTransform(drag.start, latest.transformTarget);
+    }
     setHoverCursor(point);
     try {
       hitRef.current?.releasePointerCapture(drag.pointerId);

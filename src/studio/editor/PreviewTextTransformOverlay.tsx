@@ -17,7 +17,7 @@ import type { EditorClip } from "./types";
 
 const TEXT_TRANSFORM_LIMITS = {
   ...CLIP_TRANSFORM_LIMITS,
-  scaleMin: 0.25,
+  scaleMin: 0,
   scaleMax: 6,
 } as const;
 

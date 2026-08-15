@@ -140,12 +140,15 @@ export function clipOpacityAtLocalTime(
   clipDurationSec: number,
   localTime: number,
 ): number {
-  return fadeEnvelopeAtLocalTime(
+  const envelope = fadeEnvelopeAtLocalTime(
     effects?.fadeIn ?? 0,
     effects?.fadeOut ?? 0,
     clipDurationSec,
     localTime,
   );
+  const opacity = Number(effects?.opacity);
+  const base = Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity)) : 1;
+  return envelope * base;
 }
 
 /**

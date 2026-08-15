@@ -35,6 +35,7 @@ import {
   formatTimecodeFull,
   timelineViewDuration,
 } from "./editorState";
+import { normalizeClipTransform, clampClipOpacity } from "./clipTransform";
 import type { EditorClip, EditorMediaItem, EditorProject } from "./types";
 import { MIN_CLIP_SEC } from "./projectContract";
 import {
@@ -159,6 +160,13 @@ export function EditorPreview({
     onPlayheadChange,
     onPlayingChange,
   });
+  // Stills decode instantly — a full-bleed poster under the canvas flashes at
+  // 100% when a click rebuilds the graph. Videos keep a poster while buffering.
+  const showPoster =
+    Boolean(posterUrl) &&
+    activeMedia?.kind !== "image" &&
+    (engine.buffering || !engine.supported);
+  const posterTransform = normalizeClipTransform(activeClip?.effects);
 
   useEffect(() => {
     engine.setMasterVolume(previewMuted ? 0 : previewVolume);
@@ -454,7 +462,7 @@ export function EditorPreview({
           }}
           data-frame-ratio={project.frameRatio ?? "16:9"}
         >
-          {posterUrl ? (
+          {showPoster ? (
             // Signed CDN poster URLs are already transformed and cannot use Next's loader.
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -462,6 +470,11 @@ export function EditorPreview({
               src={posterUrl}
               alt=""
               aria-hidden="true"
+              style={{
+                objectFit: "contain",
+                opacity: clampClipOpacity(activeClip?.effects?.opacity),
+                transform: `translate(${posterTransform.x * 100}%, ${posterTransform.y * 100}%) scale(${Math.max(posterTransform.scale, 0)}) rotate(${posterTransform.rotation}deg)`,
+              }}
             />
           ) : null}
           <canvas

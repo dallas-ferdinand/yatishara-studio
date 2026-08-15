@@ -62,6 +62,7 @@ import {
 } from "./editorEffects";
 import {
   CLIP_TRANSFORM_LIMITS,
+  clampClipOpacity,
   normalizeClipTransform,
 } from "./clipTransform";
 import { normalizeTextTransform } from "./textLayout";
@@ -1154,7 +1155,8 @@ function ClipTimingCard({ clip, project }) {
 function TransformPanel({ clip, onUpdateClip }) {
   const effects = clip.effects ?? {};
   const transform = normalizeClipTransform(effects);
-  const patch = (next) => {
+  const opacity = clampClipOpacity(effects.opacity);
+  const patchTransform = (next) => {
     onUpdateClip(clip.id, {
       effects: {
         ...effects,
@@ -1165,57 +1167,120 @@ function TransformPanel({ clip, onUpdateClip }) {
       },
     });
   };
+  const patchOpacity = (next) => {
+    onUpdateClip(clip.id, {
+      effects: {
+        ...effects,
+        opacity: Number(clampClipOpacity(next).toFixed(3)),
+      },
+    });
+  };
 
   return (
-    <InspectorSection
-      title="Transform"
-      hint="Keeps the media’s native aspect ratio. Drag on the canvas to move, resize, or rotate."
-      onReset={() => patch({ scale: 1, x: 0, y: 0, rotation: 0 })}
-    >
-      <SliderRow
-        label="Size"
-        min={CLIP_TRANSFORM_LIMITS.scaleMin}
-        max={CLIP_TRANSFORM_LIMITS.scaleMax}
-        step={0.05}
-        value={transform.scale}
-        defaultValue={1}
-        formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
-        parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
-        onValueChange={(next) => patch({ ...transform, scale: next })}
-      />
-      <SliderRow
-        label="Position X"
-        min={CLIP_TRANSFORM_LIMITS.panMin}
-        max={CLIP_TRANSFORM_LIMITS.panMax}
-        step={0.01}
-        value={transform.x}
-        defaultValue={0}
-        formatValue={(v) => Number(v).toFixed(2)}
-        parseInput={(raw) => parseNumberInput(raw)}
-        onValueChange={(next) => patch({ ...transform, x: next })}
-      />
-      <SliderRow
-        label="Position Y"
-        min={CLIP_TRANSFORM_LIMITS.panMin}
-        max={CLIP_TRANSFORM_LIMITS.panMax}
-        step={0.01}
-        value={transform.y}
-        defaultValue={0}
-        formatValue={(v) => Number(v).toFixed(2)}
-        parseInput={(raw) => parseNumberInput(raw)}
-        onValueChange={(next) => patch({ ...transform, y: next })}
-      />
-      <SliderRow
-        label="Rotation"
-        min={0}
-        max={359}
-        step={1}
-        value={transform.rotation}
-        defaultValue={0}
-        formatValue={(v) => `${Math.round(Number(v))}°`}
-        parseInput={(raw) => parseNumberInput(raw, { suffix: "°" })}
-        onValueChange={(next) => patch({ ...transform, rotation: next })}
-      />
+    <InspectorSection title="Appearance">
+      <div className="studio-editor-style-stack">
+        <div className="studio-editor-style-card is-open">
+          <div className="studio-editor-style-card-head">
+            <div className="studio-editor-style-card-summary">
+              <div className="studio-editor-style-card-toggle-row">
+                <span>Transform</span>
+                <span className="studio-editor-style-card-meta">
+                  {Math.round(transform.scale * 100)}% · {Math.round(transform.rotation)}°
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="studio-editor-inspector-reset"
+              onClick={() => patchTransform({ scale: 1, x: 0, y: 0, rotation: 0 })}
+              title="Reset transform"
+              aria-label="Reset transform"
+            >
+              <RotateCcw size={13} aria-hidden="true" />
+            </button>
+          </div>
+          <div className="studio-editor-style-card-body">
+            <SliderRow
+              label="Size"
+              min={CLIP_TRANSFORM_LIMITS.scaleMin}
+              max={CLIP_TRANSFORM_LIMITS.scaleMax}
+              step={0.01}
+              value={transform.scale}
+              defaultValue={1}
+              formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
+              parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
+              onValueChange={(next) => patchTransform({ ...transform, scale: next })}
+            />
+            <SliderRow
+              label="Position X"
+              min={CLIP_TRANSFORM_LIMITS.panMin}
+              max={CLIP_TRANSFORM_LIMITS.panMax}
+              step={0.01}
+              value={transform.x}
+              defaultValue={0}
+              formatValue={(v) => Number(v).toFixed(2)}
+              parseInput={(raw) => parseNumberInput(raw)}
+              onValueChange={(next) => patchTransform({ ...transform, x: next })}
+            />
+            <SliderRow
+              label="Position Y"
+              min={CLIP_TRANSFORM_LIMITS.panMin}
+              max={CLIP_TRANSFORM_LIMITS.panMax}
+              step={0.01}
+              value={transform.y}
+              defaultValue={0}
+              formatValue={(v) => Number(v).toFixed(2)}
+              parseInput={(raw) => parseNumberInput(raw)}
+              onValueChange={(next) => patchTransform({ ...transform, y: next })}
+            />
+            <SliderRow
+              label="Rotation"
+              min={0}
+              max={359}
+              step={1}
+              value={transform.rotation}
+              defaultValue={0}
+              formatValue={(v) => `${Math.round(Number(v))}°`}
+              parseInput={(raw) => parseNumberInput(raw, { suffix: "°" })}
+              onValueChange={(next) => patchTransform({ ...transform, rotation: next })}
+            />
+          </div>
+        </div>
+        <div className="studio-editor-style-card is-open">
+          <div className="studio-editor-style-card-head">
+            <div className="studio-editor-style-card-summary">
+              <div className="studio-editor-style-card-toggle-row">
+                <span>Opacity</span>
+                <span className="studio-editor-style-card-meta">
+                  {Math.round(opacity * 100)}%
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="studio-editor-inspector-reset"
+              onClick={() => patchOpacity(1)}
+              title="Reset opacity"
+              aria-label="Reset opacity"
+            >
+              <RotateCcw size={13} aria-hidden="true" />
+            </button>
+          </div>
+          <div className="studio-editor-style-card-body">
+            <SliderRow
+              label="Opacity"
+              min={0}
+              max={1}
+              step={0.01}
+              value={opacity}
+              defaultValue={1}
+              formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
+              parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
+              onValueChange={patchOpacity}
+            />
+          </div>
+        </div>
+      </div>
     </InspectorSection>
   );
 }
@@ -2270,9 +2335,9 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
             </div>
             <SliderRow
               label="Scale"
-              min={0.25}
+              min={0}
               max={6}
-              step={0.05}
+              step={0.01}
               value={pose.scale}
               defaultValue={1}
               formatValue={(v) => `${Math.round(Number(v) * 100)}%`}

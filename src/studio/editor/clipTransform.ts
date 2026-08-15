@@ -19,7 +19,8 @@ export const DEFAULT_CLIP_TRANSFORM: ClipTransform = {
 };
 
 export const CLIP_TRANSFORM_LIMITS = {
-  scaleMin: 0.2,
+  /** 0% allowed — 1% slider steps in the inspector. */
+  scaleMin: 0,
   scaleMax: 4,
   panMin: -1.5,
   panMax: 1.5,
@@ -93,15 +94,18 @@ export function ffmpegTransformFilter(
 ): string {
   const transform = normalizeClipTransform(effects);
   const scale = transform.scale;
-  const scaledW = Math.max(2, Math.round(width * scale));
-  const scaledH = Math.max(2, Math.round(height * scale));
+  // Near-zero → tiny then pad to black (matches invisible GPU scale).
+  const scaledW = Math.max(2, Math.round(width * Math.max(scale, 0)));
+  const scaledH = Math.max(2, Math.round(height * Math.max(scale, 0)));
   const panX = Math.round(transform.x * width);
   const panY = Math.round(transform.y * height);
   const rad = (-transform.rotation * Math.PI) / 180;
   const filters = [
-    `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease`,
+    scale < 0.005
+      ? `scale=2:2`
+      : `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease`,
   ];
-  if (Math.abs(transform.rotation) > 0.05) {
+  if (Math.abs(transform.rotation) > 0.05 && scale >= 0.005) {
     // FFmpeg positive angles are CCW; editor/CSS positive is CW.
     filters.push(
       `rotate=${rad}:c=black@0:ow=rotw(iw):oh=roth(ih)`,
@@ -111,5 +115,18 @@ export function ffmpegTransformFilter(
     `crop='min(iw,${width})':'min(ih,${height})':'max(0,min(iw-${width},(iw-${width})/2-${panX}))':'max(0,min(ih-${height},(ih-${height})/2-${panY}))'`,
     `pad=${width}:${height}:'max(0,min(ow-iw,(ow-iw)/2+${panX}))':'max(0,min(oh-ih,(oh-ih)/2+${panY}))':black`,
   );
+  const opacity = clampClipOpacity(effects?.opacity);
+  if (opacity < 0.999) {
+    // Fade toward black (opaque export canvas) — matches preview over u_background.
+    filters.push(
+      `lutrgb=r='val*${opacity.toFixed(4)}':g='val*${opacity.toFixed(4)}':b='val*${opacity.toFixed(4)}'`,
+    );
+  }
   return filters.join(",");
+}
+
+export function clampClipOpacity(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return clamp(n, 0, 1);
 }

@@ -19,6 +19,7 @@ describe("clipTransform", () => {
       y: 1.5,
       rotation: 10,
     });
+    expect(normalizeClipTransform({ scale: 0 }).scale).toBe(0);
   });
 
   it("grows the content rect when zooming in", () => {

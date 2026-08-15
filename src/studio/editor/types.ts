@@ -45,6 +45,8 @@ export type ClipEffects = {
   y?: number;
   /** Rotation in degrees. */
   rotation?: number;
+  /** Static picture opacity 0–1 (multiplied with edge fade envelope). Default 1. */
+  opacity?: number;
 };
 
 export type ClipTransition = {

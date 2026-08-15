@@ -20,6 +20,12 @@ describe("clipOpacityAtLocalTime", () => {
     expect(clipOpacityAtLocalTime(effects, 4, 0)).toBeCloseTo(1);
     expect(clipOpacityAtLocalTime(effects, 4, 4)).toBeCloseTo(1);
   });
+
+  it("multiplies static clip opacity with the fade envelope", () => {
+    expect(clipOpacityAtLocalTime({ opacity: 0.5 }, 4, 2)).toBeCloseTo(0.5);
+    expect(clipOpacityAtLocalTime({ opacity: 0.5, fadeIn: 1 }, 4, 0)).toBeCloseTo(0);
+    expect(clipOpacityAtLocalTime({ opacity: 0 }, 4, 2)).toBeCloseTo(0);
+  });
 });
 
 describe("audioFadeGainAtLocalTime", () => {
