@@ -1335,6 +1335,8 @@ export const resolvePublicPayLink = query({
     v.object({
       checkoutUrl: v.string(),
       status: paymentStatus,
+      amountCents: v.number(),
+      kind: v.union(v.literal("course"), v.literal("topup")),
     }),
     v.null(),
   ),
@@ -1349,6 +1351,8 @@ export const resolvePublicPayLink = query({
     return {
       checkoutUrl: payment.checkoutUrl,
       status: payment.status,
+      amountCents: payment.amountCents,
+      kind: payment.academyCourseId ? "course" : "topup",
     };
   },
 });
