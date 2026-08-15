@@ -2856,9 +2856,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Flush with the row — not a separate rounded card. */
   background: transparent;
-  border-right: none;
+  border-right: 1px solid #e4e7ec;
   flex-shrink: 0;
   align-self: stretch;
 }
@@ -2904,9 +2903,8 @@
 
 .studio-editor-track-lane {
   position: relative;
-  /* Connect to rail: no left gap / left radius so controls sit on the same strip. */
   margin: 3px 6px 3px 0;
-  border-radius: 0 8px 8px 0;
+  border-radius: 8px;
   background: var(--mos-bg, #ececf0);
   cursor: default;
   /* pan-y keeps wheel/touch scrolling the timeline; scrub uses pointer events. */
@@ -2914,9 +2912,10 @@
 }
 
 .studio-editor-track-row .studio-editor-track-rail {
-  margin: 3px 0;
-  border-radius: 8px 0 0 8px;
-  background: var(--mos-bg, #ececf0);
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  border-right: 1px solid #e4e7ec;
 }
 
 .studio-editor-marquee {
