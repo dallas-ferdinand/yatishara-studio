@@ -445,7 +445,12 @@ class EngineConsumer implements FrameConsumer {
         if (!response.ok) throw new Error(`Image preview failed (${response.status}).`);
         return response.blob();
       })
-      .then((blob) => createImageBitmap(blob))
+      .then((blob) =>
+        createImageBitmap(blob, {
+          premultiplyAlpha: "none",
+          colorSpaceConversion: "default",
+        }),
+      )
       .then((bitmap) => {
         const frame = new VideoFrame(bitmap, { timestamp: 0 });
         bitmap.close();

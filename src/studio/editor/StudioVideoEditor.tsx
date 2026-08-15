@@ -24,8 +24,8 @@ import {
   clipDuration,
   createEmptyProject,
   createInitialState,
-  projectEndTime,
   reducer,
+  timelineViewDuration,
 } from "./editorState";
 import { quantizeToFrame } from "./projectContract";
 import { readOverlaySnapEnabled, writeOverlaySnapEnabled } from "./editorSnap";
@@ -101,11 +101,16 @@ function toEditorMediaItem(asset) {
     name: asset.name,
     kind: asset.kind,
     url:
-      asset.kind === "audio"
+      asset.kind === "image"
         ? asset.signedReadUrl ?? asset.signedEditProxyUrl
-        : asset.signedEditProxyUrl ?? asset.signedReadUrl,
-    proxyUrl: asset.signedEditProxyUrl,
-    proxyHighUrl: asset.kind === "audio" ? undefined : asset.signedEditProxy1080Url,
+        : asset.kind === "audio"
+          ? asset.signedReadUrl ?? asset.signedEditProxyUrl
+          : asset.signedEditProxyUrl ?? asset.signedReadUrl,
+    proxyUrl: asset.kind === "image" ? undefined : asset.signedEditProxyUrl,
+    proxyHighUrl:
+      asset.kind === "audio" || asset.kind === "image"
+        ? undefined
+        : asset.signedEditProxy1080Url,
     thumbnailUrl: asset.signedThumbnailUrl ?? (asset.kind === "image" ? asset.signedReadUrl : undefined),
     duration: asset.durationSeconds,
     width: asset.width,
@@ -504,6 +509,21 @@ export function StudioVideoEditor({
     [mediaById],
   );
 
+  // Migrate legacy stills saved as kind:video → image (free extend + alpha stack).
+  useEffect(() => {
+    if (!hydrated) return;
+    for (const clip of state.project.clips) {
+      if (!clip.assetId || clip.kind !== "video") continue;
+      const media = mediaById.get(clip.assetId);
+      if (media?.kind !== "image") continue;
+      dispatch({
+        type: "update_clip",
+        clipId: clip.id,
+        patch: { kind: "image", sourceDuration: undefined },
+      });
+    }
+  }, [hydrated, mediaById, state.project.clips]);
+
   // When proxy/metadata fills in real duration, unlock clips still stuck on the 4s fallback.
   useEffect(() => {
     if (!hydrated) return;
@@ -532,7 +552,10 @@ export function StudioVideoEditor({
     }
   }, [hydrated, mediaById, state.project.clips]);
 
-  const timelineDuration = Math.max(state.project.duration, projectEndTime(state.project));
+  const timelineDuration = timelineViewDuration(
+    state.project,
+    state.ui.playhead,
+  );
   const selectedClipIds =
     state.ui.selectedClipIds?.length > 0
       ? state.ui.selectedClipIds

@@ -24,6 +24,7 @@ export function trackAcceptsMediaKind(trackKind, mediaKind) {
 export function clipKindForTrack(trackKind, mediaKind) {
   if (trackKind === "audio") return "audio";
   if (trackKind === "text") return "text";
+  if (mediaKind === "image") return "image";
   return "video";
 }
 

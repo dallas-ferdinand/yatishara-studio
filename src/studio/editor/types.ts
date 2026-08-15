@@ -1,5 +1,8 @@
 export type TrackKind = "video" | "audio" | "text";
 
+/** Picture/audio/text on a clip — images sit on video tracks but keep kind "image". */
+export type ClipKind = TrackKind | "image";
+
 export type TransitionType =
   | "none"
   | "crossfade"
@@ -111,7 +114,7 @@ export type EditorClip = {
   trimOut: number;
   sourceDuration?: number;
   label: string;
-  kind: TrackKind;
+  kind: ClipKind;
   effects?: ClipEffects;
   transitionOut?: ClipTransition;
   text?: TextClipContent;

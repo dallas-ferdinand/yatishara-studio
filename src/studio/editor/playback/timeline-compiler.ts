@@ -104,7 +104,7 @@ export function compileTimeline(project: EditorProject): PlaybackPlan {
   );
   const clipsById = new Map(compiled.map((clip) => [clip.clipId, clip]));
   const video = compiled
-    .filter((clip) => clip.kind === "video")
+    .filter((clip) => clip.kind === "video" || clip.kind === "image")
     .sort((a, b) => a.timelineStart - b.timelineStart);
   const audio = compiled
     .filter((clip) => clip.kind === "audio")
@@ -242,12 +242,28 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
       });
     }
   } else {
-    // Top of timeline (lowest trackIndex) wins when video lanes overlap.
+    // Lowest trackIndex = top of timeline = drawn last (over). Dual-texture
+    // compositor gets top as A and the bottom-most underlay as B so transparent
+    // PNGs reveal the picture underneath instead of the canvas colour.
     const active = plan.video
       .filter((clip) => contains(clip.timelineStart, clip.timelineEnd, time))
-      .sort((a, b) => a.trackIndex - b.trackIndex || a.timelineStart - b.timelineStart)[0];
-    if (active) {
-      video.push({ clip: active, sourceTime: sourceAt(active, time), role: "single" });
+      .sort((a, b) => a.trackIndex - b.trackIndex || a.timelineStart - b.timelineStart);
+    const top = active[0];
+    const under =
+      active.length > 1 ? active[active.length - 1] : null;
+    if (top) {
+      video.push({
+        clip: top,
+        sourceTime: sourceAt(top, time),
+        role: "single",
+      });
+    }
+    if (under && top && under.clipId !== top.clipId) {
+      video.push({
+        clip: under,
+        sourceTime: sourceAt(under, time),
+        role: "single",
+      });
     }
   }
 

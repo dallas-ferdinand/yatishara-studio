@@ -30,6 +30,7 @@ import { clipCanSplitAt, clipDuration, formatTimecodeFull, formatTimecodeRuler }
 import { MIN_CLIP_SEC, quantizeToFrame } from "./projectContract";
 import {
   collectSnapTimes,
+  nearestSnap,
   snapClipMove,
   snapThresholdSec,
   snapTrimLeft,
@@ -629,14 +630,30 @@ function TimelineClipBlock({
         });
       } else if (mode === "trim-left") {
         const disableSnap = moveEvent.altKey;
-        const rawTrimIn = Math.min(originTrimOut - MIN_CLIP_SEC, Math.max(0, originTrimIn + deltaSec));
-        const trimDelta = rawTrimIn - originTrimIn;
-        const rawStart = Math.max(0, originStart + trimDelta);
-        const snapped = snapTrimLeft(clip, rawTrimIn, rawStart, snapTimes, thresholdSec, disableSnap);
-        lastTrimIn = snapped.trimIn;
-        lastStart = snapped.startTime;
-        onSnapGuide?.(snapped.guide);
-        onTrim(clip.id, snapped.trimIn, originTrimOut, snapped.startTime, true);
+        if (clip.kind === "image") {
+          // Stills: left edge grows duration (trimIn stays 0), no media in-point.
+          const originEnd = originStart + (originTrimOut - originTrimIn);
+          const rawStart = Math.max(0, originStart + deltaSec);
+          const startSnap = disableSnap
+            ? { time: rawStart, guide: null as number | null }
+            : nearestSnap(rawStart, snapTimes, thresholdSec);
+          const snappedStart = startSnap.time;
+          const nextOut = Math.max(MIN_CLIP_SEC, originEnd - snappedStart);
+          lastTrimIn = 0;
+          lastTrimOut = nextOut;
+          lastStart = snappedStart;
+          onSnapGuide?.(startSnap.guide);
+          onTrim(clip.id, 0, nextOut, snappedStart, true);
+        } else {
+          const rawTrimIn = Math.min(originTrimOut - MIN_CLIP_SEC, Math.max(0, originTrimIn + deltaSec));
+          const trimDelta = rawTrimIn - originTrimIn;
+          const rawStart = Math.max(0, originStart + trimDelta);
+          const snapped = snapTrimLeft(clip, rawTrimIn, rawStart, snapTimes, thresholdSec, disableSnap);
+          lastTrimIn = snapped.trimIn;
+          lastStart = snapped.startTime;
+          onSnapGuide?.(snapped.guide);
+          onTrim(clip.id, snapped.trimIn, originTrimOut, snapped.startTime, true);
+        }
       } else if (mode === "trim-right") {
         const disableSnap = moveEvent.altKey;
         const rawTrimOut = Math.max(originTrimIn + MIN_CLIP_SEC, originTrimOut + deltaSec);
@@ -1243,7 +1260,15 @@ export function EditorTimeline({
   const trackRowRefs = useRef(new Map());
   const insertZoneRefs = useRef(new Map());
   const zoomAnchorRef = useRef(null);
-  const timelineWidth = Math.max(project.duration * pixelsPerSecond + 240, 720);
+  const timelineViewEnd = useMemo(() => {
+    let end = 0;
+    for (const clip of project.clips) {
+      end = Math.max(end, clip.startTime + clipDuration(clip));
+    }
+    const pad = end > 0 ? Math.min(2, Math.max(0.25, end * 0.05)) : 0;
+    return Math.max(end + pad, playhead, end > 0 ? end : 8, 0.1);
+  }, [project.clips, playhead]);
+  const timelineWidth = Math.max(timelineViewEnd * pixelsPerSecond + 240, 720);
   const [dropPreview, setDropPreview] = useState(null);
   const [ripplePreview, setRipplePreview] = useState(null);
   const [snapGuideTime, setSnapGuideTime] = useState(null);
@@ -1520,9 +1545,9 @@ export function EditorTimeline({
       // includes horizontal scroll. Do not add scrollLeft again.
       const canvasRect = canvas.getBoundingClientRect();
       const x = clientX - canvasRect.left - TRACK_RAIL_WIDTH;
-      return Math.max(0, Math.min(project.duration, x / Math.max(pixelsPerSecond, 1)));
+      return Math.max(0, Math.min(timelineViewEnd, x / Math.max(pixelsPerSecond, 1)));
     },
-    [pixelsPerSecond, project.duration],
+    [pixelsPerSecond, timelineViewEnd],
   );
 
   const beginTrackReorder = useCallback(
@@ -1582,9 +1607,9 @@ export function EditorTimeline({
       // Lane is inside the scrolled canvas; rect.left already reflects scroll.
       const rect = laneEl.getBoundingClientRect();
       const x = clientX - rect.left;
-      return Math.max(0, Math.min(project.duration, x / pixelsPerSecond));
+      return Math.max(0, Math.min(timelineViewEnd, x / pixelsPerSecond));
     },
-    [pixelsPerSecond, project.duration],
+    [pixelsPerSecond, timelineViewEnd],
   );
 
   /** Click-drag scrub on the ruler, empty lanes, or playhead. */
@@ -1605,7 +1630,7 @@ export function EditorTimeline({
       const el = event.currentTarget;
       const apply = (clientX) => {
         const clamp = (time) =>
-          quantizeToFrame(Math.max(0, Math.min(project.duration, time)));
+          quantizeToFrame(Math.max(0, Math.min(timelineViewEnd, time)));
         if (source === "ruler") {
           // Ruler is scrolled content (marginLeft = rail); rect already includes scroll.
           const rect = el.getBoundingClientRect();
@@ -1646,7 +1671,7 @@ export function EditorTimeline({
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onUp);
     },
-    [beginTimelinePan, beginTimelineZoomDrag, onSetPlayhead, pixelsPerSecond, project.duration, timeFromClientX],
+    [beginTimelinePan, beginTimelineZoomDrag, onSetPlayhead, pixelsPerSecond, timelineViewEnd, timeFromClientX],
   );
 
   /**
@@ -1686,7 +1711,7 @@ export function EditorTimeline({
       const timeFromCanvasX = (clientX) => {
         const rect = canvasEl.getBoundingClientRect();
         const x = clientX - rect.left - TRACK_RAIL_WIDTH;
-        return Math.max(0, Math.min(project.duration, x / Math.max(pixelsPerSecond, 1)));
+        return Math.max(0, Math.min(timelineViewEnd, x / Math.max(pixelsPerSecond, 1)));
       };
 
       const clipsInCanvasMarquee = (box) => {
@@ -1770,7 +1795,7 @@ export function EditorTimeline({
         onSelectClip(null);
         onSelectJoint?.(null);
         const clamp = (time) =>
-          quantizeToFrame(Math.max(0, Math.min(project.duration, time)));
+          quantizeToFrame(Math.max(0, Math.min(timelineViewEnd, time)));
         onSetPlayhead(clamp(timeFromCanvasX(upEvent.clientX)));
       };
 
@@ -1786,7 +1811,7 @@ export function EditorTimeline({
       onSetPlayhead,
       pixelsPerSecond,
       project.clips,
-      project.duration,
+      timelineViewEnd,
     ],
   );
 
@@ -1860,7 +1885,8 @@ export function EditorTimeline({
         startTime: rawStart,
         trimIn: 0,
         trimOut: payload.duration,
-        sourceDuration: payload.duration,
+        // Stills: no intrinsic length — omit sourceDuration so edges extend freely.
+        sourceDuration: payload.mediaKind === "image" ? undefined : payload.duration,
         label: payload.name,
         kind: clipKindForTrack(track.kind, payload.mediaKind),
       });
@@ -1903,7 +1929,12 @@ export function EditorTimeline({
 
       const lane = scrollRef.current?.querySelector(".studio-editor-track-row .studio-editor-track-lane");
       const rawStart = lane ? timeFromClientX(event.clientX, lane) : 0;
-      const kind = payload.mediaKind === "audio" ? "audio" : "video";
+      const kind =
+        payload.mediaKind === "audio"
+          ? "audio"
+          : payload.mediaKind === "image"
+            ? "image"
+            : "video";
 
       onRippleAddClip?.({
         assetId: payload.assetId,
@@ -1911,7 +1942,7 @@ export function EditorTimeline({
         startTime: rawStart,
         trimIn: 0,
         trimOut: payload.duration,
-        sourceDuration: payload.duration,
+        sourceDuration: payload.mediaKind === "image" ? undefined : payload.duration,
         label: payload.name,
         kind,
         // Left edge — freeform place (gaps ok); overlap parks at a touch, neighbors stay.
@@ -1952,10 +1983,10 @@ export function EditorTimeline({
   const majorTicks = [];
   const minorTicks = [];
   const majorsEvery = Math.max(1, Math.round(majorStep / minorStep));
-  const tickCount = Math.floor(project.duration / minorStep + 1e-9) + 1;
+  const tickCount = Math.floor(timelineViewEnd / minorStep + 1e-9) + 1;
   for (let i = 0; i < tickCount; i += 1) {
     const t = Number((i * minorStep).toFixed(4));
-    if (t > project.duration + 1e-6) break;
+    if (t > timelineViewEnd + 1e-6) break;
     if (i % majorsEvery === 0) majorTicks.push(t);
     else minorTicks.push(t);
   }

@@ -84,7 +84,7 @@ export type EditorClip = {
   trimOut: number;
   sourceDuration?: number;
   label: string;
-  kind: "video" | "audio" | "text";
+  kind: "video" | "audio" | "text" | "image";
   effects?: EditorClipEffects;
   transitionOut?: EditorClipTransition;
   text?: EditorTextContent;
@@ -273,9 +273,9 @@ export function seedClipsFromAssets(
         startTime: videoCursor,
         trimIn: 0,
         trimOut: duration,
-        sourceDuration: duration,
+        ...(asset.kind === "image" ? {} : { sourceDuration: duration }),
         label: asset.name,
-        kind: "video",
+        kind: asset.kind === "image" ? "image" : "video",
       };
       next.clips.push(clip);
       changedClipIds.push(clip.id);
@@ -347,9 +347,11 @@ export function appendClips(
       startTime: Math.max(0, startTime),
       trimIn,
       trimOut,
-      sourceDuration: asset.durationSeconds ?? trimOut,
+      ...(asset.kind === "image"
+        ? {}
+        : { sourceDuration: asset.durationSeconds ?? trimOut }),
       label: spec.label?.trim() || asset.name,
-      kind: isAudio ? "audio" : "video",
+      kind: isAudio ? "audio" : asset.kind === "image" ? "image" : "video",
     };
     next.clips.push(clip);
     changedClipIds.push(clip.id);

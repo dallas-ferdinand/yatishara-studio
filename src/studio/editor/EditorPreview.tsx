@@ -33,7 +33,7 @@ import {
   clipAtPlayhead,
   clipDuration,
   formatTimecodeFull,
-  projectEndTime,
+  timelineViewDuration,
 } from "./editorState";
 import type { EditorClip, EditorMediaItem, EditorProject } from "./types";
 import { MIN_CLIP_SEC } from "./projectContract";
@@ -116,11 +116,7 @@ export function EditorPreview({
     panY: number;
   } | null>(null);
   const frame = exportSizeForRatio(project.frameRatio);
-  const timelineDuration = Math.max(
-    project.duration ?? 0,
-    projectEndTime(project),
-    0.1,
-  );
+  const timelineDuration = timelineViewDuration(project, playhead);
   // Top timeline video lane (lowest track index) at the playhead.
   let activeClip: EditorClip | null = null;
   for (const track of project.tracks) {

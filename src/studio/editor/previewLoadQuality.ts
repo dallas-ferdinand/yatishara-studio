@@ -47,5 +47,9 @@ export function playbackUrlForMedia(
     }
     return media.proxyUrl ?? media.proxyHighUrl ?? media.url;
   }
+  // Prefer original bytes for images so PNG alpha survives (no WebP thumb proxy).
+  if (media.kind === "image") {
+    return media.url ?? media.proxyUrl;
+  }
   return media.proxyUrl ?? media.url;
 }

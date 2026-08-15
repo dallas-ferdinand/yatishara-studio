@@ -2,13 +2,33 @@ import {
   DEFAULT_PPS,
   DEFAULT_TRACKS,
   LEGACY_TRACK_MAP,
+  type ClipKind,
   type EditorClip,
   type EditorMode,
   type EditorSidePanel,
   type EditorProject,
   type EditorState,
   type EditorTrack,
+  type TrackKind,
 } from "./types";
+
+/** Image stills live on video tracks but keep clip.kind === "image". */
+export function clipKindCompatibleWithTrack(
+  clipKind: ClipKind,
+  trackKind: TrackKind,
+): boolean {
+  if (clipKind === "image") return trackKind === "video";
+  return clipKind === trackKind;
+}
+
+/** Preserve image kind when placing/normalizing onto a video track. */
+export function resolveClipKindForTrack(
+  clipKind: ClipKind | undefined,
+  trackKind: TrackKind,
+): ClipKind {
+  if (clipKind === "image" && trackKind === "video") return "image";
+  return trackKind;
+}
 import {
   defaultInsertIndex,
   ensureMainTextTrackAboveVideo,
@@ -106,6 +126,16 @@ export function contentEndTime(project: EditorProject): number {
   return end;
 }
 
+/**
+ * Ruler / scrub / fullscreen length: last clip (+ small pad), never the stale
+ * padded project.duration (often 30s–1m of empty canvas).
+ */
+export function timelineViewDuration(project: EditorProject, playhead = 0): number {
+  const end = contentEndTime(project);
+  const pad = end > 0 ? Math.min(2, Math.max(0.25, end * 0.05)) : 0;
+  return Math.max(end + pad, playhead, end > 0 ? end : 8, 0.1);
+}
+
 /** Clock length while playing: last clip, not padded empty duration. */
 export function playbackEndTime(project: EditorProject): number {
   const end = contentEndTime(project);
@@ -149,11 +179,14 @@ export function normalizeProject(project: EditorProject): EditorProject {
     const mappedId = LEGACY_TRACK_MAP[clip.trackId] ?? clip.trackId;
     const track =
       tracks.find((item) => item.id === mappedId) ??
-      tracks.find((item) => item.kind === clip.kind);
+      tracks.find((item) =>
+        clip.kind === "image" ? item.kind === "video" : item.kind === clip.kind,
+      );
+    const trackKind = track?.kind ?? (clip.kind === "image" ? "video" : clip.kind);
     return {
       ...clip,
       trackId: track?.id ?? mappedId,
-      kind: track?.kind ?? clip.kind,
+      kind: resolveClipKindForTrack(clip.kind, trackKind),
       effects: clip.effects ?? undefined,
     };
   });
@@ -279,7 +312,8 @@ function trackForClip(tracks: EditorTrack[], clip: Omit<EditorClip, "id">): Edit
     const explicit = tracks.find((track) => track.id === clip.trackId);
     if (explicit) return explicit;
   }
-  return tracks.find((track) => track.kind === clip.kind) ?? tracks[0]!;
+  const want: TrackKind = clip.kind === "image" ? "video" : clip.kind;
+  return tracks.find((track) => track.kind === want) ?? tracks[0]!;
 }
 
 function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
@@ -668,7 +702,7 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         ...action.clip,
         id: newClipId(),
         trackId: track.id,
-        kind: track.kind,
+        kind: resolveClipKindForTrack(action.clip.kind, track.kind),
       };
       const withClip = {
         ...state.project,
@@ -693,7 +727,11 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       const nextTrackId = action.trackId ?? before.trackId;
       const track = state.project.tracks.find((item) => item.id === nextTrackId);
       // Reject kind mismatch — keep clip where it is.
-      if (track && track.kind !== before.kind && action.trackId) {
+      if (
+        track &&
+        action.trackId &&
+        !clipKindCompatibleWithTrack(before.kind, track.kind)
+      ) {
         return state;
       }
 
@@ -703,7 +741,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           ...clip,
           startTime: Math.max(0, action.startTime),
           trackId: nextTrackId,
-          kind: track?.kind ?? clip.kind,
+          kind: track
+            ? resolveClipKindForTrack(clip.kind, track.kind)
+            : clip.kind,
         };
       });
 
@@ -749,7 +789,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           ...clip,
           startTime: Math.max(0, placement.startTime),
           trackId: placement.trackId,
-          kind: track?.kind ?? clip.kind,
+          kind: track
+            ? resolveClipKindForTrack(clip.kind, track.kind)
+            : clip.kind,
         };
       });
       if (!action.live) {
@@ -797,7 +839,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
             ...clip,
             startTime: Math.max(0, placement.startTime),
             trackId: placement.trackId,
-            kind: track?.kind ?? clip.kind,
+            kind: track
+            ? resolveClipKindForTrack(clip.kind, track.kind)
+            : clip.kind,
           };
         });
         // Ensure the moved clip landed on the destination even if placements omitted it.
@@ -808,7 +852,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
             ...clip,
             startTime: Math.max(0, action.startTime),
             trackId,
-            kind: track?.kind ?? clip.kind,
+            kind: track
+            ? resolveClipKindForTrack(clip.kind, track.kind)
+            : clip.kind,
           };
         });
         const movedIds = action.ripplePlacements
@@ -835,7 +881,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           ...clip,
           startTime: Math.max(0, action.startTime),
           trackId,
-          kind: track?.kind ?? clip.kind,
+          kind: track
+            ? resolveClipKindForTrack(clip.kind, track.kind)
+            : clip.kind,
         };
       });
       const focus = clips.find((clip) => clip.id === action.clipId);
@@ -871,7 +919,7 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         ...action.clip,
         id: newClipId(),
         trackId: track.id,
-        kind: track.kind,
+        kind: resolveClipKindForTrack(action.clip.kind, track.kind),
       };
       const placements = computeRippleInsertForNewClip({
         project,
@@ -893,11 +941,16 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       const before = state.project.clips.find((clip) => clip.id === action.clipId);
       let clips = state.project.clips.map((clip) => {
         if (clip.id !== action.clipId) return clip;
-        const sourceMax =
-          clip.sourceDuration != null && clip.sourceDuration > 0
+        const isStill = clip.kind === "image";
+        // Stills have no intrinsic media length — extend freely before/after.
+        const sourceMax = isStill
+          ? Number.POSITIVE_INFINITY
+          : clip.sourceDuration != null && clip.sourceDuration > 0
             ? clip.sourceDuration
             : Number.POSITIVE_INFINITY;
-        const nextTrimIn = Math.max(0, Math.min(action.trimIn, sourceMax - MIN_CLIP_SEC));
+        const nextTrimIn = isStill
+          ? Math.max(0, Math.min(action.trimIn, Math.max(action.trimOut, MIN_CLIP_SEC) - MIN_CLIP_SEC))
+          : Math.max(0, Math.min(action.trimIn, sourceMax - MIN_CLIP_SEC));
         const nextTrimOut = Math.max(
           nextTrimIn + MIN_CLIP_SEC,
           Math.min(action.trimOut, sourceMax),
@@ -906,6 +959,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           ...clip,
           trimIn: nextTrimIn,
           trimOut: nextTrimOut,
+          ...(isStill
+            ? { sourceDuration: Math.max(clip.sourceDuration ?? 0, nextTrimOut) }
+            : null),
         };
         if (action.startTime !== undefined) {
           next.startTime = Math.max(0, action.startTime);

@@ -274,6 +274,9 @@ void main() {
         blurFrame(u_b, v_uv, u_bSize, u_bTransform, (1.0 - p) * 10.0, opb),
         p
       );
+    } else if (u_hasA && u_hasB) {
+      // Stack: A (top lane) over B (underlay) — PNG alpha reveals B.
+      base = a + b * (1.0 - a.a);
     } else {
       base = a;
     }
@@ -325,12 +328,13 @@ function initialize(message: InitMessage): void {
   canvas.width = message.width;
   canvas.height = message.height;
   gl = canvas.getContext("webgl2", {
-    alpha: false,
+    alpha: true,
     antialias: false,
     depth: false,
     desynchronized: true,
     powerPreference: "high-performance",
     preserveDrawingBuffer: false,
+    premultipliedAlpha: false,
   });
   if (!gl) throw new Error("WebGL2 compositor is unavailable.");
   const vertex = compileShader(gl, gl.VERTEX_SHADER, vertexSource);
@@ -379,6 +383,7 @@ function upload(
   context.activeTexture(unit);
   context.bindTexture(context.TEXTURE_2D, texture);
   context.pixelStorei(context.UNPACK_FLIP_Y_WEBGL, true);
+  context.pixelStorei(context.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   context.texImage2D(
     context.TEXTURE_2D,
     0,

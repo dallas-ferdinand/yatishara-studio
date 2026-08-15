@@ -83,7 +83,7 @@ import {
   exportSizeForRatioAndResolution,
   normalizeExportResolution,
 } from "../../../convex/lib/editorExport";
-import { clipDuration, projectEndTime } from "./editorState";
+import { clipDuration, timelineViewDuration } from "./editorState";
 import { jointByKey, leftClipForJoint } from "./editorTimelineUtils";
 import { resolveClipPoster } from "./videoPoster";
 import { StudioRatioGlyph } from "../components/StudioRatioGlyph";
@@ -1062,7 +1062,7 @@ function ClipTimingCard({ clip, project }) {
   const start = Math.max(0, clip.startTime ?? 0);
   const length = clipDuration(clip);
   const end = start + length;
-  const span = Math.max(project.duration ?? 0, projectEndTime(project), end, 0.01);
+  const span = Math.max(timelineViewDuration(project), end, 0.01);
   const leftPct = Math.min(100, (start / span) * 100);
   const widthPct = Math.min(100 - leftPct, Math.max(1.5, (length / span) * 100));
   const hasOut =

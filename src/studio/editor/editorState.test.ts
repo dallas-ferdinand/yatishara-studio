@@ -5,6 +5,7 @@ import {
   normalizeProject,
   reducer,
   clipDuration,
+  timelineViewDuration,
 } from "./editorState";
 import { timelineSegmentsForTrack } from "./projectContract";
 import type { EditorProject } from "./types";
@@ -518,5 +519,60 @@ describe("contentEndTime", () => {
     expect(contentEndTime(state.project)).toBeCloseTo(3.2, 5);
     expect(playbackEndTime(state.project)).toBeCloseTo(3.2, 5);
     expect(state.project.duration).toBeGreaterThan(3.2);
+  });
+});
+
+describe("timelineViewDuration", () => {
+  it("follows last clip, not padded project.duration", () => {
+    let state = createInitialState(
+      createEmptyProject({ name: "Test", folderId: "folder1" }),
+    );
+    state = reducer(state, {
+      type: "add_clip",
+      clip: {
+        assetId: "a1",
+        trackId: "track-v1",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 15,
+        sourceDuration: 15,
+        label: "clip",
+        kind: "video",
+      },
+    });
+    // Empty project seed is 30s; withHistory may grow further — view must stay near 15s.
+    expect(state.project.duration).toBeGreaterThanOrEqual(30);
+    const view = timelineViewDuration(state.project);
+    expect(view).toBeLessThan(20);
+    expect(view).toBeGreaterThanOrEqual(15);
+  });
+});
+
+describe("image clip kind", () => {
+  it("preserves kind=image on add_clip and allows free trim extend", () => {
+    let state = createInitialState(
+      createEmptyProject({ name: "Test", folderId: "folder1" }),
+    );
+    state = reducer(state, {
+      type: "add_clip",
+      clip: {
+        assetId: "img1",
+        trackId: "track-v1",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 3,
+        label: "logo",
+        kind: "image",
+      },
+    });
+    expect(state.project.clips[0]!.kind).toBe("image");
+    state = reducer(state, {
+      type: "trim_clip",
+      clipId: state.project.clips[0]!.id,
+      trimIn: 0,
+      trimOut: 12,
+    });
+    expect(clipDuration(state.project.clips[0]!)).toBeCloseTo(12, 5);
+    expect(state.project.clips[0]!.kind).toBe("image");
   });
 });
