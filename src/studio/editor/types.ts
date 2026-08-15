@@ -27,6 +27,10 @@ export type ClipEffects = {
   audioFadeIn?: number;
   /** Audio edge fade-out seconds (inspector only — not timeline diamonds). */
   audioFadeOut?: number;
+  /**
+   * Clip gain. Default 1 (100%). Inspector allows 0–2 (200%) for boost;
+   * preview GainNode + export ffmpeg `volume=` honor the same range.
+   */
   volume?: number;
   /** CapCut-style playback rate. Timeline duration = sourceTrim / speed. Default 1. */
   speed?: number;

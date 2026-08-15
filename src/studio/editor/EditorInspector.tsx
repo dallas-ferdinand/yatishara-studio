@@ -52,8 +52,11 @@ import {
   FADE_LENGTH_PRESETS,
   TEXT_ANIMATION_TEMPLATES,
   TRANSITION_LIBRARY,
+  CLIP_VOLUME_DEFAULT,
+  CLIP_VOLUME_MAX,
   clampAudioFadePair,
   clampAudioFadeSec,
+  clampClipVolume,
   resolveAudioFadePair,
   transitionLabel,
 } from "./editorEffects";
@@ -1338,7 +1341,7 @@ function AudioPanel({ clip, folderId, onUpdateClip }) {
   const [processing, setProcessing] = useState(false);
   const [processError, setProcessError] = useState(null);
   const effects = clip.effects ?? {};
-  const volume = effects.volume ?? 1;
+  const volume = clampClipVolume(effects.volume ?? CLIP_VOLUME_DEFAULT);
   const speed = clipSpeed(effects);
   const duration = clipDuration(clip);
   const pendingDuration = pendingSpeedDurationSec(clip, speed);
@@ -1415,7 +1418,7 @@ function AudioPanel({ clip, folderId, onUpdateClip }) {
       hint="Audio fade is separate from picture fade. Set length here — no timeline diamonds."
       onReset={() =>
         patchEffects({
-          volume: 1,
+          volume: CLIP_VOLUME_DEFAULT,
           speed: 1,
           audioFadeIn: 0,
           audioFadeOut: 0,
@@ -1481,13 +1484,13 @@ function AudioPanel({ clip, folderId, onUpdateClip }) {
           </>
         }
         min={0}
-        max={1}
+        max={CLIP_VOLUME_MAX}
         step={0.05}
         value={volume}
-        defaultValue={1}
+        defaultValue={CLIP_VOLUME_DEFAULT}
         formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
         parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
-        onValueChange={(next) => patchEffects({ volume: next })}
+        onValueChange={(next) => patchEffects({ volume: clampClipVolume(next) })}
       />
       <FadeLengthControls
         fadeIn={audioFadeIn}

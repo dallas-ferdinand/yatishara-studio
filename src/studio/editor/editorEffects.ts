@@ -27,6 +27,16 @@ export const TRANSITION_LIBRARY: Array<{
 /** @deprecated use TRANSITION_LIBRARY */
 export const TRANSITION_TEMPLATES = TRANSITION_LIBRARY;
 
+/** Clip audio gain: default 100%, boost allowed to 200%. */
+export const CLIP_VOLUME_DEFAULT = 1;
+export const CLIP_VOLUME_MAX = 2;
+
+export function clampClipVolume(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return CLIP_VOLUME_DEFAULT;
+  return Math.max(0, Math.min(CLIP_VOLUME_MAX, n));
+}
+
 export const TEXT_ANIMATION_TEMPLATES: Array<{
   id: TextAnimation;
   label: string;

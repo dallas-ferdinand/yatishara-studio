@@ -10,10 +10,13 @@ describe("export audio mute / volume / fade", () => {
     expect(videoClipAudioFilter({ effects: { volume: 0 } }, false)).toBeNull();
   });
 
-  it("applies video clip volume when audible", () => {
-    expect(videoClipAudioFilter({ effects: { volume: 0.5 } }, false)).toContain(
-      "volume=0.5",
+  it("allows boost up to 200%", () => {
+    expect(videoClipAudioFilter({ effects: { volume: 2 } }, false)).toContain(
+      "volume=2",
     );
+    expect(
+      videoClipAudioFilter({ effects: { volume: 2.5 } }, false),
+    ).toContain("volume=2");
   });
 
   it("keeps default volume without a volume filter", () => {

@@ -3,7 +3,7 @@ import type {
   EditorProject,
   TransitionType,
 } from "../types";
-import { audioFadeGainAtLocalTime } from "../editorEffects";
+import { audioFadeGainAtLocalTime, clampClipVolume } from "../editorEffects";
 import { clipDurationSec, sortedClipsOnTrack } from "../projectContract";
 
 export type CompiledClip = {
@@ -82,7 +82,7 @@ function compileClip(
     timelineEnd: clip.startTime + duration,
     sourceStart: clip.trimIn,
     sourceEnd: clip.trimOut,
-    volume: Math.max(0, Math.min(2, clip.effects?.volume ?? 1)),
+    volume: clampClipVolume(clip.effects?.volume),
     muted,
     clip,
   };
