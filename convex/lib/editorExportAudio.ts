@@ -178,6 +178,32 @@ export function videoClipAudioFilter(
   return af;
 }
 
+/**
+ * Soundtrack for a picture transition, matching the preview's
+ * transitionAudioGain: the outgoing clip ramps to silence over the first half
+ * of the transition and the incoming clip rises over the second half, so the
+ * two soundtracks never play through each other. ffmpeg's acrossfade overlaps
+ * them for the whole transition, which is why it is not used here.
+ *
+ * `offsetSec` is where the transition starts in the outgoing clip — the same
+ * offset handed to xfade, so audio and picture stay locked.
+ */
+export function transitionAudioMixFilter(args: {
+  durationSec: number;
+  offsetSec: number;
+}): string {
+  const duration = Math.max(0.02, args.durationSec);
+  const offset = Math.max(0, args.offsetSec);
+  const half = duration / 2;
+  const delayMs = Math.round(offset * 1000);
+  return (
+    `[0:a]afade=t=out:st=${offset.toFixed(3)}:d=${half.toFixed(3)}:curve=tri[xa0];` +
+    `[1:a]afade=t=in:st=${half.toFixed(3)}:d=${half.toFixed(3)}:curve=tri,` +
+    `adelay=${delayMs}:all=1[xa1];` +
+    "[xa0][xa1]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
+  );
+}
+
 /** Fragment for bed mix after atrim/asetpts. */
 export function bedClipAudioFilters(
   clip: {

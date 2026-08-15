@@ -18,6 +18,7 @@ import {
   collectExportAudioBeds,
   exportCoverUntilSec,
   timelineDurationSec,
+  transitionAudioMixFilter,
   videoClipAudioFilter,
 } from "./lib/editorExportAudio";
 import {
@@ -631,7 +632,7 @@ async function concatNormalizedSegments(
       const filter =
         `[0:v]${vf}[v0];[1:v]${vf}[v1];` +
         `[v0][v1]xfade=transition=${transitionName}:duration=${duration.toFixed(3)}:offset=${offset.toFixed(3)}[vout];` +
-        `[0:a][1:a]acrossfade=d=${duration.toFixed(3)}[aout]`;
+        transitionAudioMixFilter({ durationSec: duration, offsetSec: offset });
       await execFileAsync("ffmpeg", [
         "-y",
         "-i",
