@@ -20207,7 +20207,7 @@ export function StudioShell({
         }
         .studio-music-lyrics-input {
           width: 100%;
-          min-height: 96px;
+          min-height: 88px;
           resize: vertical;
           padding: 10px 12px;
           border-radius: 12px;
@@ -20217,6 +20217,107 @@ export function StudioShell({
           color: var(--color-cursor-text-bright);
           background: color-mix(in srgb, var(--mos-surface) 70%, transparent);
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+        }
+        .studio-music-settings-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-width: 0;
+        }
+        .studio-music-acc {
+          border-radius: 12px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
+          background: color-mix(in srgb, var(--mos-plate, var(--mos-surface)) 88%, transparent);
+          overflow: hidden;
+        }
+        .studio-music-acc-toggle {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          width: 100%;
+          min-height: 38px;
+          padding: 8px 10px;
+          border: 0;
+          background: transparent;
+          color: var(--color-cursor-text-bright);
+          font: inherit;
+          cursor: pointer;
+          text-align: left;
+        }
+        .studio-music-acc-title {
+          font-size: 12px;
+          font-weight: 700;
+          line-height: 1.2;
+        }
+        .studio-music-acc-meta {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          color: var(--color-cursor-muted);
+        }
+        .studio-music-acc-meta em {
+          overflow: hidden;
+          max-width: 148px;
+          font-style: normal;
+          font-size: 11px;
+          font-weight: 600;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-music-acc-chevron {
+          width: 14px;
+          height: 14px;
+          flex: 0 0 auto;
+          transition: transform 150ms ease;
+        }
+        .studio-music-acc-chevron.is-open {
+          transform: rotate(180deg);
+        }
+        .studio-music-acc-body {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 0 10px 10px;
+        }
+        .studio-music-tag-group {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          min-width: 0;
+        }
+        .studio-music-tag-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+        }
+        .studio-music-tag {
+          appearance: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 26px;
+          padding: 0 9px;
+          border-radius: 999px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+          background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 78%, transparent);
+          font: inherit;
+          font-size: 11px;
+          font-weight: 650;
+          line-height: 1;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .studio-music-tag:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-music-tag.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 46%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+          color: var(--color-cursor-text-bright);
         }
         .studio-composer-options-back {
           display: inline-flex;
@@ -29403,6 +29504,28 @@ function StudioComposerControlStrip({
     meta: item.description,
   }));
   const showReferenceIntent = hasComposerReferences && !isElementMode && mode !== "audio";
+  const [musicAcc, setMusicAcc] = useState({
+    basics: true,
+    lyrics: false,
+    advanced: false,
+  });
+  const musicLengthLabel = musicDurationAuto
+    ? "Auto"
+    : musicDurationSeconds >= 60
+      ? `${musicDurationSeconds / 60}m`
+      : `${musicDurationSeconds}s`;
+  const musicLyricsLabel =
+    musicLyricsMode === "custom"
+      ? "Custom"
+      : musicLyricsMode === "auto"
+        ? "Auto"
+        : "Instrumental";
+  const musicWorkflowLabel =
+    musicWorkflow === "prompt"
+      ? "Quick"
+      : musicWorkflow === "extend"
+        ? "Extend"
+        : "Plan";
 
   return (
     <div
@@ -29487,150 +29610,147 @@ function StudioComposerControlStrip({
               </section>
             ) : null}
             {audioType === "music" ? (
-              <section className="studio-composer-options-section" aria-label="Music">
-                <StudioInlineSettingChipGroup
-                  label="Model"
-                  value={musicModelId}
-                  items={[
-                    { value: "music_v2", label: "v2", meta: "Current", icon: Music2 },
-                    { value: "music_v1", label: "v1", meta: "Legacy", icon: Music2 },
-                  ]}
-                  onChange={(value) => setMusicModelId?.(value)}
-                />
-                <StudioInlineSettingChipGroup
-                  label="Variants"
-                  value={String(musicVariants)}
-                  items={[
-                    { value: "1", label: "1", meta: "One take", icon: Layers },
-                    { value: "2", label: "2", meta: "Two takes", icon: Layers },
-                  ]}
-                  onChange={(value) => setMusicVariants?.(Number(value) === 2 ? 2 : 1)}
-                />
-                <StudioInlineSettingChipGroup
-                  label="Length"
-                  value={musicDurationAuto ? "auto" : String(musicDurationSeconds)}
-                  items={[
-                    { value: "auto", label: "Auto", meta: "Model picks", icon: Clock3 },
-                    { value: "30", label: "30s", icon: Clock3 },
-                    { value: "60", label: "1m", icon: Clock3 },
-                    { value: "120", label: "2m", icon: Clock3 },
-                    { value: "240", label: "4m", icon: Clock3 },
-                    { value: "360", label: "6m", icon: Clock3 },
-                    { value: "600", label: "10m", icon: Clock3 },
-                  ]}
-                  onChange={(value) => {
-                    if (value === "auto") {
-                      setMusicDurationAuto?.(true);
-                      return;
-                    }
-                    setMusicDurationAuto?.(false);
-                    setMusicDurationSeconds?.(Number(value));
-                  }}
-                />
-                <StudioInlineSettingChipGroup
-                  label="Lyrics"
-                  value={musicLyricsMode}
-                  items={[
-                    {
-                      value: "instrumental",
-                      label: "Instrumental",
-                      meta: "No vocals",
-                      icon: Music2,
-                    },
-                    {
-                      value: "auto",
-                      label: "Auto",
-                      meta: "Vocals ok",
-                      icon: Mic,
-                    },
-                    {
-                      value: "custom",
-                      label: "Custom",
-                      meta: "Your lyrics",
-                      icon: List,
-                    },
-                  ]}
-                  onChange={(value) => {
-                    setMusicLyricsMode?.(value);
-                    setMusicInstrumental?.(value === "instrumental");
-                  }}
-                />
-                {musicLyricsMode === "custom" ? (
-                  <label className="studio-composer-options-section">
-                    <span className="studio-composer-options-section-label">
-                      Custom lyrics
-                    </span>
+              <div className="studio-music-settings-stack" aria-label="Music">
+                <StudioMusicAccordion
+                  title="Basics"
+                  summary={`${musicModelId === "music_v1" ? "v1" : "v2"} · ${musicVariants}× · ${musicLengthLabel}`}
+                  open={musicAcc.basics}
+                  onToggle={() =>
+                    setMusicAcc((prev) => ({ ...prev, basics: !prev.basics }))
+                  }
+                >
+                  <StudioMusicTagGroup
+                    label="Length"
+                    value={musicDurationAuto ? "auto" : String(musicDurationSeconds)}
+                    items={[
+                      { value: "auto", label: "Auto" },
+                      { value: "30", label: "30s" },
+                      { value: "60", label: "1m" },
+                      { value: "120", label: "2m" },
+                      { value: "240", label: "4m" },
+                      { value: "360", label: "6m" },
+                      { value: "600", label: "10m" },
+                    ]}
+                    onChange={(value) => {
+                      if (value === "auto") {
+                        setMusicDurationAuto?.(true);
+                        return;
+                      }
+                      setMusicDurationAuto?.(false);
+                      setMusicDurationSeconds?.(Number(value));
+                    }}
+                  />
+                  <StudioMusicTagGroup
+                    label="Variants"
+                    value={String(musicVariants)}
+                    items={[
+                      { value: "1", label: "1" },
+                      { value: "2", label: "2" },
+                    ]}
+                    onChange={(value) => setMusicVariants?.(Number(value) === 2 ? 2 : 1)}
+                  />
+                  <StudioMusicTagGroup
+                    label="Model"
+                    value={musicModelId}
+                    items={[
+                      { value: "music_v2", label: "v2" },
+                      { value: "music_v1", label: "v1" },
+                    ]}
+                    onChange={(value) => setMusicModelId?.(value)}
+                  />
+                </StudioMusicAccordion>
+
+                <StudioMusicAccordion
+                  title="Lyrics"
+                  summary={musicLyricsLabel}
+                  open={musicAcc.lyrics || musicLyricsMode === "custom"}
+                  onToggle={() =>
+                    setMusicAcc((prev) => ({ ...prev, lyrics: !prev.lyrics }))
+                  }
+                >
+                  <StudioMusicTagGroup
+                    label="Mode"
+                    value={musicLyricsMode}
+                    items={[
+                      { value: "instrumental", label: "Instrumental" },
+                      { value: "auto", label: "Auto" },
+                      { value: "custom", label: "Custom" },
+                    ]}
+                    onChange={(value) => {
+                      setMusicLyricsMode?.(value);
+                      setMusicInstrumental?.(value === "instrumental");
+                      if (value === "custom") {
+                        setMusicAcc((prev) => ({ ...prev, lyrics: true }));
+                      }
+                    }}
+                  />
+                  {musicLyricsMode === "custom" ? (
                     <textarea
-                      className="studio-voice-picker-select studio-music-lyrics-input"
-                      rows={5}
+                      className="studio-music-lyrics-input"
+                      rows={4}
                       value={musicCustomLyrics}
                       placeholder="Start typing to use custom lyrics…"
                       onChange={(event) => setMusicCustomLyrics?.(event.target.value)}
                     />
-                  </label>
-                ) : null}
-                <StudioInlineSettingChipGroup
-                  label="Workflow"
-                  value={musicWorkflow}
-                  items={[
-                    {
-                      value: "composition_plan",
-                      label: "Plan",
-                      meta: "Structured",
-                      icon: ListChecks,
-                    },
-                    {
-                      value: "prompt",
-                      label: "Quick",
-                      meta: "Prompt only",
-                      icon: Zap,
-                    },
-                    {
-                      value: "extend",
-                      label: "Extend",
-                      meta: "Stored song",
-                      icon: History,
-                    },
-                  ]}
-                  onChange={(value) =>
-                    setMusicWorkflow?.(
-                      value as "composition_plan" | "prompt" | "extend",
-                    )
+                  ) : null}
+                </StudioMusicAccordion>
+
+                <StudioMusicAccordion
+                  title="Advanced"
+                  summary={`${musicWorkflowLabel}${musicFinetuneId?.trim() ? " · Finetune" : ""}`}
+                  open={musicAcc.advanced || musicWorkflow === "extend"}
+                  onToggle={() =>
+                    setMusicAcc((prev) => ({ ...prev, advanced: !prev.advanced }))
                   }
-                />
-                <div className="studio-audio-sfx-controls">
-                  <label className="studio-voice-picker-check">
-                    <input
-                      type="checkbox"
-                      checked={musicStoreForInpainting}
-                      onChange={(event) =>
-                        setMusicStoreForInpainting?.(event.target.checked)
-                      }
-                    />
-                    <span>Keep for extend</span>
-                  </label>
-                  <label>
-                    <span>Finetune id</span>
-                    <input
-                      className="studio-voice-picker-select"
-                      value={musicFinetuneId}
-                      placeholder="None"
-                      onChange={(event) => setMusicFinetuneId?.(event.target.value)}
-                    />
-                  </label>
-                  {musicWorkflow === "extend" ? (
+                >
+                  <StudioMusicTagGroup
+                    label="Workflow"
+                    value={musicWorkflow}
+                    items={[
+                      { value: "composition_plan", label: "Plan" },
+                      { value: "prompt", label: "Quick" },
+                      { value: "extend", label: "Extend" },
+                    ]}
+                    onChange={(value) =>
+                      setMusicWorkflow?.(
+                        value as "composition_plan" | "prompt" | "extend",
+                      )
+                    }
+                  />
+                  <div className="studio-audio-sfx-controls">
+                    <label className="studio-voice-picker-check">
+                      <input
+                        type="checkbox"
+                        checked={musicStoreForInpainting}
+                        onChange={(event) =>
+                          setMusicStoreForInpainting?.(event.target.checked)
+                        }
+                      />
+                      <span>Keep for extend</span>
+                    </label>
                     <label>
-                      <span>Song id</span>
+                      <span>Finetune id</span>
                       <input
                         className="studio-voice-picker-select"
-                        value={musicSourceSongId}
-                        placeholder="From Keep for extend"
-                        onChange={(event) => setMusicSourceSongId?.(event.target.value)}
+                        value={musicFinetuneId}
+                        placeholder="None"
+                        onChange={(event) => setMusicFinetuneId?.(event.target.value)}
                       />
                     </label>
-                  ) : null}
-                </div>
-              </section>
+                    {musicWorkflow === "extend" ? (
+                      <label>
+                        <span>Song id</span>
+                        <input
+                          className="studio-voice-picker-select"
+                          value={musicSourceSongId}
+                          placeholder="From Keep for extend"
+                          onChange={(event) => setMusicSourceSongId?.(event.target.value)}
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                </StudioMusicAccordion>
+              </div>
             ) : null}
           </>
         ) : (
@@ -29674,6 +29794,55 @@ function StudioComposerControlStrip({
             ) : null}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function StudioMusicAccordion({ title, summary, open, onToggle, children }) {
+  return (
+    <section className={`studio-music-acc${open ? " is-open" : ""}`}>
+      <button
+        type="button"
+        className="studio-music-acc-toggle"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <span className="studio-music-acc-title">{title}</span>
+        <span className="studio-music-acc-meta">
+          {summary ? <em>{summary}</em> : null}
+          <ArrowDown
+            className={`studio-music-acc-chevron${open ? " is-open" : ""}`}
+            aria-hidden="true"
+          />
+        </span>
+      </button>
+      {open ? <div className="studio-music-acc-body">{children}</div> : null}
+    </section>
+  );
+}
+
+function StudioMusicTagGroup({ label, value, items, onChange }) {
+  return (
+    <div className="studio-music-tag-group" aria-label={label}>
+      {label ? (
+        <span className="studio-composer-options-section-label">{label}</span>
+      ) : null}
+      <div className="studio-music-tag-row" role="group" aria-label={label}>
+        {items.map((item) => {
+          const active = item.value === value;
+          return (
+            <button
+              key={item.value}
+              type="button"
+              className={`studio-music-tag${active ? " is-active" : ""}`}
+              aria-pressed={active}
+              onClick={() => onChange(item.value)}
+            >
+              {item.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
