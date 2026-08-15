@@ -11,6 +11,8 @@ export const INTENT_BLURBS = {
     "Create image from prompt into a folder. Args:{prompt,folderId?}. Default folderId=CWD. Queues wait:false then polls. Paid+approval. Estimate first if cost matters. Quote cost as $ / TTD only.",
   studio_generate_video:
     "Create video (paid+approval). Queues wait:false then polls (does not block Pi turn on Seedance sync). Default folderId=CWD. People scenes: storyboard still via studio_generate_image first, then video. Quote cost as $ / TTD only.",
+  studio_generate_batch:
+    "Queue up to 8 gens. Args:{items:[{mode:image|video|audio,prompt,folderId?}]}. Each item needs its own prompt — there is no top-level prompt. Prefer studio_generate_image in a loop if unsure.",
   studio_create_document:
     "Create a Script (.md) in a folder. Args:{folderId,title,contentMarkdown}. contentMarkdown REQUIRED and non-empty for prompts/scripts. Never remember script bodies. Include References: asset lines. Default folderId=CWD.",
   studio_patch_document:

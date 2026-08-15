@@ -10,6 +10,7 @@ export const HOT_SCHEMAS = {
   studio_unshare_post: { required: ["assetId"] },
   studio_generate_image: { required: ["prompt"] },
   studio_generate_video: { required: ["prompt"] },
+  studio_generate_batch: { required: ["items"] },
   studio_estimate_generation: { required: ["mode"] },
   studio_bulk_move: { required: ["targetFolderId", "items"] },
   studio_trash: {
@@ -48,6 +49,18 @@ export const HOT_SCHEMAS = {
 export function coerceHotToolArgs(toolName, args) {
   const input =
     args && typeof args === "object" && !Array.isArray(args) ? { ...args } : {};
+
+  if (toolName === "studio_generate_batch") {
+    if ((!Array.isArray(input.items) || !input.items.length) && input.prompt) {
+      input.items = [
+        {
+          mode: input.mode || "image",
+          prompt: input.prompt,
+          folderId: input.folderId,
+        },
+      ];
+    }
+  }
 
   if (toolName === "studio_search") {
     if (input.query == null || input.query === "") {
@@ -190,6 +203,25 @@ export function validateHotToolArgs(toolName, args) {
     }
   }
 
+  if (toolName === "studio_generate_batch") {
+    if (!Array.isArray(input.items) || !input.items.length) {
+      return {
+        ok: false,
+        error: "studio_generate_batch requires args.items[{mode,prompt}]",
+        example: exampleFor(toolName),
+      };
+    }
+    for (const [index, item] of input.items.entries()) {
+      if (!item || typeof item !== "object" || !String(item.prompt || "").trim()) {
+        return {
+          ok: false,
+          error: `items[${index}] needs prompt`,
+          example: exampleFor(toolName),
+        };
+      }
+    }
+  }
+
   if (toolName === "studio_create_document") {
     // Alias common mis-keys before empty check
     if (
@@ -239,6 +271,9 @@ function exampleFor(toolName) {
     studio_share_asset_post: { assetId: "<assetId>", caption: "optional" },
     studio_generate_image: { prompt: "…", folderId: "<optional>" },
     studio_generate_video: { prompt: "…", folderId: "<optional>" },
+    studio_generate_batch: {
+      items: [{ mode: "image", prompt: "…", folderId: "<CWD>" }],
+    },
     studio_create_document: {
       folderId: "<CWD>",
       title: "Prompt — short name",

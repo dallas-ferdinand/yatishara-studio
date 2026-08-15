@@ -328,6 +328,20 @@ test("skills pack surface", () => {
   assert.ok(matchSkills("hypermotion").some((s) => s.id === "prompt-hypermotion"));
 });
 
+test("hot schemas require batch items with prompts", () => {
+  assert.equal(validateHotToolArgs("studio_generate_batch", {}).ok, false);
+  assert.equal(
+    validateHotToolArgs("studio_generate_batch", { prompt: "a flyer lock" }).ok,
+    true,
+  );
+  assert.equal(
+    validateHotToolArgs("studio_generate_batch", {
+      items: [{ mode: "image" }],
+    }).ok,
+    false,
+  );
+});
+
 test("hot schemas coerce search/estimate aliases", () => {
   assert.equal(validateHotToolArgs("studio_search", { q: "logo" }).ok, true);
   assert.equal(

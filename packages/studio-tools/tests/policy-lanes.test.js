@@ -77,6 +77,15 @@ test("http mapping for generation + trash", async () => {
   assert.equal(video.body?.wait, false);
   assert.equal(video.body?.mode, "video");
 
+  const { expandGenerateBatchItems } = await import("../src/http.js");
+  const batch = expandGenerateBatchItems({
+    items: [{ mode: "image", prompt: "ref a" }, { mode: "image", prompt: "ref b" }],
+  });
+  assert.equal(batch.length, 2);
+  const coerced = expandGenerateBatchItems({ prompt: "one still" });
+  assert.equal(coerced.length, 1);
+  assert.equal(coerced[0].prompt, "one still");
+
   const tool = (await import("../src/catalog.js")).getTool("studio_trash");
   assert.ok(tool?.http?.pathTemplate);
   const trash = buildStudioRequest("studio_trash", {

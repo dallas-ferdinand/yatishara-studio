@@ -19,6 +19,7 @@ export {
   invokeStudioTool,
   normalizeStudioToolArgs,
   normalizeAgentGenerationArgs,
+  expandGenerateBatchItems,
   resolveStudioToolAlias,
   shouldPollGeneration,
   pollGenerationJob,

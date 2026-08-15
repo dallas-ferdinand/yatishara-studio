@@ -61,8 +61,28 @@ export function normalizeAgentGenerationArgs(toolName, args = {}) {
   }
   if (name === "studio_generate_batch") {
     input.wait = false;
+    if ((!Array.isArray(input.items) || !input.items.length) && input.prompt) {
+      input.items = [
+        {
+          mode: input.mode || "image",
+          prompt: input.prompt,
+          folderId: input.folderId,
+        },
+      ];
+    }
   }
   return input;
+}
+
+/**
+ * Agent HTTP catalog maps studio_generate_batch → POST /generations (single).
+ * MCP batch is local (items[]). Expand items into single generate_* calls.
+ * @param {Record<string, unknown>} args
+ */
+export function expandGenerateBatchItems(args) {
+  const input = normalizeAgentGenerationArgs("studio_generate_batch", args);
+  const items = Array.isArray(input.items) ? input.items : [];
+  return items.slice(0, 8);
 }
 
 /**
@@ -329,6 +349,64 @@ export async function pollGenerationJob(
  * @param {{ awaitGeneration?: boolean, pollTimeoutMs?: number, pollIntervalMs?: number, signal?: AbortSignal, onGenerationQueued?: (info: { toolName: string, jobId: string, data: Record<string, unknown> }) => Promise<void>|void }} [options]
  */
 export async function invokeStudioTool(apiBase, bearerToken, toolName, args = {}, options = {}) {
+  if (String(toolName) === "studio_generate_batch") {
+    const items = expandGenerateBatchItems(args);
+    if (!items.length) {
+      return {
+        ok: false,
+        error:
+          "studio_generate_batch requires args.items[{mode,prompt}] (max 8). Or pass prompt for a single job.",
+      };
+    }
+    const jobs = [];
+    for (const [index, raw] of items.entries()) {
+      const item = raw && typeof raw === "object" ? raw : {};
+      const prompt = String(item.prompt || "").trim();
+      if (!prompt) {
+        jobs.push({
+          ok: false,
+          index,
+          label: item.label,
+          error: "prompt is required",
+        });
+        continue;
+      }
+      const mode =
+        item.mode === "video" || item.mode === "audio" || item.mode === "script"
+          ? item.mode
+          : "image";
+      const child =
+        mode === "video"
+          ? "studio_generate_video"
+          : mode === "audio"
+            ? "studio_generate_audio"
+            : "studio_generate_image";
+      const res = await invokeStudioTool(
+        apiBase,
+        bearerToken,
+        child,
+        { ...item, prompt, wait: false },
+        options,
+      );
+      jobs.push({
+        ok: res?.ok !== false,
+        index,
+        mode,
+        label: item.label,
+        error: res?.error,
+        data: res?.data,
+      });
+    }
+    const anyOk = jobs.some((job) => job.ok);
+    return {
+      ok: anyOk,
+      data: { count: jobs.length, jobs },
+      error: anyOk
+        ? undefined
+        : jobs.find((job) => job.error)?.error || "batch failed",
+    };
+  }
+
   const req = buildStudioRequest(toolName, args);
   if (req.local) {
     return {
