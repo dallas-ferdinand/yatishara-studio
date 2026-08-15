@@ -64,16 +64,11 @@ export const setMine = authedMutation({
   },
 });
 
-/** Run leftover approval cards when YOLO is already on (Continue / refresh). */
+/** Flush leftover approval cards so the composer is not stuck. */
 export const flushPendingIfYolo = authedMutation({
   args: { threadId: v.optional(v.id("agentThreads")) },
   returns: v.number(),
   handler: async (ctx, args) => {
-    const row = await ctx.db
-      .query("agentPreferences")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
-      .unique();
-    if (!row?.autoApprove) return 0;
     return await ctx.runMutation(internal.agentApprovals.approvePendingForOwner, {
       ownerId: ctx.user._id,
       threadId: args.threadId,

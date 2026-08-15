@@ -40,6 +40,7 @@ import {
 import { createPlanStore } from "./agentPlan.mjs";
 import { createTrajectory } from "./agentTrajectory.mjs";
 import { searchTools, resolveInvokeName } from "./agentToolResolve.mjs";
+import { createDirectStudioTools, DIRECT_TOOL_NAMES } from "./agentDirectTools.mjs";
 
 function textResult(payload) {
   const text =
@@ -404,15 +405,13 @@ export function createStudioPiTools(opts) {
     name: "catalog",
     label: "Catalog",
     description:
-      "List Studio tools (JIT). Default = lean always-on set. Pass q= or category= to discover the rest (post, move, send, trash, …). Then describe/invoke by name.",
-    promptSnippet: "List Studio API tools (then invoke by name)",
+      "Discover rare Studio tools not already in your tool list. Everyday studio_* tools are top-level — call them directly. Use q= only for the long tail.",
+    promptSnippet: "Find a rare Studio tool name",
     promptGuidelines: [
-      "Only Pi tools are catalog, describe, invoke, inspect, remember, skills, plan, ask.",
-      "Always-on tools appear without q=. For anything else (post/share/move/send/trash/…), catalog with q= first.",
-      "catalog q= matches words (delete element → studio_trash). Use a returned name — never invent studio_*.",
-      "Load a skill pack with skills before multi-step work.",
-      "For 2+ step jobs: plan set first, update statuses as you go (todo reinjects automatically).",
-      "Never call studio_* as a top-level tool name. describe/plan/skills are top-level — do not wrap them in invoke.",
+      "Call studio_generate_image, studio_get_document, studio_trash, etc. directly — they are typed top-level tools.",
+      "catalog / describe / invoke are only for tools that are not already in your tool list.",
+      "inspect to see images. ask if a material unknown would change the work.",
+      "For 2+ step jobs: plan set first, update statuses as you go.",
     ],
     parameters: Type.Object({
       category: Type.Optional(Type.String()),
@@ -461,7 +460,7 @@ export function createStudioPiTools(opts) {
           filtered,
           hint: filtered
             ? undefined
-            : "Always-on set only. Re-call with q= (post, move, send, trash, …) or category= for more tools.",
+            : "Hot tools are already top-level. Re-call with q= only for rare tools not in your tool list.",
           tools: tools.slice(0, max),
         };
       });
@@ -542,14 +541,12 @@ export function createStudioPiTools(opts) {
     name: "invoke",
     label: "Invoke",
     description:
-      "Run a Studio tool: { name:\"studio_*\", args:{...} }. Results are compacted. Paid/destructive/outbound/admin → approval card (YOLO may auto-run). Pass verbose:true only if you need more fields.",
-    promptSnippet: "Run a Studio tool via name + args",
+      "Run a rare Studio tool that is not already a top-level tool. Prefer calling studio_* directly. { name:\"studio_*\", args:{...} }.",
+    promptSnippet: "Run a rare Studio tool by name",
     promptGuidelines: [
-      "Always pass the Studio tool name in invoke.name (e.g. studio_create_folder).",
-      "Pass arguments in invoke.args as a JSON object.",
-      "Do the action — don't explain how unless the user asked how.",
-      "Follow verifyHint in the result before claiming success.",
-      "describe / plan / skills / catalog are top-level Pi tools — never pass them as invoke.name.",
+      "Prefer the typed studio_* tools in your tool list.",
+      "Use invoke only when catalog returned a name that is not top-level.",
+      "describe / plan / skills / catalog are top-level — never pass them as invoke.name.",
     ],
     parameters: Type.Object({
       name: Type.String({
@@ -1406,7 +1403,24 @@ export function createStudioPiTools(opts) {
     },
   });
 
-  return [catalog, describe, invoke, inspect, remember, skills, plan, ask];
+  const directTools = createDirectStudioTools({
+    executeNamed: (toolCallId, name, args, onUpdate) =>
+      invoke.execute(toolCallId, { name, args }, undefined, onUpdate),
+  });
+
+  return [
+    ...directTools,
+    inspect,
+    remember,
+    skills,
+    plan,
+    ask,
+    catalog,
+    describe,
+    invoke,
+  ];
 }
+
+export { DIRECT_TOOL_NAMES };
 
 export { createTrajectory };

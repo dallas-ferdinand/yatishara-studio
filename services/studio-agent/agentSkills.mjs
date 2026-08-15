@@ -136,6 +136,28 @@ export function matchSkills(query) {
     }));
 }
 
+/** Load 1–2 matching skill bodies into the turn (Cursor reads SKILL.md). */
+export function skillsToInject(message, lane = "") {
+  const q = `${message}\n${lane}`.toLowerCase();
+  const scored = allSkills()
+    .map((pack) => {
+      let score = 0;
+      if (q.includes(pack.id)) score += 100;
+      const tokens = pack.id.split("-").filter((t) => t.length > 3);
+      if (tokens.length && tokens.every((t) => q.includes(t))) score += 80;
+      if (pack.when && pack.when.toLowerCase().split(/\s+/).some((w) => w.length > 4 && q.includes(w))) {
+        score += 15;
+      }
+      return { id: pack.id, score };
+    })
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score);
+  return scored
+    .slice(0, 2)
+    .map((row) => getSkill(row.id))
+    .filter(Boolean);
+}
+
 export function skillPromptBlock() {
   const promptIds = allSkills()
     .filter((s) => s.category === "prompt" || s.id === "project-plan")
@@ -145,7 +167,7 @@ export function skillPromptBlock() {
     .filter((s) => s.category === "ops")
     .map((s) => s.id)
     .join(", ");
-  return `Skills: call skills (list) or skills {id} (full body) before craft/multi-step. Prompt: ${promptIds || "prompt-*"}. Ops: ${opsIds || "post-feed…"}. Studio voice only — model slugs like seedance-2.5 are OK.`;
+  return `Matching skill packs are injected into this turn when relevant. Call skills {id} only if you need another pack. Prompt: ${promptIds || "prompt-*"}. Ops: ${opsIds || "post-feed…"}. Studio voice only — model slugs like seedance-2.5 are OK.`;
 }
 
 /** @deprecated kept for older imports */

@@ -3,20 +3,19 @@
  * Studio Agent Pi worker (canonical).
  *
  * Convex agentActions.sendTurn posts here when STUDIO_AGENT_URL is set.
- * Tools: dynamic catalog/describe/invoke → Studio /api/v1 with per-user
- * capability token. No MCP bridge. No global STUDIO_API_TOKEN identity.
+ * Tools: typed studio_* + inspect/skills/ask; catalog/invoke for the long tail.
+ * Studio /api/v1 with per-user capability token. No MCP on this path.
  *
  * Env:
  *   STUDIO_AGENT_PORT / PORT
  *   STUDIO_AGENT_WORKER_TOKEN (required — fail closed)
  */
 import { createServer } from "node:http";
-import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { createStudioPiTools, createTrajectory } from "./piTools.mjs";
+import { createStudioPiTools, createTrajectory, DIRECT_TOOL_NAMES } from "./piTools.mjs";
 import { detectActionLane } from "./agentLanes.mjs";
-import { skillPromptBlock } from "./agentSkills.mjs";
+import { skillPromptBlock, skillsToInject } from "./agentSkills.mjs";
 import { normalizeAgentUsage } from "./usageBilling.mjs";
 import {
   budgetPriorHistory,
@@ -34,7 +33,7 @@ const PLATFORM_PROVIDER = String(
   process.env.STUDIO_AGENT_PROVIDER || "byteplus-ark",
 ).trim();
 const PLATFORM_MODEL = String(
-  process.env.STUDIO_AGENT_MODEL_ID || "dola-seed-2-1-turbo-260628",
+  process.env.STUDIO_AGENT_PLAN_MODEL_ID || "seed-2-0-pro-260328",
 ).trim();
 
 if (!process.env.ARK_API_KEY?.trim()) {
@@ -196,7 +195,7 @@ async function runPiTurn(body, abortSignal) {
     runId,
     role = "user",
     scopes,
-    autoApprove = false,
+    autoApprove: _autoApprove = true,
     capabilityToken,
     studioApiBase,
     callbackBase,
@@ -413,42 +412,7 @@ async function runPiTurn(body, abortSignal) {
         });
         return ask;
       },
-      onApprovalRequired: async ({ toolName, args, tool, toolCallId }) => {
-        if (autoApprove) {
-          return null;
-        }
-        approvalCreated = true;
-        const idempotencyKey = createHash("sha256")
-          .update(
-            `${runId || ""}:${toolName}:${JSON.stringify(args || {})}`,
-            "utf8",
-          )
-          .digest("hex")
-          .slice(0, 40);
-        const approval = await callback(
-          callbackBase,
-          workerCallbackToken,
-          "approval",
-          {
-            ownerId: userId,
-            threadId,
-            runId,
-            toolCallId,
-            toolName,
-            title: tool?.name || toolName,
-            summary: `Approve ${toolName} (${tool?.risk || "risk"})`,
-            args,
-            idempotencyKey,
-            role,
-          },
-        );
-        return {
-          ok: true,
-          pendingApproval: true,
-          approvalId: approval?.approvalId,
-          message: "Waiting for confirmation in chat.",
-        };
-      },
+      onApprovalRequired: async () => null,
       localHandlers: {
         studio_list_text_presets: async () => ({
           ok: true,
@@ -657,16 +621,25 @@ async function runPiTurn(body, abortSignal) {
       }
     }
 
+    const injectedSkills = skillsToInject(userMessage, lane);
+    const injectedSkillBlock = injectedSkills.length
+      ? injectedSkills
+          .map(
+            (pack) =>
+              `SKILL ${pack.id} (loaded for this turn — follow it):\n${String(pack.body || "").slice(0, 6000)}`,
+          )
+          .join("\n\n")
+      : "";
+
     const system = [
       lastTrajectoryBlock ? `${lastTrajectoryBlock}` : "",
+      injectedSkillBlock,
       "Yatishara Studio Agent. Act with tools — don't advise how unless asked.",
       "CONTINUITY: Prior + Thread summary + TODO board ARE this chat. Resume unfinished work; do not restart from scratch unless asked. \"Continue.\" means pick up the next unfinished step from Prior/TODO.",
-      "Pi tools: catalog, describe, invoke, inspect, remember, skills, plan, ask.",
-      "Studio actions: invoke {name:\"studio_*\", args:{...}}. Never call studio_* as a top-level tool.",
-      "catalog: always-on set by default; q= or category= to discover the rest (post, move, send, trash, …). describe if args unclear. Skip catalog when you already know the studio_* name.",
+      "Call studio_* tools directly — they are typed top-level tools (generate, documents, elements, folders, trash, send, …). inspect to see images. ask if a material unknown would change the work. catalog/describe/invoke only for rare tools not already in your list.",
       "Do not call remember for ephemeral tool chatter. Memories are auto-injected when relevant — never invent a recall tool step.",
       skillPromptBlock(),
-      "Before writing image/video prompts or choosing hypermotion vs cinematic, skills {id} for the matching prompt-* pack. Do not invent third-party brand names in prompts.",
+      "Matching skill packs are already injected when relevant. Call skills {id} only if you need another pack. Do not invent third-party brand names in prompts.",
       "Voiceover from video/edit: skills {id:\"prompt-voiceover\"}. Pull frames (VO cadence), write VO, studio_create_document titled \"VO script — …\", ALWAYS paste spoken-only ```text fence in chat for Copy, then ask once before ElevenLabs audio gen.",
       "Prompt craft: never ship lame short vibe lines. Load prompt-cinematic / prompt-hypermotion / prompt-image and write sealed production prompts (SCENE CONTEXT, first-frame occupancy, camera start→end, acting/voice, ⛔ failure locks, ✅ must-succeed locks). Length is not the enemy — thinning is.",
       "Prompt save: when they ask for a NEW prompt or script (write/craft/create from scratch) — skills first; if attached stills are identity locks (product/character/prop/location), ELEMENT FLOW first (list → create .element → use element://). Then studio_create_document into CWD with NON-EMPTY contentMarkdown. Body must be plain markdown only: title + ```text fence + ## References with `- [Label](element://{elementId})` for those locks (asset:// only for style/mood or when no element exists yet). INSIDE the sealed ```text``` prompt, tag each as @Label (exact same Label as the References link). NEVER pipe-meta rows (`| kind: image | studio: id`) — those crash Script open. Never create an empty Script. After create, keep the returned documentId. Never stash the prompt body in remember/memory. Title like \"Prompt — <short>\" or \"Script — <short>\" (VO: \"VO script — <short>\"). Chat: for image/video prompts, only paste if they asked to see/copy; for voiceover, ALWAYS paste the spoken-only ```text fence.",
@@ -675,26 +648,26 @@ async function runPiTurn(body, abortSignal) {
       "Prompt run: if they ask to generate from a saved prompt doc — studio_get_document, read References, pass referenceAssetIds / referenceElementIds / startFrameAssetId on generate. Default folderId=CWD.",
       "ELEMENT FLOW (understand why — do not only react to the words \"create element\"): WHY — a .element is a reusable Seedance/Create identity lock (product, character, prop, location). Bare asset:// refs are one-shot; @name + element:// hydrates chips on paste/Run and keeps the same lock across prompts/gens. WHEN — (1) they ask to create/lock/elementize media, OR (2) they attach product/character/prop/location stills and want a prompt/ad/script that must keep that identity, OR (3) they will generate with those locks. Style/mood-only refs may stay asset://. HOW — studio_list_elements in CWD (reuse live matches) → else studio_upload_asset if needed → studio_create_element {type:character|prop|location,name,folderId:CWD,description?,referenceAssetIds} with unique @name (no spaces) → tag @name inside sealed ```text``` → `- [name](element://{elementId})` under ## References → generate with referenceElementIds. studio_update_element to swap media. Sheet-build tools only if asked. NEVER claim Elements are retired, removed, unavailable, or skip create because asset:// \"is enough\" when identity lock is the job.",
       "Video models: only from studio_list_video_models (or known slugs seedance-2.5 / seedance-2.0). Talk about motion/light/res/length. Never invent caps, features, or legacy/pipeline marketing.",
-      "Bias to action: for vague creative asks, assume strong defaults and DO the next useful tool step (usually estimate, then generate → approval). Do not offer a menu of options.",
+      "Bias to action: for vague creative asks, assume strong defaults and DO the next useful tool step (usually estimate, then generate). Do not offer a menu of options.",
       "Assumptions: pick model seedance-2.5, duration ~8s (clamp to model max), aspect from attached still or 16:9, cinematic unless they said hypermotion/chaos. Disclose assumptions in one short line after tools run.",
       "Generate returns: if stillRendering/queued, tell the user it's rendering in Files and STOP — do not spin/poll forever inside the turn.",
       "TODO: if the job needs 2+ tool steps, call plan {action:\"create\", title, steps:[...]} first (cancelActive true if replacing direction). Mark steps doing/done with update_step as you go. add_step/remove_step/set_list_status when needed. Latest board reinjects on every tool result.",
       "Before your final reply this turn: update the active todo list to match real progress (doing/done). If the user cancelled the direction, set_list_status cancelled and create a new list if still working.",
       "ask: only for material unknowns (aspect/subject/direction that would change the gen). 1–4 multi-choice questions, then stop. Never ask readiness menus.",
       "Clarify only for material unknowns. Prefer estimate first, then ask if needed — never a laundry list before acting.",
-      "Never end with 'Would you like me to A, B, or C?' — pick the best next step and invoke it.",
+      "Never end with 'Would you like me to A, B, or C?' — pick the best next step and run the tool.",
       "plan: skip only for true one-shots (post/move/send one item).",
       "Attached chips are primary scope — use their ids. Tokens like [asset:Name id=…] are chips.",
       cwdBlock,
       cwdIndexBlock,
       "Orient: studio_workspace_tree {} or studio_search. folder_contents needs a real folderId.",
-      "Ambiguity: if attached ids cover the action, invoke now. Ask only when a required arg is missing.",
+      "Ambiguity: if attached ids cover the action, run the tool now. Ask only when a required arg is missing or the user did not clearly want generate/send/trash/post.",
       "Money: speak only dollars / TTD (e.g. $2.50 TTD). Never say \"credits\" to the user. Tool observations already use cost labels.",
-      "Cost: for paid generate, estimate first when the user did not clearly confirm spend, then proceed to generate (approval card handles spend). Quote estimates as $ / TTD only.",
-      "Paid/destructive/outbound/admin → approval card (stop; chat UI handles it).",
-      "Done criteria: never claim success unless invoke ok (or pendingApproval / pendingAsk). Follow verifyHint / verified.",
-      "Failures: on error → fix args or catalog/describe → retry ONCE → then tell the user the real error and stop. Never invent 'tool unavailable'. Never thrash the same broken call.",
-      "inspect: only for pixels beyond attached vision; max 8; videos → pull frames first.",
+      "Cost: for paid generate, estimate first when spend is not obvious, then generate. No approval cards — just run. Quote estimates as $ / TTD only.",
+      "If they did not clearly ask to generate, send, trash, or post — ask first. Otherwise just run it.",
+      "Done criteria: never claim success unless the tool ok (or pendingAsk). Follow verifyHint / verified.",
+      "Failures: on error → fix args → retry ONCE → then tell the user the real error and stop. Never invent 'tool unavailable'. Never thrash the same broken call.",
+      "See images: attached stills are already in vision. For other folder images, inspect { assetIds }. Videos → pull_frames first, then inspect those frames.",
       "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets. No ids/JSON/debug talk.",
       "remember: ONLY short pointers — where a script/prompt lives (document title + folder path), durable prefs, decisions. NEVER store full prompts, shot lists, or script bodies in memory — those go in studio_create_document .md Scripts. Saying \"saved to memory\" for a prompt is wrong.",
       summaryBlock,
@@ -726,7 +699,11 @@ async function runPiTurn(body, abortSignal) {
     }
 
     const images = [];
-    const attachedAssets = Array.isArray(attachments) ? attachments.slice(0, 12) : [];
+    const seenAssetIds = new Set();
+    const attachedAssets = [
+      ...(Array.isArray(attachments) ? attachments : []),
+      ...(Array.isArray(workingSet) ? workingSet : []),
+    ].slice(0, 16);
     for (const item of attachedAssets) {
       if (abortSignal?.aborted || cancelNotified) {
         await requestAbort("attach-images");
@@ -736,7 +713,9 @@ async function runPiTurn(body, abortSignal) {
       if (textValue(item?.studioKind) !== "asset") continue;
       const studioId = textValue(item?.studioId);
       const kind = textValue(item?.kind);
-      if (!studioId || kind !== "image") continue;
+      if (!studioId || seenAssetIds.has(studioId)) continue;
+      if (kind && kind !== "image") continue;
+      seenAssetIds.add(studioId);
       try {
         const media = await invokeStudioTool(
           studioApiBase,
@@ -845,19 +824,20 @@ const server = createServer(async (req, res) => {
         JSON.stringify({
           ok: true,
           harness: "pi",
-          version: "harness-2026-08-11",
+          version: "harness-2026-08-15",
           sessions: sessions.size,
           authRequired: true,
           catalog: "studio-tools",
           tools: [
-            "catalog",
-            "describe",
-            "invoke",
+            ...DIRECT_TOOL_NAMES,
             "inspect",
             "remember",
             "skills",
             "plan",
             "ask",
+            "catalog",
+            "describe",
+            "invoke",
           ],
         }),
       );

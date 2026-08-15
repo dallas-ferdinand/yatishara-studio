@@ -5,6 +5,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { detectActionLane, agentDescription, STARTER_TOOL_NAMES } from "../agentLanes.mjs";
+import { pickAgentModel } from "../agentModelRoute.mjs";
+import { DIRECT_TOOL_NAMES } from "../agentDirectTools.mjs";
+import { skillsToInject } from "../agentSkills.mjs";
+import { createStudioPiTools } from "../piTools.mjs";
 import { compactObservation, maskOlderObservations, observationByteBudget } from "../agentCompact.mjs";
 import { validateHotToolArgs, HOT_SCHEMAS } from "../agentSchemas.mjs";
 import { listSkills, getSkill, matchSkills } from "../agentSkills.mjs";
@@ -412,4 +416,34 @@ test("starter set + intent blurbs present", () => {
     agentDescription({ name: "studio_share_asset_post", description: "old" }),
     /Post owned/,
   );
+});
+
+test("always uses Pro / plan model", () => {
+  const hi = pickAgentModel({ message: "hi" });
+  assert.equal(hi.tier, "plan");
+  assert.equal(hi.reason, "always-pro");
+  assert.match(hi.modelId, /pro|PLAN|seed/i);
+});
+
+test("direct typed studio tools are first-class", () => {
+  assert.ok(DIRECT_TOOL_NAMES.includes("studio_generate_image"));
+  assert.ok(DIRECT_TOOL_NAMES.includes("studio_get_document"));
+  assert.ok(DIRECT_TOOL_NAMES.includes("studio_inspect") === false);
+  const tools = createStudioPiTools({
+    apiBase: "http://127.0.0.1",
+    role: "user",
+    scopes: ["read", "write", "generate"],
+    getBearerToken: async () => "test",
+  });
+  const names = tools.map((t) => t.name);
+  assert.ok(names.includes("studio_generate_image"));
+  assert.ok(names.includes("studio_trash"));
+  assert.ok(names.includes("inspect"));
+  assert.ok(typeof tools.find((t) => t.name === "studio_generate_image")?.execute === "function");
+});
+
+test("matching skills inject for a prompt ask", () => {
+  const packs = skillsToInject("write a hypermotion video prompt", "");
+  assert.ok(packs.some((p) => p.id === "prompt-hypermotion"));
+  assert.ok(packs[0].body);
 });

@@ -576,7 +576,6 @@ export function StudioAgentPane({
   const retryRun = useAction(api.agentActions.retryRun);
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const pricing = useQuery(api.billing.getPricing, {});
-  const agentPreferences = useQuery(api.agentPreferences.getMine, {});
   const flushPendingIfYolo = useMutation(api.agentPreferences.flushPendingIfYolo);
   const elements = useQuery(api.elements.list, {});
   const convex = useConvex();
@@ -658,12 +657,12 @@ export function StudioAgentPane({
       ),
     [runs],
   );
-  const autoApprove = Boolean(agentPreferences?.autoApprove);
+  const autoApprove = true;
 
   useEffect(() => {
-    if (!autoApprove || !awaitingApproval || !activeThreadId) return;
+    if (!awaitingApproval || !activeThreadId) return;
     void flushPendingIfYolo({ threadId: activeThreadId }).catch(() => undefined);
-  }, [autoApprove, awaitingApproval, activeThreadId, flushPendingIfYolo]);
+  }, [awaitingApproval, activeThreadId, flushPendingIfYolo]);
 
   // Stick to latest like DMs — layout settle, rAF, ResizeObserver, short retries.
   useLayoutEffect(() => {
@@ -955,7 +954,7 @@ export function StudioAgentPane({
 
   async function handleSend() {
     const text = draft.trim();
-    if ((!text && attachments.length === 0) || busy || (!autoApprove && awaitingApproval)) return;
+    if ((!text && attachments.length === 0) || busy) return;
     setBusy(true);
     stickToBottomRef.current = true;
     try {
@@ -1078,7 +1077,7 @@ export function StudioAgentPane({
   }
 
   const hasMessages = hasTurns;
-  const composerLocked = busy || (!autoApprove && awaitingApproval);
+  const composerLocked = busy;
   const canSend = (Boolean(draft.trim()) || attachments.length > 0) && !composerLocked;
 
   useEffect(() => {

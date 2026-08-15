@@ -39,7 +39,7 @@ Env (same secrets file):
 
 - `ARK_API_KEY` — ModelArk key (same as Convex generation)
 - `ARK_BASE_URL` — optional; defaults in models.json
-- `STUDIO_AGENT_MODEL_ID` — default `dola-seed-2-1-turbo-260628` (Seed 2.1 Turbo)
+- `STUDIO_AGENT_PLAN_MODEL_ID` / `STUDIO_AGENT_MODEL_ID` — Seed 2.0 Pro (`seed-2-0-pro-260328`) on every turn
 
 Do **not** use `~/.pi/agent` for the worker (that can pick a personal ZAI key and return empty “Done.”). Empty/error model replies fail closed — never fake success.
 
@@ -52,13 +52,13 @@ export STUDIO_AGENT_WORKER_TOKEN=dev
 npm start
 ```
 
-Tools: `catalog` / `describe` / `invoke` / `inspect` / `remember` / `skills` / `plan`
-from `piTools.mjs`. Studio HTTP via `@yatishara/studio-tools`.
-Harness extras: lean catalog, intent lanes, compact observations, hot-tool
-schemas, verify-after-act, markdown skill packs in `skills/` (Studio branding
-only — prompt craft + ops), plan todos, trajectory logs.
+Tools: typed `studio_*` (generate, documents, elements, folders, trash, send)
+plus `inspect` / `remember` / `skills` / `plan` / `ask`. `catalog` / `describe` /
+`invoke` only for the long tail. Studio HTTP via `@yatishara/studio-tools`.
+Matching skill packs inject into the turn. No YOLO approval cards — the agent
+runs tools and asks in chat when something is unclear.
 
-Agent loads packs via `skills {id}` (progressive disclosure). Prompt packs:
+Agent can still call `skills {id}` for another pack. Prompt packs:
 `prompt-image`, `prompt-cinematic`, `prompt-hypermotion`, `prompt-video-models`,
 `project-plan`. No third-party cinema brand names in skill text.
 

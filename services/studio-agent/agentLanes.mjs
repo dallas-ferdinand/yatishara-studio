@@ -67,7 +67,12 @@ export const ALWAYS_ON_TOOL_NAMES = [
   "studio_generate_image",
   "studio_generate_video",
   "studio_generate_audio",
+  "studio_generate_batch",
   "studio_estimate_generation",
+  "studio_get_generation",
+  "studio_list_generations",
+  "studio_list_video_models",
+  "studio_explore_voices",
   "studio_create_document",
   "studio_patch_document",
   "studio_update_document",
@@ -75,13 +80,22 @@ export const ALWAYS_ON_TOOL_NAMES = [
   "studio_create_element",
   "studio_list_elements",
   "studio_get_element",
+  "studio_update_element",
   "studio_workspace_tree",
   "studio_folder_contents",
+  "studio_list_folders",
+  "studio_create_folder",
+  "studio_ensure_path",
   "studio_search",
   "studio_pull_frames",
   "studio_get_asset",
   "studio_view_media",
   "studio_trash",
+  "studio_restore",
+  "studio_bulk_move",
+  "studio_share_asset_post",
+  "studio_send_message",
+  "studio_send_media_message",
 ];
 
 /** @deprecated alias — catalog starter = always-on lean set */
@@ -122,7 +136,7 @@ export function detectActionLane(message, workingSet) {
   }
 
   if (/\b(post|publish|share\s+(this|it|to\s+(feed|profile|public)))\b/.test(text) && hasAsset) {
-    return "LANE: invoke studio_share_asset_post with attached asset id (+ optional caption). Do not advise; do not claim unavailable unless invoke fails.";
+    return "LANE: studio_share_asset_post with attached asset id (+ optional caption). Do not advise; do not claim unavailable unless the tool fails.";
   }
 
   // Surgical edits MUST win over create-prompt (e.g. "make it a longer prompt").
@@ -196,24 +210,24 @@ export function detectActionLane(message, workingSet) {
   }
   if (/\b(generat(e|ing)|creat(e|ing)|make|draw|render)\b.{0,40}\b(image|picture|photo|still|art)\b/.test(text)
     || /\b(image|picture|photo)\b.{0,40}\b(generat|creat|make|draw|render)/.test(text)) {
-    return "LANE: skills {id:\"generate-image\"} if multi-step; invoke studio_generate_image with the user prompt. Do not claim unavailable unless invoke fails.";
+    return "LANE: studio_generate_image with the user prompt. inspect attached stills if you need to see them. Do not claim unavailable unless the tool fails.";
   }
   if (/\b(generat(e|ing)|creat(e|ing)|make|render|animat)\b.{0,40}\b(video|clip|footage)\b/.test(text)
     || /\b(video|clip)\b.{0,40}\b(generat|creat|make|render|animat)/.test(text)
     || /\banimat(e|ing)\b/.test(text)) {
-    return "LANE: Assume defaults (seedance-2.5, sensible duration/aspect from stills). skills generate-video (+ prompt pack). invoke studio_estimate_generation NOW, then studio_generate_video (or storyboard still first if people). No menus. No invented caps.";
+    return "LANE: Assume defaults (seedance-2.5, sensible duration/aspect from stills). studio_estimate_generation then studio_generate_video (or storyboard still first if people). No menus. No invented caps.";
   }
   if (/\b(move|put|place|relocat)/.test(text) && hasMovable && hasFolder) {
-    return "LANE: invoke studio_bulk_move { items:[{id,kind}], targetFolderId } using attached ids. kind=studioKind.";
+    return "LANE: studio_bulk_move { items:[{id,kind}], targetFolderId } using attached ids. kind=studioKind.";
   }
   if (/\b(trash|delet(e|ing)|remove|bin)\b/.test(text) && hasMovable) {
-    return "LANE: invoke studio_trash { kind, id } for attached item(s). Approval may appear.";
+    return "LANE: studio_trash { kind, id } for attached item(s). Just run it if they asked to trash.";
   }
   if (/\b(send|dm|message)\b/.test(text) && (/\b(dm|message|chat|conversation)\b/.test(text) || hasAsset)) {
     if (hasAsset) {
       return "LANE: prefer studio_send_media_message for attached media; studio_send_message for text-only.";
     }
-    return "LANE: invoke studio_send_message with conversationId + body.";
+    return "LANE: studio_send_message with conversationId + body.";
   }
   return "";
 }

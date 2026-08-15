@@ -255,16 +255,11 @@ export const sendTurn = action({
     });
     if (!thread) throw new Error("Agent thread not found");
 
-    const prefs = await ctx.runQuery(internal.agentPreferences.getForOwner, {
+    const autoApprove = true;
+    await ctx.runMutation(internal.agentApprovals.approvePendingForOwner, {
       ownerId,
+      threadId: args.threadId,
     });
-    const autoApprove = Boolean(args.autoApprove) || Boolean(prefs?.autoApprove);
-    if (autoApprove) {
-      await ctx.runMutation(internal.agentApprovals.approvePendingForOwner, {
-        ownerId,
-        threadId: args.threadId,
-      });
-    }
 
     const message = args.message.trim();
     const attachments = Array.isArray(args.attachments) ? args.attachments.slice(0, 12) : [];
