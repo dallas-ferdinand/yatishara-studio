@@ -17146,6 +17146,36 @@ export function StudioShell({
           width: 100%;
           min-width: 0;
         }
+        .studio-composer-resize-handle {
+          position: absolute;
+          top: 5px;
+          right: 7px;
+          z-index: 6;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 16px;
+          margin: 0;
+          padding: 0;
+          border: 0;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-ink, #1c1c1e) 6%, transparent);
+          color: color-mix(in srgb, var(--mos-ink, #1c1c1e) 42%, transparent);
+          cursor: ns-resize;
+          touch-action: none;
+        }
+        .studio-composer-resize-handle:hover,
+        .studio-composer-resize-handle:focus-visible {
+          background: color-mix(in srgb, var(--mos-ink, #1c1c1e) 10%, transparent);
+          color: color-mix(in srgb, var(--mos-ink, #1c1c1e) 62%, transparent);
+          outline: none;
+        }
+        @media (max-width: 979px) {
+          .studio-composer-resize-handle {
+            display: none;
+          }
+        }
         .studio-composer .cursor-composer-box {
           position: relative;
           overflow: hidden;
@@ -17153,7 +17183,7 @@ export function StudioShell({
           align-self: stretch;
           min-height: var(--studio-composer-min-height);
           height: auto;
-          max-height: min(42vh, 280px);
+          max-height: var(--studio-composer-box-max-height, min(42vh, 280px));
           flex: 0 1 auto;
           flex-direction: column;
           min-width: 0;
@@ -27402,6 +27432,37 @@ export function StudioShell({
   );
 }
 
+const CREATE_COMPOSER_MAX_HEIGHT_KEY = "ys-create-composer-max-height";
+const CREATE_COMPOSER_MAX_HEIGHT_MIN = 160;
+
+function clampCreateComposerMaxHeight(px) {
+  const max = Math.round((typeof window !== "undefined" ? window.innerHeight : 800) * 0.72);
+  return Math.min(max, Math.max(CREATE_COMPOSER_MAX_HEIGHT_MIN, Math.round(Number(px) || 0)));
+}
+
+function readCreateComposerMaxHeight() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = Number(window.localStorage.getItem(CREATE_COMPOSER_MAX_HEIGHT_KEY));
+    if (!Number.isFinite(raw) || raw < CREATE_COMPOSER_MAX_HEIGHT_MIN) return null;
+    return clampCreateComposerMaxHeight(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeCreateComposerMaxHeight(px) {
+  if (typeof window === "undefined" || px == null) return;
+  try {
+    window.localStorage.setItem(
+      CREATE_COMPOSER_MAX_HEIGHT_KEY,
+      String(clampCreateComposerMaxHeight(px)),
+    );
+  } catch {
+    /* ignore quota */
+  }
+}
+
 /** Chip label: first segment only ("Matilda - Knowledgeable…" → "Matilda"). */
 function shortVoiceChipLabel(name: string | null | undefined): string {
   if (!name?.trim()) return "Choose voice";
@@ -27510,7 +27571,11 @@ function StudioComposer({
   /** Local mirror so typing doesn't re-render the giant StudioShell every key. */
   const [liveDraft, setLiveDraft] = useState(draft);
   const draftPersistTimerRef = useRef(null);
+  const composerHeightDragRef = useRef(null);
   const { isMobile } = useMobileLayout();
+  const [composerMaxHeight, setComposerMaxHeight] = useState(() =>
+    readCreateComposerMaxHeight(),
+  );
 
   useMobileBackLayer("composer-preview", Boolean(previewAttachment), () => {
     setPreviewAttachment(null);
@@ -27589,6 +27654,18 @@ function StudioComposer({
   }, [activeStyleSheet, styleSheetAssetsWithThumbs]);
   const inputLineRef = useRef(null);
   const composerShellRef = useRef(null);
+  useEffect(() => {
+    const root = composerShellRef.current;
+    if (!root) return;
+    if (!isMobile && composerMaxHeight) {
+      root.style.setProperty(
+        "--studio-composer-box-max-height",
+        `${composerMaxHeight}px`,
+      );
+    } else {
+      root.style.removeProperty("--studio-composer-box-max-height");
+    }
+  }, [composerMaxHeight, isMobile]);
   const isElementMode = mode === "element";
   const isAudioMode = mode === "audio";
   const elementReferenceCounts = useMemo(() => {
@@ -27662,30 +27739,43 @@ function StudioComposer({
     onDropEntry(item.entry, range);
   }
 
-  function openCreateElementDialog(prefill = "") {
-    setCreateElementName(prefill);
-    setCreateElementDescription("");
-    setCreateElementFile(null);
-    setCreateElementOpen(true);
+  function openElementTabFromMention() {
+    const prefill = mentionQuery?.query ?? "";
     setMentionQuery(null);
+    onCreateElementTab?.(prefill);
   }
 
-  async function submitCreateElement() {
-    if (!onCreateElement) return;
-    setCreateElementBusy(true);
-    try {
-      await onCreateElement({
-        name: createElementName,
-        description: createElementDescription,
-        file: createElementFile,
-        elementType,
-      });
-      setCreateElementOpen(false);
-    } catch (error) {
-      toast.error(friendlyConvexError(error, "Couldn't create that element."));
-    } finally {
-      setCreateElementBusy(false);
-    }
+  function beginComposerHeightDrag(event) {
+    if (isMobile) return;
+    event.preventDefault();
+    const box = event.currentTarget.closest(".cursor-composer-box");
+    const startH =
+      box?.getBoundingClientRect().height ?? composerMaxHeight ?? 280;
+    composerHeightDragRef.current = {
+      startY: event.clientY,
+      startH,
+      pointerId: event.pointerId,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function moveComposerHeightDrag(event) {
+    const drag = composerHeightDragRef.current;
+    if (!drag) return;
+    const next = clampCreateComposerMaxHeight(
+      drag.startH + (drag.startY - event.clientY),
+    );
+    setComposerMaxHeight(next);
+  }
+
+  function endComposerHeightDrag() {
+    const drag = composerHeightDragRef.current;
+    composerHeightDragRef.current = null;
+    if (!drag) return;
+    setComposerMaxHeight((current) => {
+      writeCreateComposerMaxHeight(current);
+      return current;
+    });
   }
 
   useEffect(() => {
@@ -28175,57 +28265,6 @@ function StudioComposer({
         />
       ) : null}
       <div className="cursor-composer">
-        {createElementOpen ? (
-          <div className="studio-composer-element-dialog" role="dialog" aria-label="Create element">
-            <strong>New element</strong>
-            <div className="studio-composer-element-type">
-              <StudioElementTypePicker
-                elementType={elementType}
-                setElementType={setElementType}
-                showLabels
-              />
-            </div>
-            <label>
-              Unique title
-              <input
-                value={createElementName}
-                onChange={(event) => setCreateElementName(event.target.value)}
-                placeholder="product-shot"
-                autoFocus
-              />
-            </label>
-            <label>
-              Description (optional)
-              <textarea
-                value={createElementDescription}
-                onChange={(event) => setCreateElementDescription(event.target.value)}
-                rows={2}
-                placeholder="What this is"
-              />
-            </label>
-            <label className="studio-composer-element-file">
-              Image or video
-              <input
-                type="file"
-                accept="image/*,video/*"
-                onChange={(event) => setCreateElementFile(event.target.files?.[0] ?? null)}
-              />
-              {createElementFile ? <span>{createElementFile.name}</span> : null}
-            </label>
-            <div className="studio-composer-element-actions">
-              <button type="button" onClick={() => setCreateElementOpen(false)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={createElementBusy || !createElementName.trim() || !createElementFile}
-                onClick={() => void submitCreateElement()}
-              >
-                {createElementBusy ? "Saving…" : "Create"}
-              </button>
-            </div>
-          </div>
-        ) : null}
         {false && presetGridOpen ? (
           <div
             className="studio-composer-options-panel is-overlay is-style"
@@ -28421,7 +28460,7 @@ function StudioComposer({
               className="studio-composer-mention-item is-create"
               onMouseDown={(event) => {
                 event.preventDefault();
-                openCreateElementDialog(mentionQuery.query);
+                openElementTabFromMention();
               }}
             >
               <Plus aria-hidden="true" />
@@ -28433,6 +28472,20 @@ function StudioComposer({
         ) : null}
         <div className="studio-composer-row">
           <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`} data-drop-target="composer">
+      {!isMobile ? (
+        <button
+          type="button"
+          className="studio-composer-resize-handle"
+          aria-label="Resize composer"
+          title="Drag to resize"
+          onPointerDown={beginComposerHeightDrag}
+          onPointerMove={moveComposerHeightDrag}
+          onPointerUp={endComposerHeightDrag}
+          onPointerCancel={endComposerHeightDrag}
+        >
+          <GripHorizontal size={12} strokeWidth={2.25} aria-hidden="true" />
+        </button>
+      ) : null}
       <div
         className="studio-composer-inputline"
         ref={inputLineRef}
@@ -28706,17 +28759,6 @@ function StudioComposer({
         <div className="studio-composer-toolbar-left">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
           {!isAudioMode ? <StudioUploadButton inputRef={uploadInputRef} /> : null}
-          {!isAudioMode ? (
-            <button
-              type="button"
-              className="studio-composer-circle-btn"
-              title="New element"
-              aria-label="New element"
-              onClick={() => openCreateElementDialog("")}
-            >
-              <Package size={14} strokeWidth={2.25} aria-hidden="true" />
-            </button>
-          ) : null}
           <button
             type="button"
             className={`studio-composer-circle-btn studio-composer-options-btn${composerOptionsOpen ? " is-open" : ""}`}
