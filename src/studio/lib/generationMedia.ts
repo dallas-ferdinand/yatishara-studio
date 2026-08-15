@@ -164,21 +164,20 @@ export function splitVideoGenerationInputs(
   for (const attachment of attachments ?? []) {
     if (attachment.studioKind === "element") {
       const media = elementMediaAsset(attachment);
-      if (!media) continue;
       const kind: SeedanceMediaKind =
         attachmentLiveMediaKind(attachment) ??
-        (asMediaKind(media.kind) ?? "image");
+        (asMediaKind(media?.kind) ?? "image");
       const url = pickGenerationUrl({
         signedUrl:
           signedUrls[`element-media:${attachment.id}`] ??
           signedUrls[`element-sheet:${attachment.id}`],
-        mediaUrl: media.mediaUrl,
+        mediaUrl: media?.mediaUrl,
       });
       if (!url) continue;
       referenceInputs.push({
         kind,
         url,
-        mimeType: media.mimeType ?? attachment.mimeType,
+        mimeType: media?.mimeType ?? attachment.mimeType,
         tag: attachmentComposerTag(attachment),
       });
       continue;
@@ -205,6 +204,67 @@ export function generationReferenceInputs(
   signedUrls: Record<string, string | null | undefined> = {},
 ): GenerationRefInput[] {
   return splitVideoGenerationInputs(attachments, signedUrls).referenceInputs;
+}
+
+const SIGN_RETRY_MS = 400;
+const SIGN_RETRY_ATTEMPTS = 4;
+
+async function fetchSignedOriginal(
+  fetchSigned: (
+    assetId: string,
+    kind: SeedanceMediaKind,
+  ) => Promise<string | null | undefined>,
+  assetId: string,
+  kind: SeedanceMediaKind,
+): Promise<string | null> {
+  for (let attempt = 0; attempt < SIGN_RETRY_ATTEMPTS; attempt++) {
+    const url = await fetchSigned(assetId, kind);
+    if (typeof url === "string" && /^https?:\/\//i.test(url)) return url;
+    if (attempt < SIGN_RETRY_ATTEMPTS - 1) {
+      await new Promise((resolve) => setTimeout(resolve, SIGN_RETRY_MS));
+    }
+  }
+  return null;
+}
+
+/** Fill missing signed originals at send time so a just-attached element/asset can generate. */
+export async function resolveGenerationReferenceInputs(
+  attachments: AttachmentLike[],
+  signedUrls: Record<string, string | null | undefined> = {},
+  fetchSigned: (
+    assetId: string,
+    kind: SeedanceMediaKind,
+  ) => Promise<string | null | undefined>,
+): Promise<GenerationRefInput[]> {
+  const ready = splitVideoGenerationInputs(attachments, signedUrls).referenceInputs;
+  const wantsMedia = (attachments ?? []).some(
+    (item) =>
+      item.kind === "image" ||
+      item.kind === "video" ||
+      item.kind === "audio" ||
+      item.studioKind === "element",
+  );
+  if (!wantsMedia || ready.length) return ready;
+
+  const next: Record<string, string | null | undefined> = { ...signedUrls };
+  for (const attachment of attachments ?? []) {
+    const already = splitVideoGenerationInputs([attachment], next).referenceInputs;
+    if (already.length) continue;
+    const kind = attachmentLiveMediaKind(attachment) ?? "image";
+    const assetId =
+      attachment.studioKind === "element"
+        ? elementMediaAssetId(attachment)
+        : attachment.studioId;
+    if (!assetId) continue;
+    const url = await fetchSignedOriginal(fetchSigned, assetId, kind);
+    if (!url) continue;
+    const key =
+      attachment.studioKind === "element"
+        ? `element-media:${attachment.id}`
+        : `attachment:${attachment.id}`;
+    next[key] = url;
+  }
+  return splitVideoGenerationInputs(attachments, next).referenceInputs;
 }
 
 export function tooSmallSeedanceImageMessage(attachment: {

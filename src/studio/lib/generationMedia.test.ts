@@ -6,6 +6,7 @@ import {
   attachmentShowsImageOnlyChip,
   elementMediaAssetId,
   pickGenerationUrl,
+  resolveGenerationReferenceInputs,
   splitVideoGenerationInputs,
 } from "./generationMedia";
 
@@ -121,5 +122,47 @@ describe("generationMedia", () => {
         referenceAssetIds: ["asset_abc"],
       }),
     ).toBe("asset_abc");
+  });
+
+  it("resolves missing signed originals at send time", async () => {
+    const refs = await resolveGenerationReferenceInputs(
+      [
+        {
+          id: "el1",
+          studioKind: "element",
+          kind: "context",
+          label: "product",
+          referenceAssetIds: ["a1"],
+        },
+      ],
+      {},
+      async (assetId) =>
+        assetId === "a1" ? "https://cdn.example.com/full-signed.png" : null,
+    );
+    expect(refs).toHaveLength(1);
+    expect(refs[0]?.url).toBe("https://cdn.example.com/full-signed.png");
+    expect(refs[0]?.tag).toBe("product");
+  });
+
+  it("retries signing when the last generate has no bunnyPath yet", async () => {
+    let calls = 0;
+    const refs = await resolveGenerationReferenceInputs(
+      [
+        {
+          id: "el1",
+          studioKind: "element",
+          kind: "context",
+          label: "product",
+          referenceAssetIds: ["a1"],
+        },
+      ],
+      {},
+      async () => {
+        calls += 1;
+        return calls < 3 ? null : "https://cdn.example.com/late-signed.png";
+      },
+    );
+    expect(calls).toBe(3);
+    expect(refs[0]?.url).toBe("https://cdn.example.com/late-signed.png");
   });
 });
