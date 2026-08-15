@@ -10,6 +10,14 @@
   box-sizing: border-box;
 }
 
+.studio-voice-picker.is-embedded {
+  flex: 1 1 auto;
+  min-height: 220px;
+  max-height: min(52vh, 420px);
+  padding: 0;
+  gap: 10px;
+}
+
 .studio-composer-options-panel:has(.studio-voice-picker) {
   scrollbar-width: none;
   -ms-overflow-style: none;

@@ -676,6 +676,48 @@ function isAudioRefChunk(
   );
 }
 
+/** Append custom lyrics into the first generation chunk text (music_v2 plan). */
+export function injectCustomLyricsIntoMusicPlan(
+  plan: MusicCompositionPlan,
+  lyrics: string,
+): MusicCompositionPlan {
+  const trimmed = lyrics.trim();
+  if (!trimmed || !plan?.chunks?.length) return plan;
+  let injected = false;
+  const chunks = plan.chunks.map((chunk) => {
+    if (injected || isAudioRefChunk(chunk) || !chunk.text?.trim()) return chunk;
+    injected = true;
+    const base = chunk.text.trimEnd();
+    return {
+      ...chunk,
+      text: `${base}\n${trimmed}`,
+    };
+  });
+  if (!injected) {
+    chunks.unshift({
+      text: `[Verse]\n${trimmed}`,
+      duration_ms: 15_000,
+      positive_styles: ["vocals", "clear lyrics", "great production quality"],
+      negative_styles: [],
+      context_adherence: "high",
+    });
+  }
+  return { chunks };
+}
+
+/** Prompt-mode lyrics hint when not using a composition plan. */
+export function appendCustomLyricsToMusicPrompt(
+  prompt: string,
+  lyrics: string,
+): string {
+  const base = prompt.trim();
+  const trimmed = lyrics.trim();
+  if (!trimmed) return base;
+  if (!base) return `Lyrics:\n${trimmed}`;
+  if (/lyrics\s*:/i.test(base)) return base;
+  return `${base}\n\nLyrics:\n${trimmed}`;
+}
+
 /** Free (rate-limited) plan from prompt — then pass into compose. */
 export async function createMusicCompositionPlan(args: {
   prompt: string;
@@ -974,21 +1016,29 @@ export async function composeMusicFromPromptWithPlan(args: {
   storeForInpainting?: boolean;
   modelId?: ElevenMusicModelId | string | null;
   finetuneId?: string | null;
+  customLyrics?: string | null;
 }): Promise<ComposedMusicResult & { sourcePlan: MusicCompositionPlan }> {
   const plan = await createMusicCompositionPlan({
     prompt: args.prompt,
     durationSeconds: args.durationSeconds,
     modelId: args.modelId,
   });
+  const withLyrics = args.customLyrics?.trim()
+    ? injectCustomLyricsIntoMusicPlan(plan, args.customLyrics)
+    : plan;
   // force_instrumental only applies to prompt mode — plan already encodes vocals/styles.
   void args.forceInstrumental;
   const result = await composeMusicDetailed({
-    compositionPlan: plan,
+    compositionPlan: withLyrics,
     storeForInpainting: args.storeForInpainting ?? true,
     modelId: args.modelId,
     finetuneId: args.finetuneId,
   });
-  return { ...result, sourcePlan: plan, compositionPlan: result.compositionPlan ?? plan };
+  return {
+    ...result,
+    sourcePlan: withLyrics,
+    compositionPlan: result.compositionPlan ?? withLyrics,
+  };
 }
 
 /** Extend a stored song (inpainting plan). Enterprise-tier on some accounts. */

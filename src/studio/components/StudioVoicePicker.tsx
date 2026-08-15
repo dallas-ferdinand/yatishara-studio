@@ -106,7 +106,10 @@ type MenuKey = "sort" | "advanced" | FilterKey | null;
 type Props = {
   selectedVoiceId?: string | null;
   onSelect: (voice: StudioVoiceSelection) => void;
-  onClose: () => void;
+  /** Optional — omit when embedded so picking a voice does not dismiss a parent panel. */
+  onClose?: () => void;
+  /** Nested inside composer settings — fill width, scroll list. */
+  embedded?: boolean;
 };
 
 function optionLabel(
@@ -154,7 +157,12 @@ export function StudioVoicePicker(props: Props) {
   );
 }
 
-function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
+function StudioVoicePickerInner({
+  selectedVoiceId,
+  onSelect,
+  onClose,
+  embedded = false,
+}: Props) {
   const exploreVoices = useAction(api.audioActions.exploreVoices);
   const saveVoice = useMutation(api.savedVoices.save);
   const removeVoice = useMutation(api.savedVoices.remove);
@@ -461,7 +469,7 @@ function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
   }
 
   return (
-    <div className="studio-voice-picker">
+    <div className={`studio-voice-picker${embedded ? " is-embedded" : ""}`}>
       <div className="studio-voice-picker-tabs" role="tablist" aria-label="Voice library">
         <button
           type="button"
@@ -709,7 +717,7 @@ function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
                 onClick={() => {
                   onSelect(voice);
                   stopPreview();
-                  onClose();
+                  onClose?.();
                 }}
               >
                 <span

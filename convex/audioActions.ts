@@ -14,6 +14,8 @@ import {
   composeMusicDetailed,
   composeMusicFromPromptWithPlan,
   extendStoredMusic,
+  appendCustomLyricsToMusicPrompt,
+  injectCustomLyricsIntoMusicPlan,
   isAccountVoiceOwnerId,
   libraryVoicesAvailable,
   listAccountVoices,
@@ -77,6 +79,7 @@ const createQueuedJobRef = makeFunctionReference<
     musicWorkflow?: "composition_plan" | "prompt" | "extend";
     musicModelId?: "music_v1" | "music_v2";
     musicFinetuneId?: string;
+    musicCustomLyrics?: string;
     musicCompositionPlanJson?: string;
     musicStoreForInpainting?: boolean;
     musicSourceSongId?: string;
@@ -138,6 +141,7 @@ const getJobRef = internalQueryRef<
     musicWorkflow?: "composition_plan" | "prompt" | "extend";
     musicModelId?: "music_v1" | "music_v2";
     musicFinetuneId?: string;
+    musicCustomLyrics?: string;
     musicCompositionPlanJson?: string;
     musicStoreForInpainting?: boolean;
     musicSourceSongId?: string;
@@ -175,6 +179,7 @@ const prepareApiAudioGenerationRef = internalMutationRef<
     musicWorkflow?: "composition_plan" | "prompt" | "extend";
     musicModelId?: "music_v1" | "music_v2";
     musicFinetuneId?: string;
+    musicCustomLyrics?: string;
     musicCompositionPlanJson?: string;
     musicStoreForInpainting?: boolean;
     musicSourceSongId?: string;
@@ -390,6 +395,7 @@ export const runAudioFlow = action({
     ),
     musicModelId: v.optional(v.union(v.literal("music_v1"), v.literal("music_v2"))),
     musicFinetuneId: v.optional(v.string()),
+    musicCustomLyrics: v.optional(v.string()),
     musicCompositionPlanJson: v.optional(v.string()),
     musicStoreForInpainting: v.optional(v.boolean()),
     musicSourceSongId: v.optional(v.string()),
@@ -446,6 +452,8 @@ export const runAudioFlow = action({
       musicModelId: musicModel,
       musicFinetuneId:
         args.audioType === "music" ? args.musicFinetuneId?.trim() || undefined : undefined,
+      musicCustomLyrics:
+        args.audioType === "music" ? args.musicCustomLyrics?.trim() || undefined : undefined,
       musicCompositionPlanJson:
         args.audioType === "music" ? args.musicCompositionPlanJson : undefined,
       musicStoreForInpainting:
@@ -489,6 +497,7 @@ export const runAudioForApi = internalAction({
     ),
     musicModelId: v.optional(v.union(v.literal("music_v1"), v.literal("music_v2"))),
     musicFinetuneId: v.optional(v.string()),
+    musicCustomLyrics: v.optional(v.string()),
     musicCompositionPlanJson: v.optional(v.string()),
     musicStoreForInpainting: v.optional(v.boolean()),
     musicSourceSongId: v.optional(v.string()),
@@ -546,6 +555,8 @@ export const runAudioForApi = internalAction({
           : undefined,
       musicFinetuneId:
         args.audioType === "music" ? args.musicFinetuneId?.trim() || undefined : undefined,
+      musicCustomLyrics:
+        args.audioType === "music" ? args.musicCustomLyrics?.trim() || undefined : undefined,
       musicCompositionPlanJson:
         args.audioType === "music" ? args.musicCompositionPlanJson : undefined,
       musicStoreForInpainting:
@@ -610,6 +621,7 @@ export const executeAudioJob = internalAction({
       } else if (audioType === "music") {
         const workflow = job.musicWorkflow ?? "composition_plan";
         const store = job.musicStoreForInpainting ?? true;
+        const customLyrics = job.musicCustomLyrics?.trim() || "";
         let plan: MusicCompositionPlan | undefined;
         if (job.musicCompositionPlanJson?.trim()) {
           try {
@@ -617,6 +629,9 @@ export const executeAudioJob = internalAction({
           } catch {
             throw new Error("Invalid music composition plan JSON.");
           }
+        }
+        if (plan && customLyrics) {
+          plan = injectCustomLyricsIntoMusicPlan(plan, customLyrics);
         }
         let musicResult;
         if (workflow === "extend") {
@@ -649,9 +664,12 @@ export const executeAudioJob = internalAction({
             finetuneId: job.musicFinetuneId,
           });
         } else if (workflow === "prompt") {
+          const prompt = customLyrics
+            ? appendCustomLyricsToMusicPrompt(job.userPrompt, customLyrics)
+            : job.userPrompt;
           musicResult = store
             ? await composeMusicDetailed({
-                prompt: job.userPrompt,
+                prompt,
                 durationSeconds: job.durationSeconds,
                 forceInstrumental: job.forceInstrumental ?? true,
                 storeForInpainting: true,
@@ -659,7 +677,7 @@ export const executeAudioJob = internalAction({
                 finetuneId: job.musicFinetuneId,
               })
             : await composeMusic({
-                prompt: job.userPrompt,
+                prompt,
                 durationSeconds: job.durationSeconds,
                 forceInstrumental: job.forceInstrumental ?? true,
                 modelId: job.musicModelId,
@@ -673,6 +691,7 @@ export const executeAudioJob = internalAction({
             storeForInpainting: store,
             modelId: job.musicModelId,
             finetuneId: job.musicFinetuneId,
+            customLyrics: customLyrics || undefined,
           });
         }
         const planJson = musicResult.compositionPlan

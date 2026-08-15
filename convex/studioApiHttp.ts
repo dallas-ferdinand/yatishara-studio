@@ -1460,6 +1460,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         musicWorkflow?: "composition_plan" | "prompt" | "extend";
         musicModelId?: "music_v1" | "music_v2";
         musicFinetuneId?: string;
+        musicCustomLyrics?: string;
         musicCompositionPlanJson?: string;
         musicStoreForInpainting?: boolean;
         musicSourceSongId?: string;
@@ -1520,6 +1521,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           musicWorkflow: body.musicWorkflow,
           musicModelId: body.musicModelId,
           musicFinetuneId: body.musicFinetuneId,
+          musicCustomLyrics: body.musicCustomLyrics,
           musicCompositionPlanJson: body.musicCompositionPlanJson,
           musicStoreForInpainting: body.musicStoreForInpainting,
           musicSourceSongId: body.musicSourceSongId,

@@ -865,6 +865,8 @@ function serializeComposerContextsForStorage(contexts) {
       musicDurationSeconds: ctx.musicDurationSeconds,
       musicDurationAuto: ctx.musicDurationAuto,
       musicInstrumental: ctx.musicInstrumental,
+      musicLyricsMode: ctx.musicLyricsMode,
+      musicCustomLyrics: ctx.musicCustomLyrics,
       musicVariants: ctx.musicVariants,
       musicModelId: ctx.musicModelId,
       musicFinetuneId: ctx.musicFinetuneId,
@@ -933,6 +935,8 @@ function snapshotComposerContextFields({
   musicDurationSeconds,
   musicDurationAuto,
   musicInstrumental,
+  musicLyricsMode,
+  musicCustomLyrics,
   musicVariants,
   musicModelId,
   musicFinetuneId,
@@ -969,6 +973,8 @@ function snapshotComposerContextFields({
     musicDurationSeconds,
     musicDurationAuto,
     musicInstrumental,
+    musicLyricsMode,
+    musicCustomLyrics,
     musicVariants,
     musicModelId,
     musicFinetuneId,
@@ -1673,6 +1679,15 @@ export function StudioShell({
   );
   const [musicInstrumental, setMusicInstrumental] = useState(
     () => initialComposerCtx.musicInstrumental ?? true,
+  );
+  const [musicLyricsMode, setMusicLyricsMode] = useState(() => {
+    if (initialComposerCtx.musicLyricsMode === "custom") return "custom";
+    if (initialComposerCtx.musicLyricsMode === "auto") return "auto";
+    if (initialComposerCtx.musicInstrumental === false) return "auto";
+    return "instrumental";
+  });
+  const [musicCustomLyrics, setMusicCustomLyrics] = useState(
+    () => initialComposerCtx.musicCustomLyrics ?? "",
   );
   const [musicVariants, setMusicVariants] = useState(() =>
     Math.min(2, Math.max(1, Number(initialComposerCtx.musicVariants) || 1)),
@@ -3806,6 +3821,8 @@ export function StudioShell({
       musicDurationSeconds,
       musicDurationAuto,
       musicInstrumental,
+      musicLyricsMode,
+      musicCustomLyrics,
       musicVariants,
       musicModelId,
       musicFinetuneId,
@@ -3846,6 +3863,8 @@ export function StudioShell({
     musicDurationSeconds,
     musicDurationAuto,
     musicInstrumental,
+    musicLyricsMode,
+    musicCustomLyrics,
     musicVariants,
     musicModelId,
     musicFinetuneId,
@@ -3887,6 +3906,8 @@ export function StudioShell({
       musicDurationSeconds,
       musicDurationAuto,
       musicInstrumental,
+      musicLyricsMode,
+      musicCustomLyrics,
       musicVariants,
       musicModelId,
       musicFinetuneId,
@@ -3923,6 +3944,14 @@ export function StudioShell({
     setMusicDurationSeconds(next.musicDurationSeconds ?? 30);
     setMusicDurationAuto(next.musicDurationAuto ?? true);
     setMusicInstrumental(next.musicInstrumental ?? true);
+    setMusicLyricsMode(
+      next.musicLyricsMode === "custom" || next.musicLyricsMode === "auto"
+        ? next.musicLyricsMode
+        : next.musicInstrumental === false
+          ? "auto"
+          : "instrumental",
+    );
+    setMusicCustomLyrics(next.musicCustomLyrics ?? "");
     setMusicVariants(Math.min(2, Math.max(1, Number(next.musicVariants) || 1)));
     setMusicModelId(next.musicModelId === "music_v1" ? "music_v1" : "music_v2");
     setMusicFinetuneId(next.musicFinetuneId ?? "");
@@ -8724,10 +8753,14 @@ export function StudioShell({
           audioType === "music"
             ? {
                 durationSeconds: musicDurationAuto ? undefined : musicDurationSeconds,
-                forceInstrumental: musicInstrumental,
+                forceInstrumental: musicLyricsMode === "instrumental",
                 musicWorkflow,
                 musicModelId,
                 musicFinetuneId: musicFinetuneId.trim() || undefined,
+                musicCustomLyrics:
+                  musicLyricsMode === "custom" && musicCustomLyrics.trim()
+                    ? musicCustomLyrics.trim()
+                    : undefined,
                 musicStoreForInpainting,
                 musicSourceSongId:
                   musicWorkflow === "extend"
@@ -20144,6 +20177,25 @@ export function StudioShell({
         .studio-composer-audio-settings-btn strong {
           max-width: 110px;
         }
+        .studio-composer-options-section.is-voice-embedded {
+          gap: 0;
+        }
+        .studio-composer-options-section.is-voice-embedded .studio-composer-options-section-label {
+          display: none;
+        }
+        .studio-music-lyrics-input {
+          width: 100%;
+          min-height: 96px;
+          resize: vertical;
+          padding: 10px 12px;
+          border-radius: 12px;
+          font: inherit;
+          font-size: 12px;
+          line-height: 1.4;
+          color: var(--color-cursor-text-bright);
+          background: color-mix(in srgb, var(--mos-surface) 70%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+        }
         .studio-composer-options-back {
           display: inline-flex;
           min-height: 28px;
@@ -26650,6 +26702,10 @@ export function StudioShell({
             setMusicDurationAuto={setMusicDurationAuto}
             musicInstrumental={musicInstrumental}
             setMusicInstrumental={setMusicInstrumental}
+            musicLyricsMode={musicLyricsMode}
+            setMusicLyricsMode={setMusicLyricsMode}
+            musicCustomLyrics={musicCustomLyrics}
+            setMusicCustomLyrics={setMusicCustomLyrics}
             musicVariants={musicVariants}
             setMusicVariants={setMusicVariants}
             musicModelId={musicModelId}
@@ -27736,6 +27792,10 @@ function StudioComposer({
   setMusicDurationAuto,
   musicInstrumental = true,
   setMusicInstrumental,
+  musicLyricsMode = "instrumental",
+  setMusicLyricsMode,
+  musicCustomLyrics = "",
+  setMusicCustomLyrics,
   musicVariants = 1,
   setMusicVariants,
   musicModelId = "music_v2",
@@ -28373,12 +28433,7 @@ function StudioComposer({
       audioType={audioType}
       setAudioType={setAudioType}
       selectedVoice={selectedVoice}
-      onOpenVoicePicker={() => {
-        setComposerOptionsOpen(false);
-        setPresetGridOpen(false);
-        setVideoTypeGridOpen(false);
-        setVoicePickerOpen(true);
-      }}
+      setSelectedVoice={setSelectedVoice}
       sfxLoop={sfxLoop}
       setSfxLoop={setSfxLoop}
       sfxDurationAuto={sfxDurationAuto}
@@ -28393,6 +28448,10 @@ function StudioComposer({
       setMusicDurationAuto={setMusicDurationAuto}
       musicInstrumental={musicInstrumental}
       setMusicInstrumental={setMusicInstrumental}
+      musicLyricsMode={musicLyricsMode}
+      setMusicLyricsMode={setMusicLyricsMode}
+      musicCustomLyrics={musicCustomLyrics}
+      setMusicCustomLyrics={setMusicCustomLyrics}
       musicVariants={musicVariants}
       setMusicVariants={setMusicVariants}
       musicModelId={musicModelId}
@@ -29279,7 +29338,7 @@ function StudioComposerControlStrip({
   audioType = "voiceover",
   setAudioType,
   selectedVoice = null,
-  onOpenVoicePicker,
+  setSelectedVoice,
   sfxLoop = false,
   setSfxLoop,
   sfxDurationAuto = true,
@@ -29294,6 +29353,10 @@ function StudioComposerControlStrip({
   setMusicDurationAuto,
   musicInstrumental = true,
   setMusicInstrumental,
+  musicLyricsMode = "instrumental",
+  setMusicLyricsMode,
+  musicCustomLyrics = "",
+  setMusicCustomLyrics,
   musicVariants = 1,
   setMusicVariants,
   musicModelId = "music_v2",
@@ -29332,21 +29395,15 @@ function StudioComposerControlStrip({
         ) : mode === "audio" ? (
           <>
             {audioType === "voiceover" ? (
-              <section className="studio-composer-options-section" aria-label="Voice">
-                <span className="studio-composer-options-section-label">Voice</span>
-                <button
-                  type="button"
-                  className={`studio-audio-voice-chip${selectedVoice ? "" : " is-empty"}`}
-                  onClick={() => onOpenVoicePicker?.()}
-                >
-                  {selectedVoice ? (
-                    <StudioOrbAvatar
-                      seed={orbSeedForVoice(selectedVoice.voiceId, selectedVoice.name)}
-                      className="studio-audio-voice-chip-orb"
-                    />
-                  ) : null}
-                  <span>{shortVoiceChipLabel(selectedVoice?.name)}</span>
-                </button>
+              <section
+                className="studio-composer-options-section is-voice-embedded"
+                aria-label="Voice"
+              >
+                <StudioVoicePicker
+                  embedded
+                  selectedVoiceId={selectedVoice?.voiceId}
+                  onSelect={(voice) => setSelectedVoice?.(voice)}
+                />
               </section>
             ) : null}
             {audioType === "sfx" ? (
@@ -29442,7 +29499,7 @@ function StudioComposerControlStrip({
                 />
                 <StudioInlineSettingChipGroup
                   label="Lyrics"
-                  value={musicInstrumental ? "instrumental" : "auto"}
+                  value={musicLyricsMode}
                   items={[
                     {
                       value: "instrumental",
@@ -29456,9 +29513,32 @@ function StudioComposerControlStrip({
                       meta: "Vocals ok",
                       icon: Mic,
                     },
+                    {
+                      value: "custom",
+                      label: "Custom",
+                      meta: "Your lyrics",
+                      icon: List,
+                    },
                   ]}
-                  onChange={(value) => setMusicInstrumental?.(value === "instrumental")}
+                  onChange={(value) => {
+                    setMusicLyricsMode?.(value);
+                    setMusicInstrumental?.(value === "instrumental");
+                  }}
                 />
+                {musicLyricsMode === "custom" ? (
+                  <label className="studio-composer-options-section">
+                    <span className="studio-composer-options-section-label">
+                      Custom lyrics
+                    </span>
+                    <textarea
+                      className="studio-voice-picker-select studio-music-lyrics-input"
+                      rows={5}
+                      value={musicCustomLyrics}
+                      placeholder="Start typing to use custom lyrics…"
+                      onChange={(event) => setMusicCustomLyrics?.(event.target.value)}
+                    />
+                  </label>
+                ) : null}
                 <StudioInlineSettingChipGroup
                   label="Workflow"
                   value={musicWorkflow}

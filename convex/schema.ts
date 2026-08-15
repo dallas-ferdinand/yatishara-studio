@@ -756,6 +756,8 @@ export default defineSchema({
     musicModelId: v.optional(musicModelId),
     /** Optional music finetune id. */
     musicFinetuneId: v.optional(v.string()),
+    /** Optional custom lyrics injected into plan/prompt (not a separate EL endpoint). */
+    musicCustomLyrics: v.optional(v.string()),
     /** Optional pre-built composition plan JSON (music_v2 chunks). */
     musicCompositionPlanJson: v.optional(v.string()),
     /** Store song for later extend/inpaint (compose_detailed). */
