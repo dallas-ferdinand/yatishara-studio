@@ -16,6 +16,7 @@ import { ffmpegTransitionFor } from "./lib/editorEffectContract";
 import {
   bedClipAudioFilters,
   collectExportAudioBeds,
+  exportCoverUntilSec,
   timelineDurationSec,
   videoClipAudioFilter,
 } from "./lib/editorExportAudio";
@@ -680,6 +681,8 @@ async function mixAudioTrack(args: {
   getAssetBunnyPath: (assetId: Id<"assets">) => Promise<string | null>;
   expiresUnix: number;
   tempDir: string;
+  /** Full timeline length (video may already include black tail for late beds). */
+  targetDurationSec?: number;
 }): Promise<string> {
   const { videoPath, audioClips, getAssetBunnyPath, expiresUnix, tempDir } = args;
   if (!audioClips.length) return videoPath;
@@ -698,6 +701,7 @@ async function mixAudioTrack(args: {
     mixLabels.push("[abase]");
   }
 
+  let bedEnd = 0;
   for (const [index, clip] of audioClips.entries()) {
     if (!clip.assetId) continue;
     const bunnyPath = await getAssetBunnyPath(clip.assetId as Id<"assets">);
@@ -710,6 +714,7 @@ async function mixAudioTrack(args: {
     audioInputs.push("-i", sourcePath);
     const delayMs = Math.max(0, Math.round(clip.startTime * 1000));
     const duration = clipDuration(clip);
+    bedEnd = Math.max(bedEnd, clip.startTime + duration);
     const bedFilters = bedClipAudioFilters(clip, duration);
     let chain = `[${inputIndex}:a]atrim=start=${clip.trimIn}:end=${clip.trimOut},asetpts=PTS-STARTPTS`;
     if (bedFilters) chain += `,${bedFilters}`;
@@ -724,7 +729,13 @@ async function mixAudioTrack(args: {
   if (mixLabels.length === 1 && mixLabels[0] === "[abase]") return videoPath;
 
   const videoDuration = await probeMediaDurationSeconds(videoPath);
-  // apad + -shortest keeps picture length when beds are shorter than the video.
+  const targetDuration = Math.max(
+    videoDuration,
+    bedEnd,
+    Number(args.targetDurationSec) || 0,
+  );
+  // apad keeps audio as long as the timeline; picture must already cover targetDuration
+  // (black tail via exportCoverUntilSec). Do not -shortest or we cut beds after last video.
   const filter = `${filterParts.join(";")};${mixLabels.join("")}amix=inputs=${mixLabels.length}:duration=longest:dropout_transition=0:normalize=0[amixed];[amixed]apad[aout]`;
   await execFileAsync("ffmpeg", [
     "-y",
@@ -740,8 +751,7 @@ async function mixAudioTrack(args: {
     "-c:a",
     "aac",
     "-t",
-    String(videoDuration),
-    "-shortest",
+    String(targetDuration),
     outputPath,
   ]);
   return outputPath;
@@ -810,24 +820,25 @@ async function runExportVideo(
   const clips = project.clips
     .filter((clip) => clip.trackId === videoTrack.id && clip.assetId)
     .sort((a, b) => a.startTime - b.startTime);
-  if (!clips.length) {
-    const message = "Add at least one video clip before exporting.";
-    if (args.jobId) {
-      await ctx.runMutation(internal.exportJobs.fail, { jobId: args.jobId, error: message });
-    }
-    throw new Error(message);
-  }
 
   const textClips =
     exportKind === "video"
       ? collectExportTextClips(project.clips, clipDuration)
       : [];
-  const textCoverUntil = textClips.reduce(
-    (end, clip) => Math.max(end, clip.startTime + clip.duration),
-    0,
-  );
   // Every unmuted Audio lane (Separate audio often lands on Audio 2+).
   const audioClips = collectExportAudioBeds(project);
+  const coverUntil = exportCoverUntilSec({
+    textEnds: textClips.map((clip) => clip.startTime + clip.duration),
+    audioClips,
+  });
+
+  if (!clips.length && coverUntil <= 0.02) {
+    const message = "Add a video or audio clip before exporting.";
+    if (args.jobId) {
+      await ctx.runMutation(internal.exportJobs.fail, { jobId: args.jobId, error: message });
+    }
+    throw new Error(message);
+  }
 
   const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60;
   const tempDir = await mkdtemp(join(tmpdir(), "studio-edit-"));
@@ -838,7 +849,11 @@ async function runExportVideo(
 
   try {
     await report("Preparing clips…", 5);
-    const segments = timelineSegments(clips, textCoverUntil);
+    // coverUntil pads black after the last video so trailing audio/text still render.
+    const segments = timelineSegments(clips, coverUntil);
+    if (!segments.length) {
+      throw new Error("Nothing to export on the timeline.");
+    }
     for (const [index, segment] of segments.entries()) {
       const segmentPath = join(tempDir, `segment-${index}.mp4`);
       if (segment.type === "gap") {
@@ -906,6 +921,7 @@ async function runExportVideo(
       },
       expiresUnix,
       tempDir,
+      targetDurationSec: coverUntil,
     });
 
     let body: Buffer;

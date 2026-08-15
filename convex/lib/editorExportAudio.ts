@@ -62,6 +62,33 @@ export function collectExportAudioBeds<T extends ExportAudioBedClip>(project: {
     .sort((a, b) => a.startTime - b.startTime);
 }
 
+/** Timeline end for a bed/clip (start + source trim length). */
+export function exportClipEndSec(clip: {
+  startTime: number;
+  trimIn?: number;
+  trimOut?: number;
+}): number {
+  return Math.max(0, Number(clip.startTime) || 0) + timelineDurationSec(clip);
+}
+
+/**
+ * How far the export canvas must run so trailing text/audio after the last
+ * video still renders (black picture under late beds).
+ */
+export function exportCoverUntilSec(args: {
+  textEnds?: number[];
+  audioClips?: Array<{ startTime: number; trimIn?: number; trimOut?: number }>;
+}): number {
+  let end = 0;
+  for (const value of args.textEnds ?? []) {
+    if (Number.isFinite(value)) end = Math.max(end, value);
+  }
+  for (const clip of args.audioClips ?? []) {
+    end = Math.max(end, exportClipEndSec(clip));
+  }
+  return end;
+}
+
 export function timelineDurationSec(
   clip: {
     trimIn?: number;

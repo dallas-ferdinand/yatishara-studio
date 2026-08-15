@@ -538,8 +538,8 @@ function ExportPanel({
     exportKind === "studio"
       ? "Save the project before exporting a .studio package"
       : exportKind === "audio"
-        ? "Add a video clip (with soundtrack) before exporting audio"
-        : "Add a video clip before exporting";
+        ? "Add a video or audio clip before exporting"
+        : "Add a video or audio clip before exporting";
 
   return (
     <>

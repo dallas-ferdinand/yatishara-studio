@@ -573,7 +573,11 @@ export function StudioVideoEditor({
         ? [selectedJoint.key]
         : [];
   const canUseTransitions = transitionJointKeys.length > 0;
-  const canExportVideo = state.project.clips.some((clip) => clip.kind === "video" && clip.assetId);
+  const canExportVideo = state.project.clips.some(
+    (clip) =>
+      Boolean(clip.assetId) &&
+      (clip.kind === "video" || clip.kind === "image" || clip.kind === "audio"),
+  );
   const canExportAudio = canExportVideo;
   const canExportStudio = Boolean(localProjectId);
   const exportProgress = exportJob?.progress ?? exportProgressLocal;
@@ -821,11 +825,11 @@ export function StudioVideoEditor({
     }
 
     if (exportKind === "video" && !canExportVideo) {
-      onStatus?.("Add a video clip before exporting.");
+      onStatus?.("Add a video or audio clip before exporting.");
       return;
     }
     if (exportKind === "audio" && !canExportAudio) {
-      onStatus?.("Add a video clip before exporting audio.");
+      onStatus?.("Add a video or audio clip before exporting.");
       return;
     }
 

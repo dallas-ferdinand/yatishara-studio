@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   collectExportAudioBeds,
+  exportCoverUntilSec,
   videoClipAudioFilter,
 } from "./editorExportAudio";
 
@@ -130,5 +131,27 @@ describe("collectExportAudioBeds", () => {
     expect(ids).not.toContain("muted-lane");
     expect(ids).not.toContain("silent-bed");
     expect(ids).not.toContain("v1");
+  });
+});
+
+describe("exportCoverUntilSec", () => {
+  it("extends past the last video for trailing audio beds", () => {
+    expect(
+      exportCoverUntilSec({
+        textEnds: [4],
+        audioClips: [
+          { startTime: 3, trimIn: 0, trimOut: 5 },
+          { startTime: 0, trimIn: 0, trimOut: 2 },
+        ],
+      }),
+    ).toBe(8);
+  });
+
+  it("covers audio-only timelines with no video", () => {
+    expect(
+      exportCoverUntilSec({
+        audioClips: [{ startTime: 1, trimIn: 0, trimOut: 4 }],
+      }),
+    ).toBe(5);
   });
 });
