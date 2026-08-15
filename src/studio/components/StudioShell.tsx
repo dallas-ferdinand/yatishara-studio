@@ -9044,8 +9044,12 @@ export function StudioShell({
           --studio-composer-glass-border: var(--color-cursor-border, var(--mos-border));
           --studio-composer-glass-blur: saturate(170%) blur(18px);
           --studio-composer-glass-shadow:
-            0 20px 48px rgba(0, 0, 0, 0.38),
+            0 1px 2px rgba(0, 0, 0, 0.22),
+            0 4px 10px rgba(0, 0, 0, 0.16),
             inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          --studio-composer-input-shadow:
+            0 1px 2px rgba(0, 0, 0, 0.28),
+            0 3px 6px rgba(0, 0, 0, 0.14);
           --studio-composer-shell-max: 100%;
           /* Message column only — composer stays full width */
           --studio-chat-column-max: min(92%, 36rem);
@@ -12184,8 +12188,12 @@ export function StudioShell({
           --studio-composer-glass-border: var(--color-cursor-border, var(--mos-border));
           --studio-composer-glass-blur: saturate(180%) blur(10px);
           --studio-composer-glass-shadow:
-            0 2px 10px color-mix(in srgb, #000 3.5%, transparent),
+            0 1px 2px color-mix(in srgb, #000 7%, transparent),
+            0 3px 8px color-mix(in srgb, #000 5%, transparent),
             inset 0 1px 0 rgba(255, 255, 255, 0.48);
+          --studio-composer-input-shadow:
+            0 1px 2px color-mix(in srgb, #000 8%, transparent),
+            0 3px 6px color-mix(in srgb, #000 5%, transparent);
           --studio-card-bg: var(--mos-panel);
           --studio-shell-border: var(--color-cursor-border-soft);
           --studio-chrome-divider: var(--color-cursor-border-soft);
@@ -16394,7 +16402,7 @@ export function StudioShell({
           border-color: transparent;
           box-shadow:
             var(--studio-composer-glass-shadow),
-            0 0 28px color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 22%, transparent);
           /* Never animate backdrop-filter — GPU thrash; shadow alone is enough. */
           transition: box-shadow 280ms cubic-bezier(0.45, 0, 0.2, 1);
         }
@@ -17881,6 +17889,7 @@ export function StudioShell({
           overflow: hidden;
           border-radius: 12px;
           background: var(--studio-composer-glass-strong, color-mix(in srgb, var(--mos-bg, #05080f) 28%, transparent));
+          box-shadow: var(--studio-composer-input-shadow);
         }
         .studio-composer .cursor-composer-box:has(.studio-composer-media-rail) .studio-composer-inputline {
           margin-top: 6px;
