@@ -5,9 +5,10 @@ import { wamCheckoutTotalCents } from "../../../studio/lib/money";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Solid white + dark mark — light logo vanishes on WhatsApp's white card. */
-const PAY_OG_IMAGE_URL =
-  "https://link.yatishara.com/branding/yatishara-logo-dark-on-white-192.png";
+/** Same-origin 1200×630 — black π on solid white. Small/transparent marks vanish on WA dark cards. */
+const PAY_OG_IMAGE_URL = "/branding/yatishara-og-white-1200.png";
+const PAY_MARK_IMAGE_URL = "/branding/yatishara-logo-dark-on-white-512.png";
+const PAY_WAM_LOGO_URL = "/branding/wam-logo.png";
 
 function esc(s: string) {
   return s
@@ -48,7 +49,9 @@ function paySplashHtml(opts: {
   const title = `Pay ${brand} $${amount} TTD`;
   const description =
     opts.kind === "course" ? "Academy course" : "Studio top-up";
-  const image = PAY_OG_IMAGE_URL;
+  const image = new URL(PAY_OG_IMAGE_URL, opts.canonicalUrl).href;
+  const mark = new URL(PAY_MARK_IMAGE_URL, opts.canonicalUrl).href;
+  const wamLogo = new URL(PAY_WAM_LOGO_URL, opts.canonicalUrl).href;
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -62,8 +65,14 @@ function paySplashHtml(opts: {
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:url" content="${esc(opts.canonicalUrl)}">
 <meta property="og:image" content="${esc(image)}">
+<meta property="og:image:secure_url" content="${esc(image)}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="${esc(brand)}">
-<meta name="twitter:card" content="summary">
+<link rel="icon" href="${esc(mark)}" type="image/png">
+<link rel="apple-touch-icon" href="${esc(mark)}">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
 <meta name="twitter:image" content="${esc(image)}">
@@ -80,24 +89,30 @@ function paySplashHtml(opts: {
     padding: 1.75rem 1.5rem 1.5rem; text-align: center;
     box-shadow: 0 18px 50px rgba(20, 16, 8, .08);
   }
-  img { width: 72px; height: 72px; object-fit: contain; margin: 0 auto .85rem; display: block; }
+  .mark { width: 72px; height: 72px; object-fit: contain; margin: 0 auto .85rem; display: block; }
   .brand { margin: 0; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: #6b675e; }
   h1 { margin: .55rem 0 0; font-size: 2rem; letter-spacing: -.03em; }
   .desc { margin: .55rem 0 1.35rem; color: #4a463d; line-height: 1.4; font-size: .95rem; }
   .pay {
-    display: block; width: 100%; text-decoration: none; color: #fff; background: #111;
-    border-radius: 999px; padding: .95rem 1rem; font-weight: 650; font-size: 1.05rem;
+    display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+    width: 100%; text-decoration: none; color: #fff; font-weight: 700; font-size: 1.05rem;
+    border-radius: 999px; padding: .9rem 1rem; min-height: 3.15rem;
+    border: 1px solid #4ade80; border-bottom-color: #15803d;
+    background: linear-gradient(180deg, #4ade80 0%, #22c55e 46%, #15803d 100%);
+    box-shadow: inset 0 -2px 0 rgba(5,46,22,.22), 0 4px 10px rgba(22,163,74,.18);
+    text-shadow: 0 1px 2px rgba(5,46,22,.45);
   }
+  .pay .wam { height: 18px; width: auto; display: block; filter: drop-shadow(0 1px 1px rgba(5,46,22,.45)); }
   .hint { margin: .85rem 0 0; font-size: .78rem; color: #7a756a; }
 </style>
 </head>
 <body>
 <main class="card">
-<img src="${esc(image)}" alt="${esc(brand)}">
+<img class="mark" src="${esc(mark)}" alt="${esc(brand)}">
 <p class="brand">${esc(brand)}</p>
 <h1>$${esc(amount)}</h1>
 <p class="desc">${esc(description)}</p>
-<a class="pay" href="${esc(opts.payHref)}">Pay $${esc(amountShort)} with Wam</a>
+<a class="pay" href="${esc(opts.payHref)}"><span>Pay $${esc(amountShort)} with</span><img class="wam" src="${esc(wamLogo)}" alt="Wam" width="131" height="40"></a>
 <p class="hint">Card or Wam wallet · secure checkout</p>
 </main>
 </body>
