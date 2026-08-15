@@ -202,6 +202,7 @@ async function runPiTurn(body, abortSignal) {
     callbackBase,
     workerCallbackToken,
     byokFallbackNote,
+    usedByok = false,
     seedPlanJson,
     seedTodosJson,
     currentFolderId,
