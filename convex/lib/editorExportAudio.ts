@@ -197,11 +197,45 @@ export function transitionAudioMixFilter(args: {
   const half = duration / 2;
   const delayMs = Math.round(offset * 1000);
   return (
-    `[0:a]afade=t=out:st=${offset.toFixed(3)}:d=${half.toFixed(3)}:curve=tri[xa0];` +
-    `[1:a]afade=t=in:st=${half.toFixed(3)}:d=${half.toFixed(3)}:curve=tri,` +
+    `[0:a]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100,` +
+    `afade=t=out:st=${offset.toFixed(3)}:d=${half.toFixed(3)}:curve=tri[xa0];` +
+    `[1:a]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100,` +
+    `afade=t=in:st=${half.toFixed(3)}:d=${half.toFixed(3)}:curve=tri,` +
     `adelay=${delayMs}:all=1[xa1];` +
     "[xa0][xa1]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
   );
+}
+
+/** Filter-concat N segments after forcing the same size/fps/layout. */
+export function concatAvFilter(
+  count: number,
+  width?: number,
+  height?: number,
+  fps = 30,
+): string {
+  const n = Math.max(1, Math.floor(count));
+  if (!(width && height)) {
+    const parts: string[] = [];
+    for (let i = 0; i < n; i += 1) parts.push(`[${i}:v][${i}:a]`);
+    return `${parts.join("")}concat=n=${n}:v=1:a=1[vout][aout]`;
+  }
+  const w = Math.max(2, width - (width % 2));
+  const h = Math.max(2, height - (height % 2));
+  const vf =
+    `scale=${w}:${h}:force_original_aspect_ratio=decrease,` +
+    `scale=trunc(iw/2)*2:trunc(ih/2)*2,` +
+    `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:black,` +
+    `fps=${fps},setsar=1,format=yuv420p`;
+  const prep: string[] = [];
+  const links: string[] = [];
+  for (let i = 0; i < n; i += 1) {
+    prep.push(`[${i}:v]${vf}[v${i}]`);
+    prep.push(
+      `[${i}:a]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100[a${i}]`,
+    );
+    links.push(`[v${i}][a${i}]`);
+  }
+  return `${prep.join(";")};${links.join("")}concat=n=${n}:v=1:a=1[vout][aout]`;
 }
 
 /** Fragment for bed mix after atrim/asetpts. */

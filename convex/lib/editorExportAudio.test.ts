@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bedClipAudioFilters,
   collectExportAudioBeds,
+  concatAvFilter,
   exportCoverUntilSec,
   transitionAudioMixFilter,
   videoClipAudioFilter,
@@ -177,8 +178,8 @@ describe("transitionAudioMixFilter", () => {
   it("dips to silence mid-transition like preview transitionAudioGain", () => {
     const filter = transitionAudioMixFilter({ durationSec: 1, offsetSec: 3 });
     // Outgoing gone by the midpoint; incoming silent until the midpoint.
-    expect(filter).toContain("[0:a]afade=t=out:st=3.000:d=0.500:curve=tri");
-    expect(filter).toContain("[1:a]afade=t=in:st=0.500:d=0.500:curve=tri");
+    expect(filter).toContain("afade=t=out:st=3.000:d=0.500:curve=tri");
+    expect(filter).toContain("afade=t=in:st=0.500:d=0.500:curve=tri");
     expect(filter).toContain("adelay=3000:all=1");
     expect(filter).not.toContain("acrossfade");
   });
@@ -187,6 +188,21 @@ describe("transitionAudioMixFilter", () => {
     expect(transitionAudioMixFilter({ durationSec: 0.6, offsetSec: 2 })).toContain(
       "amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]",
     );
+  });
+});
+
+describe("concatAvFilter", () => {
+  it("wires every segment video+audio into one concat", () => {
+    expect(concatAvFilter(3)).toBe(
+      "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[vout][aout]",
+    );
+  });
+
+  it("normalizes mixed sizes before concat", () => {
+    const filter = concatAvFilter(2, 1920, 1080);
+    expect(filter).toContain("[0:v]scale=1920:1080");
+    expect(filter).toContain("[1:v]scale=1920:1080");
+    expect(filter).toContain("[v0][a0][v1][a1]concat=n=2:v=1:a=1[vout][aout]");
   });
 });
 

@@ -16,6 +16,7 @@ import { ffmpegTransitionFor } from "./lib/editorEffectContract";
 import {
   bedClipAudioFilters,
   collectExportAudioBeds,
+  concatAvFilter,
   exportCoverUntilSec,
   timelineDurationSec,
   transitionAudioMixFilter,
@@ -674,6 +675,88 @@ function timelineSegments(
   return segments;
 }
 
+async function ensureSegmentAv(
+  path: string,
+  dest: string,
+  width: number,
+  height: number,
+): Promise<string> {
+  const hasV = await hasVideoStream(path);
+  const hasA = await hasAudioStream(path);
+  if (hasV && hasA) return path;
+  const duration = await probeMediaDurationSeconds(path);
+  if (hasV && !hasA) {
+    await runFfmpeg([
+      "-y",
+      "-i",
+      path,
+      "-f",
+      "lavfi",
+      "-i",
+      "anullsrc=channel_layout=stereo:sample_rate=44100",
+      "-map",
+      "0:v",
+      "-map",
+      "1:a",
+      "-c:v",
+      "copy",
+      "-c:a",
+      "aac",
+      "-b:a",
+      EXPORT_AUDIO_BITRATE,
+      "-ar",
+      "44100",
+      "-ac",
+      "2",
+      "-shortest",
+      "-t",
+      String(duration),
+      dest,
+    ]);
+    return dest;
+  }
+  await makeBlackSegment(dest, duration, width, height);
+  return dest;
+}
+
+async function concatSegmentsHardCut(
+  segmentPaths: string[],
+  dest: string,
+  width: number,
+  height: number,
+): Promise<void> {
+  const inputs = segmentPaths.flatMap((path) => ["-i", path]);
+  await runFfmpeg([
+    "-y",
+    ...inputs,
+    "-filter_complex",
+    concatAvFilter(segmentPaths.length, width, height, EXPORT_FPS),
+    "-map",
+    "[vout]",
+    "-map",
+    "[aout]",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "fast",
+    "-crf",
+    "22",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-b:a",
+    EXPORT_AUDIO_BITRATE,
+    "-ar",
+    "44100",
+    "-ac",
+    "2",
+    "-movflags",
+    "+faststart",
+    dest,
+  ]);
+}
+
 async function concatNormalizedSegments(
   segmentPaths: string[],
   transitionClips: Array<EditorClip | null>,
@@ -683,11 +766,17 @@ async function concatNormalizedSegments(
 ): Promise<string> {
   const outputPath = join(tempDir, "video-composed.mp4");
   const vf = normalizeVf(width, height);
-  if (segmentPaths.length === 1) {
+  const padded: string[] = [];
+  for (const [index, path] of segmentPaths.entries()) {
+    padded.push(
+      await ensureSegmentAv(path, join(tempDir, `seg-av-${index}.mp4`), width, height),
+    );
+  }
+  if (padded.length === 1) {
     await runFfmpeg([
       "-y",
       "-i",
-      segmentPaths[0]!,
+      padded[0]!,
       "-c",
       "copy",
       "-movflags",
@@ -704,166 +793,106 @@ async function concatNormalizedSegments(
       clip.transitionOut.type !== "none",
   );
 
-  // Prefer demuxer concat — all segments are already normalized to the same size/fps/audio.
   if (!hasTransition) {
-    const listPath = join(tempDir, "concat.txt");
-    const listBody = segmentPaths.map((path) => `file '${path.replace(/'/g, "'\\''")}'`).join("\n");
-    await writeFile(listPath, listBody, "utf8");
+    await concatSegmentsHardCut(padded, outputPath, width, height);
+    return outputPath;
+  }
+
+  // Pairwise xfade into intermediate files. If a wipe fails, hard-cut the rest.
+  try {
+    let currentPath = padded[0]!;
+    let currentDuration = await probeMediaDurationSeconds(currentPath);
+
+    for (let i = 1; i < padded.length; i++) {
+      const nextPath = padded[i]!;
+      const prevClip = transitionClips[i - 1];
+      const transition = prevClip?.transitionOut;
+      const nextDuration = await probeMediaDurationSeconds(nextPath);
+      const outPath = join(tempDir, `pair-${i}.mp4`);
+
+      const useXfade =
+        Boolean(transition?.type && transition.type !== "none") &&
+        Math.min(transition?.duration ?? 0.5, currentDuration * 0.45, nextDuration * 0.45) > 0.05;
+
+      if (useXfade) {
+        const duration = Math.min(
+          transition!.duration ?? 0.5,
+          currentDuration * 0.45,
+          nextDuration * 0.45,
+        );
+        const transitionName = xfadeTransition(transition!.type);
+        const offset = Math.max(0, currentDuration - duration);
+        const filter =
+          `[0:v]${vf}[v0];[1:v]${vf}[v1];` +
+          `[v0][v1]xfade=transition=${transitionName}:duration=${duration.toFixed(3)}:offset=${offset.toFixed(3)}[vout];` +
+          transitionAudioMixFilter({ durationSec: duration, offsetSec: offset });
+        try {
+          await runFfmpeg([
+            "-y",
+            "-i",
+            currentPath,
+            "-i",
+            nextPath,
+            "-filter_complex",
+            filter,
+            "-map",
+            "[vout]",
+            "-map",
+            "[aout]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "22",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            EXPORT_AUDIO_BITRATE,
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            "-movflags",
+            "+faststart",
+            outPath,
+          ]);
+          currentDuration = currentDuration + nextDuration - duration;
+        } catch {
+          await concatSegmentsHardCut([currentPath, nextPath], outPath, width, height);
+          currentDuration += nextDuration;
+        }
+      } else {
+        await concatSegmentsHardCut([currentPath, nextPath], outPath, width, height);
+        currentDuration += nextDuration;
+      }
+
+      currentPath = outPath;
+    }
+
     await runFfmpeg([
       "-y",
-      "-f",
-      "concat",
-      "-safe",
-      "0",
       "-i",
-      listPath,
-      "-c:v",
-      "libx264",
-      "-preset",
-      "fast",
-      "-crf",
-      "22",
-      "-pix_fmt",
-      "yuv420p",
-      "-c:a",
-      "aac",
-      "-ar",
-      "44100",
-      "-ac",
-      "2",
+      currentPath,
+      "-c",
+      "copy",
       "-movflags",
       "+faststart",
       outputPath,
     ]);
     return outputPath;
-  }
-
-  // Pairwise xfade/concat into intermediate files so mixed portrait/landscape
-  // never hits a single filter graph with mismatched link sizes.
-  let currentPath = segmentPaths[0]!;
-  let currentDuration = 0;
-  {
-    const { stdout } = await execFileAsync("ffprobe", [
-      "-v",
-      "error",
-      "-show_entries",
-      "format=duration",
-      "-of",
-      "default=noprint_wrappers=1:nokey=1",
-      currentPath,
-    ]);
-    currentDuration = Number(stdout.trim()) || 0.05;
-  }
-
-  for (let i = 1; i < segmentPaths.length; i++) {
-    const nextPath = segmentPaths[i]!;
-    const prevClip = transitionClips[i - 1];
-    const transition = prevClip?.transitionOut;
-    const { stdout } = await execFileAsync("ffprobe", [
-      "-v",
-      "error",
-      "-show_entries",
-      "format=duration",
-      "-of",
-      "default=noprint_wrappers=1:nokey=1",
-      nextPath,
-    ]);
-    const nextDuration = Number(stdout.trim()) || 0.05;
-    const outPath = join(tempDir, `pair-${i}.mp4`);
-
-    const useXfade =
-      Boolean(transition?.type && transition.type !== "none") &&
-      Math.min(transition?.duration ?? 0.5, currentDuration * 0.45, nextDuration * 0.45) > 0.05;
-
-    if (useXfade) {
-      const duration = Math.min(
-        transition!.duration ?? 0.5,
-        currentDuration * 0.45,
-        nextDuration * 0.45,
+  } catch (error) {
+    try {
+      await concatSegmentsHardCut(padded, outputPath, width, height);
+      return outputPath;
+    } catch {
+      throw new Error(
+        ffmpegFailMessage(error, "Could not stitch the timeline together."),
       );
-      const transitionName = xfadeTransition(transition!.type);
-      const offset = Math.max(0, currentDuration - duration);
-      const filter =
-        `[0:v]${vf}[v0];[1:v]${vf}[v1];` +
-        `[v0][v1]xfade=transition=${transitionName}:duration=${duration.toFixed(3)}:offset=${offset.toFixed(3)}[vout];` +
-        transitionAudioMixFilter({ durationSec: duration, offsetSec: offset });
-      await runFfmpeg([
-        "-y",
-        "-i",
-        currentPath,
-        "-i",
-        nextPath,
-        "-filter_complex",
-        filter,
-        "-map",
-        "[vout]",
-        "-map",
-        "[aout]",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "fast",
-        "-crf",
-        "22",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        EXPORT_AUDIO_BITRATE,
-        "-movflags",
-        "+faststart",
-        outPath,
-      ]);
-      currentDuration = currentDuration + nextDuration - duration;
-    } else {
-      const listPath = join(tempDir, `pair-${i}.txt`);
-      await writeFile(
-        listPath,
-        `file '${currentPath.replace(/'/g, "'\\''")}'\nfile '${nextPath.replace(/'/g, "'\\''")}'\n`,
-        "utf8",
-      );
-      await runFfmpeg([
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        listPath,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "fast",
-        "-crf",
-        "22",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        EXPORT_AUDIO_BITRATE,
-        "-movflags",
-        "+faststart",
-        outPath,
-      ]);
-      currentDuration += nextDuration;
     }
-
-    currentPath = outPath;
   }
-
-  await runFfmpeg([
-    "-y",
-    "-i",
-    currentPath,
-    "-c",
-    "copy",
-    "-movflags",
-    "+faststart",
-    outputPath,
-  ]);
-  return outputPath;
 }
 
 async function mixAudioTrack(args: {
@@ -1111,13 +1140,20 @@ async function runExportVideo(
     }
 
     await report("Compositing timeline…", 60);
-    let composedPath = await concatNormalizedSegments(
-      segmentPaths,
-      transitionClips,
-      tempDir,
-      exportWidth,
-      exportHeight,
-    );
+    let composedPath: string;
+    try {
+      composedPath = await concatNormalizedSegments(
+        segmentPaths,
+        transitionClips,
+        tempDir,
+        exportWidth,
+        exportHeight,
+      );
+    } catch (error) {
+      throw new Error(
+        ffmpegFailMessage(error, "Could not stitch the timeline together."),
+      );
+    }
     await report("Mixing audio…", 72);
     composedPath = await mixAudioTrack({
       videoPath: composedPath,

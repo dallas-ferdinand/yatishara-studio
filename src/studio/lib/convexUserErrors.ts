@@ -219,6 +219,10 @@ const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
     match: /libx264 @|H\.264\/MPEG-4 AVC codec|options:\s*cabac=/i,
     message: "Video encode failed. Retry export.",
   },
+  {
+    match: /Could not stitch the timeline/i,
+    message: "Could not stitch the timeline. Retry export.",
+  },
 ];
 
 /**
