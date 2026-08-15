@@ -28,7 +28,6 @@ import {
   formatTtdCents,
   formatTtdFromCredits,
   formatTtdShort,
-  paywiseCardFeeCents,
   paywiseCheckoutTotalCents,
   topUpMinAmountCents,
 } from "@/studio/lib/money";
@@ -687,7 +686,7 @@ export function StudioAcademyPane({
   const topUpCredits = creditsFromAmountCents(topUpAmountCents, price);
   const topUpLabel = formatTtdCents(topUpAmountCents);
   const balanceLabel = formatTtdFromCredits(balance, price);
-  const feeCents = paywiseCardFeeCents(topUpAmountCents);
+  const feeCents = 0;
   const totalDueCents = paywiseCheckoutTotalCents(topUpAmountCents);
 
   useEffect(() => {

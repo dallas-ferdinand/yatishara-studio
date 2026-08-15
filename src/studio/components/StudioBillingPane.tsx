@@ -19,7 +19,6 @@ import {
   lastExtraTopUpFaceCents,
   formatTtdFromCredits,
   formatTtdShort,
-  paywiseCardFeeCents,
   paywiseCheckoutTotalCents,
   topUpMinAmountCents,
 } from "@/studio/lib/money";
@@ -298,7 +297,7 @@ function BillingTopUp({
       ? Math.round((customAmountCents * (100 - topUpDiscountPercent)) / 100)
       : 0;
   const topUpSaveCents = Math.max(0, customAmountCents - topUpChargeCents);
-  const paywiseFeeCents = topUpChargeCents > 0 ? paywiseCardFeeCents(topUpChargeCents) : 0;
+  const paywiseFeeCents = 0;
   const paywiseTotalCents = topUpChargeCents > 0 ? paywiseCheckoutTotalCents(topUpChargeCents) : 0;
 
   useEffect(() => {

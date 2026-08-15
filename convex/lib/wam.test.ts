@@ -10,13 +10,12 @@ import {
 } from "./wam";
 
 describe("wam helpers", () => {
-  it("computes 3% + TT$1.50 fee (Wam floors the 3%)", () => {
+  it("customer pays the listed product; legacy fee-on-top still matches", () => {
     expect(wamCardFeeCents(10_00)).toBe(180); // 30 + 150
-    expect(wamCheckoutTotalCents(10_00)).toBe(11_80);
+    expect(wamCheckoutTotalCents(10_00)).toBe(10_00);
     expect(wamCardFeeCents(50_00)).toBe(300); // 150 + 150
-    // Pro 8% off $10 → $9.20 charge; floor(27.6)+150 = 177 → total $10.97
     expect(wamCardFeeCents(9_20)).toBe(177);
-    expect(wamCheckoutTotalCents(9_20)).toBe(10_97);
+    expect(wamCheckoutTotalCents(9_20)).toBe(9_20);
     expect(wamPaidAmountMatchesProduct(10_00, 10_00)).toBe(true);
     expect(wamPaidAmountMatchesProduct(11_80, 10_00)).toBe(true);
     expect(wamPaidAmountMatchesProduct(10_97, 9_20)).toBe(true);

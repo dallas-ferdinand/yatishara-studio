@@ -10,7 +10,6 @@ import {
   WAM_CURRENCY,
   normalizeWamIntentStatus,
   studioWamCsReturnUrl,
-  wamCardFeeCents,
   wamCheckoutTotalCents,
   wamErrorMessage,
 } from "./lib/wam";
@@ -251,7 +250,7 @@ export const internalStartPaywiseForCs = internalAction({
         shortUrl: short.shortUrl,
         publicPayCode: short.publicPayCode,
         amountCents: prepared.amountCents,
-        feeCents: wamCardFeeCents(prepared.amountCents),
+        feeCents: 0,
         totalCents: wamCheckoutTotalCents(prepared.amountCents),
       };
     }
@@ -292,7 +291,7 @@ export const internalStartPaywiseForCs = internalAction({
         shortUrl: short.shortUrl,
         publicPayCode: short.publicPayCode,
         amountCents: prepared.amountCents,
-        feeCents: wamCardFeeCents(prepared.amountCents),
+        feeCents: 0,
         totalCents: wamCheckoutTotalCents(prepared.amountCents),
       };
     } catch (err) {

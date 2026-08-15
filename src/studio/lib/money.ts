@@ -84,8 +84,7 @@ export function creditsFromAmountCents(
 }
 
 /**
- * Wam card fee when the payer covers 100%: 3% + TT$1.50.
- * Wam floors the 3% (e.g. $9.20 → fee $1.77, total $10.97 — not round→$10.98).
+ * Legacy customer-covers fee (3% + TT$1.50). Not added to the customer total.
  * @see https://docs.wam.money/docs/help-center/fees
  */
 export function wamCardFeeCents(amountCents: number): number {
@@ -96,10 +95,9 @@ export function wamCardFeeCents(amountCents: number): number {
 /** @deprecated Use wamCardFeeCents */
 export const paywiseCardFeeCents = wamCardFeeCents;
 
-/** Top-up amount + Wam card fee (what the payer is charged). */
+/** Customer pays the listed product. We swallow Wam fees. */
 export function wamCheckoutTotalCents(amountCents: number): number {
-  const base = Math.max(0, Math.round(Number(amountCents) || 0));
-  return base + wamCardFeeCents(base);
+  return Math.max(0, Math.round(Number(amountCents) || 0));
 }
 
 /** @deprecated Use wamCheckoutTotalCents */

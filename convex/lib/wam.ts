@@ -61,8 +61,7 @@ export function humanizeWamProviderStatus(status?: string | null): string | null
 }
 
 /**
- * Wam card fee when payer covers 100%: 3% + TT$1.50.
- * Floor the 3% to match Wam checkout (920 → 177 fee → 1097 total, not 1098).
+ * Legacy customer-covers fee (3% + TT$1.50). Keep for matching old paid intents.
  * @see https://docs.wam.money/docs/help-center/fees
  */
 export function wamCardFeeCents(amountCents: number): number {
@@ -70,9 +69,15 @@ export function wamCardFeeCents(amountCents: number): number {
   return Math.floor(base * 0.03) + 150;
 }
 
-export function wamCheckoutTotalCents(amountCents: number): number {
+/** Old checkout total when the customer paid the fee on top. */
+export function wamCustomerCoveredTotalCents(amountCents: number): number {
   const base = Math.max(0, Math.round(Number(amountCents) || 0));
   return base + wamCardFeeCents(base);
+}
+
+/** Customer pays the listed product. We swallow Wam fees. */
+export function wamCheckoutTotalCents(amountCents: number): number {
+  return Math.max(0, Math.round(Number(amountCents) || 0));
 }
 
 /** Path Wam cannot strip when it replaces the query string. Trailing slash matches Studio Next. */
@@ -87,14 +92,14 @@ export function studioWamCsReturnUrl(appBase: string, paymentId: string): string
   return `${base}/pay/wa/${encodeURIComponent(String(paymentId))}/`;
 }
 
-/** Wam paid the listed product (legacy merchant-pays) or the customer-covers total. */
+/** Wam paid the listed product, or a legacy customer-covers total. */
 export function wamPaidAmountMatchesProduct(
   providerAmountCents: number,
   productCents: number,
 ): boolean {
   const paid = Math.round(Number(providerAmountCents) || 0);
   const product = Math.max(0, Math.round(Number(productCents) || 0));
-  return paid === product || paid === wamCheckoutTotalCents(product);
+  return paid === product || paid === wamCustomerCoveredTotalCents(product);
 }
 
 export function wamErrorMessage(error: unknown): string {
