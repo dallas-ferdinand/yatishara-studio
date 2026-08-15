@@ -129,6 +129,21 @@ function resolveExportAudioFades(
 }
 
 /**
+ * Force every source to 44.1k stereo before mixing.
+ *
+ * Mono must be duplicated at unity gain (`pan`), matching the Web Audio
+ * up-mix the preview uses. swr's mono→stereo rematrix costs 3 dB, and a
+ * single mono lane left unconverted makes amix negotiate mono and downmix
+ * the whole export.
+ */
+export function exportAudioLayoutFilter(channels?: number): string {
+  const mono = channels === 1;
+  return mono
+    ? "aresample=44100,pan=stereo|c0=c0|c1=c0"
+    : "aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo";
+}
+
+/**
  * Build ffmpeg -af chain for a video clip's embedded audio.
  * Volume + afade in timeline time (speed is baked via processClipSpeed).
  * Uses audioFadeIn/Out only — picture fadeIn/Out do not affect audio.
@@ -141,6 +156,7 @@ export function videoClipAudioFilter(
   },
   muteAudio: boolean,
   durationSec?: number,
+  channels?: number,
 ): string | null {
   const volume = Math.max(0, Math.min(2, clip.effects?.volume ?? 1));
   if (muteAudio || volume <= 0.001) return null;
@@ -153,7 +169,7 @@ export function videoClipAudioFilter(
   );
   const { fadeIn, fadeOut } = resolveExportAudioFades(clip.effects, duration, false);
 
-  let af = "aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo";
+  let af = exportAudioLayoutFilter(channels);
   if (fadeIn > 0) af += `,afade=t=in:st=0:d=${fadeIn}:curve=qsin`;
   if (fadeOut > 0) {
     af += `,afade=t=out:st=${Math.max(0, duration - fadeOut)}:d=${fadeOut}:curve=qsin`;
@@ -162,7 +178,7 @@ export function videoClipAudioFilter(
   return af;
 }
 
-/** Fragment for bed mix after atrim/asetpts (no aresample). */
+/** Fragment for bed mix after atrim/asetpts. */
 export function bedClipAudioFilters(
   clip: {
     effects?: ExportAudioEffects;
@@ -170,6 +186,7 @@ export function bedClipAudioFilters(
     trimOut?: number;
   },
   durationSec?: number,
+  channels?: number,
 ): string {
   const volume = Math.max(0, Math.min(2, clip.effects?.volume ?? 1));
   const duration = Math.max(
@@ -179,7 +196,7 @@ export function bedClipAudioFilters(
       : timelineDurationSec(clip),
   );
   const { fadeIn, fadeOut } = resolveExportAudioFades(clip.effects, duration, true);
-  const parts: string[] = [];
+  const parts: string[] = [exportAudioLayoutFilter(channels)];
   if (fadeIn > 0) parts.push(`afade=t=in:st=0:d=${fadeIn}:curve=qsin`);
   if (fadeOut > 0) {
     parts.push(

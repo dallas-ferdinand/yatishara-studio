@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  bedClipAudioFilters,
   collectExportAudioBeds,
   exportCoverUntilSec,
   videoClipAudioFilter,
@@ -67,6 +68,43 @@ describe("export audio mute / volume / fade", () => {
     );
     expect(af).not.toContain("atempo=");
     expect(af).toContain("aresample=44100");
+  });
+
+  it("duplicates mono at unity instead of the 3 dB swr rematrix", () => {
+    expect(videoClipAudioFilter({}, false, 4, 1)).toBe(
+      "aresample=44100,pan=stereo|c0=c0|c1=c0",
+    );
+  });
+
+  it("keeps the stereo layout filter for stereo and surround sources", () => {
+    for (const channels of [2, 6, undefined]) {
+      expect(videoClipAudioFilter({}, false, 4, channels)).toBe(
+        "aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo",
+      );
+    }
+  });
+});
+
+describe("bedClipAudioFilters", () => {
+  it("always normalizes layout so one mono bed cannot downmix the mix", () => {
+    expect(bedClipAudioFilters({ trimIn: 0, trimOut: 4 }, 4, 1)).toBe(
+      "aresample=44100,pan=stereo|c0=c0|c1=c0",
+    );
+    expect(bedClipAudioFilters({ trimIn: 0, trimOut: 4 }, 4, 2)).toBe(
+      "aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo",
+    );
+  });
+
+  it("keeps legacy bed fades and volume after the layout filter", () => {
+    const filters = bedClipAudioFilters(
+      { effects: { fadeIn: 0.5, fadeOut: 1, volume: 1.5 }, trimIn: 0, trimOut: 4 },
+      4,
+      2,
+    );
+    expect(filters).toBe(
+      "aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo," +
+        "afade=t=in:st=0:d=0.5:curve=qsin,afade=t=out:st=3:d=1:curve=qsin,volume=1.5",
+    );
   });
 });
 

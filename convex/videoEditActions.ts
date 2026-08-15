@@ -48,6 +48,13 @@ import { clipAtPlayhead } from "./lib/editorProjectOps";
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Export re-encodes audio per segment, per concat pair, then again at the mix.
+ * ffmpeg's default AAC (~128k) loses ~4 dB above 13 kHz over those passes and
+ * dulls beds against the preview; 320k holds it to ~0.4 dB.
+ */
+const EXPORT_AUDIO_BITRATE = "320k";
+
 type ClipEffects = {
   fadeIn?: number;
   fadeOut?: number;
@@ -332,23 +339,40 @@ async function makeBlackSegment(
   }
 }
 
-async function hasAudioStream(path: string): Promise<boolean> {
+/**
+ * Audio presence + channel count in one probe. Channels drive the mono
+ * up-mix (see exportAudioLayoutFilter); unknown counts assume stereo so
+ * odd probes keep the old behaviour instead of silencing a lane.
+ */
+async function probeAudioStream(
+  path: string,
+): Promise<{ present: boolean; channels: number }> {
   try {
     const { stdout } = await execFileAsync("ffprobe", [
       "-v",
       "error",
       "-select_streams",
-      "a",
+      "a:0",
       "-show_entries",
-      "stream=index",
+      "stream=index,channels",
       "-of",
       "csv=p=0",
       path,
     ]);
-    return stdout.trim().length > 0;
+    const line = stdout.trim().split(/\r?\n/)[0] ?? "";
+    if (!line.length) return { present: false, channels: 0 };
+    const channels = Number(line.split(",")[1]);
+    return {
+      present: true,
+      channels: Number.isFinite(channels) && channels > 0 ? channels : 2,
+    };
   } catch {
-    return false;
+    return { present: false, channels: 0 };
   }
+}
+
+async function hasAudioStream(path: string): Promise<boolean> {
+  return (await probeAudioStream(path)).present;
 }
 
 async function probeMediaDurationSeconds(path: string): Promise<number> {
@@ -402,6 +426,8 @@ async function renderClipSegment(args: {
     "yuv420p",
     "-c:a",
     "aac",
+    "-b:a",
+    EXPORT_AUDIO_BITRATE,
     "-ar",
     "44100",
     "-ac",
@@ -411,7 +437,13 @@ async function renderClipSegment(args: {
     args.dest,
   ];
 
-  const audioFilter = videoClipAudioFilter(args.clip, Boolean(args.muteAudio), args.duration);
+  const sourceAudio = await probeAudioStream(args.sourcePath);
+  const audioFilter = videoClipAudioFilter(
+    args.clip,
+    Boolean(args.muteAudio),
+    args.duration,
+    sourceAudio.channels,
+  );
   // ffmpeg silently emits a video-only file when `-af` matches no audio, so
   // probe first: silent / muted sources must get anullsrc or concat/xfade
   // graphs fail with "Stream specifier ':a' matches no streams".
@@ -421,7 +453,7 @@ async function renderClipSegment(args: {
       ? ["-ss", String(args.clip.trimIn), "-i", args.sourcePath]
       : ["-ss", String(args.clip.trimIn), "-t", String(sourceLen), "-i", args.sourcePath];
   try {
-    if (audioFilter && (await hasAudioStream(args.sourcePath))) {
+    if (audioFilter && sourceAudio.present) {
       await execFileAsync("ffmpeg", [
         "-y",
         ...inputTrimArgs,
@@ -622,6 +654,8 @@ async function concatNormalizedSegments(
         "yuv420p",
         "-c:a",
         "aac",
+        "-b:a",
+        EXPORT_AUDIO_BITRATE,
         "-movflags",
         "+faststart",
         outPath,
@@ -652,6 +686,8 @@ async function concatNormalizedSegments(
         "yuv420p",
         "-c:a",
         "aac",
+        "-b:a",
+        EXPORT_AUDIO_BITRATE,
         "-movflags",
         "+faststart",
         outPath,
@@ -710,15 +746,16 @@ async function mixAudioTrack(args: {
     // Detached beds reuse the video asset — keep a neutral extension; ffmpeg probes content.
     const sourcePath = join(tempDir, `audio-source-${index}.bin`);
     await downloadToFile(url, sourcePath);
-    if (!(await hasAudioStream(sourcePath))) continue;
+    const bedAudio = await probeAudioStream(sourcePath);
+    if (!bedAudio.present) continue;
     audioInputs.push("-i", sourcePath);
     const delayMs = Math.max(0, Math.round(clip.startTime * 1000));
     const duration = clipDuration(clip);
     bedEnd = Math.max(bedEnd, clip.startTime + duration);
-    const bedFilters = bedClipAudioFilters(clip, duration);
+    const bedFilters = bedClipAudioFilters(clip, duration, bedAudio.channels);
     let chain = `[${inputIndex}:a]atrim=start=${clip.trimIn}:end=${clip.trimOut},asetpts=PTS-STARTPTS`;
     if (bedFilters) chain += `,${bedFilters}`;
-    chain += `,adelay=${delayMs}|${delayMs}[a${index}]`;
+    chain += `,adelay=${delayMs}:all=1[a${index}]`;
     filterParts.push(chain);
     mixLabels.push(`[a${index}]`);
     inputIndex += 1;
@@ -750,6 +787,8 @@ async function mixAudioTrack(args: {
     "copy",
     "-c:a",
     "aac",
+    "-b:a",
+    EXPORT_AUDIO_BITRATE,
     "-t",
     String(targetDuration),
     outputPath,
@@ -936,8 +975,8 @@ async function runExportVideo(
         audioFormat === "wav"
           ? ["-vn", "-c:a", "pcm_s16le"]
           : audioFormat === "m4a"
-            ? ["-vn", "-c:a", "aac", "-b:a", "192k"]
-            : ["-vn", "-c:a", "libmp3lame", "-b:a", "192k"];
+            ? ["-vn", "-c:a", "aac", "-b:a", EXPORT_AUDIO_BITRATE]
+            : ["-vn", "-c:a", "libmp3lame", "-b:a", EXPORT_AUDIO_BITRATE];
       await execFileAsync("ffmpeg", ["-y", "-i", composedPath, ...codecArgs, audioOut]);
       body = await readFile(audioOut);
       const rawName = (args.name || "export").replace(/\.(mp3|wav|m4a|mp4|mov|webm)$/i, "");
