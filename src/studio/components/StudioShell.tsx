@@ -94,7 +94,6 @@ import {
   Zap,
   Bell,
   Bot,
-  GripHorizontal,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
@@ -17148,27 +17147,33 @@ export function StudioShell({
         }
         .studio-composer-resize-handle {
           position: absolute;
-          top: 5px;
-          right: 7px;
+          top: 4px;
+          right: 6px;
           z-index: 6;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 22px;
-          height: 16px;
+          width: 18px;
+          height: 18px;
           margin: 0;
           padding: 0;
           border: 0;
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--mos-ink, #1c1c1e) 6%, transparent);
-          color: color-mix(in srgb, var(--mos-ink, #1c1c1e) 42%, transparent);
+          background: transparent;
+          color: color-mix(in srgb, var(--mos-ink, currentColor) 38%, transparent);
           cursor: ns-resize;
           touch-action: none;
         }
+        .studio-composer-resize-handle::before {
+          content: "";
+          position: absolute;
+          top: 2px;
+          right: 2px;
+          width: 10px;
+          height: 10px;
+          border-top: 1.5px solid currentColor;
+          border-right: 1.5px solid currentColor;
+          border-radius: 0 8px 0 0;
+        }
         .studio-composer-resize-handle:hover,
         .studio-composer-resize-handle:focus-visible {
-          background: color-mix(in srgb, var(--mos-ink, #1c1c1e) 10%, transparent);
-          color: color-mix(in srgb, var(--mos-ink, #1c1c1e) 62%, transparent);
+          color: color-mix(in srgb, var(--mos-ink, currentColor) 62%, transparent);
           outline: none;
         }
         @media (max-width: 979px) {
@@ -17197,6 +17202,9 @@ export function StudioShell({
             box-shadow 1000ms cubic-bezier(0.45, 0, 0.2, 1),
             background 1000ms cubic-bezier(0.45, 0, 0.2, 1);
           padding: 0 !important;
+        }
+        .studio-composer .cursor-composer-box:has(.studio-composer-media-rail) {
+          max-height: var(--studio-composer-box-max-height, min(52vh, 380px));
         }
         .studio-composer .cursor-composer-box::before {
           content: "";
@@ -17845,14 +17853,24 @@ export function StudioShell({
           justify-content: flex-start;
           min-height: 0;
           align-items: stretch;
-          padding: 6px 10px 4px;
-          overflow: hidden;
+          margin: 0 8px 8px;
+          padding: 8px 14px 6px 10px;
+          overflow: auto;
+          border-radius: 12px;
+          background: var(--studio-composer-glass-strong, color-mix(in srgb, var(--mos-bg, #05080f) 28%, transparent));
+        }
+        .studio-composer .cursor-composer-box:has(.studio-composer-media-rail) .studio-composer-inputline {
+          margin-top: 6px;
+        }
+        .studio-composer .cursor-composer-box:not(:has(.studio-composer-media-rail)) .studio-composer-inputline {
+          margin-top: 8px;
         }
         .studio-composer-media-rail {
           display: flex;
           flex-wrap: wrap;
+          flex: 0 0 auto;
           gap: 8px;
-          padding: 8px 10px 2px;
+          padding: 10px 10px 0;
         }
         .studio-composer-media-tile {
           position: relative;
@@ -28472,20 +28490,6 @@ function StudioComposer({
         ) : null}
         <div className="studio-composer-row">
           <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`} data-drop-target="composer">
-      {!isMobile ? (
-        <button
-          type="button"
-          className="studio-composer-resize-handle"
-          aria-label="Resize composer"
-          title="Drag to resize"
-          onPointerDown={beginComposerHeightDrag}
-          onPointerMove={moveComposerHeightDrag}
-          onPointerUp={endComposerHeightDrag}
-          onPointerCancel={endComposerHeightDrag}
-        >
-          <GripHorizontal size={12} strokeWidth={2.25} aria-hidden="true" />
-        </button>
-      ) : null}
       <div
         className="studio-composer-inputline"
         ref={inputLineRef}
@@ -28495,6 +28499,18 @@ function StudioComposer({
           focusComposerEditorEnd(editorRef.current);
         }}
       >
+        {!isMobile ? (
+          <button
+            type="button"
+            className="studio-composer-resize-handle"
+            aria-label="Resize composer"
+            title="Drag to resize"
+            onPointerDown={beginComposerHeightDrag}
+            onPointerMove={moveComposerHeightDrag}
+            onPointerUp={endComposerHeightDrag}
+            onPointerCancel={endComposerHeightDrag}
+          />
+        ) : null}
         {selectionHighlights.length ? (
           <div className="studio-composer-selection-layer" aria-hidden="true">
             {selectionHighlights.map((rect, index) => (
