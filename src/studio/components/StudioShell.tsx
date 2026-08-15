@@ -9750,13 +9750,16 @@ export function StudioShell({
             align-self: stretch;
             height: auto;
             min-height: 88px;
-            max-height: min(38vh, 240px);
+            max-height: calc(
+              min(38vh, 240px)
+              + var(--studio-composer-rail-reserve, 0px)
+            );
             overflow: hidden;
           }
           .studio-polish .studio-composer-inputline {
             flex: 1 1 auto !important;
             min-height: 0;
-            overflow: hidden;
+            overflow: auto;
           }
           .studio-polish .studio-composer .cursor-composer-box::before {
             width: 220px;
@@ -17862,7 +17865,7 @@ export function StudioShell({
         .studio-composer-inputline {
           position: relative;
           display: flex;
-          flex: 1 0 auto;
+          flex: 1 1 auto;
           flex-direction: column;
           justify-content: flex-start;
           min-height: 0;
@@ -18347,6 +18350,7 @@ export function StudioShell({
           display: flex;
           align-items: center;
           justify-content: space-between;
+          flex: 0 0 auto;
           flex-wrap: nowrap;
           gap: 8px;
           margin-top: auto;
