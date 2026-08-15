@@ -2111,6 +2111,8 @@ export default defineSchema({
     pinned: v.optional(v.boolean()),
     archivedAt: v.optional(v.number()),
     sourceThreadId: v.optional(v.id("agentThreads")),
+    /** Hash-embed JSON float[] for hybrid retrieve (optional; backfilled on write). */
+    embeddingJson: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

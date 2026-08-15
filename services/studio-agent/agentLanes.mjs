@@ -57,8 +57,28 @@ export const INTENT_BLURBS = {
     "List/search ElevenLabs voices for voiceover. Pick elevenVoiceId before studio_generate_audio when none is chosen.",
 };
 
-/** Curated starter set when catalog has no q/category (token budget). */
-export const STARTER_TOOL_NAMES = Object.keys(INTENT_BLURBS);
+/**
+ * Lean always-on catalog (no q=). Everything else requires catalog q=/category=.
+ * INTENT_BLURBS still describe the full surface via describe().
+ */
+export const ALWAYS_ON_TOOL_NAMES = [
+  "studio_generate_image",
+  "studio_generate_video",
+  "studio_generate_audio",
+  "studio_estimate_generation",
+  "studio_create_document",
+  "studio_patch_document",
+  "studio_get_document",
+  "studio_create_element",
+  "studio_list_elements",
+  "studio_workspace_tree",
+  "studio_folder_contents",
+  "studio_search",
+  "studio_pull_frames",
+];
+
+/** @deprecated alias — catalog starter = always-on lean set */
+export const STARTER_TOOL_NAMES = ALWAYS_ON_TOOL_NAMES;
 
 /** @type {Record<string, Record<string, unknown>>} */
 export const DESCRIBE_EXAMPLES = {

@@ -1,6 +1,12 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import {
+  cosineSimilarity,
+  embedAgentText,
+  embeddingFromJson,
+  embeddingToJson,
+} from "./lib/agentEmbed";
 
 const memoryKind = v.union(
   v.literal("note"),
@@ -19,6 +25,10 @@ const memoryReturn = v.object({
   createdAt: v.number(),
   updatedAt: v.number(),
 });
+
+function memoryEmbedding(title: string, body: string): string {
+  return embeddingToJson(embedAgentText(`${title}\n${body}`));
+}
 
 export const listMine = authedQuery({
   args: {
@@ -86,14 +96,17 @@ export const remember = authedMutation({
       }
     }
     const now = Date.now();
+    const title = args.title.trim().slice(0, 200) || "Memory";
+    const body = args.body.trim().slice(0, 8000);
     return await ctx.db.insert("agentMemories", {
       ownerId: ctx.user._id,
       projectFolderId: args.projectFolderId,
       kind: args.kind ?? "note",
-      title: args.title.trim().slice(0, 200) || "Memory",
-      body: args.body.trim().slice(0, 8000),
+      title,
+      body,
       pinned: args.pinned,
       sourceThreadId: args.sourceThreadId,
+      embeddingJson: memoryEmbedding(title, body),
       createdAt: now,
       updatedAt: now,
     });
@@ -113,10 +126,16 @@ export const updateMemory = authedMutation({
     if (!row || row.ownerId !== ctx.user._id || row.archivedAt) {
       throw new Error("Memory not found");
     }
+    const title =
+      args.title != null ? args.title.trim().slice(0, 200) : row.title;
+    const body = args.body != null ? args.body.trim().slice(0, 8000) : row.body;
     await ctx.db.patch(row._id, {
-      ...(args.title != null ? { title: args.title.trim().slice(0, 200) } : {}),
-      ...(args.body != null ? { body: args.body.trim().slice(0, 8000) } : {}),
+      ...(args.title != null ? { title } : {}),
+      ...(args.body != null ? { body } : {}),
       ...(args.pinned != null ? { pinned: args.pinned } : {}),
+      ...(args.title != null || args.body != null
+        ? { embeddingJson: memoryEmbedding(title, body) }
+        : {}),
       updatedAt: Date.now(),
     });
     return null;
@@ -146,6 +165,8 @@ export const retrieveForRun = internalQuery({
     limit: v.optional(v.number()),
     /** Optional user message — boost memories whose title/body overlap tokens. */
     query: v.optional(v.string()),
+    /** Extra cue anchors: cwd path, attachment labels/ids, continue, scratch ids. */
+    cues: v.optional(v.string()),
   },
   returns: v.array(
     v.object({
@@ -158,7 +179,6 @@ export const retrieveForRun = internalQuery({
   ),
   handler: async (ctx, args) => {
     const limit = Math.min(Math.max(args.limit ?? 6, 1), 12);
-    // Take a wider pool so summary spam cannot crowd out real notes.
     const owned = await ctx.db
       .query("agentMemories")
       .withIndex("by_owner_and_updated", (q) => q.eq("ownerId", args.ownerId))
@@ -166,7 +186,6 @@ export const retrieveForRun = internalQuery({
       .take(120);
     const filtered = owned.filter((row) => {
       if (row.archivedAt) return false;
-      // Thread summaries are injected separately — skip as generic recall noise.
       if (row.kind === "summary") return false;
       if (
         args.projectFolderId &&
@@ -178,17 +197,28 @@ export const retrieveForRun = internalQuery({
       return true;
     });
 
-    const tokens = String(args.query ?? "")
+    const queryText = String(args.query ?? "");
+    const cueText = String(args.cues ?? "");
+    const combined = `${queryText}\n${cueText}`.trim();
+    const tokens = combined
       .toLowerCase()
       .split(/[^a-z0-9]+/i)
       .map((t) => t.trim())
       .filter((t) => t.length >= 3)
-      .slice(0, 16);
+      .slice(0, 24);
+    const cueTokens = cueText
+      .toLowerCase()
+      .split(/[^a-z0-9_./-]+/i)
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 2)
+      .slice(0, 20);
+    const queryEmbed = combined ? embedAgentText(combined) : null;
 
     const now = Date.now();
     const scored = filtered.map((row) => {
       let score = row.pinned ? 1000 : 0;
       let tokenHits = 0;
+      let cueHits = 0;
       let projectHit = false;
       if (
         args.projectFolderId &&
@@ -198,8 +228,8 @@ export const retrieveForRun = internalQuery({
         score += 200;
         projectHit = true;
       }
+      const hay = `${row.title}\n${row.body}`.toLowerCase();
       if (tokens.length) {
-        const hay = `${row.title}\n${row.body}`.toLowerCase();
         for (const t of tokens) {
           if (hay.includes(t)) {
             score += 12;
@@ -207,22 +237,36 @@ export const retrieveForRun = internalQuery({
           }
         }
       }
-      // Real recency: up to +40 for updates in the last ~14 days.
+      if (cueTokens.length) {
+        for (const t of cueTokens) {
+          if (hay.includes(t)) {
+            score += 18;
+            cueHits += 1;
+          }
+        }
+      }
+      if (queryEmbed) {
+        const stored =
+          embeddingFromJson(row.embeddingJson) ||
+          embedAgentText(`${row.title}\n${row.body}`);
+        const sim = cosineSimilarity(queryEmbed, stored);
+        if (sim > 0.12) score += Math.round(sim * 80);
+      }
       const ageMs = Math.max(0, now - row.updatedAt);
       const ageDays = ageMs / (24 * 60 * 60 * 1000);
       score += Math.max(0, Math.round(40 - ageDays * 3));
       if (row.kind === "preference" || row.kind === "decision") score += 15;
-      return { row, score, tokenHits, projectHit };
+      return { row, score, tokenHits, cueHits, projectHit };
     });
 
     scored.sort((a, b) => b.score - a.score || b.row.updatedAt - a.row.updatedAt);
 
-    // Softer gate: one token hit or recent preference/decision is enough.
     const relevant = scored.filter(
       (s) =>
         s.row.pinned ||
         s.projectHit ||
         s.tokenHits >= 1 ||
+        s.cueHits >= 1 ||
         ((s.row.kind === "preference" || s.row.kind === "decision") &&
           s.score >= 20) ||
         s.score >= 36,
@@ -282,7 +326,7 @@ export const rememberInternal = internalMutation({
     const kind = args.kind ?? "note";
     const title = args.title.trim().slice(0, 200) || "Memory";
     const body = args.body.trim().slice(0, 8000);
-    // Update-by-title when same kind+title exists (avoid note spam).
+    const embeddingJson = memoryEmbedding(title, body);
     const recent = await ctx.db
       .query("agentMemories")
       .withIndex("by_owner_and_updated", (q) => q.eq("ownerId", args.ownerId))
@@ -300,6 +344,7 @@ export const rememberInternal = internalMutation({
         body,
         projectFolderId: args.projectFolderId ?? existing.projectFolderId,
         sourceThreadId: args.sourceThreadId ?? existing.sourceThreadId,
+        embeddingJson,
         updatedAt: now,
       });
       return existing._id;
@@ -311,6 +356,7 @@ export const rememberInternal = internalMutation({
       title,
       body,
       sourceThreadId: args.sourceThreadId,
+      embeddingJson,
       createdAt: now,
       updatedAt: now,
     });
@@ -327,6 +373,8 @@ export const saveThreadSummary = internalMutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const body = args.summary.trim().slice(0, 8000);
+    const title = "Thread summary";
+    const embeddingJson = memoryEmbedding(title, body);
     const recent = await ctx.db
       .query("agentMemories")
       .withIndex("by_owner_and_updated", (q) => q.eq("ownerId", args.ownerId))
@@ -338,7 +386,6 @@ export const saveThreadSummary = internalMutation({
         row.kind === "summary" &&
         row.sourceThreadId === args.threadId,
     );
-    // Upsert one live summary; archive older duplicates for this thread.
     for (let i = 1; i < existing.length; i++) {
       await ctx.db.patch(existing[i]!._id, {
         archivedAt: now,
@@ -347,8 +394,9 @@ export const saveThreadSummary = internalMutation({
     }
     if (existing[0]) {
       await ctx.db.patch(existing[0]._id, {
-        title: "Thread summary",
+        title,
         body,
+        embeddingJson,
         updatedAt: now,
       });
       return existing[0]._id;
@@ -356,9 +404,10 @@ export const saveThreadSummary = internalMutation({
     return await ctx.db.insert("agentMemories", {
       ownerId: args.ownerId,
       kind: "summary",
-      title: "Thread summary",
+      title,
       body,
       sourceThreadId: args.threadId,
+      embeddingJson,
       createdAt: now,
       updatedAt: now,
     });

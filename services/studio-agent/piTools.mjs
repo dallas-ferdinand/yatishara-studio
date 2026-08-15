@@ -16,6 +16,7 @@ import {
   normalizeAgentGenerationArgs,
 } from "../../packages/studio-tools/src/http.js";
 import {
+  ALWAYS_ON_TOOL_NAMES,
   STARTER_TOOL_NAMES,
   DESCRIBE_EXAMPLES,
   agentDescription,
@@ -32,6 +33,7 @@ import {
   verifyHintFor,
   autoVerifyTool,
   autoVerifyArgs,
+  isVerifyFailure,
   salvageGenerationResult,
 } from "./agentVerify.mjs";
 import { createPlanStore } from "./agentPlan.mjs";
@@ -342,11 +344,11 @@ export function createStudioPiTools(opts) {
     name: "catalog",
     label: "Catalog",
     description:
-      "List Studio tools (lean). Default = high-use starter set. Pass q or category to search. Then describe/invoke by name. Never invent studio_* as top-level Pi tools.",
+      "List Studio tools (JIT). Default = lean always-on set. Pass q= or category= to discover the rest (post, move, send, trash, …). Then describe/invoke by name.",
     promptSnippet: "List Studio API tools (then invoke by name)",
     promptGuidelines: [
       "Only Pi tools are catalog, describe, invoke, inspect, remember, skills, plan, ask.",
-      "Prefer catalog with q= (e.g. q=post, q=generate, q=move) — avoid dumping everything.",
+      "Always-on tools appear without q=. For anything else (post/share/move/send/trash/…), catalog with q= first.",
       "Load a skill pack with skills before multi-step work.",
       "For 2+ step jobs: plan set first, update statuses as you go (todo reinjects automatically).",
       "Never call studio_* as a top-level tool name.",
@@ -380,8 +382,8 @@ export function createStudioPiTools(opts) {
               t.description.toLowerCase().includes(needle),
           );
         } else if (!params.category) {
-          const starter = new Set(STARTER_TOOL_NAMES);
-          tools = tools.filter((t) => starter.has(t.name));
+          const alwaysOn = new Set(ALWAYS_ON_TOOL_NAMES.length ? ALWAYS_ON_TOOL_NAMES : STARTER_TOOL_NAMES);
+          tools = tools.filter((t) => alwaysOn.has(t.name));
         }
         const max = Math.min(Math.max(Number(params.limit) || 24, 1), 60);
         return {
@@ -391,7 +393,7 @@ export function createStudioPiTools(opts) {
           filtered,
           hint: filtered
             ? undefined
-            : "Starter set only. Re-call with q= or category= for more tools.",
+            : "Always-on set only. Re-call with q= (post, move, send, trash, …) or category= for more tools.",
           tools: tools.slice(0, max),
         };
       });
@@ -757,7 +759,7 @@ export function createStudioPiTools(opts) {
           }
         }
 
-        const ok = Boolean(result?.ok !== false);
+        let ok = Boolean(result?.ok !== false);
         let verified;
         const autoName = ok ? autoVerifyTool(toolName) : null;
         if (autoName && !result?.pendingApproval) {
@@ -772,7 +774,18 @@ export function createStudioPiTools(opts) {
                 vArgs,
               );
               verified = compactObservation(autoName, vRes);
+              if (isVerifyFailure(autoName, verified, invokeArgs, result)) {
+                ok = false;
+                verified = {
+                  ...verified,
+                  ok: false,
+                  error:
+                    verified?.error ||
+                    `verify_failed:${autoName} — do not claim success; repair args and retry once`,
+                };
+              }
             } catch (error) {
+              ok = false;
               verified = {
                 ok: false,
                 toolName: autoName,
@@ -788,11 +801,20 @@ export function createStudioPiTools(opts) {
           ...(verified ? { verified } : {}),
           ...(recovery ? { recovery } : {}),
         });
+        if (!ok && verified?.ok === false) {
+          compact.ok = false;
+          compact.error =
+            compact.error ||
+            verified.error ||
+            `verify_failed:${autoName || "check"}`;
+          compact.repair =
+            "VERIFY FAILED — fix args or discover the real id, retry once, then report the real error. Never claim success.";
+        }
 
         trajectory.recordTool({
           toolName,
           ok,
-          error: result?.error,
+          error: !ok ? compact.error || result?.error : result?.error,
           bytes: observationByteBudget(compact),
         });
         await opts.onAfterInvoke?.({
@@ -800,7 +822,7 @@ export function createStudioPiTools(opts) {
           toolName,
           ok,
           result: compact,
-          error: result?.error,
+          error: !ok ? compact.error || result?.error : result?.error,
         });
         return textResultWithTodo(compact);
       } catch (error) {

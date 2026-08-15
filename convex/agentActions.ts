@@ -370,11 +370,37 @@ export const sendTurn = action({
       { threadId: args.threadId, ownerId, limit: 32 },
     );
 
+    // Build cue anchors from cwd, attachments, continue, and scratch ids.
+    const cueParts: string[] = [];
+    if (args.currentFolderId) {
+      cueParts.push(`cwd:${args.currentFolderId}`);
+      const cwdPath = folderPathFor(String(args.currentFolderId));
+      if (cwdPath) cueParts.push(`path:${cwdPath}`);
+    }
+    if (/^\s*continue\.?\s*$/i.test(message)) cueParts.push("continue");
+    for (const att of attachments) {
+      if (att.studioId) cueParts.push(`${att.studioKind}:${att.studioId}`);
+      if (att.label) cueParts.push(att.label);
+    }
+    if (workingScratchJson) {
+      try {
+        const scratch = JSON.parse(workingScratchJson) as Record<string, unknown>;
+        for (const key of ["lastDocumentIds", "lastAssetIds", "lastElementIds"]) {
+          const ids = scratch[key];
+          if (Array.isArray(ids)) cueParts.push(ids.slice(0, 4).join(","));
+        }
+      } catch {
+        // ignore
+      }
+    }
+    const cueAnchors = cueParts.join(" ");
+
     const memories = await ctx.runQuery(internal.agentMemory.retrieveForRun, {
       ownerId,
       projectFolderId: args.currentFolderId,
       limit: 6,
       query: message,
+      cues: cueAnchors || undefined,
     });
     const threadSummary = await ctx.runQuery(internal.agentMemory.getThreadSummary, {
       ownerId,
@@ -648,6 +674,7 @@ export const sendTurn = action({
         pendingApproval?: boolean;
         pendingAsk?: boolean;
         model?: string;
+        trajectory?: unknown;
         usage?: {
           inputTokens?: number;
           outputTokens?: number;
@@ -660,6 +687,31 @@ export const sendTurn = action({
         body = bodyText ? JSON.parse(bodyText) : {};
       } catch {
         body = { error: bodyText.slice(0, 500) };
+      }
+
+      // Persist lastTrajectory into workingScratchJson for next-turn coach injection.
+      if (body.trajectory != null) {
+        let current: Record<string, unknown> = {};
+        if (workingScratchJson) {
+          try {
+            current =
+              typeof workingScratchJson === "string"
+                ? (JSON.parse(workingScratchJson) as Record<string, unknown>)
+                : (workingScratchJson as Record<string, unknown>);
+          } catch {
+            current = {};
+          }
+        }
+        const next = { ...current, lastTrajectory: body.trajectory };
+        await ctx.runMutation(internal.agentThreads.patchWorkingScratchInternal, {
+          threadId: args.threadId,
+          patchJson: JSON.stringify(next).slice(0, 8000),
+        });
+        // Refresh workingScratchJson for the summary block below.
+        workingScratchJson = await ctx.runQuery(
+          internal.agentThreads.getWorkingScratchInternal,
+          { threadId: args.threadId },
+        );
       }
 
       const runAfterPi = await ctx.runQuery(internal.agentRuns.getRunInternal, {

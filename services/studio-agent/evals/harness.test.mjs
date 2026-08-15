@@ -326,7 +326,8 @@ test("trajectory + observation mask", () => {
 });
 
 test("starter set + intent blurbs present", () => {
-  assert.ok(STARTER_TOOL_NAMES.includes("studio_share_asset_post"));
+  assert.ok(STARTER_TOOL_NAMES.includes("studio_generate_image"));
+  assert.ok(STARTER_TOOL_NAMES.includes("studio_create_document"));
   assert.match(
     agentDescription({ name: "studio_share_asset_post", description: "old" }),
     /Post owned/,

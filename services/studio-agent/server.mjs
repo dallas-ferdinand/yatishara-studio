@@ -18,6 +18,12 @@ import { createStudioPiTools, createTrajectory } from "./piTools.mjs";
 import { detectActionLane } from "./agentLanes.mjs";
 import { skillPromptBlock } from "./agentSkills.mjs";
 import { normalizeAgentUsage } from "./usageBilling.mjs";
+import {
+  budgetPriorHistory,
+  buildStructuredThreadSummary,
+  formatTrajectoryCoach,
+} from "./agentContextBudget.mjs";
+import { pickAgentModel } from "./agentModelRoute.mjs";
 import { invokeStudioTool } from "../../packages/studio-tools/src/http.js";
 
 const PORT = Number(process.env.STUDIO_AGENT_PORT || process.env.PORT || 8796);
@@ -270,6 +276,18 @@ async function runPiTurn(body, abortSignal) {
       message: String(message || ""),
     });
 
+    // Model routing: plan-strong / execute-cheap (BYOK unchanged).
+    const modelChoice = pickAgentModel({
+      message: String(message || ""),
+      lane: laneEarly,
+      execModelId: PLATFORM_MODEL,
+      planModelId: process.env.STUDIO_AGENT_PLAN_MODEL_ID || undefined,
+    });
+    const usePlanModel = modelChoice.tier === "plan" && !usedByok;
+    if (usePlanModel) {
+      console.log("[studio-agent] plan-model", modelChoice.modelId, { reason: modelChoice.reason, runId, threadId });
+    }
+
     let seedBoard = null;
     const boardRaw = seedTodosJson || seedPlanJson;
     if (boardRaw) {
@@ -459,9 +477,44 @@ async function runPiTurn(body, abortSignal) {
       customTools: tools,
       // Studio tools only — no local bash/read/write on the VPS.
       noTools: "builtin",
+      ...(usePlanModel ? {} : {}), // explicit model passed below via setModel
     });
     sessionEntry.session = session;
     sessions.set(key, sessionEntry);
+
+    // Switch to plan model if lane/message demand it (platform-only; BYOK unchanged).
+    if (usePlanModel && typeof session.setModel === "function") {
+      try {
+        const modByok = await import("@earendil-works/pi-coding-agent");
+        const getModelFunc = modByok.getModel;
+        const ModelRuntimeClass = modByok.ModelRuntime;
+
+        let planModel = null;
+        // Prefer ModelRuntime async catalog to find custom models from models.json.
+        if (ModelRuntimeClass && typeof ModelRuntimeClass.create === "function") {
+          const mr = await ModelRuntimeClass.create({
+            agentDir: AGENT_DIR,
+            cwd: AGENT_DIR,
+          });
+          planModel = mr.getModel(PLATFORM_PROVIDER, modelChoice.modelId);
+        }
+        // Fallback: synchronous compat getModel (built-in models).
+        if (!planModel && getModelFunc && typeof getModelFunc === "function") {
+          planModel = getModelFunc(PLATFORM_PROVIDER, modelChoice.modelId);
+        }
+        if (planModel) {
+          session.setModel(planModel);
+          console.log("[studio-agent] setModel plan", modelChoice.modelId);
+        } else {
+          console.warn(
+            "[studio-agent] plan model not found; using default",
+            modelChoice.modelId,
+          );
+        }
+      } catch (err) {
+        console.warn("[studio-agent] setModel plan failed", err.message || err);
+      }
+    }
 
     if (abortSignal?.aborted || cancelNotified) {
       await requestAbort("pre-prompt");
@@ -470,7 +523,9 @@ async function runPiTurn(body, abortSignal) {
 
     if (!session.model) {
       throw new Error(
-        `No platform model loaded (${PLATFORM_PROVIDER}/${PLATFORM_MODEL}). Check ARK_API_KEY + .pi-harness/models.json.`,
+        `No platform model loaded (${PLATFORM_PROVIDER}/${
+          usePlanModel ? modelChoice.modelId : PLATFORM_MODEL
+        }). Check ARK_API_KEY + .pi-harness/models.json.`,
       );
     }
 
@@ -568,42 +623,45 @@ async function runPiTurn(body, abortSignal) {
       }
     }
 
-    const formatPriorLine = (row) => {
-      const role = String(row?.role || "?");
-      const tool = textValue(row?.toolName);
-      const raw = String(row?.content || "").replace(/\s+/g, " ").trim();
-      if (role === "tool") {
-        return `tool: ${tool || "step"} — ${raw.slice(0, 420)}`;
-      }
-      if (role === "user") return `user: ${raw.slice(0, 1400)}`;
-      if (role === "assistant") return `assistant: ${raw.slice(0, 1000)}`;
-      return `${role}: ${raw.slice(0, 400)}`;
-    };
-
-    const priorRows = Array.isArray(history) ? history.slice(-20) : [];
-    // Drop the trailing user echo of this turn's message if present.
-    const prior =
-      priorRows.length > 0
-        ? priorRows
-            .filter((row, i) => {
-              if (i !== priorRows.length - 1) return true;
-              return !(
-                row?.role === "user" &&
-                String(row.content || "").trim() === String(userMessage || "").trim()
-              );
-            })
-            .map(formatPriorLine)
-            .join("\n")
-        : "";
-
     const isContinue = /^\s*continue\.?\s*$/i.test(String(userMessage || ""));
 
+    // Real context budget: snip tool noise, keep episode ids.
+    const prior = budgetPriorHistory(history, {
+      maxChars: 14_000,
+      keepRecent: 10,
+      currentUser: userMessage,
+    });
+
+    // Trajectory coach from last turn (stored in Convex workingScratchJson.lastTrajectory).
+    let lastTrajectoryBlock = "";
+    let lastTrajectory: object | null = null;
+    if (workingScratchJson) {
+      try {
+        const scratch =
+          typeof workingScratchJson === "string"
+            ? JSON.parse(workingScratchJson)
+            : workingScratchJson;
+        lastTrajectory = scratch?.lastTrajectory && typeof scratch.lastTrajectory === "object"
+          ? scratch.lastTrajectory
+          : null;
+      } catch {
+        lastTrajectory = null;
+      }
+    }
+    if (lastTrajectory) {
+      const coach = formatTrajectoryCoach(lastTrajectory);
+      if (coach) {
+        lastTrajectoryBlock = `${coach}\n`;
+      }
+    }
+
     const system = [
+      lastTrajectoryBlock ? `${lastTrajectoryBlock}` : "",
       "Yatishara Studio Agent. Act with tools — don't advise how unless asked.",
       "CONTINUITY: Prior + Thread summary + TODO board ARE this chat. Resume unfinished work; do not restart from scratch unless asked. \"Continue.\" means pick up the next unfinished step from Prior/TODO.",
       "Pi tools: catalog, describe, invoke, inspect, remember, skills, plan, ask.",
       "Studio actions: invoke {name:\"studio_*\", args:{...}}. Never call studio_* as a top-level tool.",
-      "catalog: starter set by default; q= or category= to search. describe if args unclear. Skip catalog when you already know the studio_* name.",
+      "catalog: always-on set by default; q= or category= to discover the rest (post, move, send, trash, …). describe if args unclear. Skip catalog when you already know the studio_* name.",
       "Do not call remember for ephemeral tool chatter. Memories are auto-injected when relevant — never invent a recall tool step.",
       skillPromptBlock(),
       "Before writing image/video prompts or choosing hypermotion vs cinematic, skills {id} for the matching prompt-* pack. Do not invent third-party brand names in prompts.",
@@ -835,7 +893,10 @@ const server = createServer(async (req, res) => {
           JSON.stringify({
             assistantText: turn.assistantText,
             pendingApproval: Boolean(turn.pendingApproval),
+            pendingAsk: Boolean(turn.pendingAsk),
             usage: turn.usage,
+            model: turn.model,
+            trajectory: turn.trajectory,
             // Ledger charge is Convex-owned (measured usage → textCreditCost).
             usedByok: Boolean(body.usedByok),
           }),

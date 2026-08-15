@@ -1,5 +1,6 @@
 /**
  * Verify-after-act hints + optional cheap auto-checks.
+ * When auto verify returns ok:false, invoke hard-fails so the model must repair.
  */
 
 /** @type {Record<string, { hint: (args: object, result: any) => string|null, auto?: string }>} */
@@ -12,6 +13,7 @@ export const VERIFY_MAP = {
         : "VERIFY: confirm share with studio_is_asset_shared.",
   },
   studio_generate_image: {
+    auto: "studio_view_media",
     hint: (_args, result) => {
       const assetId =
         result?.data?.assetId ||
@@ -24,6 +26,7 @@ export const VERIFY_MAP = {
     },
   },
   studio_generate_video: {
+    auto: "studio_view_media",
     hint: (_args, result) => {
       const assetId = result?.data?.assetId || result?.assetId;
       if (result?.data?.stillRendering) {
@@ -35,6 +38,7 @@ export const VERIFY_MAP = {
     },
   },
   studio_bulk_move: {
+    auto: "studio_folder_contents",
     hint: (args) =>
       args?.targetFolderId
         ? `VERIFY: optional studio_folder_contents { folderId: "${args.targetFolderId}" }.`
@@ -50,6 +54,7 @@ export const VERIFY_MAP = {
         : null,
   },
   studio_create_document: {
+    auto: "studio_get_document",
     hint: (_args, result) => {
       const id =
         result?.data?.documentId ||
@@ -60,6 +65,19 @@ export const VERIFY_MAP = {
       return id
         ? `VERIFY: Script id=${id}. Use that id for studio_get_document / patch — never invent ids. Never create empty Prompt/Script bodies.`
         : "VERIFY: create must return document id; never claim saved without id; never empty Script contentMarkdown.";
+    },
+  },
+  studio_create_element: {
+    auto: "studio_list_elements",
+    hint: (_args, result) => {
+      const id =
+        result?.data?.elementId ||
+        result?.data?._id ||
+        result?.data?.id ||
+        result?.elementId;
+      return id
+        ? `VERIFY: element id=${id}. Prefer element:// + @name in prompts; never claim Elements retired.`
+        : "VERIFY: create_element must return elementId before claiming locked.";
     },
   },
   studio_send_message: {
@@ -91,12 +109,103 @@ export function autoVerifyTool(toolName) {
  * @param {any} result
  */
 export function autoVerifyArgs(verifyTool, args, result) {
+  const data =
+    result?.data && typeof result.data === "object" ? result.data : result || {};
+
   if (verifyTool === "studio_is_asset_shared") {
     const assetId =
-      args?.assetId || result?.data?.assetId || result?.assetId || null;
+      args?.assetId || data?.assetId || result?.assetId || null;
     return assetId ? { assetId: String(assetId) } : null;
   }
+
+  if (verifyTool === "studio_get_document") {
+    const documentId =
+      data?.documentId ||
+      data?._id ||
+      data?.id ||
+      data?.document?._id ||
+      data?.document?.id ||
+      args?.documentId ||
+      null;
+    return documentId ? { documentId: String(documentId) } : null;
+  }
+
+  if (verifyTool === "studio_view_media") {
+    // Skip while still rendering — no asset yet.
+    if (data?.stillRendering || data?.queued) return null;
+    const assetId =
+      data?.assetId ||
+      result?.assetId ||
+      (typeof data?.id === "string" && (data.kind === "image" || data.kind === "video")
+        ? data.id
+        : null) ||
+      args?.assetId ||
+      null;
+    return assetId ? { assetId: String(assetId) } : null;
+  }
+
+  if (verifyTool === "studio_folder_contents") {
+    const folderId = args?.targetFolderId || args?.folderId || data?.folderId || null;
+    return folderId ? { folderId: String(folderId) } : null;
+  }
+
+  if (verifyTool === "studio_list_elements") {
+    const folderId = args?.folderId || data?.folderId || null;
+    return folderId ? { folderId: String(folderId) } : {};
+  }
+
   return null;
+}
+
+/**
+ * True when auto-verify payload proves the act failed.
+ * @param {string} verifyTool
+ * @param {any} verified
+ * @param {Record<string, unknown>} args
+ * @param {any} actResult
+ */
+export function isVerifyFailure(verifyTool, verified, args, actResult) {
+  if (!verified || verified.ok === false) return true;
+  const data =
+    verified.data && typeof verified.data === "object" ? verified.data : verified;
+
+  if (verifyTool === "studio_is_asset_shared") {
+    return data.shared === false || data.isShared === false;
+  }
+  if (verifyTool === "studio_get_document") {
+    const body = String(data.contentMarkdown ?? data.content ?? "");
+    // Empty Script after create = fail hard.
+    if (!body.trim()) return true;
+    return false;
+  }
+  if (verifyTool === "studio_view_media") {
+    const url =
+      data.url ||
+      data.imageUrl ||
+      data.videoUrl ||
+      data.mediaUrl ||
+      data.signedUrl;
+    return !url && !data.assetId && verified.ok === false;
+  }
+  if (verifyTool === "studio_list_elements") {
+    const want =
+      actResult?.data?.elementId ||
+      actResult?.data?._id ||
+      actResult?.data?.id ||
+      null;
+    if (!want) return false;
+    const list = Array.isArray(data.elements)
+      ? data.elements
+      : Array.isArray(data.items)
+        ? data.items
+        : [];
+    if (!list.length) return false; // list empty may mean scope miss — soft
+    return !list.some(
+      (el) =>
+        String(el?.id ?? el?._id ?? el?.elementId ?? "") === String(want),
+    );
+  }
+  return false;
 }
 
 /**
