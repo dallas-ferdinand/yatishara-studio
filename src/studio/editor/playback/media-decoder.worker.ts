@@ -102,6 +102,8 @@ type Session = {
   aheadSec: number;
   pumping: boolean;
   pumpScheduled: boolean;
+  /** Latest-wins token so queued scrubs skip superseded times. */
+  scrubToken: number;
   frames: Map<number, VideoFrame>;
   waiters: FrameWaiter[];
   touchedAt: number;
@@ -115,10 +117,12 @@ const sessions = new Map<string, Session>();
 const MAX_FRAMES_PER_ASSET = 90;
 const MAX_DECODER_SESSIONS = 6;
 const DECODE_CHUNK = 24;
-const DEFAULT_AHEAD_SEC = 0.75;
-const FRAME_WAIT_MS = 2_500;
+const DEFAULT_AHEAD_SEC = 1.5;
+const FRAME_WAIT_MS = 1_200;
 /** Playpath wait — short; timeout falls back to nearest good frame, not a banner. */
-const PLAY_WAIT_MS = 500;
+const PLAY_WAIT_MS = 280;
+/** Scrub may show a nearby cached sample (~0.5s at 30fps) while the target decodes. */
+const SCRUB_NEAREST_DISTANCE = 16;
 
 function totalCacheBytes(): number {
   let total = 0;
@@ -190,9 +194,10 @@ function nearestFrameAny(session: Session, targetIndex: number): VideoFrame | nu
 
 function notifyWaiters(session: Session): void {
   if (!session.waiters.length) return;
+  const slack = session.pumping ? 1 : SCRUB_NEAREST_DISTANCE;
   const remaining: FrameWaiter[] = [];
   for (const waiter of session.waiters) {
-    const frame = nearestFrame(session, waiter.targetIndex);
+    const frame = nearestFrame(session, waiter.targetIndex, slack);
     if (frame) {
       clearTimeout(waiter.timer);
       waiter.resolve(frame);
@@ -254,6 +259,7 @@ function createSession(assetId: string, url: string): Session {
     aheadSec: DEFAULT_AHEAD_SEC,
     pumping: false,
     pumpScheduled: false,
+    scrubToken: 0,
     frames: new Map(),
     waiters: [],
     touchedAt: performance.now(),
@@ -599,13 +605,17 @@ async function ensureFrame(
   extendPumpTarget(session, sourceTime, speed, aheadSec);
 
   if (session.generation !== generation) {
-    closeFrames(session);
-    session.decodedThrough = -1;
-    session.streamOpen = false;
+    // Cancel stale waiters only — keep decoded frames + open stream so
+    // timeline scrub can paint immediately instead of a cold keyframe.
+    rejectWaiters(session, new Error("Decoder generation changed."));
     session.generation = generation;
   }
 
-  const cached = nearestFrame(session, targetIndex);
+  const cached = nearestFrame(
+    session,
+    targetIndex,
+    session.pumping ? 1 : SCRUB_NEAREST_DISTANCE,
+  );
   if (cached) {
     if (session.pumping) schedulePump(session);
     return cached;
@@ -759,9 +769,11 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
   if (message.type === "scrub") {
     const session = getSession(message.assetId, message.url);
     session.pumping = false;
+    const token = (session.scrubToken += 1);
     session.chain = session.chain
       .then(async () => {
-        await ensureFrame(session, message.sourceTime, message.generation, 1, 0.5);
+        if (session.scrubToken !== token) return;
+        await ensureFrame(session, message.sourceTime, message.generation, 1, 0.35);
       })
       .catch(() => undefined);
     return;

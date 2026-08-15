@@ -60,7 +60,8 @@ export class TransportClock {
     if (this.running) {
       this.anchorTimeline = this.currentTime();
       this.running = false;
-      this.generationValue += 1;
+      // Keep decode generation — wiping cache on pause blanks the still
+      // frame and makes the next scrub/play a cold keyframe.
     }
     return this.snapshot();
   }
@@ -79,10 +80,16 @@ export class TransportClock {
     return this.snapshot();
   }
 
-  seek(time: number): TransportSnapshot {
+  /**
+   * Move the playhead. Paused scrub does not bump generation (keeps decoded
+   * frames). Playing seek / explicit invalidate cancels in-flight prepares.
+   */
+  seek(time: number, opts?: { invalidate?: boolean }): TransportSnapshot {
     this.anchorTimeline = Math.max(0, Math.min(this.duration, time));
     this.anchorClock = this.now();
-    this.generationValue += 1;
+    if (opts?.invalidate === true || this.running) {
+      this.generationValue += 1;
+    }
     return this.snapshot();
   }
 

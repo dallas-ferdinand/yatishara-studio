@@ -70,7 +70,7 @@ function startDecodePumps(
       sourceTime: sample.sourceTime,
       generation,
       speed: clipSpeed(sample.clip.clip.effects),
-      aheadSec: 0.75,
+      aheadSec: 1.5,
     });
   }
 }
@@ -262,7 +262,7 @@ class EngineConsumer implements FrameConsumer {
             generation,
             {
               speed: clipSpeed(sample.clip.clip.effects),
-              aheadSec: this.playingRef.current ? 0.75 : 0.5,
+              aheadSec: this.playingRef.current ? 1.5 : 0.35,
             },
           );
         } catch {
@@ -276,7 +276,7 @@ class EngineConsumer implements FrameConsumer {
     void audioReady;
     const valid = decoded.filter((item): item is DecodedFrame => item != null);
     const hasText = slice.textOver.length > 0 || slice.textUnder.length > 0;
-    if (valid.length < slice.video.length) {
+    if (valid.length === 0 && slice.video.length > 0 && !hasText) {
       // Keep fade envelopes moving even when video decode isn't ready yet.
       this.audio.sync(
         slice,
@@ -284,11 +284,15 @@ class EngineConsumer implements FrameConsumer {
         this.mediaRef.current,
         this.playingRef.current,
       );
-      // Still paint text style changes — don't gate the canvas on video decode.
-      if (!hasText) {
-        for (const item of valid) item.frame.close();
-        return false;
-      }
+      return false;
+    }
+    if (valid.length < slice.video.length) {
+      this.audio.sync(
+        slice,
+        generation,
+        this.mediaRef.current,
+        this.playingRef.current,
+      );
     }
     // Sync whatever audio is already cached (video stems and/or beds).
     this.onAudioReady();
@@ -322,12 +326,12 @@ class EngineConsumer implements FrameConsumer {
       const media = this.mediaRef.current.get(sample.clip.assetId);
       const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
       if (url && media?.kind === "video") {
-        this.decoder.prefetch(
+          this.decoder.prefetch(
           sample.clip.assetId,
           url,
           sample.sourceTime,
           generation,
-          1.5,
+          2.5,
         );
       }
     }
@@ -504,6 +508,8 @@ export function usePlaybackEngine(args: {
   const projectRef = useRef(project);
   const disposeTimerRef = useRef<number | null>(null);
   const metricsTimerRef = useRef<number | null>(null);
+  const scrubRafRef = useRef<number | null>(null);
+  const pendingScrubRef = useRef<number | null>(null);
   mediaRef.current = mediaById;
   previewLoadQualityRef.current = previewLoadQuality;
   playingRef.current = playing;
@@ -837,30 +843,46 @@ export function usePlaybackEngine(args: {
     // While playing, the transport clock owns time. Echoed onPlayheadChange
     // updates must not seek/stopAll — that continuously kills audio beds.
     if (playing) return;
-    runtime.decoder.stopPlayback();
-    runtime.clock.seek(playhead);
-    runtime.audio.stopAll();
-    emittedTimeRef.current = playhead;
-    // Scrub active videos to the new playhead (keyframe path).
-    const slice = sliceAt(runtime.plan, playhead);
-    for (const sample of slice.video) {
-      const assetId = sample.clip.assetId;
-      if (!assetId) continue;
-      const media = mediaRef.current.get(assetId);
-      const url = playbackUrlForMedia(media, previewLoadQualityRef.current);
-      if (!media || media.kind !== "video" || !url) continue;
-      runtime.decoder.scrub({
-        assetId,
-        url,
-        sourceTime: sample.sourceTime,
-        generation: runtime.clock.generation,
+    pendingScrubRef.current = playhead;
+    if (scrubRafRef.current != null) return;
+    scrubRafRef.current = window.requestAnimationFrame(() => {
+      scrubRafRef.current = null;
+      const rt = runtimeRef.current;
+      const time = pendingScrubRef.current;
+      if (!rt || time == null || playingRef.current) return;
+      // Paused seek keeps decode generation so cached frames stay paintable.
+      rt.clock.seek(time);
+      rt.audio.stopAll();
+      emittedTimeRef.current = time;
+      const slice = sliceAt(rt.plan, time);
+      for (const sample of slice.video) {
+        const assetId = sample.clip.assetId;
+        if (!assetId) continue;
+        const media = mediaRef.current.get(assetId);
+        const url = playbackUrlForMedia(media, previewLoadQualityRef.current);
+        if (!media || media.kind !== "video" || !url) continue;
+        rt.decoder.scrub({
+          assetId,
+          url,
+          sourceTime: sample.sourceTime,
+          generation: rt.clock.generation,
+        });
+      }
+      void rt.scheduler.renderNow(time).catch((reason) => {
+        if (isSoftDecodeFailure(reason)) return;
+        setError(reason instanceof Error ? reason.message : String(reason));
       });
-    }
-    void runtime.scheduler.renderNow(playhead).catch((reason) => {
-      if (isSoftDecodeFailure(reason)) return;
-      setError(reason instanceof Error ? reason.message : String(reason));
     });
   }, [playhead, playing]);
+
+  useEffect(() => {
+    return () => {
+      if (scrubRafRef.current != null) {
+        window.cancelAnimationFrame(scrubRafRef.current);
+        scrubRafRef.current = null;
+      }
+    };
+  }, []);
 
   // Proxy URLs, signed URLs, and preview load quality can change after hydrate.
   // Restart decode pumps / scrub so the chosen 720/1080 proxy is used.

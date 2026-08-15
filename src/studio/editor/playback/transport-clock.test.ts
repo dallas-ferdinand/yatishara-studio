@@ -16,17 +16,46 @@ describe("TransportClock", () => {
     expect(second).toBeGreaterThan(first);
   });
 
-  it("invalidates pending decode generations on discontinuities", () => {
+  it("paused scrub does not invalidate decode generation", () => {
+    const clock = new TransportClock(10);
+    const initial = clock.generation;
+    clock.seek(3);
+    clock.seek(4.2);
+    clock.seek(1);
+    expect(clock.generation).toBe(initial);
+    expect(clock.currentTime()).toBeCloseTo(1);
+  });
+
+  it("playing seek invalidates pending decode generations", () => {
     let now = 0;
     const clock = new TransportClock(10, () => now);
     const initial = clock.generation;
     clock.seek(3);
-    expect(clock.generation).toBe(initial + 1);
+    expect(clock.generation).toBe(initial);
     clock.play();
     now = 1;
+    clock.seek(6);
+    expect(clock.generation).toBe(initial + 1);
+    expect(clock.currentTime()).toBeCloseTo(6);
+  });
+
+  it("explicit invalidate seek bumps generation while paused", () => {
+    const clock = new TransportClock(10);
+    const initial = clock.generation;
+    clock.seek(2, { invalidate: true });
+    expect(clock.generation).toBe(initial + 1);
+  });
+
+  it("pause keeps decode generation (same as hold)", () => {
+    let now = 0;
+    const clock = new TransportClock(10, () => now);
+    clock.seek(3);
+    clock.play();
+    now = 1;
+    const generation = clock.generation;
     clock.pause();
     expect(clock.currentTime()).toBeCloseTo(4);
-    expect(clock.generation).toBe(initial + 2);
+    expect(clock.generation).toBe(generation);
   });
 
   it("does not bump generation when duration is unchanged", () => {
