@@ -30,9 +30,18 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://studio.yatishara.com"),
   title: "Yatishara Studio",
-  description: "AI creative studio for image and video generation",
+  description: "AI creative studio for image and video generation. From Yatishara Marketing, Trinidad & Tobago.",
   applicationName: "Yatishara Studio",
+  alternates: { canonical: "https://studio.yatishara.com/" },
+  openGraph: {
+    type: "website",
+    siteName: "Yatishara Studio",
+    title: "Yatishara Studio",
+    description: "AI creative studio for image and video generation.",
+    url: "https://studio.yatishara.com/",
+  },
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
