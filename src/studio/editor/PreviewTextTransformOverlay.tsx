@@ -12,6 +12,7 @@ import {
   normalizeTextTransform,
   textContentRectNormalized,
 } from "./textLayout";
+import { hitTransformHandle, type TransformHandle } from "./transformHit";
 import type { EditorClip } from "./types";
 
 const TEXT_TRANSFORM_LIMITS = {
@@ -20,7 +21,7 @@ const TEXT_TRANSFORM_LIMITS = {
   scaleMax: 6,
 } as const;
 
-type Handle = "move" | "ne" | "nw" | "se" | "sw" | "rotate";
+type Handle = TransformHandle;
 
 type PreviewTextTransformOverlayProps = {
   clip: EditorClip;
@@ -53,10 +54,6 @@ type DragState = {
   pointerId: number;
 };
 
-function rotateHandleOffset(canvasHeight: number): number {
-  return 28 / Math.max(1, canvasHeight);
-}
-
 function pointerAngleDegrees(
   nx: number,
   ny: number,
@@ -71,31 +68,6 @@ function pointerAngleDegrees(
   return (Math.atan2(dy, dx) * 180) / Math.PI;
 }
 
-function toLocal(
-  nx: number,
-  ny: number,
-  rect: Rect,
-  rotation: number,
-  canvasWidth: number,
-  canvasHeight: number,
-): { x: number; y: number } {
-  const cx = (rect.left + rect.width / 2) * canvasWidth;
-  const cy = (rect.top + rect.height / 2) * canvasHeight;
-  const px = nx * canvasWidth - cx;
-  const py = ny * canvasHeight - cy;
-  const rad = (-rotation * Math.PI) / 180;
-  const c = Math.cos(rad);
-  const s = Math.sin(rad);
-  const lx = c * px - s * py;
-  const ly = s * px + c * py;
-  const halfW = (rect.width * canvasWidth) / 2;
-  const halfH = (rect.height * canvasHeight) / 2;
-  return {
-    x: (lx + halfW) / Math.max(1, rect.width * canvasWidth),
-    y: (ly + halfH) / Math.max(1, rect.height * canvasHeight),
-  };
-}
-
 function hitHandle(
   nx: number,
   ny: number,
@@ -104,32 +76,7 @@ function hitHandle(
   canvasWidth: number,
   canvasHeight: number,
 ): Handle | null {
-  const local = toLocal(nx, ny, rect, rotation, canvasWidth, canvasHeight);
-  const edge = 0.085;
-  const rotateY =
-    1 + rotateHandleOffset(canvasHeight) / Math.max(0.001, rect.height);
-  const nearRotate =
-    Math.abs(local.x - 0.5) <= edge * 1.4 &&
-    Math.abs(local.y - rotateY) <= edge * 1.6;
-  if (nearRotate) return "rotate";
-
-  const withinX = local.x >= -edge && local.x <= 1 + edge;
-  const withinY = local.y >= -edge && local.y <= 1 + edge;
-  if (!withinX || !withinY) return null;
-
-  const nearL = Math.abs(local.x - 0) <= edge;
-  const nearR = Math.abs(local.x - 1) <= edge;
-  const nearT = Math.abs(local.y - 0) <= edge;
-  const nearB = Math.abs(local.y - 1) <= edge;
-  if (nearT && nearL) return "nw";
-  if (nearT && nearR) return "ne";
-  if (nearB && nearL) return "sw";
-  if (nearB && nearR) return "se";
-
-  if (local.x >= 0 && local.x <= 1 && local.y >= 0 && local.y <= 1) {
-    return "move";
-  }
-  return null;
+  return hitTransformHandle(nx, ny, rect, rotation, canvasWidth, canvasHeight);
 }
 
 function cursorForHandle(handle: Handle | null, rotation: number): string {
@@ -528,6 +475,37 @@ export function PreviewTextTransformOverlay({
     };
   }, []);
 
+  const beginDrag = (
+    event: React.PointerEvent<HTMLElement>,
+    handle: Handle,
+  ) => {
+    const point = clientToNorm(event.clientX, event.clientY);
+    onSelect(clip.id);
+    dragRef.current = {
+      handle,
+      start: transform,
+      originX: point.x,
+      originY: point.y,
+      originAngle: pointerAngleDegrees(
+        point.x,
+        point.y,
+        rect,
+        canvasWidth,
+        canvasHeight,
+      ),
+      rect: { width: rect.width, height: rect.height },
+      startRect: rect,
+      pointerId: event.pointerId,
+    };
+    boxRef.current?.classList.add("is-dragging");
+    event.currentTarget.style.cursor = cursorForHandle(handle, transform.rotation);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // ignore
+    }
+  };
+
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (playing) {
       event.preventDefault();
@@ -551,26 +529,7 @@ export function PreviewTextTransformOverlay({
       onSelect(null);
       return;
     }
-    onSelect(clip.id);
-    dragRef.current = {
-      handle,
-      start: transform,
-      originX: point.x,
-      originY: point.y,
-      originAngle: pointerAngleDegrees(
-        point.x,
-        point.y,
-        rect,
-        canvasWidth,
-        canvasHeight,
-      ),
-      rect: { width: rect.width, height: rect.height },
-      startRect: rect,
-      pointerId: event.pointerId,
-    };
-    boxRef.current?.classList.add("is-dragging");
-    event.currentTarget.style.cursor = cursorForHandle(handle, transform.rotation);
-    event.currentTarget.setPointerCapture(event.pointerId);
+    beginDrag(event, handle);
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -629,7 +588,17 @@ export function PreviewTextTransformOverlay({
           <span className="studio-editor-transform-handle is-ne" />
           <span className="studio-editor-transform-handle is-sw" />
           <span className="studio-editor-transform-handle is-se" />
-          <span className="studio-editor-transform-rotate" aria-hidden="true">
+          <span
+            className="studio-editor-transform-rotate"
+            role="slider"
+            aria-label="Rotate text"
+            onPointerDown={(event) => {
+              if (playing) return;
+              event.preventDefault();
+              event.stopPropagation();
+              beginDrag(event, "rotate");
+            }}
+          >
             <span className="studio-editor-transform-rotate-stem" />
             <span className="studio-editor-transform-rotate-knob">
               <RotateCw size={12} strokeWidth={2.25} aria-hidden="true" />
