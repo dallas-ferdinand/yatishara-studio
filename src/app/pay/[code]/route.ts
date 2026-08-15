@@ -1,11 +1,16 @@
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../convex/_generated/api";
+import { wamCheckoutTotalCents } from "../../../studio/lib/money";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const BOT_RE =
   /facebookexternalhit|Facebot|Twitterbot|Slackbot|TelegramBot|Discordbot|LinkedInBot|Iframely|SkypeUriPreview/i;
+
+/** Solid white + dark mark — light logo vanishes on WhatsApp's white card. */
+const PAY_OG_IMAGE_URL =
+  "https://link.yatishara.com/branding/yatishara-logo-dark-on-white-192.png";
 
 function isLinkPreviewBot(userAgent: string | null) {
   const ua = String(userAgent || "");
@@ -40,7 +45,8 @@ function payPreviewHtml(opts: {
   kind: "course" | "topup";
   canonicalUrl: string;
 }) {
-  const amount = (Math.max(0, opts.amountCents) / 100).toLocaleString("en-US", {
+  const charged = wamCheckoutTotalCents(opts.amountCents);
+  const amount = (Math.max(0, charged) / 100).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -48,7 +54,7 @@ function payPreviewHtml(opts: {
   const title = `Pay ${brand} $${amount} TTD`;
   const description =
     opts.kind === "course" ? "Academy course" : "Studio top-up";
-  const image = "https://link.yatishara.com/branding/yatishara-logo-light-192.webp";
+  const image = PAY_OG_IMAGE_URL;
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -62,9 +68,11 @@ function payPreviewHtml(opts: {
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:url" content="${esc(opts.canonicalUrl)}">
 <meta property="og:image" content="${esc(image)}">
+<meta property="og:image:alt" content="${esc(brand)}">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
+<meta name="twitter:image" content="${esc(image)}">
 </head>
 <body style="font-family:system-ui,sans-serif;padding:2rem;max-width:28rem;line-height:1.45;color:#111">
 <h1 style="font-size:1.2rem;margin:0 0 .5rem">${esc(title)}</h1>
