@@ -429,9 +429,11 @@ function TimelineClipBlock({
     }
     event.preventDefault();
     event.stopPropagation();
-    const additive = Boolean(event.ctrlKey || event.metaKey);
+    const additive = Boolean(
+      event.ctrlKey || event.metaKey || event.shiftKey,
+    );
     onSelect(clip.id, { additive });
-    // Ctrl/Cmd+click toggles selection only — do not start a drag.
+    // Modifier+click toggles selection only — do not start a drag.
     if (additive && mode === "move") return;
     const startX = event.clientX;
     const startY = event.clientY;
@@ -736,9 +738,16 @@ function TimelineClipBlock({
       onPointerDown={(event) => onPointerDown(event, "move")}
       onContextMenu={(event) => {
         if (isPickedUp) return;
+        // macOS Ctrl+click opens context menu — treat as multi-select instead.
+        if (event.ctrlKey && !event.metaKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          onSelect(clip.id, { additive: true });
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
-        onSelect(clip.id);
+        onSelect(clip.id, { additive: Boolean(event.shiftKey || event.metaKey) });
         onContextMenu?.(clip.id, event.clientX, event.clientY);
       }}
       title={clip.label}
@@ -925,6 +934,8 @@ function LaneInsertSlot({ index, active, onDragOver, onDragLeave, onDrop, onClic
 
 const MIN_TRANSITION_DURATION = 0.1;
 const MAX_TRANSITION_DURATION = 2;
+/** Visible cut-adder chip — 4px was crushing the sparkles icon. */
+const ADDER_JOINT_WIDTH_PX = 22;
 
 function maxTransitionDurationForJoint(leftClip, rightClip) {
   const leftDur = leftClip ? clipDuration(leftClip) : MAX_TRANSITION_DURATION;
@@ -946,7 +957,9 @@ function TransitionJointMarker({
 }) {
   const hasTransition = leftClip?.transitionOut?.type && leftClip.transitionOut.type !== "none";
   const duration = Number(leftClip?.transitionOut?.duration) || 0.5;
-  const widthPx = hasTransition ? Math.max(8, duration * pps) : 4;
+  const widthPx = hasTransition
+    ? Math.max(8, duration * pps)
+    : ADDER_JOINT_WIDTH_PX;
   const left = joint.time * pps - widthPx / 2;
 
   const onHandlePointerDown = (event, side) => {
@@ -1022,7 +1035,7 @@ function TransitionJointMarker({
           />
         </>
       ) : (
-        <Sparkles size={11} aria-hidden="true" />
+        <Sparkles size={12} strokeWidth={2.25} aria-hidden="true" />
       )}
     </button>
   );
@@ -1604,7 +1617,8 @@ export function EditorTimeline({
         const top = Math.min(startLocal.y, y);
         const width = Math.abs(x - startLocal.x);
         const height = Math.abs(y - startLocal.y);
-        return { trackId: track.id, left, top, width, height };
+        const box = { trackId: track.id, left, top, width, height };
+        return { ...box, clipIds: clipsInMarquee(box) };
       };
 
       const clipsInMarquee = (box) => {
@@ -1619,7 +1633,6 @@ export function EditorTimeline({
             const start = clip.startTime;
             const end = start + clipDuration(clip);
             if (end < Math.min(t0, t1) || start > Math.max(t0, t1)) return false;
-            // Vertical: full lane height counts when box crosses mid-band.
             if (y1 < 0 || y0 > laneH) return false;
             return true;
           })
@@ -1653,7 +1666,9 @@ export function EditorTimeline({
         setMarquee(null);
 
         if (mode === "marquee" && lastMarquee) {
-          const ids = clipsInMarquee(lastMarquee);
+          const ids = lastMarquee.clipIds?.length
+            ? lastMarquee.clipIds
+            : clipsInMarquee(lastMarquee);
           if (ids.length) onSelectClip(ids, { replace: true });
           else {
             onSelectClip(null);
@@ -1693,8 +1708,12 @@ export function EditorTimeline({
         : selectedClipId
           ? [selectedClipId]
           : [];
+    // Live marquee preview — highlight before mouse-up commits selection.
+    if (marquee?.clipIds?.length) {
+      return new Set(marquee.clipIds);
+    }
     return new Set(ids);
-  }, [selectedClipId, selectedClipIds]);
+  }, [selectedClipId, selectedClipIds, marquee]);
 
   const onTrackDragOver = useCallback(
     (event, track) => {
