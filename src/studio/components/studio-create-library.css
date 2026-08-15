@@ -346,6 +346,17 @@
   justify-content: center;
 }
 
+/* Create audio busy: caption under logo, never centered over spinner. */
+.studio-gen-tile-audio.is-loading .studio-chat-audio-player.is-loading {
+  height: auto;
+  min-height: 0;
+  padding: 12px 8px;
+}
+
+.studio-gen-tile-audio.is-loading .studio-chat-audio-load-body {
+  gap: 12px;
+}
+
 /* Flatten pane/player wrappers — kill border, panel bg, radius, min-width card */
 .studio-gen-tile-audio .studio-chat-audio-player,
 .studio-gen-tile-audio .studio-chat-audio-player.is-pane,
