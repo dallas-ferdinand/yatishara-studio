@@ -229,12 +229,17 @@
 }
 
 .studio-editor-export-actions {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   padding: 0.35rem 0 0.75rem;
 }
 
 .studio-editor-export-progress {
-  margin: 4px 14px 10px;
+  margin: 4px 0 10px;
   display: grid;
+  width: 100%;
+  box-sizing: border-box;
   gap: 8px;
 }
 
@@ -271,11 +276,13 @@
 }
 
 .studio-editor-export-cta {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 0.55rem 0.75rem;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--cursor-accent) 40%, var(--mos-border));
@@ -1237,6 +1244,8 @@
 .studio-editor-field-row input,
 .studio-editor-field-full input,
 .studio-editor-textarea {
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
   border-radius: var(--cursor-radius-sm, 6px);
   background: var(--mos-plate-strong, var(--mos-hover));

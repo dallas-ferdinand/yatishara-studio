@@ -191,6 +191,26 @@ const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
     match: /recording too long/i,
     message: "That clip was too long. Try a shorter recording.",
   },
+  {
+    match: /option 'curve' to filter 'fade'|Error applying option 'curve'/i,
+    message: "Export hit a fade-effect bug. Retry — this was fixed on the server.",
+  },
+  {
+    match: /Text overlay export failed/i,
+    message: "Text overlay export failed. Check text clips and try again.",
+  },
+  {
+    match: /Missing media for clip/i,
+    message: "A clip is missing its media file. Re-add the clip, then export again.",
+  },
+  {
+    match: /Could not download media/i,
+    message: "Couldn't download clip media for export. Check your connection and retry.",
+  },
+  {
+    match: /Export requires ffmpeg/i,
+    message: "Export isn't available on the server right now. Try again in a bit.",
+  },
 ];
 
 /**

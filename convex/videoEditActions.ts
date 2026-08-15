@@ -180,12 +180,14 @@ async function buildSegmentVideoFilters(
     fadeIn *= scale;
     fadeOut *= scale;
   }
+  // Video `fade` has no `curve` option (that's afade-only). Passing curve=qsin
+  // crashes export on the action host: "Option not found".
   if (fadeIn > 0.001) {
-    parts.push(`fade=t=in:st=0:d=${fadeIn.toFixed(3)}:curve=qsin`);
+    parts.push(`fade=t=in:st=0:d=${fadeIn.toFixed(3)}`);
   }
   if (fadeOut > 0.001) {
     const st = Math.max(0, dur - fadeOut);
-    parts.push(`fade=t=out:st=${st.toFixed(3)}:d=${fadeOut.toFixed(3)}:curve=qsin`);
+    parts.push(`fade=t=out:st=${st.toFixed(3)}:d=${fadeOut.toFixed(3)}`);
   }
   parts.push(...(await buildTextOverlayParts(textClips, clip.startTime, duration, fontCacheDir)));
   return parts.length ? parts.join(",") : "null";

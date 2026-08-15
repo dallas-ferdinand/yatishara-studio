@@ -809,13 +809,13 @@ export function StudioVideoEditor({
         setExportPhaseLocal("Package ready");
         setExportResultName(`${state.project.name || "export"}.studio`);
         onStatus?.("Studio package downloaded.");
+        setExportJobId(null);
       } catch (error) {
         const message = friendlyConvexError(error, "Package export failed.");
         setExportError(message);
         onStatus?.(message);
       } finally {
         setExporting(false);
-        setExportJobId(null);
       }
       return;
     }
@@ -872,13 +872,13 @@ export function StudioVideoEditor({
       setExportResultName(exportFilename.trim() || state.project.name || "export");
       onStatus?.("Export ready.");
       if (result?.assetId) onOpenAsset?.(result.assetId);
+      setExportJobId(null);
     } catch (error) {
       const message = friendlyConvexError(error, "Export failed.");
       setExportError(message);
       onStatus?.(message);
     } finally {
       setExporting(false);
-      setExportJobId(null);
     }
   }, [
     canExportAudio,
@@ -1215,7 +1215,11 @@ export function StudioVideoEditor({
                 exporting={exporting}
                 exportProgress={exportProgress}
                 exportPhase={exportPhase}
-                exportError={exportError || (exportJob?.status === "error" ? exportJob.error : "")}
+                exportError={
+                  (exportJob?.status === "error" && exportJob.error
+                    ? friendlyConvexError(exportJob.error, exportJob.error)
+                    : "") || exportError
+                }
                 exportResultName={exportResultName}
                 canExportVideo={canExportVideo}
                 canExportAudio={canExportAudio}
@@ -1231,6 +1235,7 @@ export function StudioVideoEditor({
                   setExportResultName("");
                   setExportPhaseLocal("");
                   setExportProgressLocal(0);
+                  setExportJobId(null);
                 }}
               />
             ) : null}
