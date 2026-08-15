@@ -403,14 +403,21 @@
 .studio-editor-inspector-body {
   flex: 1;
   overflow: auto;
-  padding: 10px 10px 16px;
+  padding: 10px;
   font-size: 0.82rem;
   line-height: 1.4;
-  background: var(--mos-bg, var(--mos-panel));
+  /* Same L1 light grey as Settings / Files sidebars — not darker --mos-bg. */
+  background: var(--mos-panel, #f5f5f7);
+}
+
+[data-appearance="light"] .studio-editor-inspector-body,
+[data-appearance="light"] .studio-editor-inspector-main,
+[data-appearance="light"] .studio-editor-inspector-panel-head {
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-editor-inspector-section {
-  margin: 0 0 10px;
+  margin: 0 0 14px;
   padding: 0;
   border-bottom: 0;
   background: transparent;
@@ -431,8 +438,8 @@
 .studio-editor-inspector-section-head h4 {
   margin: 0;
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 650;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-cursor-muted, var(--mos-muted));
 }
@@ -1030,11 +1037,7 @@
   color: var(--mos-text);
 }
 
-.studio-editor-inspector-body {
-  flex: 1;
-  overflow: auto;
-  padding: 0;
-}
+/* Body padding/bg owned by the block above — do not zero it out here. */
 
 .studio-editor-joint {
   position: absolute;
@@ -1195,15 +1198,23 @@
 .studio-editor-chip {
   padding: 0.2rem 0.45rem;
   border-radius: 999px;
-  border: 1px solid #e5e7eb;
-  background: var(--mos-hover, #e6e6ec);
+  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border)) 80%, transparent);
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 70%, var(--mos-plate, #ececf0));
   font-size: 0.62rem;
-  color: #6b7280;
+  font-weight: 600;
+  color: var(--color-cursor-muted, #6b7280);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.studio-editor-chip:hover:not(:disabled) {
+  color: var(--color-cursor-text, var(--mos-text));
+  border-color: var(--color-cursor-border-soft, var(--mos-border));
 }
 
 .studio-editor-chip.is-active {
   border-color: color-mix(in srgb, var(--cursor-accent) 45%, var(--mos-border));
-  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-bg));
+  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-panel, #f5f5f7));
   color: var(--cursor-accent);
 }
 
@@ -4036,19 +4047,19 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
 }
 .studio-editor-style-card {
   border-radius: 12px;
-  background: var(--mos-plate, var(--mos-bg));
-  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border)) 70%, transparent);
+  background: var(--mos-plate, #ececf0);
+  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border)) 65%, transparent);
   overflow: hidden;
 }
 .studio-editor-style-card.is-open {
-  background: var(--mos-plate, var(--mos-bg));
+  background: var(--mos-plate, #ececf0);
 }
 .studio-editor-style-card-head {
   display: flex;
   align-items: center;
   gap: 4px;
   min-height: 40px;
-  padding: 4px 6px 4px 10px;
+  padding: 4px 6px 4px 12px;
 }
 .studio-editor-style-card-summary {
   flex: 1 1 auto;
@@ -4096,19 +4107,23 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
 .studio-editor-style-card-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 2px 10px 10px;
+  gap: 10px;
+  padding: 0 12px 12px;
   border-top: 0;
   background: transparent;
+}
+.studio-editor-style-card:not(.is-open) .studio-editor-style-card-body {
+  display: none;
 }
 .studio-editor-style-card-toggle-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   min-height: 32px;
   font-size: 13px;
-  color: var(--color-cursor-text, var(--mos-text));
+  font-weight: 600;
+  color: var(--color-cursor-text-bright, var(--mos-text));
   cursor: default;
 }
 

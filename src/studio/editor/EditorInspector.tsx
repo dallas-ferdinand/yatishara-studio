@@ -1153,6 +1153,8 @@ function ClipTimingCard({ clip, project }) {
 }
 
 function TransformPanel({ clip, onUpdateClip }) {
+  const [transformOpen, setTransformOpen] = useState(true);
+  const [opacityOpen, setOpacityOpen] = useState(true);
   const effects = clip.effects ?? {};
   const transform = normalizeClipTransform(effects);
   const opacity = clampClipOpacity(effects.opacity);
@@ -1179,107 +1181,91 @@ function TransformPanel({ clip, onUpdateClip }) {
   return (
     <InspectorSection title="Appearance">
       <div className="studio-editor-style-stack">
-        <div className="studio-editor-style-card is-open">
-          <div className="studio-editor-style-card-head">
-            <div className="studio-editor-style-card-summary">
-              <div className="studio-editor-style-card-toggle-row">
-                <span>Transform</span>
-                <span className="studio-editor-style-card-meta">
-                  {Math.round(transform.scale * 100)}% · {Math.round(transform.rotation)}°
-                </span>
-              </div>
+        <StyleAccordion
+          label="Transform"
+          open={transformOpen}
+          onToggle={() => setTransformOpen((v) => !v)}
+          onReset={() => patchTransform({ scale: 1, x: 0, y: 0, rotation: 0 })}
+          summary={
+            <div className="studio-editor-style-card-toggle-row">
+              <span>Transform</span>
+              <span className="studio-editor-style-card-meta">
+                {Math.round(transform.scale * 100)}% · {Math.round(transform.rotation)}°
+              </span>
             </div>
-            <button
-              type="button"
-              className="studio-editor-inspector-reset"
-              onClick={() => patchTransform({ scale: 1, x: 0, y: 0, rotation: 0 })}
-              title="Reset transform"
-              aria-label="Reset transform"
-            >
-              <RotateCcw size={13} aria-hidden="true" />
-            </button>
-          </div>
-          <div className="studio-editor-style-card-body">
-            <SliderRow
-              label="Size"
-              min={CLIP_TRANSFORM_LIMITS.scaleMin}
-              max={CLIP_TRANSFORM_LIMITS.scaleMax}
-              step={0.01}
-              value={transform.scale}
-              defaultValue={1}
-              formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
-              parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
-              onValueChange={(next) => patchTransform({ ...transform, scale: next })}
-            />
-            <SliderRow
-              label="Position X"
-              min={CLIP_TRANSFORM_LIMITS.panMin}
-              max={CLIP_TRANSFORM_LIMITS.panMax}
-              step={0.01}
-              value={transform.x}
-              defaultValue={0}
-              formatValue={(v) => Number(v).toFixed(2)}
-              parseInput={(raw) => parseNumberInput(raw)}
-              onValueChange={(next) => patchTransform({ ...transform, x: next })}
-            />
-            <SliderRow
-              label="Position Y"
-              min={CLIP_TRANSFORM_LIMITS.panMin}
-              max={CLIP_TRANSFORM_LIMITS.panMax}
-              step={0.01}
-              value={transform.y}
-              defaultValue={0}
-              formatValue={(v) => Number(v).toFixed(2)}
-              parseInput={(raw) => parseNumberInput(raw)}
-              onValueChange={(next) => patchTransform({ ...transform, y: next })}
-            />
-            <SliderRow
-              label="Rotation"
-              min={0}
-              max={359}
-              step={1}
-              value={transform.rotation}
-              defaultValue={0}
-              formatValue={(v) => `${Math.round(Number(v))}°`}
-              parseInput={(raw) => parseNumberInput(raw, { suffix: "°" })}
-              onValueChange={(next) => patchTransform({ ...transform, rotation: next })}
-            />
-          </div>
-        </div>
-        <div className="studio-editor-style-card is-open">
-          <div className="studio-editor-style-card-head">
-            <div className="studio-editor-style-card-summary">
-              <div className="studio-editor-style-card-toggle-row">
-                <span>Opacity</span>
-                <span className="studio-editor-style-card-meta">
-                  {Math.round(opacity * 100)}%
-                </span>
-              </div>
+          }
+        >
+          <SliderRow
+            label="Size"
+            min={CLIP_TRANSFORM_LIMITS.scaleMin}
+            max={CLIP_TRANSFORM_LIMITS.scaleMax}
+            step={0.01}
+            value={transform.scale}
+            defaultValue={1}
+            formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
+            parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
+            onValueChange={(next) => patchTransform({ ...transform, scale: next })}
+          />
+          <SliderRow
+            label="Position X"
+            min={CLIP_TRANSFORM_LIMITS.panMin}
+            max={CLIP_TRANSFORM_LIMITS.panMax}
+            step={0.01}
+            value={transform.x}
+            defaultValue={0}
+            formatValue={(v) => Number(v).toFixed(2)}
+            parseInput={(raw) => parseNumberInput(raw)}
+            onValueChange={(next) => patchTransform({ ...transform, x: next })}
+          />
+          <SliderRow
+            label="Position Y"
+            min={CLIP_TRANSFORM_LIMITS.panMin}
+            max={CLIP_TRANSFORM_LIMITS.panMax}
+            step={0.01}
+            value={transform.y}
+            defaultValue={0}
+            formatValue={(v) => Number(v).toFixed(2)}
+            parseInput={(raw) => parseNumberInput(raw)}
+            onValueChange={(next) => patchTransform({ ...transform, y: next })}
+          />
+          <SliderRow
+            label="Rotation"
+            min={0}
+            max={359}
+            step={1}
+            value={transform.rotation}
+            defaultValue={0}
+            formatValue={(v) => `${Math.round(Number(v))}°`}
+            parseInput={(raw) => parseNumberInput(raw, { suffix: "°" })}
+            onValueChange={(next) => patchTransform({ ...transform, rotation: next })}
+          />
+        </StyleAccordion>
+        <StyleAccordion
+          label="Opacity"
+          open={opacityOpen}
+          onToggle={() => setOpacityOpen((v) => !v)}
+          onReset={() => patchOpacity(1)}
+          summary={
+            <div className="studio-editor-style-card-toggle-row">
+              <span>Opacity</span>
+              <span className="studio-editor-style-card-meta">
+                {Math.round(opacity * 100)}%
+              </span>
             </div>
-            <button
-              type="button"
-              className="studio-editor-inspector-reset"
-              onClick={() => patchOpacity(1)}
-              title="Reset opacity"
-              aria-label="Reset opacity"
-            >
-              <RotateCcw size={13} aria-hidden="true" />
-            </button>
-          </div>
-          <div className="studio-editor-style-card-body">
-            <SliderRow
-              label="Opacity"
-              min={0}
-              max={1}
-              step={0.01}
-              value={opacity}
-              defaultValue={1}
-              formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
-              parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
-              onValueChange={patchOpacity}
-            />
-          </div>
-        </div>
+          }
+        >
+          <SliderRow
+            label="Opacity"
+            min={0}
+            max={1}
+            step={0.01}
+            value={opacity}
+            defaultValue={1}
+            formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
+            parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
+            onValueChange={patchOpacity}
+          />
+        </StyleAccordion>
       </div>
     </InspectorSection>
   );
@@ -1356,6 +1342,7 @@ function FadeLengthControls({
 }
 
 function FadePanel({ clip, onUpdateClip }) {
+  const [open, setOpen] = useState(true);
   const effects = clip.effects ?? {};
   const duration = clipDuration(clip);
   const { fadeIn, fadeOut } = clampAudioFadePair(
@@ -1366,6 +1353,10 @@ function FadePanel({ clip, onUpdateClip }) {
   const fadeInMax = Math.max(0, duration - fadeOut);
   const fadeOutMax = Math.max(0, duration - fadeIn);
   const fadeStep = Math.min(0.05, Math.max(0.05, duration));
+  const fadeMeta =
+    fadeIn <= 0.001 && fadeOut <= 0.001
+      ? "Off"
+      : `${fadeIn.toFixed(2)}s · ${fadeOut.toFixed(2)}s`;
 
   const patchEffects = (next) => {
     onUpdateClip(clip.id, {
@@ -1377,32 +1368,45 @@ function FadePanel({ clip, onUpdateClip }) {
   };
 
   return (
-    <InspectorSection
-      title="Fade"
-      hint="Picture only — fades this clip’s image against the background. Audio fades are under Audio. Separate from transitions."
-      onReset={() => patchEffects({ fadeIn: 0, fadeOut: 0 })}
-    >
-      <FadeLengthControls
-        fadeIn={fadeIn}
-        fadeOut={fadeOut}
-        fadeInMax={fadeInMax}
-        fadeOutMax={fadeOutMax}
-        fadeStep={fadeStep}
-        inLabel="Fade in"
-        outLabel="Fade out"
-        onFadeIn={(next) =>
-          patchEffects({ fadeIn: clampAudioFadeSec(next, duration, fadeOut) })
-        }
-        onFadeOut={(next) =>
-          patchEffects({ fadeOut: clampAudioFadeSec(next, duration, fadeIn) })
-        }
-      />
+    <InspectorSection title="Fade">
+      <div className="studio-editor-style-stack">
+        <StyleAccordion
+          label="Picture fade"
+          open={open}
+          onToggle={() => setOpen((v) => !v)}
+          onReset={() => patchEffects({ fadeIn: 0, fadeOut: 0 })}
+          summary={
+            <div className="studio-editor-style-card-toggle-row">
+              <span>Picture fade</span>
+              <span className="studio-editor-style-card-meta">{fadeMeta}</span>
+            </div>
+          }
+        >
+          <FadeLengthControls
+            fadeIn={fadeIn}
+            fadeOut={fadeOut}
+            fadeInMax={fadeInMax}
+            fadeOutMax={fadeOutMax}
+            fadeStep={fadeStep}
+            inLabel="Fade in"
+            outLabel="Fade out"
+            onFadeIn={(next) =>
+              patchEffects({ fadeIn: clampAudioFadeSec(next, duration, fadeOut) })
+            }
+            onFadeOut={(next) =>
+              patchEffects({ fadeOut: clampAudioFadeSec(next, duration, fadeIn) })
+            }
+          />
+        </StyleAccordion>
+      </div>
     </InspectorSection>
   );
 }
 
 function AudioPanel({ clip, folderId, onUpdateClip }) {
   const processClipSpeed = useAction(api.videoEditActions.processClipSpeed);
+  const [playbackOpen, setPlaybackOpen] = useState(true);
+  const [fadeOpen, setFadeOpen] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [processError, setProcessError] = useState(null);
   const effects = clip.effects ?? {};
@@ -1419,6 +1423,10 @@ function AudioPanel({ clip, folderId, onUpdateClip }) {
   const audioFadeInMax = Math.max(0, duration - audioFadeOut);
   const audioFadeOutMax = Math.max(0, duration - audioFadeIn);
   const fadeStep = Math.min(0.05, Math.max(0.05, duration));
+  const audioFadeMeta =
+    audioFadeIn <= 0.001 && audioFadeOut <= 0.001
+      ? "Off"
+      : `${audioFadeIn.toFixed(2)}s · ${audioFadeOut.toFixed(2)}s`;
 
   const patchEffects = (next) => {
     onUpdateClip(clip.id, {
@@ -1477,105 +1485,131 @@ function AudioPanel({ clip, folderId, onUpdateClip }) {
     }
   };
 
+  const resetAudio = () =>
+    patchEffects({
+      volume: CLIP_VOLUME_DEFAULT,
+      speed: 1,
+      audioFadeIn: 0,
+      audioFadeOut: 0,
+    });
+
   return (
-    <InspectorSection
-      title="Audio"
-      hint="Audio fade is separate from picture fade. Set length here — no timeline diamonds."
-      onReset={() =>
-        patchEffects({
-          volume: CLIP_VOLUME_DEFAULT,
-          speed: 1,
-          audioFadeIn: 0,
-          audioFadeOut: 0,
-        })
-      }
-    >
-      <SliderRow
-        label={
-          <>
-            <Gauge size={14} aria-hidden="true" /> Speed
-          </>
-        }
-        min={CLIP_SPEED_MIN}
-        max={CLIP_SPEED_MAX}
-        step={0.05}
-        value={speed}
-        defaultValue={1}
-        formatValue={(v) => `${Number(v).toFixed(2)}×`}
-        parseInput={(raw) => {
-          const n = parseNumberInput(String(raw).replace(/×/g, ""), {});
-          return n == null ? null : clampClipSpeed(n);
-        }}
-        onValueChange={(next) => setSpeed(next)}
-      />
-      <div className="studio-editor-chip-row" role="group" aria-label="Speed presets">
-        {SPEED_PRESETS.map((preset) => (
-          <button
-            key={preset}
-            type="button"
-            className={`studio-editor-chip${Math.abs(speed - preset) < 0.001 ? " is-active" : ""}`}
-            onClick={() => setSpeed(preset)}
-            disabled={processing}
-          >
-            {preset === 1 ? "1×" : `${preset}×`}
-          </button>
-        ))}
-      </div>
-      {needsProcess ? (
-        <div className="studio-editor-speed-process">
-          <p className="studio-editor-speed-process-hint">
-            Draft {speed.toFixed(2)}× → about {pendingDuration.toFixed(1)}s after Process.
-            Preview stays normal until then.
-          </p>
-          <button
-            type="button"
-            className="studio-editor-primary-btn"
-            disabled={processing || !clip.assetId}
-            onClick={() => void onProcessSpeed()}
-          >
-            {processing ? "Processing…" : "Process speed"}
-          </button>
-          {processError ? (
-            <p className="studio-editor-speed-process-error" role="alert">
-              {processError}
-            </p>
+    <InspectorSection title="Audio" onReset={resetAudio}>
+      <div className="studio-editor-style-stack">
+        <StyleAccordion
+          label="Playback"
+          open={playbackOpen}
+          onToggle={() => setPlaybackOpen((v) => !v)}
+          summary={
+            <div className="studio-editor-style-card-toggle-row">
+              <span>Playback</span>
+              <span className="studio-editor-style-card-meta">
+                {speed.toFixed(2)}× · {Math.round(volume * 100)}%
+              </span>
+            </div>
+          }
+        >
+          <SliderRow
+            label={
+              <>
+                <Gauge size={14} aria-hidden="true" /> Speed
+              </>
+            }
+            min={CLIP_SPEED_MIN}
+            max={CLIP_SPEED_MAX}
+            step={0.05}
+            value={speed}
+            defaultValue={1}
+            formatValue={(v) => `${Number(v).toFixed(2)}×`}
+            parseInput={(raw) => {
+              const n = parseNumberInput(String(raw).replace(/×/g, ""), {});
+              return n == null ? null : clampClipSpeed(n);
+            }}
+            onValueChange={(next) => setSpeed(next)}
+          />
+          <div className="studio-editor-chip-row" role="group" aria-label="Speed presets">
+            {SPEED_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={`studio-editor-chip${Math.abs(speed - preset) < 0.001 ? " is-active" : ""}`}
+                onClick={() => setSpeed(preset)}
+                disabled={processing}
+              >
+                {preset === 1 ? "1×" : `${preset}×`}
+              </button>
+            ))}
+          </div>
+          {needsProcess ? (
+            <div className="studio-editor-speed-process">
+              <p className="studio-editor-speed-process-hint">
+                Draft {speed.toFixed(2)}× → about {pendingDuration.toFixed(1)}s after Process.
+                Preview stays normal until then.
+              </p>
+              <button
+                type="button"
+                className="studio-editor-primary-btn"
+                disabled={processing || !clip.assetId}
+                onClick={() => void onProcessSpeed()}
+              >
+                {processing ? "Processing…" : "Process speed"}
+              </button>
+              {processError ? (
+                <p className="studio-editor-speed-process-error" role="alert">
+                  {processError}
+                </p>
+              ) : null}
+            </div>
           ) : null}
-        </div>
-      ) : null}
-      <SliderRow
-        label={
-          <>
-            <Volume2 size={14} aria-hidden="true" /> Volume
-          </>
-        }
-        min={0}
-        max={CLIP_VOLUME_MAX}
-        step={0.05}
-        value={volume}
-        defaultValue={CLIP_VOLUME_DEFAULT}
-        formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
-        parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
-        onValueChange={(next) => patchEffects({ volume: clampClipVolume(next) })}
-      />
-      <FadeLengthControls
-        fadeIn={audioFadeIn}
-        fadeOut={audioFadeOut}
-        fadeInMax={audioFadeInMax}
-        fadeOutMax={audioFadeOutMax}
-        fadeStep={fadeStep}
-        inLabel="Audio fade in"
-        outLabel="Audio fade out"
-        onFadeIn={(next) =>
-          patchEffects({
-            audioFadeIn: clampAudioFadeSec(next, duration, audioFadeOut),
-          })
-        }
-        onFadeOut={(next) =>
-          patchEffects({
-            audioFadeOut: clampAudioFadeSec(next, duration, audioFadeIn),
-          })
-        }
-      />
+          <SliderRow
+            label={
+              <>
+                <Volume2 size={14} aria-hidden="true" /> Volume
+              </>
+            }
+            min={0}
+            max={CLIP_VOLUME_MAX}
+            step={0.05}
+            value={volume}
+            defaultValue={CLIP_VOLUME_DEFAULT}
+            formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
+            parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
+            onValueChange={(next) => patchEffects({ volume: clampClipVolume(next) })}
+          />
+        </StyleAccordion>
+        <StyleAccordion
+          label="Audio fade"
+          open={fadeOpen}
+          onToggle={() => setFadeOpen((v) => !v)}
+          onReset={() => patchEffects({ audioFadeIn: 0, audioFadeOut: 0 })}
+          summary={
+            <div className="studio-editor-style-card-toggle-row">
+              <span>Audio fade</span>
+              <span className="studio-editor-style-card-meta">{audioFadeMeta}</span>
+            </div>
+          }
+        >
+          <FadeLengthControls
+            fadeIn={audioFadeIn}
+            fadeOut={audioFadeOut}
+            fadeInMax={audioFadeInMax}
+            fadeOutMax={audioFadeOutMax}
+            fadeStep={fadeStep}
+            inLabel="Fade in"
+            outLabel="Fade out"
+            onFadeIn={(next) =>
+              patchEffects({
+                audioFadeIn: clampAudioFadeSec(next, duration, audioFadeOut),
+              })
+            }
+            onFadeOut={(next) =>
+              patchEffects({
+                audioFadeOut: clampAudioFadeSec(next, duration, audioFadeIn),
+              })
+            }
+          />
+        </StyleAccordion>
+      </div>
     </InspectorSection>
   );
 }
