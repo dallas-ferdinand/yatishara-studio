@@ -245,6 +245,12 @@ import {
   elementMediaAssetId,
 } from "@/studio/lib/generationMedia";
 import {
+  elementReferenceIds,
+  matchElementReferenceRow,
+  prioritizeAssetIds,
+  shouldSkipEmptyElementMediaPersist,
+} from "@/studio/lib/elementReferenceAssets";
+import {
   composerAssetTag,
   composerElementTag,
   elementFileName,
@@ -3323,19 +3329,31 @@ export function StudioShell({
   }, [styleSheetPreviewAssets, styleSheets]);
   const elementLinkedAssetIds = useMemo(() => {
     const folderAssetIds = new Set((assets ?? []).map((asset) => asset._id));
-    const linked = new Set();
-    for (const element of [...(elements ?? []), ...(styleSheets ?? [])]) {
-      for (const assetId of element.referenceAssetIds ?? element.sourceAssetIds ?? []) {
-        if (!folderAssetIds.has(assetId)) {
-          linked.add(assetId);
-        }
+    const collect = (element) => {
+      const ids = [];
+      for (const assetId of elementReferenceIds(element)) {
+        if (assetId && !folderAssetIds.has(assetId)) ids.push(assetId);
       }
       if (element.sheetAssetId && !folderAssetIds.has(element.sheetAssetId)) {
-        linked.add(element.sheetAssetId);
+        ids.push(element.sheetAssetId);
       }
+      return ids;
+    };
+    const catalog = [...(elements ?? []), ...(styleSheets ?? [])];
+    const openElementIds = new Set(
+      (openTabs ?? [])
+        .filter((tab) => typeof tab === "string" && tab.startsWith("element:"))
+        .map((tab) => tab.slice("element:".length)),
+    );
+    const preferred = [];
+    const rest = [];
+    for (const element of catalog) {
+      const ids = collect(element);
+      if (openElementIds.has(element._id)) preferred.push(...ids);
+      else rest.push(...ids);
     }
-    return [...linked];
-  }, [assets, elements, styleSheets]);
+    return prioritizeAssetIds(preferred, rest);
+  }, [assets, elements, openTabs, styleSheets]);
   const linkedElementAssets = useQuery(
     api.assets.listByIds,
     hasCurrentUser && elementLinkedAssetIds.length
@@ -6982,13 +7000,17 @@ export function StudioShell({
     if (!tag || tag === "ref") {
       throw new Error("Give the element a unique title (letters, numbers, dashes).");
     }
+    const nextReferenceAssetIds =
+      values.referenceAssetIds ?? values.sourceAssetIds;
     await updateElement({
       elementId: entry.studioId,
       name: tag,
       description: typeof values.description === "string" ? values.description.trim() : undefined,
       styleRules: values.styleRules?.trim() || undefined,
       renderMode: values.renderMode,
-      referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
+      ...(nextReferenceAssetIds !== undefined
+        ? { referenceAssetIds: nextReferenceAssetIds }
+        : {}),
     });
     const refs = values.referenceAssets ?? values.sourceAssets ?? entry.referenceAssets;
     const nextDescription =
@@ -6999,13 +7021,13 @@ export function StudioShell({
       description: nextDescription,
       styleRules: values.styleRules?.trim() || undefined,
       renderMode: values.renderMode ?? entry.renderMode,
-      referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
+      referenceAssetIds: nextReferenceAssetIds ?? entry.referenceAssetIds,
       referenceAssets: refs,
       sheetAsset: values.sheetAsset ?? entry.sheetAsset,
       buildStatus:
         values.sheetAsset || entry.sheetAsset
           ? "built"
-          : (values.referenceAssetIds ?? values.sourceAssetIds ?? []).length || refs?.length
+          : (nextReferenceAssetIds ?? entry.referenceAssetIds ?? []).length || refs?.length
             ? "ready"
             : "unbuilt",
     };
@@ -31119,11 +31141,13 @@ function elementSheetReferenceInputs(sourceAssets = []) {
 }
 
 function resolveElementReferenceAssets(entry, assets) {
-  const ids = entry.referenceAssetIds ?? entry.sourceAssetIds ?? [];
+  const ids = elementReferenceIds(entry);
+  const nested = entry.referenceAssets ?? entry.sourceAssets ?? [];
   return ids
     .map((assetId) => {
-      const asset = (assets ?? []).find((item) => item._id === assetId || item.studioId === assetId);
-      return asset ? assetToEntry(asset) : null;
+      const row = matchElementReferenceRow(assetId, assets ?? [], nested);
+      if (!row) return null;
+      return row.studioKind ? row : assetToEntry(row);
     })
     .filter(Boolean);
 }
@@ -34146,6 +34170,7 @@ function StudioElementDetailPane({
   const saveTimerRef = useRef(0);
   const lastSavedRef = useRef("");
   const persistRef = useRef(async () => {});
+  const userClearedMediaRef = useRef(false);
 
   nameRef.current = name;
   descriptionRef.current = description;
@@ -34172,12 +34197,19 @@ function StudioElementDetailPane({
     if (!tag || tag === "ref") return;
     const snap = snapshot(current, nextName, nextDescription, nextAssets);
     if (current.studioId === entryRef.current?.studioId && snap === lastSavedRef.current) return;
+    const ids = (nextAssets ?? []).map((asset) => asset.studioId).filter(Boolean);
+    const skipMedia = shouldSkipEmptyElementMediaPersist(
+      ids,
+      elementReferenceIds(current),
+      userClearedMediaRef.current,
+    );
     try {
       await onUpdateRef.current(current, {
         name: tag,
         description: nextDescription,
-        referenceAssetIds: nextAssets.map((asset) => asset.studioId).filter(Boolean),
-        referenceAssets: nextAssets,
+        ...(skipMedia
+          ? {}
+          : { referenceAssetIds: ids, referenceAssets: nextAssets }),
       });
       if (entryRef.current?.studioId === current.studioId) {
         lastSavedRef.current = snap;
@@ -34210,6 +34242,7 @@ function StudioElementDetailPane({
     const nextDescription = entry.description ?? "";
     const resolved = resolveElementReferenceAssets(entry, assets);
     const nextAssets = resolved.length ? resolved : (entry.referenceAssets ?? entry.sourceAssets ?? []);
+    userClearedMediaRef.current = false;
     setName(nextName);
     setDescription(nextDescription);
     setSourceAssets(nextAssets);
@@ -34222,14 +34255,24 @@ function StudioElementDetailPane({
   }, [entry.studioId]);
 
   useEffect(() => {
+    if (userClearedMediaRef.current) return;
     const resolved = resolveElementReferenceAssets(entry, assets);
-    if (!resolved.length) return;
+    const fallback = entry.referenceAssets ?? entry.sourceAssets ?? [];
+    const next = resolved.length ? resolved : fallback;
+    if (!next.length) return;
     setSourceAssets((current) => {
-      if (!current.length) return current;
-      return current.map((row) => {
-        const hit = resolved.find((item) => item.studioId === row.studioId);
-        return hit ? { ...row, ...hit } : row;
+      if (!current.length) return next;
+      let changed = false;
+      const merged = current.map((row) => {
+        const hit = next.find((item) => item.studioId === row.studioId);
+        if (!hit) return row;
+        if (hit.mediaUrl === row.mediaUrl && hit.thumbnailUrl === row.thumbnailUrl) {
+          return row;
+        }
+        changed = true;
+        return { ...row, ...hit };
       });
+      return changed ? merged : current;
     });
   }, [assets, entry.studioId]);
 
@@ -34249,6 +34292,7 @@ function StudioElementDetailPane({
       const uploaded = await onUploadElementFiles(picked);
       const nextAssets = (uploaded ?? []).map(uploadedElementAssetToEntry);
       const merged = isStyleSheet ? [...assetsRef.current, ...nextAssets] : nextAssets;
+      userClearedMediaRef.current = false;
       setSourceAssets(merged);
       assetsRef.current = merged;
       await persist(merged);
@@ -34274,6 +34318,7 @@ function StudioElementDetailPane({
       if (row.studioId) byId.set(row.studioId, row);
     }
     const merged = isStyleSheet ? [...byId.values()] : [next[0]];
+    userClearedMediaRef.current = false;
     setSourceAssets(merged);
     assetsRef.current = merged;
     setError("");
@@ -34351,6 +34396,7 @@ function StudioElementDetailPane({
 
   async function removeMedia(studioId) {
     const next = assetsRef.current.filter((item) => item.studioId !== studioId);
+    userClearedMediaRef.current = next.length === 0;
     setSourceAssets(next);
     assetsRef.current = next;
     await persist(next);
