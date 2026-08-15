@@ -63,6 +63,7 @@ function isTransientFetchError(error: unknown): boolean {
     code === "ECONNREFUSED" ||
     code === "ECONNRESET" ||
     code === "EPIPE" ||
+    code === "UND_ERR_SOCKET" ||
     code === "UND_ERR_CONNECT_TIMEOUT"
   );
 }
@@ -70,16 +71,19 @@ function isTransientFetchError(error: unknown): boolean {
 async function fetchPiTurn(
   url: string,
   init: RequestInit,
-  attempts = 3,
-): Promise<Response> {
+  attempts = 5,
+): Promise<{ res: Response; bodyText: string }> {
   let last: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await fetch(url, init);
+      const res = await fetch(url, init);
+      const bodyText = await res.text();
+      return { res, bodyText };
     } catch (error) {
       last = error;
       if (!isTransientFetchError(error) || i === attempts - 1) throw error;
-      await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+      // Worker bounce is ~1–2s; 0.8 / 1.6 / 3.2 / 6.4 covers a systemd restart.
+      await new Promise((r) => setTimeout(r, 800 * 2 ** i));
     }
   }
   throw last instanceof Error ? last : new Error(String(last));
@@ -623,7 +627,7 @@ export const sendTurn = action({
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const res = await fetchPiTurn(`${piBase}/v1/turn`, {
+      const { res, bodyText } = await fetchPiTurn(`${piBase}/v1/turn`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -665,7 +669,6 @@ export const sendTurn = action({
         }),
       });
 
-      const bodyText = await res.text();
       let body: {
         assistantText?: string;
         creditsSpent?: number;
@@ -879,9 +882,11 @@ export const sendTurn = action({
       const err =
         error instanceof Error && error.name === "AbortError"
           ? `Timed out after ${Math.round(timeoutMs / 60000)}m — tap Continue to keep going.`
-          : error instanceof Error
-            ? error.message
-            : String(error);
+          : isTransientFetchError(error)
+            ? "Connection dropped — tap Continue to keep going."
+            : error instanceof Error
+              ? error.message
+              : String(error);
       const usage =
         (await fetchPiUsageBestEffort({
           userId: String(ownerId),
@@ -899,18 +904,21 @@ export const sendTurn = action({
         usedByok,
         usageJson: billed.usageJson,
       });
+      const userText =
+        error instanceof Error && error.name === "AbortError"
+          ? err
+          : isTransientFetchError(error)
+            ? err
+            : `Agent run failed: ${err}`;
       await ctx.runMutation(api.agentMessages.appendMessage, {
         threadId: args.threadId,
         role: "assistant",
-        content:
-          error instanceof Error && error.name === "AbortError"
-            ? err
-            : `Agent run failed: ${err}`,
+        content: userText,
       });
       await ctx.runMutation(internal.agentCapabilities.revokeForRun, { runId });
       return {
         ok: false,
-        assistantText: `Agent run failed: ${err}`,
+        assistantText: userText,
         creditsSpent: billed.creditsSpent,
         usedByok,
         runId: String(runId),
