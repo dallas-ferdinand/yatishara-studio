@@ -2777,7 +2777,7 @@
   top: 0;
   z-index: 6;
   border-bottom: none;
-  cursor: default;
+  cursor: var(--studio-cursor-resize-x, ew-resize);
   /* Allow vertical timeline scroll; pointer scrub still handles seek. */
   touch-action: pan-y;
   user-select: none;
@@ -2950,13 +2950,14 @@
 .studio-editor-track-row.is-text .studio-editor-track-rail {
   margin: 0;
   border-radius: 0;
+  background: var(--mos-bg, #ececf0);
 }
 
 .studio-editor-track-row.is-text .studio-editor-track-lane {
   margin: 0 6px 0 0;
   height: 100%;
   min-height: 0;
-  border-radius: 6px;
+  border-radius: 0 6px 6px 0;
   overflow: hidden;
 }
 
@@ -3693,7 +3694,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   padding: 0;
   border: none;
   background: transparent;
-  cursor: var(--studio-cursor-resize-x, ew-resize);
+  cursor: pointer;
   pointer-events: auto;
 }
 
@@ -3746,7 +3747,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   margin-left: -8px;
   background: transparent;
   pointer-events: none;
-  cursor: var(--studio-cursor-resize-x, ew-resize);
+  cursor: default;
   touch-action: none;
   z-index: 8;
 }
@@ -3758,7 +3759,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   right: 0;
   height: 18px;
   pointer-events: auto;
-  cursor: var(--studio-cursor-resize-x, ew-resize);
+  cursor: default;
   touch-action: none;
   z-index: 2;
 }
