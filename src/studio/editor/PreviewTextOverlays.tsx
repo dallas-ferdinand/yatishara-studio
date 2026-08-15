@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { clipAtPlayhead, clipDuration } from "./editorState";
-import { textAnimationStyle } from "./editorEffects";
+import { textClipAnimationStyle } from "./editorEffects";
 import { textLayoutRect } from "./textLayout";
 import { isLegacySystemFont, loadGoogleFont } from "./loadGoogleFont";
 import type { EditorClip, EditorProject } from "./types";
@@ -31,12 +31,7 @@ function textHitRect(
   const content = clip.text;
   const duration = clipDuration(clip);
   const local = playhead - clip.startTime;
-  const animation = textAnimationStyle(
-    content?.animation,
-    content?.animationDuration ?? 0.5,
-    local,
-    duration,
-  );
+  const animation = textClipAnimationStyle(content, local, duration);
   const translateYMatch = /translateY\((-?[\d.]+)px\)/.exec(animation.transform);
   const scaleMatch = /scale\(([\d.]+)\)/.exec(animation.transform);
   const translateY = translateYMatch ? Number(translateYMatch[1]) : 0;

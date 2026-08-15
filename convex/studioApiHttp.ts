@@ -2596,6 +2596,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           align?: "left" | "center" | "right";
           animation?: "none" | "fadeIn" | "fadeOut" | "slideUp" | "slideDown" | "popIn";
           animationDuration?: number;
+          animationOut?: "none" | "fadeIn" | "fadeOut" | "slideUp" | "slideDown" | "popIn";
+          animationOutDuration?: number;
           fontFamily?: string;
           underline?: boolean;
           textCase?: "none" | "upper" | "lower" | "title";

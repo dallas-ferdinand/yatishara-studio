@@ -1165,6 +1165,17 @@ export const addTextClipForApi = internalMutation({
           ),
         ),
         animationDuration: v.optional(v.number()),
+        animationOut: v.optional(
+          v.union(
+            v.literal("none"),
+            v.literal("fadeIn"),
+            v.literal("fadeOut"),
+            v.literal("slideUp"),
+            v.literal("slideDown"),
+            v.literal("popIn"),
+          ),
+        ),
+        animationOutDuration: v.optional(v.number()),
         fontFamily: v.optional(v.string()),
         bold: v.optional(v.boolean()),
         italic: v.optional(v.boolean()),

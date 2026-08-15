@@ -45,6 +45,8 @@ export type EditorTextContent = {
   verticalAlign?: "top" | "middle" | "bottom";
   animation?: "none" | "fadeIn" | "fadeOut" | "slideUp" | "slideDown" | "popIn";
   animationDuration?: number;
+  animationOut?: "none" | "fadeIn" | "fadeOut" | "slideUp" | "slideDown" | "popIn";
+  animationOutDuration?: number;
   fontFamily?: EditorTextFontFamily;
   bold?: boolean;
   italic?: boolean;
@@ -705,6 +707,8 @@ export function addTextClip(
       verticalAlign: options.text?.verticalAlign ?? "middle",
       animation: options.text?.animation ?? "fadeIn",
       animationDuration: options.text?.animationDuration ?? 0.5,
+      animationOut: options.text?.animationOut ?? "none",
+      animationOutDuration: options.text?.animationOutDuration ?? 0,
       fontFamily: options.text?.fontFamily ?? "system",
       bold: options.text?.bold ?? false,
       italic: options.text?.italic ?? false,

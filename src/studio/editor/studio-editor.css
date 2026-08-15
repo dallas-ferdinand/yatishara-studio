@@ -2249,6 +2249,41 @@
   color: var(--cursor-accent, #c9a227);
 }
 
+/* Text motion In/Out — same 1px plate stroke as Voice Explore/My Voices */
+.studio-editor-motion-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 0 0 0.55rem;
+}
+
+.studio-editor-motion-tab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-height: 26px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border, rgba(15, 23, 42, 0.22)));
+  border-radius: 8px;
+  background: var(--mos-plate, var(--cursor-surface, #fff));
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.studio-editor-motion-tab:hover,
+.studio-editor-motion-tab.is-active {
+  border-color: var(--color-cursor-border, var(--mos-border, rgba(15, 23, 42, 0.28)));
+  background: var(--mos-plate, var(--cursor-surface, #fff));
+  color: var(--color-cursor-text, var(--mos-ink));
+}
+
 /* Text motion presets — square cards with SVG motion diagrams */
 .studio-editor-motion-grid {
   display: grid;

@@ -61,6 +61,10 @@ const clipPatch = z.object({
         .enum(["none", "fadeIn", "fadeOut", "slideUp", "slideDown", "popIn"])
         .optional(),
       animationDuration: z.number().optional(),
+      animationOut: z
+        .enum(["none", "fadeIn", "fadeOut", "slideUp", "slideDown", "popIn"])
+        .optional(),
+      animationOutDuration: z.number().optional(),
       fontFamily: z.string().optional(),
       underline: z.boolean().optional(),
       textCase: z.enum(["none", "upper", "lower", "title"]).optional(),
@@ -397,6 +401,10 @@ export function registerEditTools(server: McpServer) {
         .enum(["none", "fadeIn", "fadeOut", "slideUp", "slideDown", "popIn"])
         .optional(),
       animationDuration: z.number().optional(),
+      animationOut: z
+        .enum(["none", "fadeIn", "fadeOut", "slideUp", "slideDown", "popIn"])
+        .optional(),
+      animationOutDuration: z.number().optional(),
       fontFamily: z.string().optional(),
       underline: z.boolean().optional(),
       textCase: z.enum(["none", "upper", "lower", "title"]).optional(),
@@ -431,6 +439,8 @@ export function registerEditTools(server: McpServer) {
       verticalAlign,
       animation,
       animationDuration,
+      animationOut,
+      animationOutDuration,
       fontFamily,
       bold,
       italic,
@@ -468,6 +478,8 @@ export function registerEditTools(server: McpServer) {
               verticalAlign,
               animation,
               animationDuration,
+              animationOut,
+              animationOutDuration,
               fontFamily,
               bold,
               italic,

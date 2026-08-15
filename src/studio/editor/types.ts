@@ -67,8 +67,12 @@ export type TextClipContent = {
   color?: string;
   align?: "left" | "center" | "right";
   verticalAlign?: TextVerticalAlign;
+  /** Enter motion. Legacy clips may store an exit id here (fadeOut) — see resolveTextMotion. */
   animation?: TextAnimation;
   animationDuration?: number;
+  /** Exit motion. Independent of enter. */
+  animationOut?: TextAnimation;
+  animationOutDuration?: number;
   /** Legacy stack id or Google Font family name. */
   fontFamily?: TextFontFamily;
   bold?: boolean;

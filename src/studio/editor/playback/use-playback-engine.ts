@@ -7,7 +7,7 @@ import {
   type ClipTransform,
 } from "../clipTransform";
 import { normalizeTextTransform } from "../textLayout";
-import { clipOpacityAtLocalTime, textAnimationStyle } from "../editorEffects";
+import { clipOpacityAtLocalTime, textClipAnimationStyle } from "../editorEffects";
 import type { ClipEffects, EditorMediaItem, EditorProject } from "../types";
 import { AudioMixer } from "./audio-mixer";
 import { CompositorClient } from "./compositor-client";
@@ -120,12 +120,7 @@ function mapTextItems(
     .map((item) => {
       const local = timelineTime - item.timelineStart;
       const duration = item.timelineEnd - item.timelineStart;
-      const animation = textAnimationStyle(
-        item.clip.text?.animation,
-        item.clip.text?.animationDuration ?? 0.5,
-        local,
-        duration,
-      );
+      const animation = textClipAnimationStyle(item.clip.text, local, duration);
       const translateY = /translateY\((-?[\d.]+)px\)/.exec(animation.transform);
       const scale = /scale\(([\d.]+)\)/.exec(animation.transform);
       const pose = normalizeTextTransform(item.clip.effects);

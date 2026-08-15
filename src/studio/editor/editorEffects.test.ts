@@ -5,6 +5,9 @@ import {
   clampAudioFadeSec,
   clipOpacityAtLocalTime,
   resolveAudioFadePair,
+  resolveTextMotion,
+  textAnimationStyle,
+  textMotionSummary,
 } from "./editorEffects";
 
 describe("clipOpacityAtLocalTime", () => {
@@ -109,5 +112,76 @@ describe("clampAudioFadePair", () => {
 
   it("scales overlapping pairs to fit the clip", () => {
     expect(clampAudioFadePair(3, 3, 4)).toEqual({ fadeIn: 2, fadeOut: 2 });
+  });
+});
+
+describe("resolveTextMotion", () => {
+  it("maps legacy fadeOut on animation to exit only", () => {
+    expect(resolveTextMotion({ animation: "fadeOut", animationDuration: 0.5 })).toEqual({
+      animationIn: "none",
+      animationInDuration: 0,
+      animationOut: "fadeOut",
+      animationOutDuration: 0.5,
+    });
+  });
+
+  it("keeps enter and exit independent when animationOut is set", () => {
+    expect(
+      resolveTextMotion({
+        animation: "fadeIn",
+        animationDuration: 0.5,
+        animationOut: "fadeOut",
+        animationOutDuration: 0.4,
+      }),
+    ).toEqual({
+      animationIn: "fadeIn",
+      animationInDuration: 0.5,
+      animationOut: "fadeOut",
+      animationOutDuration: 0.4,
+    });
+  });
+
+  it("does not clear exit when enter is static", () => {
+    expect(
+      resolveTextMotion({
+        animation: "none",
+        animationDuration: 0,
+        animationOut: "slideUp",
+        animationOutDuration: 0.55,
+      }),
+    ).toEqual({
+      animationIn: "none",
+      animationInDuration: 0,
+      animationOut: "slideUp",
+      animationOutDuration: 0.55,
+    });
+  });
+});
+
+describe("textAnimationStyle", () => {
+  it("legacy fadeOut stays full mid-clip and empty at the end", () => {
+    expect(textAnimationStyle("fadeOut", 0.5, 2, 4).opacity).toBeCloseTo(1);
+    expect(textAnimationStyle("fadeOut", 0.5, 4, 4).opacity).toBeCloseTo(0);
+  });
+
+  it("combines fade in and fade out on one clip", () => {
+    const style = (t: number) =>
+      textAnimationStyle("fadeIn", 0.5, t, 4, "fadeOut", 0.5);
+    expect(style(0).opacity).toBeCloseTo(0);
+    expect(style(2).opacity).toBeCloseTo(1);
+    expect(style(4).opacity).toBeCloseTo(0);
+  });
+});
+
+describe("textMotionSummary", () => {
+  it("names both sides when they differ from static", () => {
+    expect(
+      textMotionSummary({
+        animationIn: "fadeIn",
+        animationInDuration: 0.5,
+        animationOut: "fadeOut",
+        animationOutDuration: 0.5,
+      }),
+    ).toBe("Fade in · Fade out");
   });
 });

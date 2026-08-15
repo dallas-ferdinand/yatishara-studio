@@ -11,7 +11,7 @@ export type TextPresetCategory =
 /** Style fields applied by a preset (never overwrites clip wording unless asked). */
 export type TextStylePatch = Omit<
   Partial<TextClipContent>,
-  "text" | "animation" | "animationDuration"
+  "text" | "animation" | "animationDuration" | "animationOut" | "animationOutDuration"
 >;
 
 export type TextStylePreset = {

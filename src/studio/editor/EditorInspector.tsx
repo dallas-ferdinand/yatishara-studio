@@ -50,7 +50,10 @@ import {
   EDITOR_MODES,
   DEFAULT_TEXT_STYLE,
   FADE_LENGTH_PRESETS,
-  TEXT_ANIMATION_TEMPLATES,
+  TEXT_ANIMATION_IN_TEMPLATES,
+  TEXT_ANIMATION_OUT_TEMPLATES,
+  resolveTextMotion,
+  textMotionSummary,
   TRANSITION_LIBRARY,
   CLIP_VOLUME_DEFAULT,
   CLIP_VOLUME_MAX,
@@ -1691,6 +1694,7 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
     transform: false,
     motion: false,
   });
+  const [motionSide, setMotionSide] = useState("in");
   const toggleSection = (key) =>
     setSectionOpen((prev) => ({ ...prev, [key]: !prev[key] }));
 
@@ -2421,60 +2425,129 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
               <div className="studio-editor-style-card-toggle-row">
                 <span>Motion</span>
                 <span className="studio-editor-style-card-meta">
-                  {TEXT_ANIMATION_TEMPLATES.find((t) => t.id === (text.animation ?? "none"))
-                    ?.label ?? "Static"}
+                  {textMotionSummary(resolveTextMotion(text))}
                 </span>
               </div>
             }
           >
             <p className="studio-editor-inspector-hint">
-              How the text enters or exits on the canvas.
+              Set how the text enters and how it leaves — each side is its own animation.
             </p>
-            <div className="studio-editor-motion-grid" role="group" aria-label="Text motion">
-              {TEXT_ANIMATION_TEMPLATES.map((template) => {
-                const active = (text.animation ?? "none") === template.id;
-                return (
-                  <button
-                    key={template.id}
-                    type="button"
-                    className={`studio-editor-motion-card${active ? " is-active" : ""}`}
-                    aria-pressed={active}
-                    title={template.label}
-                    onClick={() =>
-                      patchText({
-                        animation: template.id,
-                        animationDuration:
-                          template.id === "none"
-                            ? 0
-                            : (text.animationDuration ?? (template.duration || 0.5)),
-                      })
-                    }
+            {(() => {
+              const motion = resolveTextMotion(text);
+              const templates =
+                motionSide === "out"
+                  ? TEXT_ANIMATION_OUT_TEMPLATES
+                  : TEXT_ANIMATION_IN_TEMPLATES;
+              const activeId =
+                motionSide === "out" ? motion.animationOut : motion.animationIn;
+              const activeDuration =
+                motionSide === "out"
+                  ? motion.animationOutDuration
+                  : motion.animationInDuration;
+              const patchMotion = (next) => {
+                const merged = { ...motion, ...next };
+                patchText({
+                  animation: merged.animationIn,
+                  animationDuration: merged.animationInDuration,
+                  animationOut: merged.animationOut,
+                  animationOutDuration: merged.animationOutDuration,
+                });
+              };
+              return (
+                <>
+                  <div
+                    className="studio-editor-motion-tabs"
+                    role="tablist"
+                    aria-label="Text motion side"
                   >
-                    <span className="studio-editor-motion-card-glyph">
-                      <MotionPresetGlyph id={template.id} />
-                    </span>
-                    <span className="studio-editor-motion-card-label">{template.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {(text.animation ?? "none") !== "none" ? (
-              <div className="studio-editor-control-block">
-                <span className="studio-editor-slider-label">
-                  Duration · {(text.animationDuration ?? 0.5).toFixed(1)}s
-                </span>
-                <input
-                  type="range"
-                  min={0.1}
-                  max={2}
-                  step={0.1}
-                  value={text.animationDuration ?? 0.5}
-                  onChange={(e) =>
-                    patchText({ animationDuration: Number(e.target.value) || 0.5 })
-                  }
-                />
-              </div>
-            ) : null}
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={motionSide === "in"}
+                      className={`studio-editor-motion-tab${motionSide === "in" ? " is-active" : ""}`}
+                      onClick={() => setMotionSide("in")}
+                    >
+                      In
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={motionSide === "out"}
+                      className={`studio-editor-motion-tab${motionSide === "out" ? " is-active" : ""}`}
+                      onClick={() => setMotionSide("out")}
+                    >
+                      Out
+                    </button>
+                  </div>
+                  <div
+                    className="studio-editor-motion-grid"
+                    role="group"
+                    aria-label={motionSide === "out" ? "Exit motion" : "Enter motion"}
+                  >
+                    {templates.map((template) => {
+                      const active = activeId === template.id;
+                      return (
+                        <button
+                          key={`${motionSide}-${template.id}`}
+                          type="button"
+                          className={`studio-editor-motion-card${active ? " is-active" : ""}`}
+                          aria-pressed={active}
+                          title={template.label}
+                          onClick={() => {
+                            const duration =
+                              template.id === "none"
+                                ? 0
+                                : activeDuration || template.duration || 0.5;
+                            if (motionSide === "out") {
+                              patchMotion({
+                                animationOut: template.id,
+                                animationOutDuration: duration,
+                              });
+                              return;
+                            }
+                            patchMotion({
+                              animationIn: template.id,
+                              animationInDuration: duration,
+                            });
+                          }}
+                        >
+                          <span className="studio-editor-motion-card-glyph">
+                            <MotionPresetGlyph id={template.id} />
+                          </span>
+                          <span className="studio-editor-motion-card-label">
+                            {template.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {activeId !== "none" ? (
+                    <div className="studio-editor-control-block">
+                      <span className="studio-editor-slider-label">
+                        {motionSide === "out" ? "Out" : "In"} duration ·{" "}
+                        {(activeDuration || 0.5).toFixed(1)}s
+                      </span>
+                      <input
+                        type="range"
+                        min={0.1}
+                        max={2}
+                        step={0.1}
+                        value={activeDuration || 0.5}
+                        onChange={(e) => {
+                          const duration = Number(e.target.value) || 0.5;
+                          if (motionSide === "out") {
+                            patchMotion({ animationOutDuration: duration });
+                            return;
+                          }
+                          patchMotion({ animationInDuration: duration });
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </>
+              );
+            })()}
           </StyleAccordion>
         </div>
       </section>

@@ -51,6 +51,76 @@ export const TEXT_ANIMATION_TEMPLATES: Array<{
   { id: "popIn", label: "Pop", duration: 0.4, icon: "zap" },
 ];
 
+export const TEXT_ANIMATION_IN_TEMPLATES = TEXT_ANIMATION_TEMPLATES.filter(
+  (item) => item.id !== "fadeOut",
+);
+
+export const TEXT_ANIMATION_OUT_TEMPLATES = TEXT_ANIMATION_TEMPLATES.filter(
+  (item) => item.id !== "fadeIn",
+).map((item) =>
+  item.id === "fadeOut" ? item : item.id === "none" ? item : { ...item, label: item.label.replace(/ in$/i, "") },
+);
+
+export type TextMotionPair = {
+  animationIn: TextAnimation;
+  animationInDuration: number;
+  animationOut: TextAnimation;
+  animationOutDuration: number;
+};
+
+/** Map a stored text clip to independent in/out motion. */
+export function resolveTextMotion(
+  text?: Pick<
+    TextClipContent,
+    "animation" | "animationDuration" | "animationOut" | "animationOutDuration"
+  > | null,
+): TextMotionPair {
+  const raw = text?.animation ?? "none";
+  const rawDur = Math.max(0, Number(text?.animationDuration) || 0);
+  const hasOutField = text?.animationOut != null;
+  if (hasOutField) {
+    const out = text.animationOut ?? "none";
+    const inId = raw === "fadeOut" ? "none" : raw;
+    return {
+      animationIn: inId,
+      animationInDuration:
+        inId === "none" ? 0 : rawDur || 0.5,
+      animationOut: out,
+      animationOutDuration:
+        out === "none"
+          ? 0
+          : Math.max(0, Number(text.animationOutDuration) || 0) || 0.5,
+    };
+  }
+  if (raw === "fadeOut") {
+    return {
+      animationIn: "none",
+      animationInDuration: 0,
+      animationOut: "fadeOut",
+      animationOutDuration: rawDur || 0.5,
+    };
+  }
+  return {
+    animationIn: raw,
+    animationInDuration: raw === "none" ? 0 : rawDur || 0.5,
+    animationOut: "none",
+    animationOutDuration: 0,
+  };
+}
+
+export function textMotionSummary(motion: TextMotionPair): string {
+  const inLabel =
+    TEXT_ANIMATION_TEMPLATES.find((item) => item.id === motion.animationIn)?.label ??
+    "Static";
+  const outLabel =
+    TEXT_ANIMATION_OUT_TEMPLATES.find((item) => item.id === motion.animationOut)
+      ?.label ?? "Static";
+  if (motion.animationIn === "none" && motion.animationOut === "none") return "Static";
+  if (motion.animationOut === "none") return inLabel;
+  if (motion.animationIn === "none") return outLabel;
+  return `${inLabel} · ${outLabel}`;
+}
+
 export const EDITOR_MODES = [
   { id: "select", label: "Edit", icon: "mouse-pointer" },
   { id: "transition", label: "Transitions", icon: "blend" },
@@ -68,6 +138,8 @@ export const DEFAULT_TEXT_STYLE: TextClipContent = {
   verticalAlign: "middle",
   animation: "fadeIn",
   animationDuration: 0.5,
+  animationOut: "none",
+  animationOutDuration: 0,
   fontFamily: "system",
   bold: false,
   italic: false,
@@ -225,40 +297,128 @@ export function clampAudioFadePair(
   return { fadeIn: fadeIn * scale, fadeOut: fadeOut * scale };
 }
 
+type MotionSample = { opacity: number; y: number; scale: number };
+
+function sampleEnterMotion(
+  animation: TextAnimation,
+  durationSec: number,
+  localTime: number,
+): MotionSample {
+  if (animation === "none" || animation === "fadeOut") {
+    return { opacity: 1, y: 0, scale: 1 };
+  }
+  const dur = Math.max(0.05, durationSec || 0.5);
+  const t = Math.min(1, localTime / dur);
+  if (animation === "fadeIn") {
+    return { opacity: t, y: 0, scale: 1 };
+  }
+  if (animation === "slideUp") {
+    const ease = 1 - (1 - t) ** 3;
+    return { opacity: Math.min(1, t * 1.2), y: (1 - ease) * 28, scale: 1 };
+  }
+  if (animation === "slideDown") {
+    const ease = 1 - (1 - t) ** 3;
+    return { opacity: Math.min(1, t * 1.2), y: (ease - 1) * 28, scale: 1 };
+  }
+  if (animation === "popIn") {
+    const scale = 0.85 + 0.15 * (1 - (1 - t) ** 3);
+    return { opacity: Math.min(1, t * 1.4), y: 0, scale };
+  }
+  return { opacity: 1, y: 0, scale: 1 };
+}
+
+function sampleExitMotion(
+  animation: TextAnimation,
+  durationSec: number,
+  localTime: number,
+  clipDurationSec: number,
+): MotionSample {
+  if (animation === "none" || animation === "fadeIn") {
+    return { opacity: 1, y: 0, scale: 1 };
+  }
+  const dur = Math.max(0.05, durationSec || 0.5);
+  const start = Math.max(0, clipDurationSec - dur);
+  const t = localTime < start ? 0 : Math.min(1, (localTime - start) / dur);
+  if (t <= 0) return { opacity: 1, y: 0, scale: 1 };
+  if (animation === "fadeOut") {
+    return { opacity: 1 - t, y: 0, scale: 1 };
+  }
+  if (animation === "slideUp") {
+    const ease = 1 - (1 - t) ** 3;
+    return { opacity: Math.max(0, 1 - t * 1.2), y: -ease * 28, scale: 1 };
+  }
+  if (animation === "slideDown") {
+    const ease = 1 - (1 - t) ** 3;
+    return { opacity: Math.max(0, 1 - t * 1.2), y: ease * 28, scale: 1 };
+  }
+  if (animation === "popIn") {
+    const scale = 1 - 0.15 * (1 - (1 - t) ** 3);
+    return { opacity: Math.max(0, 1 - t * 1.4), y: 0, scale };
+  }
+  return { opacity: 1, y: 0, scale: 1 };
+}
+
+function motionToStyle(sample: MotionSample): { opacity: number; transform: string } {
+  const y = Number.isFinite(sample.y) ? sample.y : 0;
+  const scale = Number.isFinite(sample.scale) ? sample.scale : 1;
+  if (Math.abs(y) < 0.01 && Math.abs(scale - 1) < 0.001) {
+    return { opacity: sample.opacity, transform: "none" };
+  }
+  if (Math.abs(scale - 1) < 0.001) {
+    return { opacity: sample.opacity, transform: `translateY(${y}px)` };
+  }
+  if (Math.abs(y) < 0.01) {
+    return { opacity: sample.opacity, transform: `scale(${scale})` };
+  }
+  return { opacity: sample.opacity, transform: `translateY(${y}px) scale(${scale})` };
+}
+
 export function textAnimationStyle(
   animation: TextAnimation | undefined,
   animationDuration: number,
   localTime: number,
   clipDurationSec: number,
+  animationOut?: TextAnimation,
+  animationOutDuration?: number,
 ): { opacity: number; transform: string } {
-  const dur = Math.max(0.05, animationDuration || 0.5);
-  const anim = animation ?? "none";
+  const motion = resolveTextMotion({
+    animation,
+    animationDuration,
+    animationOut,
+    animationOutDuration,
+  });
+  const enter = sampleEnterMotion(
+    motion.animationIn,
+    motion.animationInDuration,
+    localTime,
+  );
+  const exit = sampleExitMotion(
+    motion.animationOut,
+    motion.animationOutDuration,
+    localTime,
+    clipDurationSec,
+  );
+  return motionToStyle({
+    opacity: enter.opacity * exit.opacity,
+    y: enter.y + exit.y,
+    scale: enter.scale * exit.scale,
+  });
+}
 
-  if (anim === "fadeIn") {
-    const t = Math.min(1, localTime / dur);
-    return { opacity: t, transform: "translateY(0)" };
-  }
-  if (anim === "fadeOut") {
-    const start = Math.max(0, clipDurationSec - dur);
-    const t = localTime < start ? 1 : Math.max(0, 1 - (localTime - start) / dur);
-    return { opacity: t, transform: "translateY(0)" };
-  }
-  if (anim === "slideUp") {
-    const t = Math.min(1, localTime / dur);
-    const ease = 1 - (1 - t) ** 3;
-    return { opacity: Math.min(1, t * 1.2), transform: `translateY(${(1 - ease) * 28}px)` };
-  }
-  if (anim === "slideDown") {
-    const t = Math.min(1, localTime / dur);
-    const ease = 1 - (1 - t) ** 3;
-    return { opacity: Math.min(1, t * 1.2), transform: `translateY(${(ease - 1) * 28}px)` };
-  }
-  if (anim === "popIn") {
-    const t = Math.min(1, localTime / dur);
-    const scale = 0.85 + 0.15 * (1 - (1 - t) ** 3);
-    return { opacity: Math.min(1, t * 1.4), transform: `scale(${scale})` };
-  }
-  return { opacity: 1, transform: "none" };
+export function textClipAnimationStyle(
+  text: TextClipContent | undefined,
+  localTime: number,
+  clipDurationSec: number,
+): { opacity: number; transform: string } {
+  const motion = resolveTextMotion(text);
+  return textAnimationStyle(
+    motion.animationIn,
+    motion.animationInDuration,
+    localTime,
+    clipDurationSec,
+    motion.animationOut,
+    motion.animationOutDuration,
+  );
 }
 
 export function transitionLabel(type: TransitionType | undefined): string {
