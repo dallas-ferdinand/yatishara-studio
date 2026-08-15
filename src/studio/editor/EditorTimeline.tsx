@@ -1586,10 +1586,11 @@ export function EditorTimeline({
   );
 
   /**
-   * Empty-lane pointer: small drag → marquee multi-select; click / tiny move → scrub playhead.
+   * Empty timeline pointer (lane or bottom filler):
+   * small drag → marquee across ALL layers; click → scrub.
    */
   const beginLanePointer = useCallback(
-    (event, track) => {
+    (event) => {
       if (event.button === 1 || event.altKey) {
         beginTimelinePan(event);
         return;
@@ -1598,48 +1599,69 @@ export function EditorTimeline({
       event.preventDefault();
       event.stopPropagation();
 
-      const laneEl = event.currentTarget;
+      const captureEl = event.currentTarget;
+      const canvasEl =
+        captureEl.closest(".studio-editor-timeline-canvas") ||
+        scrollRef.current?.querySelector(".studio-editor-timeline-canvas");
+      if (!canvasEl) return;
+
       const startX = event.clientX;
       const startY = event.clientY;
-      const laneRect = laneEl.getBoundingClientRect();
+      const canvasRect0 = canvasEl.getBoundingClientRect();
       const startLocal = {
-        x: startX - laneRect.left,
-        y: startY - laneRect.top,
+        x: startX - canvasRect0.left,
+        y: startY - canvasRect0.top,
       };
-      let mode = null; // null | "marquee" | "scrub"
+      let mode = null; // null | "marquee"
       let lastMarquee = null;
 
+      const timeFromCanvasX = (clientX) => {
+        const rect = canvasEl.getBoundingClientRect();
+        const x = clientX - rect.left - TRACK_RAIL_WIDTH;
+        return Math.max(0, Math.min(project.duration, x / Math.max(pixelsPerSecond, 1)));
+      };
+
+      const clipsInCanvasMarquee = (box) => {
+        const t0 = Math.min(box.left, box.left + box.width) - TRACK_RAIL_WIDTH;
+        const t1 = Math.max(box.left, box.left + box.width) - TRACK_RAIL_WIDTH;
+        const time0 = t0 / Math.max(pixelsPerSecond, 1);
+        const time1 = t1 / Math.max(pixelsPerSecond, 1);
+        const y0 = Math.min(box.top, box.top + box.height);
+        const y1 = Math.max(box.top, box.top + box.height);
+        const canvasRect = canvasEl.getBoundingClientRect();
+        const ids = [];
+
+        for (const clip of project.clips) {
+          const row = trackRowRefs.current.get(clip.trackId);
+          if (!row) continue;
+          const lane = row.querySelector(".studio-editor-track-lane");
+          if (!lane) continue;
+          const laneRect = lane.getBoundingClientRect();
+          const laneTop = laneRect.top - canvasRect.top;
+          const laneBottom = laneRect.bottom - canvasRect.top;
+          if (y1 < laneTop || y0 > laneBottom) continue;
+
+          const start = clip.startTime;
+          const end = start + clipDuration(clip);
+          if (end < Math.min(time0, time1) || start > Math.max(time0, time1)) continue;
+          ids.push(clip.id);
+        }
+        return ids;
+      };
+
       const toMarquee = (clientX, clientY) => {
-        const rect = laneEl.getBoundingClientRect();
+        const rect = canvasEl.getBoundingClientRect();
         const x = clientX - rect.left;
         const y = clientY - rect.top;
         const left = Math.min(startLocal.x, x);
         const top = Math.min(startLocal.y, y);
         const width = Math.abs(x - startLocal.x);
         const height = Math.abs(y - startLocal.y);
-        const box = { trackId: track.id, left, top, width, height };
-        return { ...box, clipIds: clipsInMarquee(box) };
+        const box = { left, top, width, height };
+        return { ...box, clipIds: clipsInCanvasMarquee(box) };
       };
 
-      const clipsInMarquee = (box) => {
-        const t0 = box.left / Math.max(pixelsPerSecond, 1);
-        const t1 = (box.left + box.width) / Math.max(pixelsPerSecond, 1);
-        const y0 = box.top;
-        const y1 = box.top + box.height;
-        const laneH = laneEl.clientHeight || 1;
-        return project.clips
-          .filter((clip) => {
-            if (clip.trackId !== track.id) return false;
-            const start = clip.startTime;
-            const end = start + clipDuration(clip);
-            if (end < Math.min(t0, t1) || start > Math.max(t0, t1)) return false;
-            if (y1 < 0 || y0 > laneH) return false;
-            return true;
-          })
-          .map((clip) => clip.id);
-      };
-
-      laneEl.setPointerCapture?.(event.pointerId);
+      captureEl.setPointerCapture?.(event.pointerId);
 
       const onMove = (moveEvent) => {
         const dist = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
@@ -1656,7 +1678,7 @@ export function EditorTimeline({
 
       const onUp = (upEvent) => {
         try {
-          laneEl.releasePointerCapture?.(upEvent.pointerId);
+          captureEl.releasePointerCapture?.(upEvent.pointerId);
         } catch {
           /* ignore */
         }
@@ -1668,7 +1690,7 @@ export function EditorTimeline({
         if (mode === "marquee" && lastMarquee) {
           const ids = lastMarquee.clipIds?.length
             ? lastMarquee.clipIds
-            : clipsInMarquee(lastMarquee);
+            : clipsInCanvasMarquee(lastMarquee);
           if (ids.length) onSelectClip(ids, { replace: true });
           else {
             onSelectClip(null);
@@ -1677,12 +1699,11 @@ export function EditorTimeline({
           return;
         }
 
-        // Click / tiny move: clear selection + scrub playhead like before.
         onSelectClip(null);
         onSelectJoint?.(null);
         const clamp = (time) =>
           quantizeToFrame(Math.max(0, Math.min(project.duration, time)));
-        onSetPlayhead(clamp(timeFromClientX(upEvent.clientX, laneEl)));
+        onSetPlayhead(clamp(timeFromCanvasX(upEvent.clientX)));
       };
 
       window.addEventListener("pointermove", onMove);
@@ -1697,7 +1718,6 @@ export function EditorTimeline({
       pixelsPerSecond,
       project.clips,
       project.duration,
-      timeFromClientX,
     ],
   );
 
@@ -1977,21 +1997,9 @@ export function EditorTimeline({
                     ) {
                       return;
                     }
-                    beginLanePointer(event, track);
+                    beginLanePointer(event);
                   }}
                 >
-                  {marquee && marquee.trackId === track.id ? (
-                    <div
-                      className="studio-editor-marquee"
-                      style={{
-                        left: marquee.left,
-                        top: marquee.top,
-                        width: marquee.width,
-                        height: marquee.height,
-                      }}
-                      aria-hidden="true"
-                    />
-                  ) : null}
                   {trackRipple && !pickup ? (
                     <div className="studio-editor-ripple-layer" aria-hidden="true">
                       {trackRipple.placements.map((placement) => {
@@ -2137,6 +2145,19 @@ export function EditorTimeline({
               onDrop={onInsertDrop}
             />
           </div>
+          <div className="studio-editor-timeline-empty-row" aria-hidden="false">
+            <div
+              className="studio-editor-track-rail studio-editor-timeline-empty-rail"
+              style={{ width: TRACK_RAIL_WIDTH }}
+            />
+            <div
+              className="studio-editor-timeline-empty"
+              onPointerDown={(event) => {
+                if (event.button !== 0 || event.altKey) return;
+                beginLanePointer(event);
+              }}
+            />
+          </div>
           <div
             className={`studio-editor-playhead${scrubbing ? " is-scrubbing" : ""}`}
             style={{ left: TRACK_RAIL_WIDTH + playhead * pixelsPerSecond }}
@@ -2150,6 +2171,18 @@ export function EditorTimeline({
             <div
               className="studio-editor-snap-guide"
               style={{ left: TRACK_RAIL_WIDTH + snapGuideTime * pixelsPerSecond }}
+              aria-hidden="true"
+            />
+          ) : null}
+          {marquee ? (
+            <div
+              className="studio-editor-marquee"
+              style={{
+                left: marquee.left,
+                top: marquee.top,
+                width: marquee.width,
+                height: marquee.height,
+              }}
               aria-hidden="true"
             />
           ) : null}

@@ -2735,11 +2735,36 @@
 
 .studio-editor-timeline-canvas {
   position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1 0 auto;
   /* Fill the timeline viewport so the scrub line reaches the bottom
      even when there are only a few tracks. */
   min-height: 100%;
   box-sizing: border-box;
+}
+
+/* Dead space under the last lane is still timeline: marquee / scrub / deselect. */
+.studio-editor-timeline-empty-row {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: stretch;
+  min-height: 48px;
+}
+
+.studio-editor-timeline-empty-rail {
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.studio-editor-timeline-empty {
+  flex: 1 1 auto;
+  min-height: 48px;
+  margin: 3px 6px 6px 0;
+  border-radius: 8px;
+  background: var(--mos-bg, #ececf0);
+  cursor: default;
+  touch-action: pan-y;
 }
 
 .studio-editor-ruler {
@@ -2882,7 +2907,7 @@
 
 .studio-editor-marquee {
   position: absolute;
-  z-index: 20;
+  z-index: 30;
   pointer-events: none;
   border: 1px solid color-mix(in srgb, var(--studio-edit-accent, #00c2c7) 80%, #fff);
   background: color-mix(in srgb, var(--studio-edit-accent, #00c2c7) 18%, transparent);
