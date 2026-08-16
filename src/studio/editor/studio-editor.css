@@ -2212,14 +2212,17 @@
   display: contents;
 }
 
-/* Text Edit / Presets — same pill toggle as Files “Your files / Asset library” */
+/* Text Edit / Presets — full-bleed under header; pills align with plate cards. */
 .studio-editor-text-tabs {
   display: flex;
   align-items: center;
   gap: 4px;
   box-sizing: border-box;
-  margin: 0;
-  padding: 0 8px;
+  /* Cancel inspector-body padding so the divider is edge-to-edge. */
+  margin: -10px -10px 0;
+  width: calc(100% + 20px);
+  max-width: none;
+  padding: 4px 10px;
   min-height: var(--cursor-head-h, 32px);
   height: var(--cursor-head-h, 32px);
   max-height: var(--cursor-head-h, 32px);
@@ -2228,6 +2231,7 @@
   position: sticky;
   top: 0;
   z-index: 3;
+  flex: 0 0 auto;
 }
 
 .studio-editor-text-tab {
