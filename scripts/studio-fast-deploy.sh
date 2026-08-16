@@ -50,7 +50,11 @@ LOCAL_IMAGE="yatishara-studio:${FAST_TAG}"
 PUBLISH_IMAGE="${IMAGE_REPO}:${FAST_TAG}"
 
 LIVE_ID="$(docker ps -qf "label=coolify.name=${COOLIFY_UUID}" | head -n1 || true)"
-[[ -n "$LIVE_ID" ]] || die "No running Coolify container with label coolify.name=${COOLIFY_UUID}"
+if [[ -z "$LIVE_ID" ]]; then
+  # After prior fast deploys, coolify.name may carry a -g* suffix; fall back to name.
+  LIVE_ID="$(docker ps --format '{{.ID}} {{.Names}}' | awk -v p="$COOLIFY_UUID" '$2 ~ "^"p {print $1; exit}')"
+fi
+[[ -n "$LIVE_ID" ]] || die "No running Coolify container for ${COOLIFY_UUID}"
 
 LIVE_NAME="$(docker inspect -f '{{.Name}}' "$LIVE_ID" | sed 's#^/##')"
 log "live container: ${LIVE_NAME} (${LIVE_ID:0:12})"
@@ -194,19 +198,30 @@ while IFS= read -r key; do
   [[ -n "$key" ]] || continue
   [[ "$key" == "com.docker.compose.image" ]] && continue
   val="$(docker inspect -f "{{index .Config.Labels \"$key\"}}" "$LIVE_ID")"
-  # Rename Traefik router/service keys + values that embed the Coolify uuid.
-  new_key="${key//${ROUTER_TOKEN}/${GREEN_TOKEN}}"
-  new_val="${val//${ROUTER_TOKEN}/${GREEN_TOKEN}}"
+  new_key="$key"
+  new_val="$val"
+  # Only uniquify Traefik router/service names so blue+green can share the Host rule.
+  # Never rewrite coolify.* identity labels (Coolify + this script discover by coolify.name).
+  if [[ "$key" == traefik.http.routers.* || "$key" == traefik.http.services.* ]]; then
+    new_key="${key//${ROUTER_TOKEN}/${GREEN_TOKEN}}"
+    new_val="${val//${ROUTER_TOKEN}/${GREEN_TOKEN}}"
+  fi
   if [[ "$key" == "com.docker.compose.service" ]]; then
     new_val="$GREEN_NAME"
   fi
   if [[ "$key" == "com.docker.compose.container-number" ]]; then
     new_val="2"
   fi
-  printf '%s=%s\n' "$new_key" "$new_val" >>"$LABEL_FILE"
+  if [[ "$key" == "coolify.name" ]]; then
+    new_val="$COOLIFY_UUID"
+  fi
+  printf '%s=%s
+' "$new_key" "$new_val" >>"$LABEL_FILE"
 done <"${LABEL_FILE}.keys"
-printf 'yatishara.studio.fast_deploy=%s\n' "$FAST_TAG" >>"$LABEL_FILE"
-printf 'yatishara.studio.deploy_color=green\n' >>"$LABEL_FILE"
+printf 'yatishara.studio.fast_deploy=%s
+' "$FAST_TAG" >>"$LABEL_FILE"
+printf 'yatishara.studio.deploy_color=green
+' >>"$LABEL_FILE"
 
 log "starting green beside live (zero-downtime): ${GREEN_NAME}"
 RUN_ARGS=(
@@ -277,7 +292,14 @@ docker rename "$GREEN_NAME" "$LIVE_NAME"
 docker update --restart unless-stopped "$LIVE_NAME" >/dev/null || true
 
 log "smoke ${SMOKE_URL}"
-code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SMOKE_URL" || echo 000)"
+code="000"
+for _ in $(seq 1 20); do
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$SMOKE_URL" || echo 000)"
+  if [[ "$code" == "200" || "$code" == "307" || "$code" == "302" ]]; then
+    break
+  fi
+  sleep 1
+done
 [[ "$code" == "200" || "$code" == "307" || "$code" == "302" ]] \
   || die "smoke HTTP ${code} from ${SMOKE_URL} (green is live as ${LIVE_NAME} — investigate Traefik)"
 
