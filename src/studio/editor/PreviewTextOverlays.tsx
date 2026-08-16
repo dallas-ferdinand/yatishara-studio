@@ -108,6 +108,7 @@ export function PreviewTextOverlays({
     }
   }, [project.clips]);
 
+  if (playing) return null;
   if (clips.length === 0 || canvasWidth <= 0 || canvasHeight <= 0) return null;
 
   return (

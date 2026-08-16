@@ -311,6 +311,8 @@ let lastBSize: [number, number] = [1, 1];
 let textCanvas: OffscreenCanvas | null = null;
 let lastTextsUnder: RenderMessage["textsUnder"] = [];
 let lastTextsOver: RenderMessage["textsOver"] = [];
+let lastTextUnderKey = "\0";
+let lastTextOverKey = "\0";
 let textContext: OffscreenCanvasRenderingContext2D | null = null;
 
 function compileShader(context: WebGL2RenderingContext, type: number, source: string): WebGLShader {
@@ -534,6 +536,32 @@ function applyCase(text: string, mode: TextItem["textCase"]): string {
   return text;
 }
 
+function textLayerCacheKey(items: TextItem[]): string {
+  const size = canvas ? `${canvas.width}x${canvas.height}` : "0x0";
+  if (!items.length) return `${size}:`;
+  return `${size}:${JSON.stringify(items, (_key, value) =>
+    typeof value === "number" ? Math.round(value * 1000) / 1000 : value,
+  )}`;
+}
+
+function uploadTextLayerIfChanged(
+  texture: WebGLTexture,
+  unit: number,
+  items: TextItem[],
+  slot: "under" | "over",
+): void {
+  const key = textLayerCacheKey(items);
+  if (slot === "under") {
+    if (key === lastTextUnderKey) return;
+    lastTextUnderKey = key;
+  } else if (key === lastTextOverKey) {
+    return;
+  } else {
+    lastTextOverKey = key;
+  }
+  uploadTextLayer(texture, unit, items);
+}
+
 
 function uploadTextLayer(
   texture: WebGLTexture,
@@ -753,8 +781,8 @@ function render(message: RenderMessage): void {
     const hasB = upload(gl, textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
     lastTextsUnder = message.textsUnder;
     lastTextsOver = message.textsOver;
-    uploadTextLayer(textureTextUnder, gl.TEXTURE2, lastTextsUnder);
-    uploadTextLayer(textureTextOver, gl.TEXTURE3, lastTextsOver);
+    uploadTextLayerIfChanged(textureTextUnder, gl.TEXTURE2, lastTextsUnder, "under");
+    uploadTextLayerIfChanged(textureTextOver, gl.TEXTURE3, lastTextsOver, "over");
     gl.useProgram(program);
     gl.uniform2f(
       uniform("u_aSize"),
@@ -846,6 +874,8 @@ function updateTextTransform(message: TextTransformMessage): void {
     );
   lastTextsUnder = patch(lastTextsUnder);
   lastTextsOver = patch(lastTextsOver);
+  lastTextUnderKey = textLayerCacheKey(lastTextsUnder);
+  lastTextOverKey = textLayerCacheKey(lastTextsOver);
   uploadTextLayer(textureTextUnder, gl.TEXTURE2, lastTextsUnder);
   uploadTextLayer(textureTextOver, gl.TEXTURE3, lastTextsOver);
   redrawCompositor();
@@ -860,6 +890,8 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     } else if (message.type === "resize" && canvas && gl) {
       canvas.width = Math.max(1, message.width);
       canvas.height = Math.max(1, message.height);
+      lastTextUnderKey = "\0";
+      lastTextOverKey = "\0";
       gl.viewport(0, 0, canvas.width, canvas.height);
     } else if (message.type === "transform") {
       updateTransform(message);

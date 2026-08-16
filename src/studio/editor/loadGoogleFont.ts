@@ -1,4 +1,5 @@
 const loaded = new Set<string>();
+const loading = new Map<string, Promise<void>>();
 
 function cssFamilyParam(family: string): string {
   return family.trim().replace(/\s+/g, "+");
@@ -9,26 +10,32 @@ export async function loadGoogleFont(
   family: string,
   weights: number[] = [400, 600, 700],
 ): Promise<void> {
-  if (!family || loaded.has(family)) {
-    if (family && typeof document !== "undefined") {
-      await document.fonts.load(`600 42px "${family}"`).catch(() => undefined);
-    }
-    return;
-  }
+  if (!family) return;
+  if (loaded.has(family)) return;
+  const inflight = loading.get(family);
+  if (inflight) return inflight;
   if (typeof document === "undefined") return;
-  const id = `gf-${cssFamilyParam(family).toLowerCase()}`;
-  if (!document.getElementById(id)) {
-    const link = document.createElement("link");
-    link.id = id;
-    link.rel = "stylesheet";
-    const wght = weights.join(";");
-    link.href = `https://fonts.googleapis.com/css2?family=${cssFamilyParam(family)}:wght@${wght}&display=swap`;
-    document.head.appendChild(link);
+  const job = (async () => {
+    const id = `gf-${cssFamilyParam(family).toLowerCase()}`;
+    if (!document.getElementById(id)) {
+      const link = document.createElement("link");
+      link.id = id;
+      link.rel = "stylesheet";
+      const wght = weights.join(";");
+      link.href = `https://fonts.googleapis.com/css2?family=${cssFamilyParam(family)}:wght@${wght}&display=swap`;
+      document.head.appendChild(link);
+    }
+    await document.fonts.load(`400 16px "${family}"`).catch(() => undefined);
+    await document.fonts.load(`600 42px "${family}"`).catch(() => undefined);
+    await document.fonts.load(`700 42px "${family}"`).catch(() => undefined);
+    loaded.add(family);
+  })();
+  loading.set(family, job);
+  try {
+    await job;
+  } finally {
+    loading.delete(family);
   }
-  loaded.add(family);
-  await document.fonts.load(`400 16px "${family}"`).catch(() => undefined);
-  await document.fonts.load(`600 42px "${family}"`).catch(() => undefined);
-  await document.fonts.load(`700 42px "${family}"`).catch(() => undefined);
 }
 
 export function isLegacySystemFont(family: string | undefined): boolean {

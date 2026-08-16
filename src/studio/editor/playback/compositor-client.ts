@@ -13,6 +13,7 @@ export class CompositorClient {
   >();
   private ready: Promise<void>;
   private disposed = false;
+  private ensuredFonts = new Set<string>();
 
   constructor(canvas: HTMLCanvasElement, width: number, height: number) {
     if (!("transferControlToOffscreen" in canvas)) {
@@ -235,11 +236,17 @@ export class CompositorClient {
 
   async ensureFonts(families: string[]): Promise<void> {
     if (this.disposed) return;
-    const unique = [...new Set(families.map((f) => f.trim()).filter(Boolean))];
+    const unique = [
+      ...new Set(
+        families
+          .map((family) => family.trim())
+          .filter((family) => family && !this.ensuredFonts.has(family)),
+      ),
+    ];
     if (unique.length === 0) return;
     await this.ready;
     const requestId = ++this.requestId;
-    return await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       this.pending.set(requestId, { resolve, reject });
       this.worker.postMessage({
         type: "ensureFonts",
@@ -247,6 +254,8 @@ export class CompositorClient {
         families: unique,
       });
     });
+    if (this.disposed) return;
+    for (const family of unique) this.ensuredFonts.add(family);
   }
 
   resize(width: number, height: number): void {
