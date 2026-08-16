@@ -146,33 +146,19 @@
   color: var(--mos-text);
 }
 
-.studio-editor-mode-icon.is-active:not(:disabled) {
+.studio-editor-mode-icon.is-active:not(:disabled),
+.studio-editor-mode-export.is-active:not(:disabled) {
   background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-bg));
   border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--mos-border));
   color: var(--cursor-accent);
 }
 
 .studio-editor-mode-icon.is-disabled,
-.studio-editor-mode-icon:disabled {
+.studio-editor-mode-icon:disabled,
+.studio-editor-mode-export:disabled {
   opacity: 0.35;
   cursor: not-allowed;
   color: var(--mos-muted);
-}
-
-.studio-editor-mode-export {
-  border-color: var(--mos-border);
-  background: var(--mos-plate-strong);
-  color: var(--cursor-accent);
-}
-
-.studio-editor-mode-export.is-active {
-  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-bg));
-  border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--mos-border));
-  color: var(--cursor-accent);
-}
-
-.studio-editor-mode-export:disabled {
-  opacity: 0.45;
 }
 
 .studio-editor-export-tiers {

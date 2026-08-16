@@ -123,8 +123,8 @@ export function textMotionSummary(motion: TextMotionPair): string {
 
 export const EDITOR_MODES = [
   { id: "select", label: "Edit", icon: "mouse-pointer" },
-  { id: "transition", label: "Transitions", icon: "blend" },
   { id: "text", label: "Text", icon: "type" },
+  { id: "transition", label: "Transitions", icon: "blend" },
 ] as const;
 
 /** Quick fade lengths offered in the inspector when a clip is selected. */
