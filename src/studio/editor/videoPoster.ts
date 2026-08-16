@@ -159,7 +159,11 @@ export function captureVideoPoster(videoUrl, { trimIn = 0, trimOut } = {}) {
     } finally {
       releaseCaptureSlot();
     }
-  })();
+  })().then((url) => {
+    // Never cache a miss — contention / gate / timeout used to stick logos forever.
+    if (!url) posterCache.delete(cacheKey);
+    return url;
+  });
 
   posterCache.set(cacheKey, promise);
   return promise;
@@ -198,7 +202,10 @@ export async function captureVideoFilmstrip(videoUrl, { trimIn = 0, trimOut = 4,
     } finally {
       releaseCaptureSlot();
     }
-  })();
+  })().then((frames) => {
+    if (!frames.length) filmstripCache.delete(key);
+    return frames;
+  });
 
   filmstripCache.set(key, promise);
   return promise;
@@ -286,16 +293,19 @@ export async function resolveClipFilmstrip(media, { trimIn, trimOut, count }) {
 
   const videoUrl = previewVideoUrl(media);
   if (videoUrl && (media.kind === "video" || isVideoFileUrl(videoUrl))) {
-    // Skip heavy seeks on the full original while the edit proxy is still
-    // building — leave bandwidth for live preview; CDN thumb is enough.
+    const thumb =
+      (media.thumbnailUrl && isImageThumbUrl(media.thumbnailUrl) && media.thumbnailUrl) ||
+      null;
+    // While the edit proxy builds, skip multi-tile seek storms on the original —
+    // but still grab one poster so the lane is not stuck on logos.
     const proxyPending =
       !media.proxyUrl &&
       (media.proxyStatus === "pending" || media.proxyStatus === "processing");
     if (proxyPending) {
-      const thumb =
-        (media.thumbnailUrl && isImageThumbUrl(media.thumbnailUrl) && media.thumbnailUrl) ||
-        null;
-      return { frames: thumb ? [thumb] : [], fallback: thumb };
+      if (thumb) return { frames: [thumb], fallback: thumb };
+      const poster = await captureVideoPoster(videoUrl, { trimIn, trimOut });
+      if (poster) return { frames: [poster], fallback: poster };
+      return { frames: [], fallback: null };
     }
     // Sample past the black open once proxy/original is ready for seeks.
     const tileCount = Math.max(1, Math.min(MAX_FILMSTRIP_CAPTURE_FRAMES, count || 1));
@@ -309,6 +319,7 @@ export async function resolveClipFilmstrip(media, { trimIn, trimOut, count }) {
     }
     const poster = await captureVideoPoster(videoUrl, { trimIn, trimOut });
     if (poster) return { frames: [poster], fallback: poster };
+    if (thumb) return { frames: [thumb], fallback: thumb };
   }
 
   const thumb =

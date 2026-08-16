@@ -653,12 +653,13 @@ export function usePlaybackEngine(args: {
   callbacksRef.current = { onPlayheadChange, onPlayingChange };
   projectRef.current = project;
 
-  // Pause timeline filmstrip HTML5 seeks while transport is live — they fight
-  // the WebCodecs preview decoder for bandwidth and GPU.
+  // Pause timeline filmstrip HTML5 seeks while frames are flowing. While the
+  // preview is buffering / cold-loading, release the gate so strip posters can
+  // still paint — otherwise lanes stay on logos for the whole underrun.
   useEffect(() => {
-    setEditorPlaybackBusy(playing);
+    setEditorPlaybackBusy(playing && !buffering);
     return () => setEditorPlaybackBusy(false);
-  }, [playing]);
+  }, [playing, buffering]);
 
   const canvasRef = useCallback((element: HTMLCanvasElement | null) => {
     setCanvas(element);
