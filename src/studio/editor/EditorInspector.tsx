@@ -470,7 +470,7 @@ export function EditorModeRail({
         type="button"
         role="tab"
         aria-selected={exportActive}
-        className={`studio-editor-mode-export${exportActive ? " is-active" : ""}`}
+        className={`studio-editor-mode-icon studio-editor-mode-export${exportActive ? " is-active" : ""}`}
         aria-label="Export settings"
         title="Export"
         onClick={onOpenExport}
