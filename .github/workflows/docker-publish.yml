@@ -1,15 +1,23 @@
-# Build Studio on GitHub runners → ghcr.io, then Coolify only pulls (no VPS npm/next build).
+# Build Studio on GitHub runners → ghcr.io.
+# Push to main does NOT touch production Coolify or live Convex.
+# Production ships only via workflow_dispatch with explicit booleans.
 #
-# Image: ghcr.io/dallas-ferdinand/yatishara-studio
-# Coolify app UUID: y2po9nswpdem975f1zo47u19 (dockerimage pack)
-#
-# Day-to-day UI ships: bash scripts/studio-fast-deploy.sh on the VPS (faster).
-# This workflow is the formal release path.
+# Safe iteration: preview.studio.yatishara.com (HMR) — no Coolify.
+# Day-to-day prod (explicit): bash scripts/studio-fast-deploy.sh --i-mean-prod
 #
 name: Docker publish
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: "Pull the built image into Coolify production (studio.yatishara.com)"
+        type: boolean
+        default: false
+      deploy_convex:
+        description: "Deploy Convex functions to the live production backend"
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -67,7 +75,7 @@ jobs:
               - 'docs/coolify-env.example'
               - '.github/workflows/docker-publish.yml'
 
-  # Lint/typecheck/tests — non-blocking; does not gate image publish.
+  # Lint/typecheck/tests — non-blocking; never ships prod.
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -88,10 +96,9 @@ jobs:
       - name: Performance asset budgets
         run: npm run check:perf-budgets
 
-  # Convex only when backend/lockfile changed (or manual dispatch).
+  # Live Convex only when explicitly requested (never on git push).
   deploy-convex:
-    needs: changes
-    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.convex == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_convex == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -102,7 +109,7 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Deploy Convex functions
+      - name: Deploy Convex functions to production
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           CONVEX_SELF_HOSTED_URL: ${{ secrets.CONVEX_SELF_HOSTED_URL }}
@@ -110,14 +117,13 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${CONVEX_DEPLOY_KEY:-}" && -z "${CONVEX_SELF_HOSTED_ADMIN_KEY:-}" ]]; then
-            echo "No Convex deploy credentials configured — skip backend deploy."
-            echo "Deploy Convex manually before releasing frontend when Assistance schema changes."
-            exit 0
+            echo "No Convex deploy credentials configured — cannot deploy backend."
+            exit 1
           fi
           npx convex deploy --yes
           echo "After deploy: run migrateLegacyAssistanceData (idempotent) until legacy question events are cleared."
 
-  # Frontend image — parallel with Convex on frontend-only pushes.
+  # Push image to GHCR only — does not restart production.
   build-and-push:
     needs: changes
     if: ${{ always() && !cancelled() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true' || needs.changes.outputs.convex == 'true') }}
@@ -170,9 +176,10 @@ jobs:
             -f visibility=public \
             || echo "Package visibility update skipped (may already be public or first push)."
 
+  # Coolify production pull — explicit only.
   deploy-coolify:
     needs: build-and-push
-    if: ${{ always() && !cancelled() && needs.build-and-push.result == 'success' }}
+    if: ${{ always() && !cancelled() && needs.build-and-push.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.deploy_production == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -186,7 +193,7 @@ jobs:
           set -euo pipefail
           if [[ -z "${COOLIFY_ACCESS_TOKEN:-}" ]]; then
             echo "COOLIFY_ACCESS_TOKEN secret missing — image pushed, deploy manually."
-            exit 0
+            exit 1
           fi
           API="${COOLIFY_API_URL:-https://coolify.yatishara.com}"
           UUID="${COOLIFY_APP_UUID:-y2po9nswpdem975f1zo47u19}"

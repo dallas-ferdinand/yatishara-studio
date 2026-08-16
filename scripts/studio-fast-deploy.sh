@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Studio VPS fast-deploy — warm Next build + thin image swap (~30–90s warm).
-# Day-to-day prod ships. Formal releases still use push → GHA → GHCR → Coolify.
+# Studio VPS fast-deploy — warm Next build + blue/green swap (prod stays up).
+#
+# Zero-downtime cutover: start the new container (unique Traefik routers) beside
+# the live one, wait healthy, THEN stop the old container. Build is niced and
+# preview is paused so the shared VPS does not starve Convex/prod mid-ship.
 #
 # Usage:
 #   bash scripts/studio-fast-deploy.sh
 #   bash scripts/studio-fast-deploy.sh --with-convex
-#   bash scripts/studio-fast-deploy.sh --skip-build   # reuse existing .next/standalone
+#   bash scripts/studio-fast-deploy.sh --skip-build
 #
 set -euo pipefail
 
@@ -17,13 +20,14 @@ IMAGE_REPO="${STUDIO_FAST_IMAGE_REPO:-ghcr.io/dallas-ferdinand/yatishara-studio}
 SMOKE_URL="${STUDIO_SMOKE_URL:-https://studio.yatishara.com}"
 WITH_CONVEX=0
 SKIP_BUILD=0
+PREVIEW_WAS_ACTIVE=0
 
 for arg in "$@"; do
   case "$arg" in
     --with-convex) WITH_CONVEX=1 ;;
     --skip-build) SKIP_BUILD=1 ;;
     -h|--help)
-      sed -n '2,12p' "$0"
+      sed -n '2,14p' "$0"
       exit 0
       ;;
     *)
@@ -45,14 +49,12 @@ FAST_TAG="fast-${SHA}"
 LOCAL_IMAGE="yatishara-studio:${FAST_TAG}"
 PUBLISH_IMAGE="${IMAGE_REPO}:${FAST_TAG}"
 
-# Live Coolify-managed container (label coolify.name = app uuid).
 LIVE_ID="$(docker ps -qf "label=coolify.name=${COOLIFY_UUID}" | head -n1 || true)"
 [[ -n "$LIVE_ID" ]] || die "No running Coolify container with label coolify.name=${COOLIFY_UUID}"
 
 LIVE_NAME="$(docker inspect -f '{{.Name}}' "$LIVE_ID" | sed 's#^/##')"
 log "live container: ${LIVE_NAME} (${LIVE_ID:0:12})"
 
-# Refuse Convex-only dirty trees without --with-convex (frontend-only ok).
 if [[ "$WITH_CONVEX" -eq 0 ]]; then
   CONVEX_DIRTY="$(git status --porcelain -- convex 2>/dev/null || true)"
   OTHER_DIRTY="$(git status --porcelain -- . ':!convex' 2>/dev/null || true)"
@@ -64,12 +66,26 @@ if [[ "$WITH_CONVEX" -eq 0 ]]; then
   fi
 fi
 
+# Pause preview so next-dev + npm build do not starve prod/Convex on this VPS.
+restore_preview() {
+  if [[ "$PREVIEW_WAS_ACTIVE" -eq 1 ]]; then
+    log "restoring preview service…"
+    sudo systemctl start yatishara-studio-preview.service >/dev/null 2>&1 || true
+  fi
+}
+
+if systemctl is-active --quiet yatishara-studio-preview.service 2>/dev/null; then
+  PREVIEW_WAS_ACTIVE=1
+  log "pausing preview during deploy (protects prod CPU/RAM)…"
+  sudo systemctl stop yatishara-studio-preview.service >/dev/null 2>&1 || true
+fi
+trap 'restore_preview' EXIT
+
 if [[ "$WITH_CONVEX" -eq 1 ]]; then
   log "deploying Convex functions…"
   npx convex deploy --yes
 fi
 
-# Bake the same NEXT_PUBLIC_* prod uses (from live container, then .env.local).
 read_env_from_container() {
   local key="$1"
   docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$LIVE_ID" \
@@ -118,12 +134,11 @@ NEXT_PUBLIC_DESK_BUILD="fast-${SHA}-$(date -u +%Y%m%d%H%M%S)"
 [[ -n "$NEXT_PUBLIC_CONVEX_SITE_URL" ]] || die "NEXT_PUBLIC_CONVEX_SITE_URL unresolved"
 
 log "NEXT_PUBLIC_DESK_BUILD=${NEXT_PUBLIC_DESK_BUILD}"
-
 STARTED_AT="$(date +%s)"
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
-  log "next build (warm cache if present)…"
-  npm run build
+  log "next build (niced — low priority vs live traffic)…"
+  nice -n 19 ionice -c3 npm run build
 else
   log "skipping next build (--skip-build)"
 fi
@@ -138,6 +153,7 @@ cleanup() {
   rm -rf "$STAGE"
   [[ -n "$ENV_FILE" ]] && rm -f "$ENV_FILE" "${ENV_FILE}.tmp" 2>/dev/null || true
   [[ -n "$LABEL_FILE" ]] && rm -f "$LABEL_FILE" "${LABEL_FILE}.keys" 2>/dev/null || true
+  restore_preview
 }
 trap cleanup EXIT
 
@@ -151,8 +167,8 @@ if [[ -d public ]]; then
 fi
 cp "$ROOT/Dockerfile.fast" "$STAGE/Dockerfile"
 
-log "docker build ${LOCAL_IMAGE}"
-docker build -t "$LOCAL_IMAGE" -t "$PUBLISH_IMAGE" "$STAGE"
+log "docker build ${LOCAL_IMAGE} (niced)"
+nice -n 19 ionice -c3 docker build -t "$LOCAL_IMAGE" -t "$PUBLISH_IMAGE" "$STAGE"
 
 ENV_FILE="$(mktemp /tmp/studio-fast-env-XXXXXX)"
 LABEL_FILE="$(mktemp /tmp/studio-fast-labels-XXXXXX)"
@@ -163,7 +179,14 @@ grep -vE '^NEXT_PUBLIC_DESK_BUILD=' "$ENV_FILE" >"${ENV_FILE}.tmp" || true
 mv "${ENV_FILE}.tmp" "$ENV_FILE"
 printf 'NEXT_PUBLIC_DESK_BUILD=%s\n' "$NEXT_PUBLIC_DESK_BUILD" >>"$ENV_FILE"
 printf 'SOURCE_COMMIT=%s\n' "fast-${SHA}" >>"$ENV_FILE"
-printf 'COOLIFY_CONTAINER_NAME=%s\n' "$LIVE_NAME" >>"$ENV_FILE"
+
+# Blue/green: unique Traefik router/service names so BOTH containers can serve
+# Host(studio.yatishara.com) until we cut the old one.
+GREEN_NAME="${LIVE_NAME}-green-${STARTED_AT}"
+printf 'COOLIFY_CONTAINER_NAME=%s\n' "$GREEN_NAME" >>"$ENV_FILE"
+
+ROUTER_TOKEN="${COOLIFY_UUID}"
+GREEN_TOKEN="${COOLIFY_UUID}-g${STARTED_AT}"
 
 docker inspect -f '{{range $k,$v := .Config.Labels}}{{println $k}}{{end}}' "$LIVE_ID" >"${LABEL_FILE}.keys"
 : >"$LABEL_FILE"
@@ -171,18 +194,24 @@ while IFS= read -r key; do
   [[ -n "$key" ]] || continue
   [[ "$key" == "com.docker.compose.image" ]] && continue
   val="$(docker inspect -f "{{index .Config.Labels \"$key\"}}" "$LIVE_ID")"
-  printf '%s=%s\n' "$key" "$val" >>"$LABEL_FILE"
+  # Rename Traefik router/service keys + values that embed the Coolify uuid.
+  new_key="${key//${ROUTER_TOKEN}/${GREEN_TOKEN}}"
+  new_val="${val//${ROUTER_TOKEN}/${GREEN_TOKEN}}"
+  if [[ "$key" == "com.docker.compose.service" ]]; then
+    new_val="$GREEN_NAME"
+  fi
+  if [[ "$key" == "com.docker.compose.container-number" ]]; then
+    new_val="2"
+  fi
+  printf '%s=%s\n' "$new_key" "$new_val" >>"$LABEL_FILE"
 done <"${LABEL_FILE}.keys"
 printf 'yatishara.studio.fast_deploy=%s\n' "$FAST_TAG" >>"$LABEL_FILE"
+printf 'yatishara.studio.deploy_color=green\n' >>"$LABEL_FILE"
 
-BACKUP_NAME="${LIVE_NAME}-pre-fast-${STARTED_AT}"
-log "swapping container (backup=${BACKUP_NAME})"
-docker stop "$LIVE_NAME" >/dev/null
-docker rename "$LIVE_NAME" "$BACKUP_NAME"
-
+log "starting green beside live (zero-downtime): ${GREEN_NAME}"
 RUN_ARGS=(
   -d
-  --name "$LIVE_NAME"
+  --name "$GREEN_NAME"
   --network coolify
   --restart unless-stopped
   --env-file "$ENV_FILE"
@@ -191,29 +220,26 @@ while IFS= read -r line; do
   [[ -n "$line" ]] || continue
   RUN_ARGS+=(--label "$line")
 done <"$LABEL_FILE"
-
 RUN_ARGS+=(
   --health-cmd "curl -sf http://127.0.0.1:3000/api/health >/dev/null || exit 1"
-  --health-interval 15s
+  --health-interval 5s
   --health-timeout 5s
-  --health-start-period 60s
-  --health-retries 8
+  --health-start-period 20s
+  --health-retries 12
 )
 
 if ! docker run "${RUN_ARGS[@]}" "$LOCAL_IMAGE"; then
-  log "run failed — restoring backup"
-  docker rename "$BACKUP_NAME" "$LIVE_NAME" 2>/dev/null || true
-  docker start "$LIVE_NAME" >/dev/null || true
-  die "docker run failed; attempted restore of ${BACKUP_NAME}"
+  docker rm -f "$GREEN_NAME" >/dev/null 2>&1 || true
+  die "green docker run failed — live container untouched"
 fi
 
-log "waiting for health…"
-NEW_ID="$(docker ps -qf "name=^/${LIVE_NAME}$" | head -n1 || true)"
-[[ -n "$NEW_ID" ]] || die "new container not running"
+log "waiting for green health (live still serving)…"
+GREEN_ID="$(docker ps -qf "name=^/${GREEN_NAME}$" | head -n1 || true)"
+[[ -n "$GREEN_ID" ]] || die "green container not running — live untouched"
 
 healthy=0
-for _ in $(seq 1 40); do
-  status="$(docker inspect -f '{{.State.Health.Status}}' "$NEW_ID" 2>/dev/null || echo starting)"
+for _ in $(seq 1 60); do
+  status="$(docker inspect -f '{{.State.Health.Status}}' "$GREEN_ID" 2>/dev/null || echo starting)"
   if [[ "$status" == "healthy" ]]; then
     healthy=1
     break
@@ -225,21 +251,35 @@ for _ in $(seq 1 40); do
 done
 
 if [[ "$healthy" -ne 1 ]]; then
-  log "health failed — rolling back to ${BACKUP_NAME}"
-  docker stop "$LIVE_NAME" >/dev/null 2>&1 || true
-  docker rm "$LIVE_NAME" >/dev/null 2>&1 || true
-  docker rename "$BACKUP_NAME" "$LIVE_NAME"
-  docker start "$LIVE_NAME" >/dev/null
-  die "new container unhealthy; rolled back"
+  log "green unhealthy — removing green, live stays"
+  docker rm -f "$GREEN_NAME" >/dev/null 2>&1 || true
+  die "green container unhealthy; production was not interrupted"
 fi
 
-docker rm "$BACKUP_NAME" >/dev/null 2>&1 || true
+# Direct health on green container IP (bypass Traefik) before cutover.
+GREEN_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$GREEN_ID")"
+if [[ -n "$GREEN_IP" ]]; then
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "http://${GREEN_IP}:3000/api/health" || echo 000)"
+  if [[ "$code" != "200" ]]; then
+    docker rm -f "$GREEN_NAME" >/dev/null 2>&1 || true
+    die "green /api/health returned ${code}; live untouched"
+  fi
+fi
+
+log "green healthy — draining old live ${LIVE_NAME}"
+docker stop --time=15 "$LIVE_NAME" >/dev/null || true
+docker rm "$LIVE_NAME" >/dev/null 2>&1 || true
+
+# Promote green to the canonical Coolify container name (labels keep unique routers).
+docker rename "$GREEN_NAME" "$LIVE_NAME"
+# Refresh Coolify container name env for operators reading inspect.
+docker update --restart unless-stopped "$LIVE_NAME" >/dev/null || true
 
 log "smoke ${SMOKE_URL}"
 code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SMOKE_URL" || echo 000)"
 [[ "$code" == "200" || "$code" == "307" || "$code" == "302" ]] \
-  || die "smoke HTTP ${code} from ${SMOKE_URL}"
+  || die "smoke HTTP ${code} from ${SMOKE_URL} (green is live as ${LIVE_NAME} — investigate Traefik)"
 
 ELAPSED=$(( $(date +%s) - STARTED_AT ))
-log "OK — ${PUBLISH_IMAGE} live on ${SMOKE_URL} in ${ELAPSED}s"
+log "OK — ${PUBLISH_IMAGE} live on ${SMOKE_URL} in ${ELAPSED}s (blue/green, no stop-before-start)"
 log "note: Coolify UI may show prior GHCR tag until the next GHA release"
