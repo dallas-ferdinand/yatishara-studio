@@ -259,7 +259,8 @@ fi
 # Direct health on green container IP (bypass Traefik) before cutover.
 GREEN_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$GREEN_ID")"
 if [[ -n "$GREEN_IP" ]]; then
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "http://${GREEN_IP}:3000/api/health" || echo 000)"
+  # Next may 308 /api/health → /api/health/; follow redirects.
+  code="$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 10 "http://${GREEN_IP}:3000/api/health" || echo 000)"
   if [[ "$code" != "200" ]]; then
     docker rm -f "$GREEN_NAME" >/dev/null 2>&1 || true
     die "green /api/health returned ${code}; live untouched"
