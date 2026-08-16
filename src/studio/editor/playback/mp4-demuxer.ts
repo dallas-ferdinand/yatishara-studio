@@ -178,36 +178,47 @@ export class Mp4Demuxer {
     file.onReady = (movie) => resolveReady?.(movie);
     file.onError = (_module, message) => rejectReady?.(new Error(message));
 
-    const headChunk = Math.min(size, 2 * 1024 * 1024);
-    const headBytes = await this.source.read(0, headChunk - 1, signal);
+    const headProbe = Math.min(size, 256 * 1024);
+    const headBytes = await this.source.read(0, headProbe - 1, signal);
     appendAt(file, headBytes, 0);
     await Promise.resolve();
     if (file.readySent) {
       this.movie = await ready;
     } else {
-      // Non-faststart MP4s put moov after mdat. Jump to the tail instead of
-      // walking the entire media payload (that was the cold-load stall).
-      const tailChunk = Math.min(size, 4 * 1024 * 1024);
-      const tailStart = Math.max(headChunk, size - tailChunk);
-      if (tailStart < size) {
-        const tailBytes = await this.source.read(tailStart, size - 1, signal);
-        appendAt(file, tailBytes, tailStart);
+      // Fast-start proxies usually fit moov in 256KB; grow head once before tail.
+      const headChunk = Math.min(size, 2 * 1024 * 1024);
+      if (headChunk > headProbe) {
+        const more = await this.source.read(headProbe, headChunk - 1, signal);
+        appendAt(file, more, headProbe);
         await Promise.resolve();
       }
       if (file.readySent) {
         this.movie = await ready;
       } else {
-        // Rare: moov in the middle, or sparse layout — scan remaining gaps.
-        const chunkSize = 2 * 1024 * 1024;
-        for (let offset = headChunk; offset < tailStart && !this.movie; offset += chunkSize) {
-          if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-          const end = Math.min(tailStart - 1, offset + chunkSize - 1);
-          const bytes = await this.source.read(offset, end, signal);
-          appendAt(file, bytes, offset);
+        // Non-faststart MP4s put moov after mdat. Jump to the tail instead of
+        // walking the entire media payload (that was the cold-load stall).
+        const tailChunk = Math.min(size, 4 * 1024 * 1024);
+        const tailStart = Math.max(headChunk, size - tailChunk);
+        if (tailStart < size) {
+          const tailBytes = await this.source.read(tailStart, size - 1, signal);
+          appendAt(file, tailBytes, tailStart);
           await Promise.resolve();
-          if (file.readySent) {
-            this.movie = await ready;
-            break;
+        }
+        if (file.readySent) {
+          this.movie = await ready;
+        } else {
+          // Rare: moov in the middle, or sparse layout — scan remaining gaps.
+          const chunkSize = 2 * 1024 * 1024;
+          for (let offset = headChunk; offset < tailStart && !this.movie; offset += chunkSize) {
+            if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+            const end = Math.min(tailStart - 1, offset + chunkSize - 1);
+            const bytes = await this.source.read(offset, end, signal);
+            appendAt(file, bytes, offset);
+            await Promise.resolve();
+            if (file.readySent) {
+              this.movie = await ready;
+              break;
+            }
           }
         }
       }

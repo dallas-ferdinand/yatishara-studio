@@ -516,6 +516,21 @@ async function feedSamples(
   const track = session.demuxer.videoTrack;
   if (!track) throw new Error("Decoder did not initialize.");
   if (first > last) return;
+  // One range GET for the whole GOP/window — serial per-sample fetches were
+  // the cold-play stall (N round-trips before the first canvas paint).
+  let rangeStart = Number.POSITIVE_INFINITY;
+  let rangeEnd = 0;
+  for (let index = first; index <= last; index += 1) {
+    const sample = track.samples[index]!;
+    rangeStart = Math.min(rangeStart, sample.offset);
+    rangeEnd = Math.max(rangeEnd, sample.offset + sample.size - 1);
+  }
+  if (Number.isFinite(rangeStart) && rangeEnd >= rangeStart) {
+    await session.demuxer.source.prefetch(
+      [{ start: rangeStart, end: rangeEnd }],
+      session.abortController.signal,
+    );
+  }
   for (let index = first; index <= last; index += 1) {
     const sample = track.samples[index]!;
     const isBatchKey =
@@ -647,6 +662,8 @@ async function keyframeEnsure(
   generation: number,
   waitMs = FRAME_WAIT_MS,
   slack = 1,
+  /** Decode only through the playhead — pump fills ahead after first paint. */
+  paintOnly = false,
 ): Promise<VideoFrame> {
   const track = session.demuxer.videoTrack;
   if (!track) throw new Error("Decoder did not initialize.");
@@ -656,7 +673,9 @@ async function keyframeEnsure(
   const resetDecoder = configureSessionDecoder(session);
   session.generation = generation;
   const first = session.demuxer.precedingSyncIndex(targetIndex);
-  const last = Math.min(track.samples.length - 1, targetIndex + DECODE_CHUNK);
+  const last = paintOnly
+    ? targetIndex
+    : Math.min(track.samples.length - 1, targetIndex + DECODE_CHUNK);
   await feedSamples(session, resetDecoder, first, last, true);
   return waitForFrame(session, targetIndex, waitMs, slack);
 }
@@ -762,8 +781,17 @@ async function ensureFrame(
       return frame;
     }
 
-    // Backward / cold / eviction — keyframe, then keep pumping if playing.
-    const frame = await keyframeEnsure(session, targetIndex, generation, waitMs, slack);
+    // Backward / cold / eviction — keyframe to the playhead first (paintOnly on
+    // live play/exact review). Ahead decode belongs to the pump, not first paint.
+    const paintOnly = mode === "play" || mode === "exact";
+    const frame = await keyframeEnsure(
+      session,
+      targetIndex,
+      generation,
+      waitMs,
+      slack,
+      paintOnly,
+    );
     if (session.pumping) schedulePump(session);
     return frame;
   } catch (error) {
@@ -771,7 +799,7 @@ async function ensureFrame(
     const resetDecoder = configureSessionDecoder(session);
     session.generation = generation;
     const first = session.demuxer.precedingSyncIndex(targetIndex);
-    const last = Math.min(track.samples.length - 1, targetIndex + DECODE_CHUNK);
+    const last = Math.min(track.samples.length - 1, targetIndex);
     await feedSamples(session, resetDecoder, first, last, true);
     await resetDecoder.flush();
     session.streamOpen = false;
@@ -782,16 +810,7 @@ async function ensureFrame(
     if (!frame) {
       throw error instanceof Error ? error : new Error(String(error));
     }
-    if (session.pumping) {
-      // Re-open stream after flush recovery so the pump can continue.
-      session.streamOpen = false;
-      try {
-        await keyframeEnsure(session, targetIndex, generation);
-      } catch {
-        /* keep the flushed frame */
-      }
-      schedulePump(session);
-    }
+    if (session.pumping) schedulePump(session);
     return frame;
   }
 }

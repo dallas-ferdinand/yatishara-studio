@@ -79,8 +79,28 @@ function startDecodePumps(
       sourceTime: sample.sourceTime,
       generation,
       speed: clipSpeed(sample.clip.clip.effects),
-      aheadSec: 1.5,
+      aheadSec: 1.25,
     });
+  }
+}
+
+/** Idle: open demux + decode the playhead sample so Play isn't a cold start. */
+function warmPlayheadVideos(
+  decoder: MediaDecoderClient,
+  plan: PlaybackPlan,
+  mediaById: ReadonlyMap<string, EditorMediaItem>,
+  timelineTime: number,
+  generation: number,
+  previewLoadQuality: number = DEFAULT_PREVIEW_LOAD_QUALITY,
+): void {
+  const slice = sliceAt(plan, timelineTime);
+  for (const sample of slice.video.slice(0, 2)) {
+    const assetId = sample.clip.assetId;
+    if (!assetId) continue;
+    const media = mediaById.get(assetId);
+    const url = playbackUrlForMedia(media, previewLoadQuality);
+    if (!media || media.kind !== "video" || !url) continue;
+    decoder.warm(assetId, url, sample.sourceTime, generation);
   }
 }
 
@@ -300,7 +320,7 @@ class EngineConsumer implements FrameConsumer {
           generation,
           {
             speed: clipSpeed(sample.clip.clip.effects),
-            aheadSec: playing ? 1.5 : 0.35,
+            aheadSec: playing ? 0.6 : 0.35,
             // Paused review shows the sample under the playhead, not a
             // neighbour — otherwise stepping frames never changes the image.
             exact: !playing,
@@ -399,30 +419,30 @@ class EngineConsumer implements FrameConsumer {
       }),
     };
 
-    // Pre-roll an upcoming transition partner from MP4 sample offsets.
-    // The scheduler invokes this before entry, eliminating transition-start I/O.
+    // Only after the primary paint is ready — prefetch/warm used to steal
+    // bandwidth from the first frame on cold play.
     for (const sample of [...slice.video, ...slice.preload]) {
       if (!sample.clip.assetId) continue;
       const media = this.mediaRef.current.get(sample.clip.assetId);
       const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
       if (url && media?.kind === "video") {
-          this.decoder.prefetch(
+        this.decoder.prefetch(
           sample.clip.assetId,
           url,
           sample.sourceTime,
           generation,
-          2.5,
+          playing ? 1.25 : 2.0,
         );
       }
     }
-    // Decode-ahead the first frames of upcoming clips so boundaries render
-    // from cache instead of stalling on a cold keyframe decode.
-    for (const sample of slice.preload) {
-      if (!sample.clip.assetId) continue;
-      const media = this.mediaRef.current.get(sample.clip.assetId);
-      const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
-      if (url && media?.kind === "video") {
-        this.decoder.warm(sample.clip.assetId, url, sample.sourceTime, generation);
+    if (!playing) {
+      for (const sample of slice.preload) {
+        if (!sample.clip.assetId) continue;
+        const media = this.mediaRef.current.get(sample.clip.assetId);
+        const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
+        if (url && media?.kind === "video") {
+          this.decoder.warm(sample.clip.assetId, url, sample.sourceTime, generation);
+        }
       }
     }
     return true;
@@ -939,6 +959,14 @@ export function usePlaybackEngine(args: {
     }
     // While playing the scheduler repaints every frame from the new plan.
     if (playingRef.current) return;
+    warmPlayheadVideos(
+      runtime.decoder,
+      plan,
+      mediaRef.current,
+      time,
+      runtime.clock.generation,
+      previewLoadQualityRef.current,
+    );
     void runtime.scheduler.renderNow(time).catch((reason) => {
       if (isSoftDecodeFailure(reason)) return;
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -1133,6 +1161,14 @@ export function usePlaybackEngine(args: {
           generation: runtime.clock.generation,
         });
       }
+      warmPlayheadVideos(
+        runtime.decoder,
+        runtime.plan,
+        mediaRef.current,
+        time,
+        runtime.clock.generation,
+        previewLoadQualityRef.current,
+      );
     }
     void runtime.audio.prepare(slice, mediaRef.current).then(() => {
       if (runtimeRef.current !== runtime) return;
