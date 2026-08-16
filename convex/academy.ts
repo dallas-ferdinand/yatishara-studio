@@ -1496,6 +1496,68 @@ export const internalAttachStreamVideo = internalMutation({
   },
 });
 
+/** Attach free course intro preview only (does not set legacy bunnyStreamVideoId). */
+export const internalAttachIntroStreamVideo = internalMutation({
+  args: {
+    courseId: v.id("academyCourses"),
+    bunnyStreamVideoId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const course = await ctx.db.get("academyCourses", args.courseId);
+    if (!course) throw new Error("Course not found");
+    const videoId = args.bunnyStreamVideoId.trim();
+    if (!videoId) throw new Error("Video id required");
+    await ctx.db.patch(args.courseId, {
+      introBunnyStreamVideoId: videoId,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** Attach Bunny Stream video to a lesson (ops / seed scripts). */
+export const internalAttachLessonStreamVideo = internalMutation({
+  args: {
+    lessonId: v.id("academyLessons"),
+    bunnyStreamVideoId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const lesson = await ctx.db.get("academyLessons", args.lessonId);
+    if (!lesson) throw new Error("Lesson not found");
+    const videoId = args.bunnyStreamVideoId.trim();
+    if (!videoId) throw new Error("Video id required");
+    const now = Date.now();
+    await ctx.db.patch(args.lessonId, {
+      bunnyStreamVideoId: videoId,
+      updatedAt: now,
+    });
+    await ctx.db.patch(lesson.courseId, { updatedAt: now });
+    return null;
+  },
+});
+
+/** Patch lesson description markdown after transcript (ops). */
+export const internalPatchLessonDescription = internalMutation({
+  args: {
+    lessonId: v.id("academyLessons"),
+    descriptionMarkdown: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const lesson = await ctx.db.get("academyLessons", args.lessonId);
+    if (!lesson) throw new Error("Lesson not found");
+    const now = Date.now();
+    await ctx.db.patch(args.lessonId, {
+      descriptionMarkdown: args.descriptionMarkdown,
+      updatedAt: now,
+    });
+    await ctx.db.patch(lesson.courseId, { updatedAt: now });
+    return null;
+  },
+});
+
 export {
   internalSeedLiveCourses,
   internalSeedLiveCourses as internalSeedDemoCourses,

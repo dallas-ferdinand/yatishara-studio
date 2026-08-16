@@ -41,51 +41,66 @@ export const AD_SIDE_HUSTLE_LESSONS = [
 `,
   },
   {
+    // Slug kept for stable URLs; title matches master 04 (Video Editing).
+    // Agent prompting is covered inside Flyer + Generate lessons.
     slug: "prompt-with-agent",
-    title: "Prompt with Agent",
-    sortOrder: 30,
-    descriptionMarkdown: `Brief Agent so prompts match the flyer and brand. See good vs weak prompts.
+    title: "Edit Your Video",
+    sortOrder: 45,
+    descriptionMarkdown: `Create a video edit, set 9:16, then split/cut AI errors and dead space.
 
-### You leave knowing
-- How to brief Agent clearly
-- Prompt habits that hold the brand
-- What to reject before you spend a generate
+### In this lesson
+- Create a video edit project
+- Set 9:16 export frame
+- Split/cut AI errors and dead space
+- Rearrange scenes when you need a new flow
 `,
   },
   {
     slug: "generate-the-video",
     title: "Generate the Video",
     sortOrder: 40,
-    descriptionMarkdown: `Take those prompts into generation. Pick the cut. Keep it practical.
+    descriptionMarkdown: `Use Agent + your flyer to write the video prompt, then generate 9:16 clips.
 
-### You leave knowing
-- How to run generation from locked prompts
-- How to pick a usable cut
-- When to regenerate vs when to move on
+### In this lesson
+- Agent helps write the video prompt from your flyer
+- Seedance settings (9:16, 15s)
+- Generate the clips you’ll edit next
 `,
   },
   {
     slug: "create-the-audio-in-studio",
     title: "Create the Audio in Studio",
     sortOrder: 50,
-    descriptionMarkdown: `Music and voiceover inside Studio for this ad.
+    descriptionMarkdown: `Export the edit for context, ask Agent for a VO script, then generate voiceover.
 
-### You leave knowing
-- Where audio lives in Studio
-- How to score the picture you already made
-- A clean audio bed ready for edit
+### In this lesson
+- Export the edit for Agent context
+- Ask Agent for a VO script
+- Generate audio in Create → Voiceover
+`,
+  },
+  {
+    slug: "edit-voiceover-in-studio",
+    title: "Edit the Voiceover",
+    sortOrder: 55,
+    descriptionMarkdown: `Drop VO on the timeline, speed/trim to fit, and balance voice vs music volume.
+
+### In this lesson
+- Place the voiceover on the edit
+- Speed up or shorten audio to fit the cut
+- Lower music so the voice stays clear
 `,
   },
   {
     slug: "edit-watermark-export",
     title: "Edit & Watermark Export",
     sortOrder: 60,
-    descriptionMarkdown: `Assemble video + audio in the Studio editor. Export the watermarked delivery cut.
+    descriptionMarkdown: `Add a draft watermark, then export the 9:16 delivery cut for the client.
 
-### You leave knowing
-- How to lay VO on the picture
-- Export settings for delivery
-- Why the watermarked cut is the course standard
+### In this lesson
+- Add draft watermark text
+- Protect unpaid delivery
+- Export 9:16 MP4 for the client
 `,
   },
   {
@@ -121,48 +136,44 @@ export const AD_SIDE_HUSTLE_LESSONS = [
     slug: "funnel-tiktok-dms-to-whatsapp",
     title: "Funnel TikTok DMs to WhatsApp",
     sortOrder: 90,
-    descriptionMarkdown: `Cut noise. Ask for WhatsApp. Only move people who will convert.
+    descriptionMarkdown: `Ops overview: TikTok ad → DMs → WhatsApp. Same Extra Tips master as the next three sales lessons.
 
-### You leave knowing
-- Tire-kickers vs serious buyers
-- The WhatsApp ask
-- How to keep the DM inbox usable
+### In this lesson
+- How the side-hustle funnel runs
+- Move serious buyers onto WhatsApp
 `,
   },
   {
     slug: "close-on-whatsapp-packages",
     title: "Close on WhatsApp (Info, Price, Packages)",
     sortOrder: 100,
-    descriptionMarkdown: `What to ask, how much to charge, packages, soft close, and deposit path.
+    descriptionMarkdown: `Packages, pricing, and closing context from the Extra Tips ops overview.
 
-### You leave knowing
-- Intake questions that unlock a quote
-- Package shape to sell
-- Soft close + deposit without hard-sell dump
+### In this lesson
+- What to charge / package shape
+- Convert WhatsApp chats into paying clients
 `,
   },
   {
     slug: "tags-followups-retention-sales",
     title: "Tags, Follow-ups, Retention, Quick Sales",
     sortOrder: 110,
-    descriptionMarkdown: `Manage chats with tags. Follow up. Keep clients coming back. Every ~2 weeks, run a quick sale to pull ad spend back.
+    descriptionMarkdown: `Retention and follow-through from the Extra Tips ops overview.
 
-### You leave knowing
-- Tag habits that keep the book clean
-- Follow-up cadence
-- Retention + biweekly quick-sale idea to recover ad spend
+### In this lesson
+- Keep clients after the first job
+- Habits that support repeat sales
 `,
   },
   {
     slug: "the-10-usd-loop",
     title: "The $10 USD Loop",
     sortOrder: 120,
-    descriptionMarkdown: `Reviews + client care. Put the same video back up as an ad at ~$10 USD/day and run the flywheel again.
+    descriptionMarkdown: `Reinvest a cut of each win back into ads — the Extra Tips loop.
 
-### You leave knowing
-- How to ask for reviews without being awkward
-- Relationship habits that get repurchase
-- The $10 USD/day loop on the same creative
+### In this lesson
+- Take profit and put a portion back into ads
+- Keep the acquisition engine running
 `,
   },
   {
