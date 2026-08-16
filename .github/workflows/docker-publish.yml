@@ -3,6 +3,9 @@
 # Image: ghcr.io/dallas-ferdinand/yatishara-studio
 # Coolify app UUID: y2po9nswpdem975f1zo47u19 (dockerimage pack)
 #
+# Day-to-day UI ships: bash scripts/studio-fast-deploy.sh on the VPS (faster).
+# This workflow is the formal release path.
+#
 name: Docker publish
 
 on:
@@ -18,6 +21,8 @@ on:
       - "next.config.*"
       - "tsconfig.json"
       - "Dockerfile"
+      - "Dockerfile.fast"
+      - "scripts/studio-fast-deploy.sh"
       - ".github/workflows/docker-publish.yml"
       - "docs/coolify-env.example"
 
@@ -34,12 +39,39 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/yatishara-studio
 
 jobs:
-  # Convex additive backend (schema + compatibility shims + migration) must land
-  # before the Next image, so cached clients still talk to readable endpoints
-  # while Assistance turns use the new lifecycle.
-  deploy-convex:
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    outputs:
+      convex: ${{ steps.filter.outputs.convex }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            convex:
+              - 'convex/**'
+              - 'package.json'
+              - 'package-lock.json'
+            frontend:
+              - 'src/**'
+              - 'public/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'next.config.*'
+              - 'tsconfig.json'
+              - 'Dockerfile'
+              - 'Dockerfile.fast'
+              - 'scripts/studio-fast-deploy.sh'
+              - 'docs/coolify-env.example'
+              - '.github/workflows/docker-publish.yml'
+
+  # Lint/typecheck/tests — non-blocking; does not gate image publish.
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,14 +81,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Lint, typecheck, and unit tests
-        continue-on-error: true
         run: |
           npx eslint . --quiet
           npm run typecheck
           npm test
       - name: Performance asset budgets
-        continue-on-error: true
         run: npm run check:perf-budgets
+
+  # Convex only when backend/lockfile changed (or manual dispatch).
+  deploy-convex:
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.convex == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
       - name: Deploy Convex functions
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
@@ -69,13 +114,13 @@ jobs:
             echo "Deploy Convex manually before releasing frontend when Assistance schema changes."
             exit 0
           fi
-          # Self-hosted uses CONVEX_SELF_HOSTED_URL + CONVEX_SELF_HOSTED_ADMIN_KEY from env.
           npx convex deploy --yes
           echo "After deploy: run migrateLegacyAssistanceData (idempotent) until legacy question events are cleared."
 
+  # Frontend image — parallel with Convex on frontend-only pushes.
   build-and-push:
-    needs: deploy-convex
-    if: ${{ always() && !cancelled() && needs.deploy-convex.result != 'cancelled' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true' || needs.changes.outputs.convex == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
@@ -127,6 +172,7 @@ jobs:
 
   deploy-coolify:
     needs: build-and-push
+    if: ${{ always() && !cancelled() && needs.build-and-push.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -171,7 +217,6 @@ jobs:
             done
           }
 
-          # Point Coolify at this commit tag, then deploy (pull only for dockerimage pack).
           coolify_curl PATCH \
             "${API}/api/v1/applications/${UUID}" \
             "{\"docker_registry_image_tag\":\"${IMAGE_TAG}\"}"

@@ -2,6 +2,31 @@
 
 Production is deployed from the dedicated GitHub repository through Coolify on the VPS. Preview hot reload is a separate VPS service that runs the checked-out repo directly for rapid UI review.
 
+## Fast deploy (day-to-day production)
+
+For UI iteration that must hit **production** without waiting on GitHub Actions:
+
+```bash
+cd /opt/yatishara-studio
+bash scripts/studio-fast-deploy.sh
+# optional backend: bash scripts/studio-fast-deploy.sh --with-convex
+```
+
+What it does:
+
+1. Warm `npm run build` on the VPS (reuses `node_modules` + `.next` cache).
+2. Builds a thin image via [`Dockerfile.fast`](../Dockerfile.fast) (standalone copy only — no `npm ci` in Docker).
+3. Swaps the live Coolify container in place (same name, network `coolify`, Traefik labels, env).
+4. Waits for `/api/health`, smokes `https://studio.yatishara.com`, rolls back on failure.
+
+Target: ~30–90s on a warm box. Coolify UI may still show the prior GHCR tag until the next formal GHA release — the running container is the fast image.
+
+Gates:
+
+- Requires existing `node_modules`.
+- Convex-only dirty trees need `--with-convex`.
+- Preview (`preview.studio.yatishara.com`) remains the HMR path for mid-edit review.
+
 ## Production Target
 
 - Public URL: `https://studio.yatishara.com`
@@ -12,12 +37,14 @@ Production is deployed from the dedicated GitHub repository through Coolify on t
 - Image: `ghcr.io/dallas-ferdinand/yatishara-studio`
 - Runtime port: `3000`
 
-## Production Flow
+## Production Flow (formal release — GHA)
+
+Prefer **fast deploy** above for day-to-day UI. Use this path for tagged/formal releases and when you want GHCR as source of truth:
 
 1. Verify repo changes locally.
 2. Push `main` (or run **Docker publish** workflow).
-3. **Convex first:** the workflow’s `deploy-convex` job pushes additive schema/functions (Assistance turn lifecycle, compatibility shims) before building the Next image. Configure `CONVEX_DEPLOY_KEY` and/or `CONVEX_SELF_HOSTED_*` secrets; if unset, deploy Convex manually before Coolify picks up a new frontend.
-4. After Convex deploy, run `migrateLegacyAssistanceData` (internal mutation, resumable) until question events and stale `review_ready` briefs without plan fingerprints are cleared.
+3. **Path-filtered jobs:** frontend-only pushes build/push the Next image **without waiting** on Convex. `deploy-convex` runs only when `convex/**` (or lockfile) changed, or on `workflow_dispatch`. Lint/typecheck/tests run in a separate non-blocking `quality` job.
+4. When Convex did change: after deploy, run `migrateLegacyAssistanceData` (internal mutation, resumable) until question events and stale `review_ready` briefs without plan fingerprints are cleared.
 5. Image publishes to `ghcr.io/dallas-ferdinand/yatishara-studio` (`:latest` + commit sha).
 6. Workflow patches Coolify’s image tag and triggers deploy — Coolify **pulls only** (no `npm`/`next` on the VPS).
 7. Smoke `https://studio.yatishara.com` (Assistance: composer-only turns, review → Generate; no question cards).
