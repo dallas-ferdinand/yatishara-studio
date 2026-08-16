@@ -1551,6 +1551,7 @@ export function StudioShell({
   const tabSessionReadyRef = useRef(false);
   const tabAccountIdRef = useRef(null);
   const skipNextTabPersistRef = useRef(false);
+  const userClearedTabsRef = useRef(false);
   const lastPersistedTabSessionRef = useRef("");
   const latestTabSessionRef = useRef({
     openTabs: [],
@@ -1604,24 +1605,21 @@ export function StudioShell({
       navTrail,
       snapshots: slimTabEntrySnapshots(tabEntrySnapshots),
     };
-    // Never clobber a richer stored workspace with a boot/empty flash.
+    // Never clobber a stored workspace with a boot/empty flash (including a
+    // single open file tab — the old >1 guard missed that case).
     try {
       const key = studioOpenTabsKey(userId);
       const raw = key ? window.localStorage.getItem(key) : null;
       if (raw) {
         const prev = JSON.parse(raw);
         const prevTabs = Array.isArray(prev?.openTabs) ? prev.openTabs : [];
-        if (
-          prevTabs.length > 1 &&
-          slimmed.openTabs.length <= 1 &&
-          prevTabs.length > slimmed.openTabs.length
-        ) {
-          const justReloaded = Boolean(
-            sessionStorage.getItem("yatishara-studio-reloaded-build"),
-          );
-          if (justReloaded || slimmed.openTabs.length === 0) {
-            return;
-          }
+        const shrinking = prevTabs.length > slimmed.openTabs.length;
+        const wiping = prevTabs.length > 0 && slimmed.openTabs.length === 0;
+        const justReloaded = Boolean(
+          sessionStorage.getItem("yatishara-studio-reloaded-build"),
+        );
+        if ((wiping && !userClearedTabsRef.current) || (justReloaded && shrinking)) {
+          return;
         }
       }
     } catch {
@@ -2095,6 +2093,7 @@ export function StudioShell({
     setActiveFolderId(session.activeFolderId);
     setNavTrail(session.navTrail);
     setTabEntrySnapshots(session.snapshots || {});
+    userClearedTabsRef.current = false;
     if (
       typeof session.activeTab === "string" &&
       (session.activeTab.startsWith("composer:") ||
@@ -2112,6 +2111,14 @@ export function StudioShell({
     }
     tabAccountIdRef.current = userId;
     tabSessionReadyRef.current = true;
+    // Soft-update guard only needs the first paint cycle.
+    window.setTimeout(() => {
+      try {
+        sessionStorage.removeItem("yatishara-studio-reloaded-build");
+      } catch {
+        /* ignore */
+      }
+    }, 2500);
   }, [currentUser?._id]);
   const isGenerateSurface =
     typeof activeTab === "string" &&
@@ -4924,22 +4931,67 @@ export function StudioShell({
       openFeedTab(parsed?.seed ?? "home", parsed?.mode ?? "forYou");
       return;
     }
-    setOpenTabs((tabs) => (tabs.includes(key) ? tabs : [...tabs, key]));
+    userClearedTabsRef.current = false;
+    setOpenTabs((tabs) => {
+      const next = tabs.includes(key) ? tabs : [...tabs, key];
+      const userId = tabAccountIdRef.current;
+      if (userId && tabSessionReadyRef.current) {
+        const slimmed = {
+          openTabs: next,
+          activeTab: key,
+          activeFolderId: latestTabSessionRef.current.activeFolderId,
+          navTrail: latestTabSessionRef.current.navTrail,
+          snapshots: slimTabEntrySnapshots(latestTabSessionRef.current.snapshots),
+        };
+        writePersistedTabSession(slimmed, userId);
+        try {
+          lastPersistedTabSessionRef.current = JSON.stringify(slimmed);
+        } catch {
+          /* ignore */
+        }
+      }
+      return next;
+    });
     setActiveTab(key);
   }
 
   /** At most one feed tab — opening another replaces the current feed. */
   function openFeedTab(seed = "home", mode = "forYou") {
     const key = buildFeedTabKey(mode, seed);
+    userClearedTabsRef.current = false;
     setOpenTabs((tabs) => {
+      let next;
       const existingIdx = tabs.findIndex((tab) => tab.startsWith("feed:"));
       if (existingIdx >= 0) {
-        if (tabs[existingIdx] === key) return tabs;
-        const next = [...tabs];
-        next[existingIdx] = key;
-        return next.filter((tab, index) => !tab.startsWith("feed:") || index === existingIdx);
+        if (tabs[existingIdx] === key) {
+          next = tabs;
+        } else {
+          const replaced = [...tabs];
+          replaced[existingIdx] = key;
+          next = replaced.filter(
+            (tab, index) => !tab.startsWith("feed:") || index === existingIdx,
+          );
+        }
+      } else {
+        next = [...tabs.filter((tab) => !tab.startsWith("feed:")), key];
       }
-      return [...tabs.filter((tab) => !tab.startsWith("feed:")), key];
+      const userId = tabAccountIdRef.current;
+      if (userId && tabSessionReadyRef.current) {
+        const slimmed = {
+          openTabs: next,
+          activeTab: key,
+          activeFolderId: latestTabSessionRef.current.activeFolderId,
+          navTrail: latestTabSessionRef.current.navTrail,
+          snapshots: slimTabEntrySnapshots(latestTabSessionRef.current.snapshots),
+        };
+        writePersistedTabSession(slimmed, userId);
+        try {
+          lastPersistedTabSessionRef.current = JSON.stringify(slimmed);
+        } catch {
+          /* ignore */
+        }
+      }
+      return next;
     });
     setActiveTab(key);
   }
@@ -6375,7 +6427,33 @@ export function StudioShell({
         tabAccountIdRef.current,
       );
     }
-    setOpenTabs((tabs) => tabs.filter((tab) => tab !== key));
+    setOpenTabs((tabs) => {
+      const next = tabs.filter((tab) => tab !== key);
+      if (next.length === 0) userClearedTabsRef.current = true;
+      const userId = tabAccountIdRef.current;
+      if (userId && tabSessionReadyRef.current) {
+        const remainingActive =
+          activeTab === key
+            ? next.length
+              ? next[next.length - 1]
+              : ""
+            : activeTab;
+        const slimmed = {
+          openTabs: next,
+          activeTab: remainingActive,
+          activeFolderId: latestTabSessionRef.current.activeFolderId,
+          navTrail: latestTabSessionRef.current.navTrail,
+          snapshots: slimTabEntrySnapshots(latestTabSessionRef.current.snapshots),
+        };
+        writePersistedTabSession(slimmed, userId);
+        try {
+          lastPersistedTabSessionRef.current = JSON.stringify(slimmed);
+        } catch {
+          /* ignore */
+        }
+      }
+      return next;
+    });
     if (activeTab === key) {
       setActiveTab((tab) => {
         if (tab !== key) return tab;
@@ -6513,6 +6591,11 @@ export function StudioShell({
       setRecentFileRows(recordFileOpen(entry, explorerUserId));
     }
     const key = `${entry.studioKind}:${entry.studioId}`;
+    // Update the live ref before openTab's sync persist (setState is async).
+    latestTabSessionRef.current = {
+      ...latestTabSessionRef.current,
+      snapshots: { ...latestTabSessionRef.current.snapshots, [key]: entry },
+    };
     setTabEntrySnapshots((snapshots) => ({ ...snapshots, [key]: entry }));
     openTab(key);
     // Document body loads via documents.get in the pane — do not hydrate into shell state.
