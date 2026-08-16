@@ -789,7 +789,7 @@ export const separateStemsFromAsset = action({
     assetId: v.id("assets"),
   },
   returns: v.object({ jobId: v.id("generationJobs") }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ jobId: Id<"generationJobs"> }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to separate stems.");
     const asset = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
@@ -799,16 +799,17 @@ export const separateStemsFromAsset = action({
     if (!asset?.bunnyPath) throw new Error("Audio asset not found.");
     if (asset.kind !== "audio") throw new Error("Stem separation requires an audio file.");
 
-    const prepared = await ctx.runMutation(prepareApiAudioGenerationRef, {
-      userId,
-      folderId: asset.folderId,
-      userPrompt: `Stem separation: ${asset.name}`,
-      title: `Stems — ${asset.name}`.slice(0, 64),
-      audioType: "music",
-      durationSeconds: 30,
-      musicWorkflow: "prompt",
-      forceInstrumental: true,
-    });
+    const prepared: { threadId: Id<"generationThreads">; jobId: Id<"generationJobs"> } =
+      await ctx.runMutation(prepareApiAudioGenerationRef, {
+        userId,
+        folderId: asset.folderId,
+        userPrompt: `Stem separation: ${asset.name}`,
+        title: `Stems — ${asset.name}`.slice(0, 64),
+        audioType: "music",
+        durationSeconds: 30,
+        musicWorkflow: "prompt",
+        forceInstrumental: true,
+      });
     await ctx.scheduler.runAfter(0, internal.audioActions.executeStemSeparationJob, {
       jobId: prepared.jobId,
       assetId: args.assetId,

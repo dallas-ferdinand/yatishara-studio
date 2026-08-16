@@ -1352,7 +1352,7 @@ export const resolvePublicPayLink = query({
       checkoutUrl: payment.checkoutUrl,
       status: payment.status,
       amountCents: payment.amountCents,
-      kind: payment.academyCourseId ? "course" : "topup",
+      kind: payment.academyCourseId ? ("course" as const) : ("topup" as const),
     };
   },
 });

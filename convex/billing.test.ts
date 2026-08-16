@@ -203,7 +203,7 @@ describe("PayWise billing invariants", () => {
       now: Date.now(),
       limit: 20,
     });
-    expect(claimed.map((row) => row._id)).toEqual([seeded.paymentId]);
+    expect(claimed.map((row: { _id: string }) => row._id)).toEqual([seeded.paymentId]);
     expect(
       await t.mutation(internal.billing.claimDuePaywisePayments, {
         now: Date.now(),

@@ -68,7 +68,7 @@ export const setMine = authedMutation({
 export const flushPendingIfYolo = authedMutation({
   args: { threadId: v.optional(v.id("agentThreads")) },
   returns: v.number(),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<number> => {
     return await ctx.runMutation(internal.agentApprovals.approvePendingForOwner, {
       ownerId: ctx.user._id,
       threadId: args.threadId,

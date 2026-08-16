@@ -1069,7 +1069,9 @@ async function runExportVideo(
 
   const textClips =
     exportKind === "video"
-      ? collectExportTextClips(project.clips, clipDuration)
+      ? collectExportTextClips(project.clips, (clip) =>
+          Math.max(0.05, Number(clip.trimOut ?? 3) - Number(clip.trimIn ?? 0) || 3),
+        )
       : [];
   // Audio lanes + unmuted video rows under the picture track (V2+ soundtrack).
   const audioClips = [

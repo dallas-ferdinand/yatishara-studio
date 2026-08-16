@@ -72,7 +72,13 @@ describe("Assistance approval lifecycle", () => {
       mimeType: "image/png",
     });
     await t.run(async (ctx) => {
-      expect((await ctx.db.get(reserved.assetId))?.storageStatus).toBe("pending");
+      expect(
+        (
+          (await ctx.db.get(reserved.assetId)) as {
+            storageStatus?: string;
+          } | null
+        )?.storageStatus,
+      ).toBe("pending");
     });
 
     await t.mutation(internal.generation.setGeneratedAssetStorageStatus, {
@@ -82,7 +88,10 @@ describe("Assistance approval lifecycle", () => {
       byteSize: 1234,
     });
     await t.run(async (ctx) => {
-      const asset = await ctx.db.get(reserved.assetId);
+      const asset = (await ctx.db.get(reserved.assetId)) as {
+        storageStatus?: string;
+        byteSize?: number;
+      } | null;
       expect(asset?.storageStatus).toBe("ready");
       expect(asset?.byteSize).toBe(1234);
     });
@@ -213,7 +222,10 @@ describe("Assistance approval lifecycle", () => {
     });
     await t.run(async (ctx) => {
       const brief = await ctx.db.get(seeded.briefId);
-      const job = await ctx.db.get(approved.jobId);
+      const job = (await ctx.db.get(approved.jobId)) as {
+        stage?: string;
+        threadId?: string;
+      } | null;
       const inputs = await ctx.db
         .query("generationInputs")
         .withIndex("by_job", (query) => query.eq("jobId", approved.jobId))
@@ -224,7 +236,9 @@ describe("Assistance approval lifecycle", () => {
       expect(inputs).toHaveLength(0);
       const jobs = await ctx.db
         .query("generationJobs")
-        .withIndex("by_thread", (query) => query.eq("threadId", job!.threadId))
+        .withIndex("by_thread", (query) =>
+          query.eq("threadId", job!.threadId as never),
+        )
         .collect();
       expect(jobs).toHaveLength(2);
     });

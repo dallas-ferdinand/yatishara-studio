@@ -380,10 +380,17 @@ export const sendTurn = action({
       { threadId: args.threadId, ownerId, limit: 32 },
     );
 
-    const folderRows = await ctx.runQuery(internal.agentMessages.listFoldersForOwner, {
+    type FolderRow = {
+      _id: Id<"folders">;
+      name: string;
+      parentId?: Id<"folders">;
+    };
+    const folderRows = (await ctx.runQuery(internal.agentMessages.listFoldersForOwner, {
       ownerId,
-    });
-    const folderById = new Map(folderRows.map((row) => [String(row._id), row]));
+    })) as FolderRow[];
+    const folderById = new Map(
+      folderRows.map((row: FolderRow) => [String(row._id), row] as const),
+    );
     const folderPathFor = (folderId?: string | null): string | undefined => {
       if (!folderId) return undefined;
       const visited = new Set<string>();
@@ -429,13 +436,13 @@ export const sendTurn = action({
     }
     const cueAnchors = cueParts.join(" ");
 
-    const memories = await ctx.runQuery(internal.agentMemory.retrieveForRun, {
+    const memories = (await ctx.runQuery(internal.agentMemory.retrieveForRun, {
       ownerId,
       projectFolderId: args.currentFolderId,
       limit: 6,
       query: message,
       cues: cueAnchors || undefined,
-    });
+    })) as Array<{ title?: string; kind?: string; pinned?: boolean }>;
     const threadSummary = await ctx.runQuery(internal.agentMemory.getThreadSummary, {
       ownerId,
       threadId: args.threadId,
@@ -485,14 +492,19 @@ export const sendTurn = action({
             ownerId,
             folderId: rawId as Id<"folders">,
           });
-          const contents = await ctx.runQuery(
+          const contents = (await ctx.runQuery(
             internal.assistanceWorkspace.getFolderContentsForAgent,
             {
               ownerId,
               folderId: rawId as Id<"folders">,
               expiresUnix: Math.floor(Date.now() / 1000) + 60 * 60,
             },
-          );
+          )) as {
+            folders: Array<{ name: string }>;
+            assets: Array<{ id: string; name: string; kind: string }>;
+            documents: Array<{ title: string }>;
+            elements: Array<{ name: string }>;
+          };
           if (folder) {
             workingSet.push({
               studioKind,

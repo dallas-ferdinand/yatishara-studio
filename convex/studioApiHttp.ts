@@ -1977,7 +1977,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       let assets = job?.assets ?? [];
       if (!assets.length && result.assetIds?.length) {
         const fallback = await Promise.all(
-          result.assetIds.map(async (assetId) => {
+          result.assetIds.map(async (assetId: Id<"assets">) => {
             try {
               return await ctx.runQuery(internal.studioApiInternal.getAsset, {
                 userId: auth.userId,
@@ -1991,7 +1991,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           }),
         );
         assets = fallback.filter(
-          (row): row is NonNullable<(typeof fallback)[number]> => row != null,
+          (row: (typeof fallback)[number]): row is NonNullable<(typeof fallback)[number]> =>
+            row != null,
         );
       }
 

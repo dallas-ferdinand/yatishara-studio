@@ -452,8 +452,14 @@ describe("Assistance guardrails", () => {
     await t.run(async (ctx) => {
       const estimate = seeded.plan.estimate.credits!;
       const account = await ctx.db.get(seeded.accountId);
-      const job = await ctx.db.get(approved.jobId);
-      const reservation = await ctx.db.get(job!.reservedCreditTransactionId!);
+      const job = (await ctx.db.get(approved.jobId)) as {
+        reservedCreditTransactionId?: string;
+      } | null;
+      const reservation = job?.reservedCreditTransactionId
+        ? ((await ctx.db.get(job.reservedCreditTransactionId as never)) as {
+            amount?: number;
+          } | null)
+        : null;
       expect(account?.creditBalance).toBe(100 - estimate);
       expect(account?.reservedCredits).toBe(estimate);
       expect(reservation?.amount).toBe(-estimate);
@@ -743,7 +749,9 @@ describe("Assistance guardrails", () => {
         .query("creditTransactions")
         .withIndex("by_user", (q) => q.eq("userId", workspace.userId))
         .collect();
-      expect(turn?.creditTransactionId).toBe(first.creditTransactionId);
+      expect(
+        (turn as { creditTransactionId?: string } | null)?.creditTransactionId,
+      ).toBe(first.creditTransactionId);
       expect(spends.filter((row) => row.kind === "spent")).toHaveLength(1);
       expect(account.creditBalance).toBeLessThan(50);
     });
