@@ -1264,6 +1264,7 @@ export function StudioVideoEditor({
                   setExportProgressLocal(0);
                   setExportJobId(null);
                 }}
+                onOpenExport={() => dispatch({ type: "set_side_panel", panel: "export" })}
               />
             ) : null}
           </aside>
@@ -1271,7 +1272,6 @@ export function StudioVideoEditor({
             editorMode={state.ui.editorMode}
             sidePanel={state.ui.sidePanel}
             onModeChange={(mode) => dispatch({ type: "set_editor_mode", mode })}
-            onOpenExport={() => dispatch({ type: "set_side_panel", panel: "export" })}
             joint={selectedJoint}
             canTransition={canUseTransitions}
           />

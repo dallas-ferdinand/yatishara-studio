@@ -127,13 +127,7 @@
   background: var(--mos-panel, #f5f5f7);
 }
 
-.studio-editor-mode-stack-spacer {
-  flex: 1;
-  min-height: 0.5rem;
-}
-
-.studio-editor-mode-icon,
-.studio-editor-mode-export {
+.studio-editor-mode-icon {
   display: grid;
   place-items: center;
   width: 26px;
@@ -145,8 +139,7 @@
   flex-shrink: 0;
 }
 
-.studio-editor-mode-icon:hover:not(:disabled),
-.studio-editor-mode-export:hover:not(:disabled) {
+.studio-editor-mode-icon:hover:not(:disabled) {
   background: var(--mos-hover);
   color: var(--mos-text);
 }
@@ -162,22 +155,6 @@
   opacity: 0.35;
   cursor: not-allowed;
   color: var(--mos-muted);
-}
-
-.studio-editor-mode-export {
-  border-color: var(--mos-border);
-  background: var(--mos-plate-strong);
-  color: var(--cursor-accent);
-}
-
-.studio-editor-mode-export.is-active {
-  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-bg));
-  border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--mos-border));
-  color: var(--cursor-accent);
-}
-
-.studio-editor-mode-export:disabled {
-  opacity: 0.45;
 }
 
 .studio-editor-export-tiers {
@@ -228,13 +205,6 @@
   color: var(--mos-text);
 }
 
-.studio-editor-export-actions {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0.35rem 0 0.75rem;
-}
-
 .studio-editor-export-progress {
   margin: 4px 0 10px;
   display: grid;
@@ -275,33 +245,6 @@
   color: var(--mos-muted);
 }
 
-.studio-editor-export-cta {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  padding: 0.55rem 0.75rem;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--cursor-accent) 40%, var(--mos-border));
-  background: color-mix(in srgb, var(--cursor-accent) 14%, var(--mos-bg));
-  color: var(--cursor-accent);
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.studio-editor-export-cta:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--cursor-accent) 22%, var(--mos-bg));
-}
-
-.studio-editor-export-cta:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
 .studio-editor-inspector-main {
   flex: 1;
   min-width: 0;
@@ -329,8 +272,34 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  width: 100%;
+  flex: 1 1 auto;
   height: 100%;
+}
+
+.studio-editor-inspector-export {
+  flex: 0 0 auto;
+  margin-left: auto;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--mos-plate-strong);
+  color: var(--color-cursor-text, var(--mos-text));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.studio-editor-inspector-export:hover:not(:disabled) {
+  background: var(--mos-hover);
+}
+
+.studio-editor-inspector-export:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .studio-editor-inspector-thumb {

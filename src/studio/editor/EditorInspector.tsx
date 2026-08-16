@@ -22,7 +22,6 @@ import {
   Blend,
   Bold,
   CaseSensitive,
-  Download,
   FlipHorizontal2,
   FlipVertical2,
   Image as ImageIcon,
@@ -403,11 +402,29 @@ export function inspectorPanelOpen({ editorMode, clip, joint, sidePanel }) {
   return true;
 }
 
+function InspectorExportButton({
+  busy = false,
+  disabled = false,
+  title,
+  onClick,
+}) {
+  return (
+    <button
+      type="button"
+      className="studio-editor-inspector-export"
+      disabled={disabled || busy}
+      title={title || (busy ? "Exporting…" : "Export")}
+      onClick={onClick}
+    >
+      {busy ? "Exporting…" : "Export"}
+    </button>
+  );
+}
+
 export function EditorModeRail({
   editorMode,
   sidePanel = "inspect",
   onModeChange,
-  onOpenExport,
   joint,
   canTransition = false,
 }) {
@@ -442,18 +459,6 @@ export function EditorModeRail({
           </button>
         );
       })}
-      <div className="studio-editor-mode-stack-spacer" />
-      <button
-        type="button"
-        role="tab"
-        aria-selected={exportActive}
-        className={`studio-editor-mode-export${exportActive ? " is-active" : ""}`}
-        aria-label="Export settings"
-        title="Export"
-        onClick={onOpenExport}
-      >
-        <Download size={14} aria-hidden="true" />
-      </button>
     </nav>
   );
 }
@@ -551,6 +556,18 @@ function ExportPanel({
           <InspectorThumb kind="canvas" />
           <span className="studio-editor-inspector-name">Export as</span>
         </div>
+        <InspectorExportButton
+          busy={exporting}
+          disabled={!canExport}
+          title={
+            exporting
+              ? "Exporting…"
+              : !canExport
+                ? disabledReason
+                : "Export"
+          }
+          onClick={onExport}
+        />
       </header>
 
       <div className="studio-editor-inspector-body">
@@ -719,33 +736,6 @@ function ExportPanel({
             />
           </div>
         ) : null}
-
-        <div className="studio-editor-export-actions">
-          <button
-            type="button"
-            className="studio-editor-export-cta"
-            disabled={exporting || !canExport}
-            onClick={onExport}
-            title={
-              exporting
-                ? "Exporting…"
-                : !canExport
-                  ? disabledReason
-                  : exportKind === "studio"
-                    ? "Download .studio package"
-                    : exportKind === "audio"
-                      ? `Export ${String(audioFormat || "mp3").toUpperCase()}`
-                      : "Export MP4"
-            }
-          >
-            <Download size={15} aria-hidden="true" />
-            {exporting
-              ? "Exporting…"
-              : exportKind === "studio"
-                ? "Download .studio"
-                : "Export"}
-          </button>
-        </div>
       </div>
     </>
   );
@@ -780,7 +770,7 @@ function InspectorThumb({ kind, thumbUrl }) {
   );
 }
 
-function InspectorHeader({ clip, media, joint }) {
+function InspectorHeader({ clip, media, joint, onOpenExport }) {
   const [resolvedThumb, setResolvedThumb] = useState(null);
 
   useEffect(() => {
@@ -826,6 +816,7 @@ function InspectorHeader({ clip, media, joint }) {
           <InspectorThumb kind="transition" />
           <span className="studio-editor-inspector-name">Transition</span>
         </div>
+        <InspectorExportButton onClick={onOpenExport} />
       </header>
     );
   }
@@ -837,6 +828,7 @@ function InspectorHeader({ clip, media, joint }) {
           <InspectorThumb kind="canvas" />
           <span className="studio-editor-inspector-name">Canvas</span>
         </div>
+        <InspectorExportButton onClick={onOpenExport} />
       </header>
     );
   }
@@ -862,6 +854,7 @@ function InspectorHeader({ clip, media, joint }) {
           {name}
         </span>
       </div>
+      <InspectorExportButton onClick={onOpenExport} />
     </header>
   );
 }
@@ -899,6 +892,7 @@ export function EditorInspector({
   onExportFilenameChange,
   onExport,
   onDismissExport,
+  onOpenExport,
 }) {
   const joint = jointByKey(project, jointKey);
   const jointLeft = joint ? leftClipForJoint(project, joint) : null;
@@ -959,6 +953,7 @@ export function EditorInspector({
           clip={clip}
           media={media}
           joint={joint}
+          onOpenExport={onOpenExport}
         />
 
         <div className="studio-editor-inspector-body">
