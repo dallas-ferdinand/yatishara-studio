@@ -987,15 +987,22 @@ export function EditorInspector({
       : jointKey
         ? [jointKey]
         : [];
+  const isTransitionMode = editorMode === "transition";
+  const isTextMode = editorMode === "text";
   const showTransition =
-    applyJointKeys.length > 0 && (editorMode === "transition" || editorMode === "select");
+    applyJointKeys.length > 0 && (isTransitionMode || editorMode === "select");
   const multiTransitionCount = applyJointKeys.length;
-  const showAudio = Boolean(clip) && (clip.kind === "audio" || clip.kind === "video");
-  const showVideo = Boolean(clip) && (clip.kind === "video" || clip.kind === "image");
+  /** Transition mode focuses the cut — hide clip edit stacks until Select. */
+  const showClipEdit = Boolean(clip) && !isTransitionMode && !isTextMode;
+  const showAudio =
+    showClipEdit && (clip.kind === "audio" || clip.kind === "video");
+  const showVideo =
+    showClipEdit && (clip.kind === "video" || clip.kind === "image");
   /** Picture edge fades — video/image only (audio fades live in Audio panel). */
   const showFade =
-    Boolean(clip) && (clip.kind === "video" || clip.kind === "image");
-  const showText = editorMode === "text" || clip?.kind === "text";
+    showClipEdit && (clip.kind === "video" || clip.kind === "image");
+  const showText = isTextMode || clip?.kind === "text";
+  const showTiming = Boolean(clip) && !isTransitionMode && !isTextMode;
   const resolution = normalizeExportResolution(exportResolution);
 
   if (sidePanel === "export") {
@@ -1042,6 +1049,17 @@ export function EditorInspector({
         />
 
         <div className="studio-editor-inspector-body">
+          {isTransitionMode && !showTransition ? (
+            <InspectorSection
+              title="Transitions"
+              hint="Select a cut between two clips on the timeline to pick a transition."
+            >
+              <p className="studio-editor-export-note">
+                Click the joint between clips, or select adjacent clips.
+              </p>
+            </InspectorSection>
+          ) : null}
+
           {showTransition ? (
             <InspectorSection
               title="Transitions"
@@ -1127,7 +1145,7 @@ export function EditorInspector({
             />
           ) : null}
 
-          {clip ? (
+          {showTiming && clip ? (
             <ClipTimingCard clip={clip} project={project} />
           ) : null}
         </div>

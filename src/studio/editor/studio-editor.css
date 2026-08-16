@@ -283,28 +283,29 @@
 .studio-editor-inspector-export {
   flex: 0 0 auto;
   margin-left: auto;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 6px;
-  border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
-  background: var(--mos-plate-strong, var(--mos-hover));
-  color: var(--color-cursor-text, var(--mos-text));
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 0;
+  /* Settings/Billing primary CTA — never L3 plate-strong grey. */
+  background: var(--cursor-accent);
+  color: var(--cursor-on-accent, #fff);
   font: inherit;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
 }
 
 .studio-editor-inspector-export:hover:not(:disabled) {
-  background: var(--mos-hover);
-  border-color: var(--color-cursor-border, var(--mos-border));
+  background: var(--cursor-accent-hover, var(--cursor-accent));
+  color: var(--cursor-on-accent, #fff);
 }
 
 .studio-editor-inspector-export:disabled {
-  opacity: 0.45;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -568,6 +569,9 @@
 
 .studio-editor-inspector-body {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   overflow: auto;
   padding: 10px;
   font-size: 0.82rem;
@@ -582,15 +586,25 @@
   background: var(--mos-panel, #f5f5f7);
 }
 
+/* Settings/Billing plate cards — shared with Export stack. */
 .studio-editor-inspector-section {
-  margin: 0 0 14px;
+  margin: 0;
   padding: 0;
-  border-bottom: 0;
-  background: transparent;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border)) 82%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--mos-surface, var(--mos-plate, #ececf0)) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright, #fff) 7%, transparent),
+    0 1px 2px color-mix(in srgb, #000 8%, transparent),
+    0 4px 10px color-mix(in srgb, #000 6%, transparent);
 }
 
-.studio-editor-inspector-section:last-child {
-  margin-bottom: 0;
+[data-appearance="light"] .studio-editor-inspector-section {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 3px 8px rgba(15, 23, 42, 0.04);
 }
 
 .studio-editor-inspector-section-head {
@@ -598,13 +612,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin: 0 2px 8px;
+  min-height: 36px;
+  margin: 0;
+  padding: 10px 14px 0;
 }
 
 .studio-editor-inspector-section-head h4 {
   margin: 0;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-cursor-muted, var(--mos-muted));
@@ -647,11 +663,8 @@
 .studio-editor-inspector-section.is-open .studio-editor-inspector-section-caret {
   transform: rotate(180deg);
 }
-.studio-editor-inspector-section.is-collapsible:not(.is-open) {
-  padding-bottom: 0.7rem;
-}
 .studio-editor-inspector-section.is-collapsible:not(.is-open) .studio-editor-inspector-section-head {
-  margin-bottom: 0;
+  padding-bottom: 12px;
 }
 
 .studio-editor-inspector-reset {
@@ -674,11 +687,13 @@
 .studio-editor-inspector-section-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  padding: 10px 14px 14px;
 }
 
 .studio-editor-inspector-hint {
-  margin: 0 2px 8px;
+  margin: 0;
+  padding: 4px 14px 0;
   font-size: 0.72rem;
   color: var(--color-cursor-muted, var(--mos-muted));
   line-height: 1.35;
@@ -792,7 +807,8 @@
   position: relative;
   height: 10px;
   border-radius: 999px;
-  background: var(--mos-plate-strong, var(--mos-raised));
+  background: color-mix(in srgb, var(--mos-page, #fff) 72%, var(--mos-hover, #e6e6ec));
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
   overflow: hidden;
 }
 .studio-editor-timing-ruler-range {
@@ -822,7 +838,8 @@
   min-width: 0;
   padding: 8px 8px 9px;
   border-radius: 10px;
-  background: var(--mos-plate-strong, var(--mos-raised));
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
+  background: var(--color-cursor-panel, var(--mos-page, #fff));
 }
 .studio-editor-timing-metric-label {
   font-size: 11px;
@@ -849,8 +866,9 @@
   align-items: center;
   min-height: 26px;
   padding: 0 10px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 14%, var(--mos-plate-strong, var(--mos-raised)));
+  border-radius: var(--cursor-radius-pill, 999px);
+  border: 1px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 28%, var(--color-cursor-border-soft, var(--mos-border)));
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 10%, var(--mos-page, #fff));
   color: var(--cursor-accent, var(--mos-accent));
   font-size: 12px;
   font-weight: 600;
@@ -865,7 +883,7 @@
 .studio-editor-transition-list {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 6px;
 }
 
 .studio-editor-transition-list.is-muted {
@@ -880,47 +898,60 @@
   gap: 0.55rem;
   width: 100%;
   min-height: 40px;
-  padding: 0.45rem 0.6rem;
-  border-radius: 10px;
-  border: 1px solid #e5e7eb;
-  background: var(--mos-hover, #e6e6ec);
+  padding: 0.45rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  background: var(--color-cursor-panel, var(--mos-page, #fff));
   text-align: left;
-  color: #111827;
+  color: var(--color-cursor-text, var(--mos-text));
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.studio-editor-transition-row:hover:not(:disabled):not(.is-disabled) {
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  border-color: var(--color-cursor-border, var(--mos-border));
+  background: color-mix(in srgb, var(--mos-hover, #e6e6ec) 55%, var(--mos-page, #fff));
 }
 
 .studio-editor-transition-row.is-active {
-  border-color: color-mix(in srgb, var(--cursor-accent) 45%, var(--mos-border));
-  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-bg));
+  border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft, var(--mos-border)));
+  background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-page, var(--color-cursor-panel, #fff)));
+  color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
-.studio-editor-transition-row.is-disabled {
+.studio-editor-transition-row.is-disabled,
+.studio-editor-transition-row:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
 .studio-editor-transition-row-icon {
-  color: var(--cursor-accent);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: var(--cursor-accent, var(--mos-accent));
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 12%, transparent);
+}
+
+.studio-editor-transition-row.is-active .studio-editor-transition-row-icon {
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 18%, transparent);
 }
 
 .studio-editor-transition-row-label {
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 650;
+  color: inherit;
 }
 
 .studio-editor-transition-row-meta {
   font-size: 0.68rem;
-  color: #9ca3af;
-}
-
-.studio-editor-transition-row-label {
-  font-size: 0.78rem;
   font-weight: 600;
-  color: #111827;
-}
-
-.studio-editor-transition-row-meta {
-  font-size: 0.68rem;
-  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cursor-muted, var(--mos-muted));
 }
 
 .studio-editor-animation-list {
@@ -1067,7 +1098,7 @@
 .studio-editor-frame-presets {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.4rem;
+  gap: 6px;
 }
 
 .studio-editor-frame-preset {
@@ -1078,17 +1109,24 @@
   gap: 0.4rem;
   min-height: 72px;
   padding: 0.45rem 0.35rem 0.5rem;
-  border-radius: 10px;
-  border: 1px solid var(--mos-border);
-  background: var(--mos-plate-strong);
+  border-radius: 12px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  /* Page-level wash — same as Settings pills, not plate-strong. */
+  background: var(--color-cursor-panel, var(--mos-page, #fff));
   font-size: 0.72rem;
-  color: var(--mos-text);
+  color: var(--color-cursor-muted, var(--mos-muted));
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.studio-editor-frame-preset:hover {
+  color: var(--color-cursor-text, var(--mos-text));
 }
 
 .studio-editor-frame-preset.is-active {
-  border-color: color-mix(in srgb, var(--cursor-accent) 45%, var(--mos-border));
-  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-bg));
-  color: var(--cursor-accent);
+  border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft, var(--mos-border)));
+  background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-page, var(--color-cursor-panel, #fff)));
+  color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
 .studio-editor-frame-preset-glyph {
