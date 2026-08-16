@@ -7,6 +7,17 @@ export const STUDIO_OPEN_TABS_BASE = "yatishara-studio-open-tabs-v1";
 export const STUDIO_COMPOSER_CONTEXTS_BASE = "yatishara-studio-composer-contexts-v1";
 export const STUDIO_DEFAULT_TAB_BASE = "yatishara-studio-default-tab-v1";
 
+/** `api.users.current` returns `userId`, not Convex `_id`. */
+export function studioCurrentUserId(
+  user: { userId?: string | null; _id?: string | null } | null | undefined,
+): string | null {
+  const id =
+    (typeof user?.userId === "string" && user.userId.trim()) ||
+    (typeof user?._id === "string" && user._id.trim()) ||
+    "";
+  return id || null;
+}
+
 export function studioAccountStorageKey(
   base: string,
   userId: string | null | undefined,

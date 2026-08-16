@@ -211,6 +211,7 @@ import {
 import {
   purgeLegacyUnscopedStudioShellKeys,
   studioComposerContextsKey,
+  studioCurrentUserId,
   studioOpenTabsKey,
 } from "@/studio/lib/studio-account-storage";
 import {
@@ -2088,7 +2089,7 @@ export function StudioShell({
 
   // Per-account tab/recents restore — never reuse another user's localStorage blob.
   useLayoutEffect(() => {
-    const userId = currentUser?._id ?? null;
+    const userId = studioCurrentUserId(currentUser);
     if (!userId) {
       tabSessionReadyRef.current = false;
       return;
@@ -2132,7 +2133,7 @@ export function StudioShell({
     tabSessionReadyRef.current = true;
     // Keep yatishara-studio-reloaded-build for the session — desk-build-guard
     // uses it as the one-shot deploy reload latch. Persist no longer reads it.
-  }, [currentUser?._id]);
+  }, [currentUser?.userId, currentUser?._id]);
   const isGenerateSurface =
     typeof activeTab === "string" &&
     (activeTab.startsWith("composer:") ||
@@ -2202,7 +2203,7 @@ export function StudioShell({
       ? { assetId: contextMenuAssetId }
       : "skip",
   );
-  const explorerUserId = currentUser?._id ?? null;
+  const explorerUserId = studioCurrentUserId(currentUser);
   const [pinnedFolders, setPinnedFolders] = useState([]);
   const [folderAccessRows, setFolderAccessRows] = useState([]);
   const [recentFileRows, setRecentFileRows] = useState([]);
@@ -5529,7 +5530,7 @@ export function StudioShell({
   }, []);
 
   useEffect(() => {
-    if (!currentUser?._id) return;
+    if (!studioCurrentUserId(currentUser)) return;
     if (typeof window === "undefined") return;
     if (paymentCelebration || wamHandoff) return;
     if (!isStudioWebPushAvailable()) return;
@@ -5551,7 +5552,7 @@ export function StudioShell({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [currentUser?._id, paymentCelebration, wamHandoff]);
+  }, [currentUser?.userId, currentUser?._id, paymentCelebration, wamHandoff]);
 
   const applyStudioOpenParams = useCallback(
     (search) => {
@@ -5811,13 +5812,13 @@ export function StudioShell({
   }
 
   useEffect(() => {
-    if (!currentUser?._id) return;
+    if (!studioCurrentUserId(currentUser)) return;
     const stored = readWamReturn();
     if (!stored?.wamOk || !stored.paymentId) return;
     if (billingPaymentReturnHandledRef.current) return;
     billingPaymentReturnHandledRef.current = true;
     void syncWamPayment({ paymentId: stored.paymentId, force: true }).catch(() => {});
-  }, [currentUser?._id, syncWamPayment]);
+  }, [currentUser?.userId, currentUser?._id, syncWamPayment]);
 
   useEffect(() => {
     if (!wamReturnPayment?.paymentId) return;

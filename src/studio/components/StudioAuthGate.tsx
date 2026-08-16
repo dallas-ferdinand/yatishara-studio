@@ -33,6 +33,7 @@ import {
 } from "@/studio/lib/studio-client-reset";
 import {
   stripDocumentTabsFromOpenSession,
+  studioCurrentUserId,
   studioOpenTabsKey,
 } from "@/studio/lib/studio-account-storage";
 import {
@@ -295,7 +296,7 @@ export function StudioAuthGate({
     if (intentHandledRef.current) return;
     intentHandledRef.current = true;
     try {
-      const tabsKey = studioOpenTabsKey(currentUser?._id);
+      const tabsKey = studioOpenTabsKey(studioCurrentUserId(currentUser));
       const hasTabs = Boolean(tabsKey && window.localStorage.getItem(tabsKey));
       if (hasTabs) {
         setIntentBackfilling(true);
@@ -379,7 +380,7 @@ function StudioIntentChooser() {
         window.localStorage.setItem(STUDIO_START_SELLER_APPLY_KEY, "1");
       }
       // Seed first open so boot lands on the chosen tab (this account only).
-      const tabsKey = studioOpenTabsKey(currentUser?._id);
+      const tabsKey = studioOpenTabsKey(studioCurrentUserId(currentUser));
       if (tabsKey) window.localStorage.removeItem(tabsKey);
       await setDefaultStudioTab({ tab, markIntentChosen: true });
     } catch (err: unknown) {
