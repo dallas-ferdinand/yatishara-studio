@@ -9,7 +9,6 @@ import {
   Loader2,
   Lock,
   MessageCircle,
-  Play,
   Tag,
   Zap,
 } from "lucide-react";
@@ -444,28 +443,21 @@ function CheckoutDock({
   );
 }
 
-function withEmbedAutoplay(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.searchParams.set("autoplay", "true");
-    return parsed.toString();
-  } catch {
-    return url;
-  }
-}
-
 function BannerStage({
   bannerUrl,
   embedUrl,
   loading,
   onPlay,
   playLabel,
+  locked,
 }: {
   bannerUrl?: string;
   embedUrl: string | null;
   loading: boolean;
   onPlay: () => void;
   playLabel: string;
+  /** When true, show cover only (no Studio play chrome — buy to unlock). */
+  locked?: boolean;
 }) {
   const [posterReady, setPosterReady] = useState(!bannerUrl);
 
@@ -473,67 +465,72 @@ function BannerStage({
     setPosterReady(!bannerUrl);
   }, [bannerUrl]);
 
-  if (embedUrl) {
-    return (
-      <div className="studio-academy-player">
-        <iframe
-          src={embedUrl}
-          title={playLabel}
-          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-          allowFullScreen
-        />
-      </div>
-    );
-  }
-
   return (
-    <div className="studio-academy-player">
-      {bannerUrl ? (
-        <MediaLoadFrame
-          kind="image"
-          src={bannerUrl}
-          cacheKey={`academy-banner:${bannerUrl}`}
-          ratio="fill"
-          className="studio-academy-player-cover"
-          loaderSize="lg"
-        >
-          {({ onLoad, onError }) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={bannerUrl}
-              alt=""
-              decoding="async"
-              onLoad={(event) => {
-                onLoad(event);
-                setPosterReady(true);
-              }}
-              onError={() => {
-                onError();
-                setPosterReady(true);
-              }}
-            />
-          )}
-        </MediaLoadFrame>
-      ) : (
-        <div className="studio-academy-player-empty" aria-hidden="true" />
-      )}
-      {posterReady || !bannerUrl ? (
-        <button
-          type="button"
-          className="studio-academy-player-play"
-          aria-label={playLabel}
-          disabled={loading}
-          onClick={() => {
-            if (!loading) onPlay();
-          }}
-        >
-          {loading ? (
-            <Loader2 aria-hidden="true" className="animate-spin" />
-          ) : (
-            <Play aria-hidden="true" fill="currentColor" />
-          )}
-        </button>
-      ) : null}
+    <div className="studio-academy-player-shell">
+      <div className="studio-academy-player">
+        {embedUrl ? (
+          <iframe
+            src={embedUrl}
+            title={playLabel}
+            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          <>
+            {bannerUrl ? (
+              <MediaLoadFrame
+                kind="image"
+                src={bannerUrl}
+                cacheKey={`academy-banner:${bannerUrl}`}
+                ratio="fill"
+                className="studio-academy-player-cover"
+                loaderSize="lg"
+              >
+                {({ onLoad, onError }) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={bannerUrl}
+                    alt=""
+                    decoding="async"
+                    onLoad={(event) => {
+                      onLoad(event);
+                      setPosterReady(true);
+                    }}
+                    onError={() => {
+                      onError();
+                      setPosterReady(true);
+                    }}
+                  />
+                )}
+              </MediaLoadFrame>
+            ) : (
+              <div className="studio-academy-player-empty" aria-hidden="true" />
+            )}
+            {!locked && (posterReady || !bannerUrl) ? (
+              <button
+                type="button"
+                className="studio-academy-player-hit"
+                aria-label={playLabel}
+                disabled={loading}
+                onClick={() => {
+                  if (!loading) onPlay();
+                }}
+              >
+                {loading ? (
+                  <span className="studio-academy-player-loading">
+                    <Loader2 aria-hidden="true" className="animate-spin" />
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
+            {locked ? (
+              <div className="studio-academy-player-locked" aria-hidden="true">
+                <Lock />
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -634,6 +631,46 @@ export function StudioAcademyPane({
   const selectedLesson = academy.lessonId
     ? (detail?.lessons.find((l) => l._id === academy.lessonId) ?? null)
     : null;
+
+  // Prefetch Bunny embed (no autoplay) so Stream shows its own thumbnail + play.
+  useEffect(() => {
+    if (!academy.courseId || !detail || academy.lessonId) return;
+    let cancelled = false;
+    setLoadingPlay(true);
+    void getIntroPlayback({ courseId: academy.courseId })
+      .then((playback) => {
+        if (!cancelled) setIntroEmbed(playback.embedUrl);
+      })
+      .catch(() => {
+        /* keep cover; hit target can retry */
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPlay(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [academy.courseId, academy.lessonId, detail, getIntroPlayback]);
+
+  useEffect(() => {
+    if (!owned || !selectedLesson?._id) return;
+    let cancelled = false;
+    setLoadingPlay(true);
+    void getLessonPlayback({ lessonId: selectedLesson._id })
+      .then((playback) => {
+        if (!cancelled) setLessonEmbed(playback.embedUrl);
+      })
+      .catch(() => {
+        /* keep cover */
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPlay(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [owned, selectedLesson?._id, getLessonPlayback]);
+
   const commentsLessonId =
     owned && academy.lessonId ? academy.lessonId : undefined;
   const commentsSidebarTitle =
@@ -812,7 +849,8 @@ export function StudioAcademyPane({
     setLoadingPlay(true);
     try {
       const playback = await getIntroPlayback({ courseId: academy.courseId });
-      setIntroEmbed(withEmbedAutoplay(playback.embedUrl));
+      // No autoplay — Bunny Stream thumbnail + native play control.
+      setIntroEmbed(playback.embedUrl);
     } catch (error) {
       toast.error(friendlyConvexError(error, "Could not load intro"));
     } finally {
@@ -825,7 +863,7 @@ export function StudioAcademyPane({
     setLoadingPlay(true);
     try {
       const playback = await getLessonPlayback({ lessonId: selectedLesson._id });
-      setLessonEmbed(withEmbedAutoplay(playback.embedUrl));
+      setLessonEmbed(playback.embedUrl);
     } catch (error) {
       toast.error(friendlyConvexError(error, "Could not load lesson"));
     } finally {
@@ -1038,6 +1076,7 @@ export function StudioAcademyPane({
               }
               embedUrl={owned ? lessonEmbed : null}
               loading={loadingPlay}
+              locked={!owned}
               onPlay={() => {
                 if (!owned) {
                   toast.message("Buy the course to watch this lesson");

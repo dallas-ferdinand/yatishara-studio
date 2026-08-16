@@ -23190,6 +23190,25 @@ export function StudioShell({
           max-width: none;
           padding: 0 0 28px;
         }
+        .studio-academy-player-shell {
+          width: 100%;
+          max-width: 100%;
+          padding: 12px;
+          border-radius: calc(var(--cursor-radius-lg, 12px) + 6px);
+          background: var(--mos-plate, var(--cursor-surface));
+          border: 1px solid
+            color-mix(
+              in srgb,
+              var(--cursor-accent, var(--mos-accent)) 34%,
+              var(--color-cursor-border, var(--mos-border))
+            );
+          box-shadow: 0 0 0 1px
+            color-mix(
+              in srgb,
+              var(--cursor-accent, var(--mos-accent)) 10%,
+              transparent
+            );
+        }
         .studio-academy-player {
           position: relative;
           width: 100%;
@@ -23229,37 +23248,50 @@ export function StudioShell({
           inset: 0;
           background: #111;
         }
-        .studio-academy-player-play {
+        .studio-academy-player-hit {
           position: absolute;
           inset: 0;
-          margin: auto;
-          width: 48px;
-          height: 48px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
+          margin: 0;
+          padding: 0;
           border: 0;
-          border-radius: 999px;
-          background: #fff;
-          color: #111;
-          box-shadow: 0 2px 14px rgba(0, 0, 0, 0.28);
+          background: transparent;
           cursor: pointer;
           z-index: 2;
         }
-        .studio-academy-player-play svg {
-          width: 18px;
-          height: 18px;
-          margin-left: 2px;
-        }
-        .studio-academy-player-play:hover:not(:disabled) {
-          transform: scale(1.04);
-        }
-        .studio-academy-player-play:disabled {
-          opacity: 0.72;
+        .studio-academy-player-hit:disabled {
           cursor: wait;
         }
-        .studio-academy-player-play:disabled svg {
-          margin-left: 0;
+        .studio-academy-player-loading {
+          position: absolute;
+          inset: 0;
+          margin: auto;
+          width: 40px;
+          height: 40px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #fff;
+          filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.45));
+        }
+        .studio-academy-player-loading svg {
+          width: 22px;
+          height: 22px;
+        }
+        .studio-academy-player-locked {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: color-mix(in srgb, #000 28%, transparent);
+          color: #fff;
+          pointer-events: none;
+          z-index: 2;
+        }
+        .studio-academy-player-locked svg {
+          width: 22px;
+          height: 22px;
+          opacity: 0.9;
         }
         .studio-academy-banner {
           width: 100%;
