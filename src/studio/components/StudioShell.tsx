@@ -23219,6 +23219,18 @@ export function StudioShell({
           border-radius: var(--cursor-radius-lg, 12px);
           overflow: hidden;
           background: #000;
+          border: 1.5px solid
+            color-mix(
+              in srgb,
+              var(--cursor-accent, var(--mos-accent)) 55%,
+              var(--color-cursor-border, var(--mos-border))
+            );
+          box-shadow: inset 0 0 0 1px
+            color-mix(
+              in srgb,
+              var(--cursor-accent, var(--mos-accent)) 18%,
+              transparent
+            );
         }
         .studio-academy-player-cover.media-load-frame,
         .studio-academy-player-cover.media-load-frame.is-ready {

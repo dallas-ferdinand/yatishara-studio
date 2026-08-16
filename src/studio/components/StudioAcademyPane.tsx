@@ -632,45 +632,6 @@ export function StudioAcademyPane({
     ? (detail?.lessons.find((l) => l._id === academy.lessonId) ?? null)
     : null;
 
-  // Prefetch Bunny embed (no autoplay) so Stream shows its own thumbnail + play.
-  useEffect(() => {
-    if (!academy.courseId || !detail || academy.lessonId) return;
-    let cancelled = false;
-    setLoadingPlay(true);
-    void getIntroPlayback({ courseId: academy.courseId })
-      .then((playback) => {
-        if (!cancelled) setIntroEmbed(playback.embedUrl);
-      })
-      .catch(() => {
-        /* keep cover; hit target can retry */
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingPlay(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [academy.courseId, academy.lessonId, detail, getIntroPlayback]);
-
-  useEffect(() => {
-    if (!owned || !selectedLesson?._id) return;
-    let cancelled = false;
-    setLoadingPlay(true);
-    void getLessonPlayback({ lessonId: selectedLesson._id })
-      .then((playback) => {
-        if (!cancelled) setLessonEmbed(playback.embedUrl);
-      })
-      .catch(() => {
-        /* keep cover */
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingPlay(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [owned, selectedLesson?._id, getLessonPlayback]);
-
   const commentsLessonId =
     owned && academy.lessonId ? academy.lessonId : undefined;
   const commentsSidebarTitle =
