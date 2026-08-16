@@ -169,6 +169,8 @@ if [[ -d public ]]; then
   mkdir -p "$STAGE/public"
   cp -a public/. "$STAGE/public/"
 fi
+# Stamp deploy build id so open tabs can poll /version.json for updates.
+NEXT_PUBLIC_DESK_BUILD="$NEXT_PUBLIC_DESK_BUILD" node "$ROOT/scripts/write-studio-version.mjs" --out="$STAGE/public"
 cp "$ROOT/Dockerfile.fast" "$STAGE/Dockerfile"
 
 log "docker build ${LOCAL_IMAGE} (niced)"

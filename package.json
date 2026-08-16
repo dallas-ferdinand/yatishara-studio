@@ -10,7 +10,7 @@
     "dev": "concurrently -n convex,next -c blue,green \"npm run dev:convex\" \"npm run dev:next\"",
     "dev:next": "next dev",
     "dev:convex": "npx convex dev",
-    "build": "next build",
+    "build": "next build && node scripts/write-studio-version.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",

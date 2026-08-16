@@ -9,6 +9,7 @@ import { MosTooltipLayer } from "@/components/mos-tooltip-layer";
 import { PaintBoot } from "@/components/paint-boot";
 import { PerformanceReporter } from "@/components/performance-reporter";
 import { StudioToaster } from "@/components/studio-toaster";
+import { StudioUpdateBanner } from "@/components/studio-update-banner";
 import "./globals.css";
 
 const onest = Onest({
@@ -147,13 +148,14 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: getThemeBootInlineScript() }}
         />
       </head>
-      <body className="h-full overflow-hidden" suppressHydrationWarning>
+      <body className="flex h-full flex-col overflow-hidden" suppressHydrationWarning>
         <PaintBoot />
         <MobileGestures />
         <MosTooltipLayer />
         <PerformanceReporter surface="root" />
         <StudioToaster />
-        {children}
+        <StudioUpdateBanner />
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
       </body>
     </html>
   );
