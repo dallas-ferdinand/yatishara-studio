@@ -2366,23 +2366,27 @@
   margin: 0;
   padding: 0;
   overflow: hidden;
+  container-type: inline-size;
+  container-name: dm-lightbox;
   /* L1 canvas — never hardcoded white/black overlay. */
   background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
   color: var(--color-cursor-text, var(--mos-text));
 }
 
 .studio-dm-lightbox-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   flex: 0 0 auto;
   z-index: 2;
   height: var(--cursor-head-h, 32px);
   min-height: var(--cursor-head-h, 32px);
   max-height: var(--cursor-head-h, 32px);
+  min-width: 0;
   padding: 0 8px;
   box-sizing: border-box;
+  overflow: hidden;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
   background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
 }
@@ -2393,7 +2397,7 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
-  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .studio-dm-lightbox-meta .studio-profile-avatar {
@@ -2455,7 +2459,9 @@
   align-items: center;
   gap: 4px;
   flex: 0 0 auto;
+  flex-wrap: nowrap;
   height: 100%;
+  min-width: 0;
 }
 
 /* Match chrome head icon circles (24px / 13px glyph). */
@@ -2464,6 +2470,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   flex: 0 0 auto;
   width: 24px;
   min-width: 24px;
@@ -2509,6 +2516,12 @@
   letter-spacing: -0.01em;
   color: var(--color-cursor-muted, var(--mos-muted));
   user-select: none;
+}
+
+@container dm-lightbox (max-width: 340px) {
+  .studio-dm-lightbox-zoom-label {
+    display: none;
+  }
 }
 
 .studio-dm-lightbox-stage {

@@ -20,6 +20,7 @@ import {
   MessagesSquare,
   Mic,
   Copy,
+  Download,
   Music,
   Pause,
   Paperclip,
@@ -74,6 +75,7 @@ import {
   rememberDmMessages,
 } from "@/studio/lib/dmClientCache";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { downloadMediaUrl } from "@/studio/lib/mediaUrls";
 import { playUiSound } from "@/mos-app/sounds.js";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import {
@@ -486,6 +488,28 @@ function copyableDmText(message: DmMessageRow): string | null {
   return body || null;
 }
 
+function dmDownloadForMessage(
+  message: Pick<DmMessageRow, "deleted" | "kind" | "imageUrl" | "videoUrl" | "audioUrl">,
+): { url: string; filename: string } | null {
+  if (message.deleted) return null;
+  if (message.kind === "image" && message.imageUrl) {
+    return { url: message.imageUrl, filename: "photo.jpg" };
+  }
+  if (message.kind === "video" && message.videoUrl) {
+    return { url: message.videoUrl, filename: "video.mp4" };
+  }
+  if (message.kind === "voice" && message.audioUrl) {
+    return { url: message.audioUrl, filename: "voice-message.webm" };
+  }
+  return null;
+}
+
+function downloadDmMedia(url: string, filename: string) {
+  void downloadMediaUrl(url, filename).then((ok) => {
+    if (!ok) toast.error("Could not download this file. Try again.");
+  });
+}
+
 async function copyDmText(value: string) {
   try {
     await navigator.clipboard.writeText(value);
@@ -554,6 +578,15 @@ function buildDmBubbleMenuItems(
       onSelect: () => handlers.onReply(message),
     },
   ];
+  const download = dmDownloadForMessage(message);
+  if (download) {
+    items.push({
+      key: "download",
+      label: "Download",
+      icon: <Download aria-hidden="true" />,
+      onSelect: () => downloadDmMedia(download.url, download.filename),
+    });
+  }
   const copyText = copyableDmText(message);
   if (copyText) {
     items.push({
@@ -1186,6 +1219,15 @@ function DmPhotoLightbox({
             title="Zoom in"
           >
             <ZoomIn size={13} strokeWidth={2.25} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="studio-dm-lightbox-tool"
+            onClick={() => downloadDmMedia(active.url, "photo.jpg")}
+            aria-label="Download"
+            title="Download"
+          >
+            <Download size={13} strokeWidth={2.25} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -2199,9 +2241,15 @@ export function StudioMessagesPane({
 }: StudioMessagesPaneProps) {
   const { isMobile } = useMobileLayout();
   const showBack = showChatListWhenEmpty || embeddedInRail;
-  const [expiresUnix] = useState(
+  const [expiresUnix, setExpiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60 * 12,
   );
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setExpiresUnix(Math.floor(Date.now() / 1000) + 60 * 60 * 12);
+    }, 45 * 60 * 1000);
+    return () => window.clearInterval(id);
+  }, []);
   const [peerSidebarOpen, setPeerSidebarOpen] = useState(() => {
     if (typeof window === "undefined") return false;
     if (embeddedInRail) return false;
@@ -2902,15 +2950,20 @@ export function StudioMessagesPane({
     if (!root) return undefined;
 
     const NEAR_BOTTOM_PX = 96;
+    const paneVisible = () => root.clientHeight >= 24;
     const distanceFromBottom = () =>
       root.scrollHeight - root.scrollTop - root.clientHeight;
     const updateJump = () => {
+      // Hidden keepalive (`content-visibility: hidden`) reports 0 height and
+      // must not clear stick-to-bottom — otherwise inbound DMs land off-screen.
+      if (!paneVisible()) return;
       const near = distanceFromBottom() <= NEAR_BOTTOM_PX;
       stickToBottomRef.current = near;
       setShowJumpDown(!near && root.scrollHeight > root.clientHeight + 12);
     };
     const pinIfStuck = () => {
       if (!stickToBottomRef.current) return;
+      if (!paneVisible()) return;
       root.scrollTop = root.scrollHeight;
       setShowJumpDown(false);
     };
@@ -2940,6 +2993,7 @@ export function StudioMessagesPane({
       if (stickToBottomRef.current) pinIfStuck();
       else updateJump();
     });
+    observer.observe(root);
     const inner = root.querySelector(".studio-dm-messages");
     if (inner) observer.observe(inner);
 

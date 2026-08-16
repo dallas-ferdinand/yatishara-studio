@@ -129,11 +129,21 @@ export function StudioMessagesSidebar({
   useLayoutEffect(() => {
     bindDmCacheOwner(me?.userId ?? null);
   }, [me?.userId]);
+  const [signedExpiresUnix, setSignedExpiresUnix] = useState(expiresUnix);
+  useEffect(() => {
+    setSignedExpiresUnix(expiresUnix);
+  }, [expiresUnix]);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setSignedExpiresUnix(Math.floor(Date.now() / 1000) + 60 * 60 * 12);
+    }, 45 * 60 * 1000);
+    return () => window.clearInterval(id);
+  }, []);
   const labels = useQuery(api.dmLabels.listMine, {});
   const removeLabel = useMutation(api.dmLabels.remove);
   const ackDelivered = useMutation(api.dms.ackDelivered);
   const conversationsLive = useQuery(api.dms.listMyConversations, {
-    expiresUnix,
+    expiresUnix: signedExpiresUnix,
     labelId: activeLabelId ?? undefined,
   });
   useEffect(() => {
@@ -158,11 +168,11 @@ export function StudioMessagesSidebar({
     for (const row of conversations.slice(0, 8)) {
       queries[`dm:${row.conversationId}`] = {
         query: api.dms.listMessages,
-        args: { conversationId: row.conversationId, expiresUnix },
+        args: { conversationId: row.conversationId, expiresUnix: signedExpiresUnix },
       };
     }
     return queries;
-  }, [conversations, expiresUnix]);
+  }, [conversations, signedExpiresUnix]);
   const warmMessageResults = useQueries(warmMessageQueries);
   useEffect(() => {
     if (!cacheReady) return;
@@ -178,7 +188,7 @@ export function StudioMessagesSidebar({
     searching
       ? {
           query: deferredSearch,
-          expiresUnix,
+          expiresUnix: signedExpiresUnix,
           now: searchNow,
         }
       : "skip",

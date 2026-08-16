@@ -656,62 +656,78 @@ async function listConversationMessages(
   );
   return await Promise.all(
     chronological.map(async (row) => {
-      const deleted = Boolean(row.deletedAt);
       const fromMe = row.senderId === args.viewerId;
-      if (deleted) {
+      const receipt = fromMe
+        ? receiptFor(
+            row.createdAt,
+            peerReadWatermark,
+            peerDeliveredWatermark,
+          )
+        : ("sent" as const);
+      try {
+        const deleted = Boolean(row.deletedAt);
+        if (deleted) {
+          return {
+            _id: row._id,
+            body: "",
+            kind: "text" as const,
+            fromMe,
+            receipt,
+            replyTo: row.replyToMessageId
+              ? replyById.get(row.replyToMessageId)
+              : undefined,
+            createdAt: row.createdAt,
+            deleted: true,
+          };
+        }
+        const media = await resolveDmMediaUrls(ctx, row, expiresUnix);
+        const feedShare = await hydrateFeedShareCard(ctx, row, expiresUnix);
+        const studioShare = await hydrateStudioShareCard(
+          ctx,
+          row,
+          expiresUnix,
+          args.viewerId,
+          peerIdOf(args.conversation, row.senderId),
+        );
         return {
           _id: row._id,
-          body: "",
-          kind: "text" as const,
+          body: row.body,
+          kind: row.kind ?? "text",
+          audioUrl: media.audioUrl,
+          imageUrl: media.imageUrl,
+          videoUrl: media.videoUrl,
+          contentType: media.contentType,
+          durationSec: row.durationSec,
           fromMe,
-          receipt: fromMe
-            ? receiptFor(
-                row.createdAt,
-                peerReadWatermark,
-                peerDeliveredWatermark,
-              )
-            : ("sent" as const),
+          receipt,
           replyTo: row.replyToMessageId
             ? replyById.get(row.replyToMessageId)
             : undefined,
+          feedShare,
+          studioShare,
           createdAt: row.createdAt,
-          deleted: true,
+          ...(row.editedAt !== undefined ? { editedAt: row.editedAt } : {}),
+        };
+      } catch {
+        // One bad hydrate must not blank the whole thread (inbound looks "missing").
+        const kind =
+          row.kind === "voice" ||
+          row.kind === "image" ||
+          row.kind === "video" ||
+          row.kind === "post" ||
+          row.kind === "comment" ||
+          row.kind === "studio_share"
+            ? row.kind
+            : ("text" as const);
+        return {
+          _id: row._id,
+          body: row.body ?? "",
+          kind,
+          fromMe,
+          receipt,
+          createdAt: row.createdAt,
         };
       }
-      const media = await resolveDmMediaUrls(ctx, row, expiresUnix);
-      const feedShare = await hydrateFeedShareCard(ctx, row, expiresUnix);
-      const studioShare = await hydrateStudioShareCard(
-        ctx,
-        row,
-        expiresUnix,
-        args.viewerId,
-        peerIdOf(args.conversation, row.senderId),
-      );
-      return {
-        _id: row._id,
-        body: row.body,
-        kind: row.kind ?? "text",
-        audioUrl: media.audioUrl,
-        imageUrl: media.imageUrl,
-        videoUrl: media.videoUrl,
-        contentType: media.contentType,
-        durationSec: row.durationSec,
-        fromMe,
-        receipt: fromMe
-          ? receiptFor(
-              row.createdAt,
-              peerReadWatermark,
-              peerDeliveredWatermark,
-            )
-          : ("sent" as const),
-        replyTo: row.replyToMessageId
-          ? replyById.get(row.replyToMessageId)
-          : undefined,
-        feedShare,
-        studioShare,
-        createdAt: row.createdAt,
-        ...(row.editedAt !== undefined ? { editedAt: row.editedAt } : {}),
-      };
     }),
   );
 }
