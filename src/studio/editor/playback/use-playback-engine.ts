@@ -537,14 +537,19 @@ class EngineConsumer implements FrameConsumer {
           }
         : null,
     );
-    const top = valid[0];
+    // Pick layers by role, not by index into the decoded array: one lane failing
+    // to decode used to shift the array and blend an overlay as the transition
+    // partner. slice.video is ordered top lane first, so middles paint bottom→top.
+    const top = slice.transition
+      ? valid.find((item) => item.sample.role === "outgoing")
+      : valid[0];
     const bottom = slice.transition
-      ? valid[1]
+      ? valid.find((item) => item.sample.role === "incoming")
       : valid.length > 1
         ? valid[valid.length - 1]
         : undefined;
     const middles = slice.transition
-      ? valid.slice(2).reverse()
+      ? valid.filter((item) => item.sample.role === "single").reverse()
       : valid.length > 2
         ? valid.slice(1, -1).reverse()
         : [];
@@ -634,7 +639,9 @@ class EngineConsumer implements FrameConsumer {
       transformB: transformTuple(sampleB?.clip.clip.effects),
       opacityA: opacityFor(sampleA),
       opacityB: opacityFor(sampleB),
-      stack: slice.transition ? undefined : prepared.stack,
+      // Overlay lanes stay painted through a transition window; dropping the stack
+      // here made every extra media row vanish while paused or scrubbing over one.
+      stack: prepared.stack?.length ? prepared.stack : undefined,
       transition: previewTransitionWhilePlaying(
         slice.transition?.type,
         this.playingRef.current,
