@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyProject } from "../editorState";
 import type { EditorClip } from "../types";
-import { compileTimeline, playbackSignature, sliceAt } from "./timeline-compiler";
+import { compileTimeline, playbackSignature, sliceAt, stackOverlappingVideo } from "./timeline-compiler";
 
 function clip(
   id: string,
@@ -263,20 +263,28 @@ describe("timeline compiler", () => {
     expect(slice.textUnder.map((item) => item.clipId)).toEqual(["under"]);
   });
 
-  it("prefers the top timeline video lane when clips overlap", () => {
+  it("stacks overlapping picture lanes from top to bottom", () => {
     const project = createEmptyProject({ name: "test", folderId: "folder" });
     project.tracks = [
       { id: "track-v1", kind: "video", label: "V1" },
       { id: "track-v2", kind: "video", label: "V2" },
+      { id: "track-v3", kind: "video", label: "V3" },
       { id: "track-audio", kind: "audio", label: "Audio" },
     ];
     project.clips = [
       { ...clip("top", 0, 3), trackId: "track-v1" },
-      { ...clip("bottom", 0, 3), trackId: "track-v2" },
+      { ...clip("mid", 0, 3), trackId: "track-v2" },
+      { ...clip("bottom", 0, 3), trackId: "track-v3" },
     ];
     const plan = compileTimeline(project);
     expect(sliceAt(plan, 1).video.map((sample) => sample.clip.clipId)).toEqual([
       "top",
+      "mid",
+      "bottom",
     ]);
+  });
+
+  it("keeps the top overlay and the lowest lanes when the stack is capped", () => {
+    expect(stackOverlappingVideo(["a", "b", "c", "d"], 3)).toEqual(["a", "c", "d"]);
   });
 });

@@ -155,16 +155,26 @@ export class CompositorClient {
       glowColor?: string;
       glowBlur?: number;
     }>;
+    stack?: Array<{
+      frame?: VideoFrame;
+      textureKey?: string;
+      transform?: [number, number, number, number];
+      opacity?: number;
+      width?: number;
+      height?: number;
+    }>;
   }): Promise<void> {
     if (this.disposed) {
       args.frameA?.close();
       args.frameB?.close();
+      for (const layer of args.stack ?? []) layer.frame?.close();
       return;
     }
     await this.ready;
     const requestId = ++this.requestId;
     const frameA = args.frameA;
     let frameB = args.frameB;
+    const stack = args.stack ?? [];
     // postMessage transfer list cannot contain the same VideoFrame twice.
     if (frameA && frameB && frameA === frameB) {
       frameB = frameA.clone();
@@ -172,6 +182,9 @@ export class CompositorClient {
     const transfer: Transferable[] = [];
     if (frameA) transfer.push(frameA);
     if (frameB) transfer.push(frameB);
+    for (const layer of stack) {
+      if (layer.frame) transfer.push(layer.frame);
+    }
     return await new Promise<void>((resolve, reject) => {
       this.pending.set(requestId, { resolve, reject });
       this.worker.postMessage(
@@ -186,6 +199,7 @@ export class CompositorClient {
           transformB: args.transformB ?? [1, 0, 0, 0],
           opacityA: args.opacityA ?? 1,
           opacityB: args.opacityB ?? 1,
+          stack,
           transition: args.transition ?? "none",
           progress: args.progress ?? 0,
           background: args.background ?? [0, 0, 0, 1],

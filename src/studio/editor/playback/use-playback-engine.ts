@@ -14,7 +14,6 @@ import { CompositorClient } from "./compositor-client";
 import {
   detectDecoderCapabilities,
   MediaDecoderClient,
-  type DecodedFrame,
 } from "./media-decoder-client";
 import { FrameScheduler, type FrameConsumer, type SchedulerMetrics } from "./frame-scheduler";
 import { compileTimeline, playbackSignature, sliceAt } from "./timeline-compiler";
@@ -184,6 +183,14 @@ type Prepared = {
   frameB?: VideoFrame;
   textureKeyA?: string;
   textureKeyB?: string;
+  stack?: Array<{
+    frame?: VideoFrame;
+    textureKey?: string;
+    transform: [number, number, number, number];
+    opacity: number;
+    width?: number;
+    height?: number;
+  }>;
 };
 
 class EngineConsumer implements FrameConsumer {
@@ -202,6 +209,7 @@ class EngineConsumer implements FrameConsumer {
   private prepared: Prepared | null = null;
   private readonly imageFrames = new Map<string, VideoFrame>();
   private readonly imageLoads = new Map<string, Promise<VideoFrame>>();
+  private readonly warmedStills = new Set<string>();
   private transitionKey: string | null = null;
   private transitionStartedAt = 0;
 
@@ -246,7 +254,16 @@ class EngineConsumer implements FrameConsumer {
     });
     const playing = this.playingRef.current;
     const decoded = await Promise.all(
-      slice.video.map(async (sample, index): Promise<DecodedFrame | null> => {
+      slice.video.map(async (sample, index): Promise<{
+        assetId: string;
+        sourceTime: number;
+        generation: number;
+        frame?: VideoFrame;
+        textureKey?: string;
+        width?: number;
+        height?: number;
+        sample: (typeof slice.video)[number];
+      } | null> => {
         const assetId = sample.clip.assetId;
         if (!assetId) return null;
         const media = this.mediaRef.current.get(assetId);
@@ -258,13 +275,17 @@ class EngineConsumer implements FrameConsumer {
             url,
             this.previewLoadQualityRef.current,
           );
+          const textureKey = `image:${assetId}`;
+          const warmed = this.warmedStills.has(textureKey);
           return {
             assetId,
             sourceTime: sample.sourceTime,
             generation,
-            // Still cache key — compositor skips tex upload when unchanged.
-            textureKey: `image:${assetId}`,
-            frame: frame.clone(),
+            textureKey,
+            frame: warmed ? undefined : frame.clone(),
+            width: frame.displayWidth,
+            height: frame.displayHeight,
+            sample,
           };
         }
         try {
@@ -286,8 +307,8 @@ class EngineConsumer implements FrameConsumer {
           if (!decoded) return null;
           return {
             ...decoded,
-            // Same sample → skip compositor re-upload (big for scrub stickiness).
             textureKey: `video:${assetId}:${sample.sourceTime.toFixed(3)}`,
+            sample,
           };
         } catch {
           // Skip broken/slow samples — underrun/buffer; never throw into a
@@ -298,7 +319,7 @@ class EngineConsumer implements FrameConsumer {
     );
     // Touch the promise so failures aren't unhandled; do not await for readiness.
     void audioReady;
-    const valid = decoded.filter((item): item is DecodedFrame => item != null);
+    const valid = decoded.filter((item): item is NonNullable<typeof item> => item != null);
     const hasText = slice.textOver.length > 0 || slice.textUnder.length > 0;
     if (valid.length === 0 && slice.video.length > 0 && !hasText) {
       // Keep fade envelopes moving even when video decode isn't ready yet.
@@ -330,9 +351,11 @@ class EngineConsumer implements FrameConsumer {
           }
         : null,
     );
-    const frameA = valid[0]?.frame;
-    let frameB = valid[1]?.frame;
-    // Distinct transferables required for compositor postMessage.
+    const top = valid[0];
+    const bottom = valid.length > 1 ? valid[valid.length - 1] : undefined;
+    const middles = valid.length > 2 ? valid.slice(1, -1).reverse() : [];
+    const frameA = top?.frame;
+    let frameB = bottom?.frame;
     if (frameA && frameB && frameA === frameB) {
       frameB = frameA.clone();
     }
@@ -341,8 +364,21 @@ class EngineConsumer implements FrameConsumer {
       generation,
       frameA,
       frameB,
-      textureKeyA: valid[0]?.textureKey,
-      textureKeyB: valid[1]?.textureKey,
+      textureKeyA: top?.textureKey,
+      textureKeyB: bottom?.textureKey,
+      stack: middles.map((item) => {
+        const sample = item.sample;
+        const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
+        const local = slice.timelineTime - sample.clip.timelineStart;
+        return {
+          frame: item.frame,
+          textureKey: item.textureKey,
+          transform: transformTuple(sample.clip.clip.effects),
+          opacity: clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local),
+          width: item.width ?? item.frame?.displayWidth,
+          height: item.height ?? item.frame?.displayHeight,
+        };
+      }),
     };
 
     // Pre-roll an upcoming transition partner from MP4 sample offsets.
@@ -394,8 +430,12 @@ class EngineConsumer implements FrameConsumer {
     // Document + worker FontFace sets are separate — load both before paint.
     await Promise.all(families.map((family) => loadGoogleFont(family)));
     await this.compositor.ensureFonts(families);
-    const sampleA = prepared.slice.video[0];
-    const sampleB = prepared.slice.video[1];
+    const videos = prepared.slice.video;
+    const sampleA = videos[0];
+    const sampleB =
+      slice.transition || videos.length <= 2
+        ? videos[1]
+        : videos[videos.length - 1];
     const opacityFor = (sample: typeof sampleA | undefined) => {
       if (!sample) return 1;
       const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
@@ -411,9 +451,7 @@ class EngineConsumer implements FrameConsumer {
       transformB: transformTuple(sampleB?.clip.clip.effects),
       opacityA: opacityFor(sampleA),
       opacityB: opacityFor(sampleB),
-      // Live play: blur/zoom are multi-tap GPU passes on two 720/1080 frames —
-      // approximate as crossfade so the clock doesn't hitch. Scrub/paused keeps
-      // the real shader; export uses FFmpeg.
+      stack: slice.transition ? undefined : prepared.stack,
       transition: previewTransitionWhilePlaying(
         slice.transition?.type,
         this.playingRef.current,
@@ -422,6 +460,12 @@ class EngineConsumer implements FrameConsumer {
       textsUnder,
       textsOver,
     });
+    const warm = (key?: string) => {
+      if (key?.startsWith("image:")) this.warmedStills.add(key);
+    };
+    warm(prepared.textureKeyA);
+    warm(prepared.textureKeyB);
+    for (const layer of prepared.stack ?? []) warm(layer.textureKey);
     if (slice.transition && this.transitionStartedAt > 0) {
       reportPerfMetric(
         "editor-transition-start",
@@ -452,6 +496,7 @@ class EngineConsumer implements FrameConsumer {
     for (const frame of this.imageFrames.values()) frame.close();
     this.imageFrames.clear();
     this.imageLoads.clear();
+    this.warmedStills.clear();
   }
 
   private imageFrame(
@@ -511,6 +556,7 @@ class EngineConsumer implements FrameConsumer {
   private closePrepared(): void {
     this.prepared?.frameA?.close();
     this.prepared?.frameB?.close();
+    for (const layer of this.prepared?.stack ?? []) layer.frame?.close();
     this.prepared = null;
   }
 }

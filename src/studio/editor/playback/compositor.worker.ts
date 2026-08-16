@@ -74,6 +74,14 @@ type RenderMessage = {
   /** Per-clip picture opacity (edge fade in/out). Defaults to 1. */
   opacityA?: number;
   opacityB?: number;
+  stack?: Array<{
+    frame?: VideoFrame;
+    textureKey?: string;
+    transform?: TransformTuple;
+    opacity?: number;
+    width?: number;
+    height?: number;
+  }>;
   transition: TransitionName;
   progress: number;
   background: [number, number, number, number];
@@ -189,8 +197,10 @@ uniform float u_progress;
 uniform float u_opacityA;
 uniform float u_opacityB;
 uniform int u_effect;
+uniform int u_pass;
 uniform bool u_hasA;
 uniform bool u_hasB;
+uniform bool u_bIsCanvas;
 uniform vec4 u_background;
 in vec2 v_uv;
 out vec4 outColor;
@@ -241,15 +251,36 @@ vec4 blurFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform, float ra
 }
 
 void main() {
-  vec4 layer = u_background;
   vec4 underText = texture(u_textUnder, v_uv);
+  vec4 overText = texture(u_textOver, v_uv);
+  float opa = clamp(u_opacityA, 0.0, 1.0);
+  float opb = clamp(u_opacityB, 0.0, 1.0);
+  vec4 a = u_hasA ? sampleFrame(u_a, v_uv, u_aSize, u_aTransform, opa) : vec4(0.0);
+  vec4 b = u_bIsCanvas
+    ? texture(u_b, v_uv)
+    : (u_hasB ? sampleFrame(u_b, v_uv, u_bSize, u_bTransform, opb) : a);
+
+  if (u_pass == 1) {
+    vec4 layer = u_background;
+    layer = underText + layer * (1.0 - underText.a);
+    vec4 seed = u_hasB ? b : a;
+    outColor = seed + layer * (1.0 - seed.a);
+    return;
+  }
+  if (u_pass == 2) {
+    outColor = a + b * (1.0 - a.a);
+    return;
+  }
+  if (u_pass == 3) {
+    vec4 stacked = a + b * (1.0 - a.a);
+    outColor = overText + stacked * (1.0 - overText.a);
+    return;
+  }
+
+  vec4 layer = u_background;
   layer = underText + layer * (1.0 - underText.a);
 
   if (u_hasA || u_hasB) {
-    float opa = clamp(u_opacityA, 0.0, 1.0);
-    float opb = clamp(u_opacityB, 0.0, 1.0);
-    vec4 a = u_hasA ? sampleFrame(u_a, v_uv, u_aSize, u_aTransform, opa) : vec4(0.0);
-    vec4 b = u_hasB ? sampleFrame(u_b, v_uv, u_bSize, u_bTransform, opb) : a;
     float p = clamp(u_progress, 0.0, 1.0);
     vec4 base;
 
@@ -293,7 +324,6 @@ void main() {
     layer = base + layer * (1.0 - base.a);
   }
 
-  vec4 overText = texture(u_textOver, v_uv);
   outColor = overText + layer * (1.0 - overText.a);
 }`;
 
@@ -308,6 +338,8 @@ let uploadedAKey: string | null = null;
 let uploadedBKey: string | null = null;
 let lastASize: [number, number] = [1, 1];
 let lastBSize: [number, number] = [1, 1];
+const stillCache = new Map<string, { texture: WebGLTexture; width: number; height: number }>();
+const STILL_CACHE_MAX = 12;
 let textCanvas: OffscreenCanvas | null = null;
 let lastTextsUnder: RenderMessage["textsUnder"] = [];
 let lastTextsOver: RenderMessage["textsOver"] = [];
@@ -392,6 +424,40 @@ function initialize(message: InitMessage): void {
   gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
+function evictStillCache(keep: WebGLTexture | null): void {
+  if (!gl) return;
+  while (stillCache.size > STILL_CACHE_MAX) {
+    const oldest = stillCache.keys().next().value;
+    if (!oldest) break;
+    const dropped = stillCache.get(oldest);
+    stillCache.delete(oldest);
+    if (dropped && dropped.texture !== keep) {
+      gl.deleteTexture(dropped.texture);
+    }
+  }
+}
+
+function bindCachedStill(
+  context: WebGL2RenderingContext,
+  unit: number,
+  cacheKey: string | undefined,
+  slot: "a" | "b",
+): boolean {
+  if (!cacheKey) return false;
+  const cached = stillCache.get(cacheKey);
+  if (!cached) return false;
+  context.activeTexture(unit);
+  context.bindTexture(context.TEXTURE_2D, cached.texture);
+  if (slot === "a") {
+    uploadedAKey = cacheKey;
+    lastASize = [cached.width, cached.height];
+  } else {
+    uploadedBKey = cacheKey;
+    lastBSize = [cached.width, cached.height];
+  }
+  return true;
+}
+
 function upload(
   context: WebGL2RenderingContext,
   texture: WebGLTexture,
@@ -400,7 +466,40 @@ function upload(
   cacheKey?: string,
   slot: "a" | "b" = "a",
 ): boolean {
+  if (cacheKey?.startsWith("image:")) {
+    if (!frame) return bindCachedStill(context, unit, cacheKey, slot);
+    let cached = stillCache.get(cacheKey);
+    if (!cached) {
+      const still = createTexture(context);
+      context.activeTexture(unit);
+      context.bindTexture(context.TEXTURE_2D, still);
+      context.pixelStorei(context.UNPACK_FLIP_Y_WEBGL, true);
+      context.pixelStorei(context.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+      context.texImage2D(
+        context.TEXTURE_2D,
+        0,
+        context.RGBA,
+        context.RGBA,
+        context.UNSIGNED_BYTE,
+        frame,
+      );
+      cached = {
+        texture: still,
+        width: frame.displayWidth,
+        height: frame.displayHeight,
+      };
+      stillCache.set(cacheKey, cached);
+      evictStillCache(still);
+    }
+    return bindCachedStill(context, unit, cacheKey, slot);
+  }
   if (!frame) {
+    const prev = slot === "a" ? uploadedAKey : uploadedBKey;
+    if (cacheKey && cacheKey === prev) {
+      context.activeTexture(unit);
+      context.bindTexture(context.TEXTURE_2D, texture);
+      return true;
+    }
     if (slot === "a") uploadedAKey = null;
     else uploadedBKey = null;
     return false;
@@ -409,11 +508,9 @@ function upload(
   context.bindTexture(context.TEXTURE_2D, texture);
   const prev = slot === "a" ? uploadedAKey : uploadedBKey;
   if (cacheKey && cacheKey === prev) {
-    // Texture already holds these pixels — skip UNPACK_PREMULTIPLY + texImage2D.
     return true;
   }
   context.pixelStorei(context.UNPACK_FLIP_Y_WEBGL, true);
-  // Premultiply on upload so LINEAR filter + source-over don't fringe/glow PNGs.
   context.pixelStorei(context.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
   context.texImage2D(
     context.TEXTURE_2D,
@@ -762,6 +859,60 @@ function uploadTextLayer(
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
 }
 
+function copyCanvasToB(): void {
+  if (!gl || !canvas || !textureB) return;
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, textureB);
+  gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, canvas.width, canvas.height, 0);
+  uploadedBKey = "__canvas_stack__";
+  lastBSize = [canvas.width, canvas.height];
+}
+
+function applyLayerUniforms(args: {
+  hasA: boolean;
+  hasB: boolean;
+  transformA: TransformTuple;
+  transformB: TransformTuple;
+  opacityA: number;
+  opacityB: number;
+  pass: number;
+  bIsCanvas: boolean;
+  effect: number;
+  progress: number;
+  background: [number, number, number, number];
+}): void {
+  if (!gl || !program || !canvas) return;
+  gl.useProgram(program);
+  gl.uniform2f(uniform("u_aSize"), args.hasA ? lastASize[0] : 1, args.hasA ? lastASize[1] : 1);
+  gl.uniform2f(uniform("u_bSize"), args.hasB ? lastBSize[0] : 1, args.hasB ? lastBSize[1] : 1);
+  gl.uniform2f(uniform("u_canvasSize"), canvas.width, canvas.height);
+  gl.uniform4f(
+    uniform("u_aTransform"),
+    args.transformA[0],
+    args.transformA[1],
+    args.transformA[2],
+    args.transformA[3],
+  );
+  gl.uniform4f(
+    uniform("u_bTransform"),
+    args.transformB[0],
+    args.transformB[1],
+    args.transformB[2],
+    args.transformB[3],
+  );
+  gl.uniform1f(uniform("u_progress"), args.progress);
+  gl.uniform1f(uniform("u_opacityA"), args.opacityA);
+  gl.uniform1f(uniform("u_opacityB"), args.opacityB);
+  gl.uniform1i(uniform("u_effect"), args.effect);
+  gl.uniform1i(uniform("u_pass"), args.pass);
+  gl.uniform1i(uniform("u_hasA"), args.hasA ? 1 : 0);
+  gl.uniform1i(uniform("u_hasB"), args.hasB ? 1 : 0);
+  gl.uniform1i(uniform("u_bIsCanvas"), args.bIsCanvas ? 1 : 0);
+  gl.uniform4fv(uniform("u_background"), args.background);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
 function render(message: RenderMessage): void {
   if (
     !gl ||
@@ -776,60 +927,93 @@ function render(message: RenderMessage): void {
   }
   const a = message.frameA;
   const b = message.frameB;
+  const stack = message.stack ?? [];
+  const transformA = message.transformA ?? [1, 0, 0, 0];
+  const transformB = message.transformB ?? [1, 0, 0, 0];
+  const identity: TransformTuple = [1, 0, 0, 0];
+  const opacityA = Number.isFinite(message.opacityA) ? Number(message.opacityA) : 1;
+  const opacityB = Number.isFinite(message.opacityB) ? Number(message.opacityB) : 1;
+  const effect = transitionShaderIdFor(message.transition);
+  const canStack =
+    stack.length > 0 && (message.transition === "none" || effect === TRANSITION_SHADER_IDS.none);
   try {
-    const hasA = upload(gl, textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
-    const hasB = upload(gl, textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
     lastTextsUnder = message.textsUnder;
     lastTextsOver = message.textsOver;
     uploadTextLayerIfChanged(textureTextUnder, gl.TEXTURE2, lastTextsUnder, "under");
     uploadTextLayerIfChanged(textureTextOver, gl.TEXTURE3, lastTextsOver, "over");
-    gl.useProgram(program);
-    gl.uniform2f(
-      uniform("u_aSize"),
-      hasA ? (a?.displayWidth ?? lastASize[0]) : 1,
-      hasA ? (a?.displayHeight ?? lastASize[1]) : 1,
-    );
-    gl.uniform2f(
-      uniform("u_bSize"),
-      hasB ? (b?.displayWidth ?? lastBSize[0]) : 1,
-      hasB ? (b?.displayHeight ?? lastBSize[1]) : 1,
-    );
-    gl.uniform2f(uniform("u_canvasSize"), canvas.width, canvas.height);
-    const transformA = message.transformA ?? [1, 0, 0, 0];
-    const transformB = message.transformB ?? [1, 0, 0, 0];
-    gl.uniform4f(
-      uniform("u_aTransform"),
-      transformA[0],
-      transformA[1],
-      transformA[2],
-      transformA[3],
-    );
-    gl.uniform4f(
-      uniform("u_bTransform"),
-      transformB[0],
-      transformB[1],
-      transformB[2],
-      transformB[3],
-    );
-    gl.uniform1f(uniform("u_progress"), message.progress);
-    gl.uniform1f(
-      uniform("u_opacityA"),
-      Number.isFinite(message.opacityA) ? Number(message.opacityA) : 1,
-    );
-    gl.uniform1f(
-      uniform("u_opacityB"),
-      Number.isFinite(message.opacityB) ? Number(message.opacityB) : 1,
-    );
-    gl.uniform1i(uniform("u_effect"), transitionShaderIdFor(message.transition));
-    gl.uniform1i(uniform("u_hasA"), hasA ? 1 : 0);
-    gl.uniform1i(uniform("u_hasB"), hasB ? 1 : 0);
-    gl.uniform4fv(uniform("u_background"), message.background);
-    gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    if (canStack) {
+      const hasBottom = upload(gl, textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
+      applyLayerUniforms({
+        hasA: false,
+        hasB: hasBottom,
+        transformA,
+        transformB,
+        opacityA,
+        opacityB,
+        pass: 1,
+        bIsCanvas: false,
+        effect: TRANSITION_SHADER_IDS.none,
+        progress: 0,
+        background: message.background,
+      });
+      copyCanvasToB();
+      for (const layer of stack) {
+        const hasLayer = upload(gl, textureA, gl.TEXTURE0, layer.frame, layer.textureKey, "a");
+        if (!hasLayer) continue;
+        if (layer.width && layer.height) lastASize = [layer.width, layer.height];
+        applyLayerUniforms({
+          hasA: true,
+          hasB: true,
+          transformA: layer.transform ?? identity,
+          transformB: identity,
+          opacityA: Number.isFinite(layer.opacity) ? Number(layer.opacity) : 1,
+          opacityB: 1,
+          pass: 2,
+          bIsCanvas: true,
+          effect: TRANSITION_SHADER_IDS.none,
+          progress: 0,
+          background: message.background,
+        });
+        copyCanvasToB();
+      }
+      const hasFinish = upload(gl, textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
+      applyLayerUniforms({
+        hasA: hasFinish,
+        hasB: true,
+        transformA,
+        transformB: identity,
+        opacityA,
+        opacityB: 1,
+        pass: 3,
+        bIsCanvas: true,
+        effect: TRANSITION_SHADER_IDS.none,
+        progress: 0,
+        background: message.background,
+      });
+      gl.flush();
+    } else {
+    const hasA = upload(gl, textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
+    const hasB = upload(gl, textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
+    applyLayerUniforms({
+      hasA,
+      hasB,
+      transformA,
+      transformB,
+      opacityA,
+      opacityB,
+      pass: 0,
+      bIsCanvas: false,
+      effect,
+      progress: message.progress,
+      background: message.background,
+    });
     gl.flush();
+    }
   } finally {
     a?.close();
     b?.close();
+    for (const layer of stack) layer.frame?.close();
   }
   self.postMessage({ type: "rendered", requestId: message.requestId });
 }
@@ -912,6 +1096,10 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     } else if (message.type === "dispose") {
       uploadedAKey = null;
       uploadedBKey = null;
+      for (const entry of stillCache.values()) {
+        gl?.deleteTexture(entry.texture);
+      }
+      stillCache.clear();
       gl?.getExtension("WEBGL_lose_context")?.loseContext();
       close();
     }

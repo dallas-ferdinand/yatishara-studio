@@ -158,6 +158,18 @@ export function compileTimeline(project: EditorProject): PlaybackPlan {
   };
 }
 
+export const MAX_PREVIEW_VIDEO_STACK = 8;
+
+/** Top-to-bottom overlapping picture lanes for the preview compositor. */
+export function stackOverlappingVideo<T>(
+  active: T[],
+  max = MAX_PREVIEW_VIDEO_STACK,
+): T[] {
+  if (active.length <= max) return active;
+  const keepBottom = max - 1;
+  return [active[0]!, ...active.slice(active.length - keepBottom)];
+}
+
 /**
  * Identity of everything that decides which bytes get decoded and which audio
  * is mixed. Cosmetic edits — transform drags, text styling, colours — leave it
@@ -242,26 +254,15 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
       });
     }
   } else {
-    // Lowest trackIndex = top of timeline = drawn last (over). Dual-texture
-    // compositor gets top as A and the bottom-most underlay as B so transparent
-    // PNGs reveal the picture underneath instead of the canvas colour.
+    // Lowest trackIndex = top of timeline = drawn last (over). Stack every
+    // overlapping picture lane so middle rows render, not only first+last.
     const active = plan.video
       .filter((clip) => contains(clip.timelineStart, clip.timelineEnd, time))
       .sort((a, b) => a.trackIndex - b.trackIndex || a.timelineStart - b.timelineStart);
-    const top = active[0];
-    const under =
-      active.length > 1 ? active[active.length - 1] : null;
-    if (top) {
+    for (const clip of stackOverlappingVideo(active)) {
       video.push({
-        clip: top,
-        sourceTime: sourceAt(top, time),
-        role: "single",
-      });
-    }
-    if (under && top && under.clipId !== top.clipId) {
-      video.push({
-        clip: under,
-        sourceTime: sourceAt(under, time),
+        clip,
+        sourceTime: sourceAt(clip, time),
         role: "single",
       });
     }
