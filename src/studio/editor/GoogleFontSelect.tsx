@@ -44,8 +44,9 @@ export function GoogleFontSelect({ value, onChange }: GoogleFontSelectProps) {
     const rect = anchorRef.current.getBoundingClientRect();
     const width = Math.min(320, Math.max(rect.width, 240));
     const left = Math.min(window.innerWidth - width - 8, Math.max(8, rect.left));
+    const panelH = Math.min(480, window.innerHeight * 0.78);
     let top = rect.bottom + 6;
-    if (top + 360 > window.innerHeight) top = Math.max(8, rect.top - 360);
+    if (top + panelH > window.innerHeight) top = Math.max(8, rect.top - panelH);
     setPos({ top, left, width });
     setQuery("");
   }, [open]);

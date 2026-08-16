@@ -2036,148 +2036,150 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
       </InspectorSection>
 
       <InspectorSection title="Type">
-        <div className="studio-editor-font-size-row">
-          <GoogleFontSelect
-            value={text.fontFamily ?? "system"}
-            onChange={(fontFamily) => patchText({ fontFamily })}
-          />
-          <label className="studio-editor-font-size">
-            <span className="sr-only">Size</span>
-            <input
-              type="number"
-              min={12}
-              max={200}
-              step={1}
-              value={text.fontSize ?? 42}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (raw === "") return;
-                patchText({ fontSize: Number(raw) || 42 });
-              }}
-              onBlur={(e) => {
-                const n = Number(e.target.value);
-                patchText({ fontSize: Number.isFinite(n) ? n : 42 });
-              }}
+        <div className="studio-editor-type-stack">
+          <div className="studio-editor-font-size-row">
+            <GoogleFontSelect
+              value={text.fontFamily ?? "system"}
+              onChange={(fontFamily) => patchText({ fontFamily })}
             />
-          </label>
-        </div>
-        <SliderRow
-          label="Size"
-          min={12}
-          max={200}
-          step={1}
-          value={text.fontSize ?? 42}
-          defaultValue={42}
-          formatValue={(v) => `${Math.round(Number(v))}px`}
-          parseInput={(raw) => parseNumberInput(raw, { suffix: "px" })}
-          onValueChange={(next) => patchText({ fontSize: next })}
-        />
-
-        <div className="studio-editor-text-toolbar">
-          <button
-            type="button"
-            className={`studio-editor-text-tool${text.bold ? " is-active" : ""}`}
-            onClick={() => patchText({ bold: !text.bold })}
-            aria-pressed={Boolean(text.bold)}
-            title="Bold"
-          >
-            <Bold size={14} />
-          </button>
-          <button
-            type="button"
-            className={`studio-editor-text-tool${text.italic ? " is-active" : ""}`}
-            onClick={() => patchText({ italic: !text.italic })}
-            aria-pressed={Boolean(text.italic)}
-            title="Italic"
-          >
-            <Italic size={14} />
-          </button>
-          <button
-            type="button"
-            className={`studio-editor-text-tool${text.underline ? " is-active" : ""}`}
-            onClick={() => patchText({ underline: !text.underline })}
-            aria-pressed={Boolean(text.underline)}
-            title="Underline"
-          >
-            <Underline size={14} />
-          </button>
-          <span className="studio-editor-text-tool-sep" aria-hidden="true" />
-          <div className="studio-editor-text-tool-wrap">
-            <button
-              type="button"
-              className={`studio-editor-text-tool${alignOpen ? " is-active" : ""}`}
-              onClick={() => {
-                setAlignOpen((v) => !v);
-                setSpacingOpen(false);
-              }}
-              aria-expanded={alignOpen}
-              title="Alignment"
-            >
-              <AlignHIcon size={14} />
-            </button>
-            {alignOpen ? (
-              <div className="studio-editor-align-popover" role="menu">
-                <button type="button" className={(text.align ?? "center") === "left" ? "is-active" : ""} onClick={() => patchText({ align: "left" })} title="Left"><AlignLeft size={14} /></button>
-                <button type="button" className={(text.align ?? "center") === "center" ? "is-active" : ""} onClick={() => patchText({ align: "center" })} title="Center"><AlignCenter size={14} /></button>
-                <button type="button" className={(text.align ?? "center") === "right" ? "is-active" : ""} onClick={() => patchText({ align: "right" })} title="Right"><AlignRight size={14} /></button>
-                <button type="button" disabled title="Justify"><AlignJustify size={14} /></button>
-                <button type="button" className={(text.verticalAlign ?? "middle") === "top" ? "is-active" : ""} onClick={() => patchText({ verticalAlign: "top" })} title="Top"><AlignVerticalJustifyStart size={14} /></button>
-                <button type="button" className={(text.verticalAlign ?? "middle") === "middle" ? "is-active" : ""} onClick={() => patchText({ verticalAlign: "middle" })} title="Middle"><VAlignIcon size={14} /></button>
-                <button type="button" className={(text.verticalAlign ?? "middle") === "bottom" ? "is-active" : ""} onClick={() => patchText({ verticalAlign: "bottom" })} title="Bottom"><AlignVerticalJustifyEnd size={14} /></button>
-                <button type="button" disabled title="Distribute"><AlignVerticalDistributeCenter size={14} /></button>
-              </div>
-            ) : null}
+            <label className="studio-editor-font-size">
+              <span className="sr-only">Size</span>
+              <input
+                type="number"
+                min={12}
+                max={200}
+                step={1}
+                value={text.fontSize ?? 42}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") return;
+                  patchText({ fontSize: Number(raw) || 42 });
+                }}
+                onBlur={(e) => {
+                  const n = Number(e.target.value);
+                  patchText({ fontSize: Number.isFinite(n) ? n : 42 });
+                }}
+              />
+            </label>
           </div>
-          <button
-            type="button"
-            className={`studio-editor-text-tool${currentCase !== "none" ? " is-active" : ""}`}
-            onClick={() => {
-              const idx = caseCycle.indexOf(currentCase);
-              patchText({ textCase: caseCycle[(idx + 1) % caseCycle.length] });
-            }}
-            title={`Case · ${caseLabel[currentCase]}`}
-          >
-            <CaseSensitive size={14} />
-          </button>
-          <div className="studio-editor-text-tool-wrap">
+          <SliderRow
+            label="Size"
+            min={12}
+            max={200}
+            step={1}
+            value={text.fontSize ?? 42}
+            defaultValue={42}
+            formatValue={(v) => `${Math.round(Number(v))}px`}
+            parseInput={(raw) => parseNumberInput(raw, { suffix: "px" })}
+            onValueChange={(next) => patchText({ fontSize: next })}
+          />
+
+          <div className="studio-editor-text-toolbar" role="toolbar" aria-label="Text formatting">
             <button
               type="button"
-              className={`studio-editor-text-tool${spacingOpen ? " is-active" : ""}`}
-              onClick={() => {
-                setSpacingOpen((v) => !v);
-                setAlignOpen(false);
-              }}
-              aria-expanded={spacingOpen}
-              title="Spacing"
+              className={`studio-editor-text-tool${text.bold ? " is-active" : ""}`}
+              onClick={() => patchText({ bold: !text.bold })}
+              aria-pressed={Boolean(text.bold)}
+              title="Bold"
             >
-              <AlignVerticalDistributeCenter size={14} />
+              <Bold size={14} />
             </button>
-            {spacingOpen ? (
-              <div className="studio-editor-spacing-popover">
-                <SliderRow
-                  label="Letter"
-                  min={-0.1}
-                  max={0.5}
-                  step={0.01}
-                  value={text.letterSpacing ?? 0}
-                  defaultValue={0}
-                  formatValue={(v) => Number(v).toFixed(2)}
-                  parseInput={(raw) => parseNumberInput(raw)}
-                  onValueChange={(next) => patchText({ letterSpacing: next })}
-                />
-                <SliderRow
-                  label="Line"
-                  min={0.8}
-                  max={2.4}
-                  step={0.05}
-                  value={text.lineHeight ?? 1.2}
-                  defaultValue={1.2}
-                  formatValue={(v) => Number(v).toFixed(2)}
-                  parseInput={(raw) => parseNumberInput(raw)}
-                  onValueChange={(next) => patchText({ lineHeight: next })}
-                />
-              </div>
-            ) : null}
+            <button
+              type="button"
+              className={`studio-editor-text-tool${text.italic ? " is-active" : ""}`}
+              onClick={() => patchText({ italic: !text.italic })}
+              aria-pressed={Boolean(text.italic)}
+              title="Italic"
+            >
+              <Italic size={14} />
+            </button>
+            <button
+              type="button"
+              className={`studio-editor-text-tool${text.underline ? " is-active" : ""}`}
+              onClick={() => patchText({ underline: !text.underline })}
+              aria-pressed={Boolean(text.underline)}
+              title="Underline"
+            >
+              <Underline size={14} />
+            </button>
+            <span className="studio-editor-text-tool-sep" aria-hidden="true" />
+            <div className="studio-editor-text-tool-wrap">
+              <button
+                type="button"
+                className={`studio-editor-text-tool${alignOpen ? " is-active" : ""}`}
+                onClick={() => {
+                  setAlignOpen((v) => !v);
+                  setSpacingOpen(false);
+                }}
+                aria-expanded={alignOpen}
+                title="Alignment"
+              >
+                <AlignHIcon size={14} />
+              </button>
+              {alignOpen ? (
+                <div className="studio-editor-align-popover" role="menu">
+                  <button type="button" className={(text.align ?? "center") === "left" ? "is-active" : ""} onClick={() => patchText({ align: "left" })} title="Left"><AlignLeft size={14} /></button>
+                  <button type="button" className={(text.align ?? "center") === "center" ? "is-active" : ""} onClick={() => patchText({ align: "center" })} title="Center"><AlignCenter size={14} /></button>
+                  <button type="button" className={(text.align ?? "center") === "right" ? "is-active" : ""} onClick={() => patchText({ align: "right" })} title="Right"><AlignRight size={14} /></button>
+                  <button type="button" disabled title="Justify"><AlignJustify size={14} /></button>
+                  <button type="button" className={(text.verticalAlign ?? "middle") === "top" ? "is-active" : ""} onClick={() => patchText({ verticalAlign: "top" })} title="Top"><AlignVerticalJustifyStart size={14} /></button>
+                  <button type="button" className={(text.verticalAlign ?? "middle") === "middle" ? "is-active" : ""} onClick={() => patchText({ verticalAlign: "middle" })} title="Middle"><VAlignIcon size={14} /></button>
+                  <button type="button" className={(text.verticalAlign ?? "middle") === "bottom" ? "is-active" : ""} onClick={() => patchText({ verticalAlign: "bottom" })} title="Bottom"><AlignVerticalJustifyEnd size={14} /></button>
+                  <button type="button" disabled title="Distribute"><AlignVerticalDistributeCenter size={14} /></button>
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className={`studio-editor-text-tool${currentCase !== "none" ? " is-active" : ""}`}
+              onClick={() => {
+                const idx = caseCycle.indexOf(currentCase);
+                patchText({ textCase: caseCycle[(idx + 1) % caseCycle.length] });
+              }}
+              title={`Case · ${caseLabel[currentCase]}`}
+            >
+              <CaseSensitive size={14} />
+            </button>
+            <div className="studio-editor-text-tool-wrap">
+              <button
+                type="button"
+                className={`studio-editor-text-tool${spacingOpen ? " is-active" : ""}`}
+                onClick={() => {
+                  setSpacingOpen((v) => !v);
+                  setAlignOpen(false);
+                }}
+                aria-expanded={spacingOpen}
+                title="Spacing"
+              >
+                <AlignVerticalDistributeCenter size={14} />
+              </button>
+              {spacingOpen ? (
+                <div className="studio-editor-spacing-popover">
+                  <SliderRow
+                    label="Letter"
+                    min={-0.1}
+                    max={0.5}
+                    step={0.01}
+                    value={text.letterSpacing ?? 0}
+                    defaultValue={0}
+                    formatValue={(v) => Number(v).toFixed(2)}
+                    parseInput={(raw) => parseNumberInput(raw)}
+                    onValueChange={(next) => patchText({ letterSpacing: next })}
+                  />
+                  <SliderRow
+                    label="Line"
+                    min={0.8}
+                    max={2.4}
+                    step={0.05}
+                    value={text.lineHeight ?? 1.2}
+                    defaultValue={1.2}
+                    formatValue={(v) => Number(v).toFixed(2)}
+                    parseInput={(raw) => parseNumberInput(raw)}
+                    onValueChange={(next) => patchText({ lineHeight: next })}
+                  />
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </InspectorSection>

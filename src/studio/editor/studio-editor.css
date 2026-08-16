@@ -1184,9 +1184,15 @@
 .studio-editor-primary-btn {
   border: none;
   background: var(--cursor-accent);
-  color: #fff;
+  color: var(--cursor-on-accent, #fff);
   width: 100%;
   justify-content: center;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.studio-editor-primary-btn:hover {
+  background: var(--cursor-accent-hover, var(--cursor-accent));
 }
 
 .studio-editor-speed-process {
@@ -1449,8 +1455,8 @@
   width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
-  border-radius: var(--cursor-radius-sm, 6px);
-  background: var(--mos-plate-strong, var(--mos-hover));
+  border-radius: 8px;
+  background: var(--color-cursor-panel, var(--mos-page, #fff));
   color: var(--color-cursor-text, var(--mos-text));
   font-size: var(--desk-text-ui, 13px);
   padding: 0.45rem 0.55rem;
@@ -1462,6 +1468,13 @@
   resize: vertical;
   min-height: 88px;
   line-height: 1.4;
+}
+
+.studio-editor-field-row input:focus,
+.studio-editor-field-full input:focus,
+.studio-editor-textarea:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--cursor-accent) 45%, var(--mos-border));
 }
 
 .studio-editor-range {
@@ -4150,13 +4163,21 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   border: 0;
 }
 
-/* —— CapCut-style text inspector —— */
+/* —— CapCut-style text inspector (Settings plate / pill tokens) —— */
+.studio-editor-type-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
 .studio-editor-font-size-row {
   display: flex;
   gap: 8px;
   align-items: stretch;
   min-width: 0;
 }
+
 .studio-editor-font-select {
   flex: 1 1 auto;
   min-width: 0;
@@ -4164,47 +4185,80 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  height: 32px;
+  height: 34px;
   padding: 0 10px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--mos-plate-strong, var(--mos-raised));
-  color: var(--color-cursor-text-bright, var(--mos-text));
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  border-radius: 10px;
+  background: var(--color-cursor-panel, var(--mos-page, #fff));
+  color: var(--color-cursor-text, var(--mos-text));
   font: inherit;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
+
+.studio-editor-font-select:hover {
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  border-color: var(--color-cursor-border, var(--mos-border));
+}
+
+.studio-editor-font-select[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft, var(--mos-border)));
+  background: color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-page, #fff));
+}
+
 .studio-editor-font-select-label {
   min-width: 0;
   text-align: left;
 }
-.studio-editor-font-size {
-  flex: 0 0 64px;
+
+.studio-editor-font-select > svg {
+  flex: 0 0 auto;
+  color: var(--color-cursor-muted, var(--mos-muted));
 }
+
+.studio-editor-font-size {
+  flex: 0 0 68px;
+}
+
 .studio-editor-font-size input {
   width: 100%;
-  height: 32px;
+  height: 34px;
   box-sizing: border-box;
-  border: 0;
-  border-radius: 8px;
-  background: var(--mos-plate-strong, var(--mos-raised));
-  color: inherit;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  border-radius: 10px;
+  background: var(--color-cursor-panel, var(--mos-page, #fff));
+  color: var(--color-cursor-text, var(--mos-text));
   font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   text-align: center;
   padding: 0 6px;
 }
+
+.studio-editor-font-size input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--cursor-accent) 45%, var(--mos-border));
+}
+
 .studio-editor-font-panel,
 .studio-editor-color-panel {
   position: fixed;
   z-index: 140;
   display: flex;
   flex-direction: column;
-  max-height: min(360px, 70vh);
-  border-radius: 12px;
+  max-height: min(480px, 78vh);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border)) 82%, transparent);
   background: var(--mos-plate, var(--mos-panel));
-  box-shadow: 0 12px 40px color-mix(in srgb, #000 28%, transparent);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 10%, transparent),
+    0 12px 32px color-mix(in srgb, #000 18%, transparent);
   overflow: hidden;
 }
+
 .studio-editor-font-search {
   display: flex;
   align-items: center;
@@ -4212,81 +4266,113 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   padding: 10px 12px;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
   background: var(--mos-page, var(--mos-panel));
+  color: var(--color-cursor-muted, var(--mos-muted));
 }
+
 .studio-editor-font-search input {
   flex: 1;
   border: 0;
   background: transparent;
-  color: inherit;
+  color: var(--color-cursor-text, var(--mos-text));
   font: inherit;
+  font-size: 13px;
   outline: none;
 }
+
 .studio-editor-font-list {
   overflow-y: auto;
   padding: 6px;
   min-height: 0;
 }
+
 .studio-editor-font-group-label {
-  padding: 8px 8px 4px;
+  padding: 8px 10px 4px;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--color-cursor-muted, var(--mos-muted));
 }
+
 .studio-editor-font-option {
   display: flex;
   width: 100%;
   align-items: center;
-  min-height: 34px;
+  min-height: 36px;
   padding: 6px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
-  color: inherit;
+  color: var(--color-cursor-text, var(--mos-text));
   font: inherit;
   font-size: 14px;
   text-align: left;
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
-.studio-editor-font-option:hover,
+
+.studio-editor-font-option:hover {
+  background: color-mix(in srgb, var(--mos-hover, #e6e6ec) 70%, transparent);
+}
+
 .studio-editor-font-option.is-active {
-  background: var(--mos-plate-strong, var(--mos-raised));
+  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-page, #fff));
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  font-weight: 650;
 }
+
 .studio-editor-font-more-hint {
-  margin: 8px;
+  margin: 8px 10px;
   font-size: 11px;
   color: var(--color-cursor-muted, var(--mos-muted));
 }
+
 .studio-editor-text-toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
-  margin-top: 8px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
+  background: color-mix(in srgb, var(--mos-page, #fff) 72%, transparent);
 }
+
 .studio-editor-text-tool {
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--mos-plate-strong, var(--mos-raised));
-  color: var(--color-cursor-text, var(--mos-text));
+  background: transparent;
+  color: var(--color-cursor-muted, var(--mos-muted));
   cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
+
+.studio-editor-text-tool:hover {
+  color: var(--color-cursor-text, var(--mos-text));
+  background: color-mix(in srgb, var(--mos-hover, #e6e6ec) 65%, transparent);
+}
+
 .studio-editor-text-tool.is-active {
-  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 22%, var(--mos-plate-strong, var(--mos-raised)));
+  border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft, var(--mos-border)));
+  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-page, #fff));
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
+
 .studio-editor-text-tool-sep {
   width: 1px;
   height: 18px;
   margin: 0 2px;
   background: var(--studio-chrome-divider, var(--color-cursor-border-soft));
 }
+
 .studio-editor-text-tool-wrap {
   position: relative;
 }
+
 .studio-editor-align-popover,
 .studio-editor-spacing-popover {
   position: absolute;
@@ -4297,28 +4383,41 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   grid-template-columns: repeat(4, 30px);
   gap: 4px;
   padding: 8px;
-  border-radius: 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border)) 82%, transparent);
   background: var(--mos-plate, var(--mos-panel));
-  box-shadow: 0 10px 28px color-mix(in srgb, #000 24%, transparent);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 8%, transparent),
+    0 10px 24px color-mix(in srgb, #000 16%, transparent);
 }
+
 .studio-editor-spacing-popover {
   grid-template-columns: 1fr;
   width: min(240px, 70vw);
 }
+
 .studio-editor-align-popover button {
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--mos-plate-strong, var(--mos-raised));
-  color: inherit;
+  background: var(--color-cursor-panel, var(--mos-page, #fff));
+  color: var(--color-cursor-muted, var(--mos-muted));
   cursor: pointer;
 }
-.studio-editor-align-popover button.is-active {
-  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 22%, var(--mos-plate-strong));
+
+.studio-editor-align-popover button:hover {
+  color: var(--color-cursor-text, var(--mos-text));
 }
+
+.studio-editor-align-popover button.is-active {
+  border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft, var(--mos-border)));
+  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-page, #fff));
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
 .studio-editor-align-popover button:disabled {
   opacity: 0.35;
   cursor: default;
@@ -4332,12 +4431,12 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
 }
 .studio-editor-style-card {
   border-radius: 12px;
-  background: var(--mos-plate, #ececf0);
-  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border)) 65%, transparent);
-  overflow: hidden;
+  background: var(--color-cursor-panel, var(--mos-page, #fff));
+  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, var(--mos-border)) 82%, transparent);
+  overflow: visible;
 }
 .studio-editor-style-card.is-open {
-  background: var(--mos-plate, #ececf0);
+  background: var(--color-cursor-panel, var(--mos-page, #fff));
 }
 .studio-editor-style-card-head {
   display: flex;
