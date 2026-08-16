@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   bedClipAudioFilters,
   collectExportAudioBeds,
+  collectExportVideoSoundtracks,
   concatAvFilter,
   exportCoverUntilSec,
+  mixSourceAudioFilters,
   transitionAudioMixFilter,
   videoClipAudioFilter,
 } from "./editorExportAudio";
@@ -171,6 +173,102 @@ describe("collectExportAudioBeds", () => {
     expect(ids).not.toContain("muted-lane");
     expect(ids).not.toContain("silent-bed");
     expect(ids).not.toContain("v1");
+  });
+});
+
+describe("collectExportVideoSoundtracks", () => {
+  const stacked = {
+    tracks: [
+      { id: "track-v1", kind: "video", muted: true },
+      { id: "track-v2", kind: "video" },
+      { id: "track-v3", kind: "video", muted: true },
+      { id: "track-audio", kind: "audio" },
+    ],
+    clips: [
+      {
+        id: "top",
+        kind: "video",
+        trackId: "track-v1",
+        assetId: "a-top",
+        startTime: 0,
+      },
+      {
+        id: "bottom",
+        kind: "video",
+        trackId: "track-v2",
+        assetId: "a-bottom",
+        startTime: 0,
+      },
+      {
+        id: "muted-row",
+        kind: "video",
+        trackId: "track-v3",
+        assetId: "a-muted",
+        startTime: 0,
+      },
+      {
+        id: "png",
+        kind: "image",
+        trackId: "track-v2",
+        assetId: "a-png",
+        startTime: 0,
+      },
+      {
+        id: "quiet",
+        kind: "video",
+        trackId: "track-v2",
+        assetId: "a-quiet",
+        startTime: 4,
+        effects: { volume: 0 },
+      },
+    ],
+  };
+
+  it("keeps unmuted lower video rows when the picture track is muted", () => {
+    expect(collectExportVideoSoundtracks(stacked, "track-v1").map((c) => c.id)).toEqual([
+      "bottom",
+    ]);
+  });
+
+  it("does not double the picture track soundtrack", () => {
+    const unmuted = {
+      ...stacked,
+      tracks: stacked.tracks.map((track) =>
+        track.id === "track-v3" ? track : { ...track, muted: false },
+      ),
+    };
+    expect(collectExportVideoSoundtracks(unmuted, "track-v1").map((c) => c.id)).toEqual([
+      "bottom",
+    ]);
+  });
+});
+
+describe("mixSourceAudioFilters", () => {
+  it("does not let picture fades drive mixed-in video audio", () => {
+    expect(
+      mixSourceAudioFilters(
+        {
+          kind: "video",
+          effects: { fadeIn: 2, fadeOut: 2, audioFadeIn: 0.5 },
+          trimIn: 0,
+          trimOut: 4,
+        },
+        4,
+        2,
+      ),
+    ).toContain("afade=t=in:st=0:d=0.5:curve=qsin");
+    expect(
+      mixSourceAudioFilters(
+        {
+          kind: "video",
+          effects: { fadeIn: 2, fadeOut: 2 },
+          trimIn: 0,
+          trimOut: 4,
+        },
+        4,
+        2,
+      ),
+    ).not.toContain("afade=");
   });
 });
 

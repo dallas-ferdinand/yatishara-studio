@@ -328,7 +328,7 @@ export class AudioMixer {
         if (isIdentitySpeed(clipSpeed(clip.clip.effects))) {
           const media = mediaById.get(clip.assetId);
           const url = media?.url ?? media?.proxyUrl;
-          if (clip.kind === "audio" && url) {
+          if ((clip.kind === "audio" || clip.kind === "video") && url) {
             this.syncMediaElement(key, url, item, generation);
           }
         }

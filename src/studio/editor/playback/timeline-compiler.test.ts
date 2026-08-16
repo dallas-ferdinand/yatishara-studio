@@ -284,6 +284,24 @@ describe("timeline compiler", () => {
     ]);
   });
 
+  it("mutes only the muted video row so lower-row audio still mixes", () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.tracks = [
+      { id: "track-v1", kind: "video", label: "V1", muted: true },
+      { id: "track-v2", kind: "video", label: "V2" },
+      { id: "track-audio", kind: "audio", label: "Audio" },
+    ];
+    project.clips = [
+      { ...clip("top", 0, 3), trackId: "track-v1" },
+      { ...clip("bottom", 0, 3), trackId: "track-v2" },
+    ];
+    const plan = compileTimeline(project);
+    const slice = sliceAt(plan, 1);
+    expect(slice.video.map((sample) => sample.clip.clipId)).toEqual(["top", "bottom"]);
+    expect(slice.video[0]?.clip.muted).toBe(true);
+    expect(slice.video[1]?.clip.muted).toBe(false);
+  });
+
   it("keeps the top overlay and the lowest lanes when the stack is capped", () => {
     expect(stackOverlappingVideo(["a", "b", "c", "d"], 3)).toEqual(["a", "c", "d"]);
   });

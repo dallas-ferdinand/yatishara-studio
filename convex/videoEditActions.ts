@@ -14,9 +14,10 @@ import { internal } from "./_generated/api";
 import { putObject, signBunnyCdnUrl } from "./lib/bunny";
 import { ffmpegTransitionFor } from "./lib/editorEffectContract";
 import {
-  bedClipAudioFilters,
   collectExportAudioBeds,
+  collectExportVideoSoundtracks,
   concatAvFilter,
+  mixSourceAudioFilters,
   exportCoverUntilSec,
   timelineDurationSec,
   transitionAudioMixFilter,
@@ -949,7 +950,7 @@ async function mixAudioTrack(args: {
     const delayMs = Math.max(0, Math.round(clip.startTime * 1000));
     const duration = clipDuration(clip);
     bedEnd = Math.max(bedEnd, clip.startTime + duration);
-    const bedFilters = bedClipAudioFilters(clip, duration, bedAudio.channels);
+    const bedFilters = mixSourceAudioFilters(clip, duration, bedAudio.channels);
     let chain = `[${inputIndex}:a]atrim=start=${clip.trimIn}:end=${clip.trimOut},asetpts=PTS-STARTPTS`;
     if (bedFilters) chain += `,${bedFilters}`;
     chain += `,adelay=${delayMs}:all=1[a${index}]`;
@@ -1049,7 +1050,11 @@ async function runExportVideo(
     project.frameRatio,
     renderResolution,
   );
-  const videoTrack = project.tracks.find((track) => track.kind === "video");
+  const videoTracks = project.tracks.filter((track) => track.kind === "video");
+  const videoTrack =
+    videoTracks.find((track) =>
+      project.clips.some((clip) => clip.trackId === track.id && clip.assetId),
+    ) ?? videoTracks[0];
   if (!videoTrack) {
     const message = "No video track in project.";
     if (args.jobId) {
@@ -1066,8 +1071,11 @@ async function runExportVideo(
     exportKind === "video"
       ? collectExportTextClips(project.clips, clipDuration)
       : [];
-  // Every unmuted Audio lane (Separate audio often lands on Audio 2+).
-  const audioClips = collectExportAudioBeds(project);
+  // Audio lanes + unmuted video rows under the picture track (V2+ soundtrack).
+  const audioClips = [
+    ...collectExportAudioBeds(project),
+    ...collectExportVideoSoundtracks(project, videoTrack.id),
+  ];
   const coverUntil = exportCoverUntilSec({
     textEnds: textClips.map((clip) => clip.startTime + clip.duration),
     audioClips,
@@ -1132,7 +1140,9 @@ async function runExportVideo(
           width: exportWidth,
           height: exportHeight,
           fontCacheDir,
-          muteAudio: Boolean(videoTrack.muted),
+          muteAudio: Boolean(
+            project.tracks.find((track) => track.id === segment.clip.trackId)?.muted,
+          ),
         });
         transitionClips.push(segment.clip);
       }

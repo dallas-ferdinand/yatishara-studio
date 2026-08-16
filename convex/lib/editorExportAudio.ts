@@ -62,6 +62,34 @@ export function collectExportAudioBeds<T extends ExportAudioBedClip>(project: {
     .sort((a, b) => a.startTime - b.startTime);
 }
 
+/**
+ * Embedded soundtracks from other video rows (not the picture track).
+ * Preview already mixes every unmuted slice.video stem; export used to keep
+ * only the first video track, so muting V1 dropped V2+ audio.
+ */
+export function collectExportVideoSoundtracks<T extends ExportAudioBedClip>(
+  project: {
+    tracks: Array<{ id: string; kind: string; muted?: boolean }>;
+    clips: T[];
+  },
+  primaryVideoTrackId: string,
+): T[] {
+  const unmutedVideoTrackIds = new Set(
+    project.tracks
+      .filter((track) => track.kind === "video" && !track.muted)
+      .map((track) => track.id),
+  );
+  return project.clips
+    .filter((clip) => {
+      if (clip.kind !== "video" || !clip.assetId) return false;
+      if (clip.trackId === primaryVideoTrackId) return false;
+      if (!unmutedVideoTrackIds.has(clip.trackId)) return false;
+      const volume = Math.max(0, Math.min(2, clip.effects?.volume ?? 1));
+      return volume > 0.001;
+    })
+    .sort((a, b) => a.startTime - b.startTime);
+}
+
 /** Timeline end for a bed/clip (start + source trim length). */
 export function exportClipEndSec(clip: {
   startTime: number;
@@ -265,6 +293,26 @@ export function bedClipAudioFilters(
   }
   if (Math.abs(volume - 1) > 0.001) parts.push(`volume=${volume}`);
   return parts.join(",");
+}
+
+/** Filters for a mixed-in stem: video rows use picture-fade-safe fades. */
+export function mixSourceAudioFilters(
+  clip: {
+    kind?: string;
+    effects?: ExportAudioEffects;
+    trimIn?: number;
+    trimOut?: number;
+  },
+  durationSec?: number,
+  channels?: number,
+): string {
+  if (clip.kind === "video") {
+    return (
+      videoClipAudioFilter(clip, false, durationSec, channels) ??
+      exportAudioLayoutFilter(channels)
+    );
+  }
+  return bedClipAudioFilters(clip, durationSec, channels);
 }
 
 export { isIdentitySpeed, clipSpeedFromEffects };
