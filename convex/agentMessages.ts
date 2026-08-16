@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { authedMutation } from "./lib/customFunctions";
 
 export const appendMessage = authedMutation({
@@ -188,11 +189,11 @@ export const folderPathForOwner = internalQuery({
   ),
   handler: async (ctx, args) => {
     const names: string[] = [];
-    let cursor: typeof args.folderId | undefined = args.folderId;
+    let cursor: Id<"folders"> | undefined = args.folderId;
     const seen = new Set<string>();
     while (cursor && !seen.has(cursor)) {
       seen.add(cursor);
-      const row = await ctx.db.get("folders", cursor);
+      const row: Doc<"folders"> | null = await ctx.db.get(cursor);
       if (!row || row.ownerId !== args.ownerId || row.deletedAt) break;
       names.unshift(row.name);
       cursor = row.parentId;
