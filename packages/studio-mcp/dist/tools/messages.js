@@ -53,7 +53,7 @@ function registerMessageTools(server) {
   );
   server.tool(
     "studio_send_message",
-    "Send a text DM. Optional replyToMessageId for quote-reply. Requires messages scope.",
+    "Send a text DM. Args: {conversationId,body}. Optional replyToMessageId. Outbound \u2014 needs approval in Agent.",
     {
       conversationId: z.string(),
       body: z.string(),
@@ -97,7 +97,7 @@ function registerMessageTools(server) {
   );
   server.tool(
     "studio_send_media_message",
-    "Send Studio media into a DM like the UI Choose/Share flow. Default delivery=file copies into the peer's Messages folder and posts image/video bubbles (supports video). Pass assetId, assetIds, and/or items[{itemKind,itemId}]. delivery=access grants live Shared-with-me links. Requires messages scope.",
+    "Send Studio media in a DM (Choose/Share). Args: conversationId + assetId|assetIds. delivery=file (default) or access. Outbound \u2014 needs approval in Agent.",
     {
       conversationId: z.string(),
       assetId: z.string().optional(),

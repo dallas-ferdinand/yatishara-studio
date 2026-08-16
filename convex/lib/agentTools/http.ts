@@ -24,7 +24,9 @@ export function buildStudioRequest(
   );
   const path = pathTemplate.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => {
     used.add(key);
-    const value = args[key];
+    const value =
+      args[key] ??
+      (key === "courseId" ? args.slug : undefined);
     if (value == null || value === "") {
       throw new Error(`Missing path param ${key} for ${toolName}`);
     }

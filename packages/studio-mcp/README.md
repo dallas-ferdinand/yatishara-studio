@@ -58,6 +58,7 @@ Agents should open **`studio://guides/index`** first, then the lane guide for th
 | `studio://guides/messages` | DMs |
 | `studio://guides/social` | Feed / profiles |
 | `studio://guides/network` | Creative Network |
+| `studio://guides/academy` | Academy |
 | `studio://guides/account` | Credits / health |
 
 ## Tools
@@ -110,6 +111,12 @@ Agents should open **`studio://guides/index`** first, then the lane guide for th
 - `studio_export_edit` — video or audio render → Studio asset (`exportKind`, `exportResolution`, `audioFormat`)
 - `studio_download_edit_package` — portable `.studio` package manifest (signed media + project JSON)
 - `studio_download_clip_segment` — trimmed Save as video/audio download URL
+
+### Academy & billing
+- `studio_list_academy_courses`, `studio_get_academy_course`, `studio_list_my_academy_courses`
+- `studio_purchase_academy_course` (credits) / `studio_start_checkout` (Wam)
+- `studio_get_academy_intro`, `studio_get_academy_lesson`
+- `studio_separate_music_stems` — split a music asset into stems
 
 ## VPS install
 

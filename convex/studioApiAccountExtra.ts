@@ -35,6 +35,7 @@ import {
   errorResponse,
   jsonResponse,
   optionsResponse,
+  readJsonBody,
 } from "./lib/studioApi/httpHelpers";
 
 type AuthContext = Pick<StudioHttpAuth, "userId" | "apiKeyId" | "scopes">;
@@ -192,6 +193,34 @@ export const studioApiAccountExtra = httpAction(async (ctx, request) => {
         notificationId: notifReadMatch[1] as Id<"notifications">,
       });
       return finish(jsonResponse({ ok: true, id: notifReadMatch[1] }));
+    }
+
+    if (request.method === "POST" && route === "account/checkout") {
+      const auth = await authFor("generate");
+      if (auth instanceof Response) return finish(auth);
+      const body = await readJsonBody<{
+        amountCents?: number;
+        creditsRequested?: number;
+        reference?: string;
+        academyCourseId?: string;
+        clientRequestId?: string;
+      }>(request);
+      if (body.amountCents == null || !Number.isFinite(body.amountCents) || body.amountCents <= 0) {
+        return finish(errorResponse("amountCents is required"));
+      }
+      const result = await ctx.runAction(internal.wamActions.startCheckoutForApi, {
+        userId: auth.userId,
+        clientRequestId:
+          body.clientRequestId?.trim() ||
+          `mcp:${Date.now()}:${Math.random().toString(16).slice(2)}`,
+        amountCents: Math.round(body.amountCents),
+        creditsRequested: body.creditsRequested,
+        reference: body.reference,
+        academyCourseId: body.academyCourseId
+          ? (body.academyCourseId as Id<"academyCourses">)
+          : undefined,
+      });
+      return finish(jsonResponse(result));
     }
 
     return finish(errorResponse("Not found", 404));

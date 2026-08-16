@@ -3,39 +3,42 @@ import { jsonResult, studioFetch } from "../client.js";
 const elementType = z.enum(["character", "prop", "location", "doc", "style_sheet"]);
 const STYLE_SHEET_CREATE_GUIDE = "Create a Style Sheet element (unbuilt). Add styleRules + optional mood referenceAssetIds, then studio_build_style_sheet. Required before styled generation (skipPromptEnhancement false).";
 const STYLE_SHEET_BUILD_GUIDE = "Build the visual style board image for a Style Sheet element. Requires styleRules and/or mood refs on the element.";
-const CREATE_ELEMENT_GUIDE = "Creates the element record ONLY (buildStatus=unbuilt) \u2014 does not build a sheet image. Before calling: read studio_element_sheet_guide. sourceMode photographic = real person/object + upload referenceAssetIds. sourceMode designed = fictional character/prop/location + rich description \u2014 NO photo refs, NO throwaway plates before generate-sheet.";
+const CREATE_ELEMENT_GUIDE = "Create a Studio .element (unique @name, no spaces). Attach one image or video with referenceAssetIds after studio_upload_asset. Optional description. Empty media is allowed; generate still needs media. Then tag @name inside sealed prompts and add `- [name](element://{elementId})` under ## References so paste hydrates chips. Pass referenceElementIds on studio_generate_image|video. sourceMode photographic = real subject + upload refs. designed = fictional from description (no throwaway plates).";
 const GENERATE_SHEET_GUIDE = "BUILDS the reference sheet image (GPT Image 2) and sets sheetAssetId (buildStatus=built). designed: one call from description \u2014 no reference photos required. photographic: uses referenceAssetIds (upload photos). location designed: pass referenceElementIds with built prop sheets to compose set dressing. For video gen use referenceElementIds \u2014 never raw upload refs.";
 const GENERATE_TEXT_SHEET_GUIDE = "Generates the markdown production bible (description) from reference photos. Does not build the sheet image \u2014 call studio_generate_element_sheet after. Parity with Studio UI Build sheet text step.";
 const stylePresetSheetFieldDesc = "Element sheet style: unstyled|raw (photoreal) for character/prop/location sheets. Style Sheet elements ignore cartoon presets.";
-const UPDATE_ELEMENT_GUIDE = "Update referenceAssetIds (upload photos only \u2014 never include sheetAssetId). Rebuild sheet after changing refs.";
-function registerElementTools(server) {
-  server.tool(
-    "studio_production_guide",
-    "READ FIRST for character/prop/location pipelines. Explains unbuilt vs built states, when to use sheet vs upload refs, and direct-prompt generation defaults (unstyled + skipPromptEnhancement \u2014 no Flash rewrite before Seedance).",
-    {},
-    async () => jsonResult(await studioFetch("/elements/production-guide"))
-  );
-  server.tool(
-    "studio_element_sheet_guide",
-    "READ FIRST before character/prop/location sheets. Returns min/recommended reference photo counts, upload checklist, fidelity locks, output layout, and step-by-step MCP workflow.",
-    {
-      type: elementType.exclude(["doc"]).optional().describe(
-        "character, prop, or location \u2014 omit to return all three guides"
-      )
-    },
-    async ({ type }) => {
-      if (!type) {
-        return jsonResult({
-          character: (await studioFetch("/elements/sheet-guide?type=character")).guide,
-          prop: (await studioFetch("/elements/sheet-guide?type=prop")).guide,
-          location: (await studioFetch("/elements/sheet-guide?type=location")).guide,
-          production: (await studioFetch("/elements/production-guide")).guide,
-          note: "Workflow: upload refs \u2192 create_element (unbuilt) \u2192 generate_text_sheet (optional) \u2192 generate_element_sheet (built). Generation uses sheet only."
-        });
+const UPDATE_ELEMENT_GUIDE = "Update name, description, or attached media (referenceAssetIds = one image or video asset id). Upload first with studio_upload_asset. Do not put sheetAssetId in referenceAssetIds.";
+function registerElementTools(server, opts = {}) {
+  const includeSheets = opts.includeSheets !== false;
+  if (includeSheets) {
+    server.tool(
+      "studio_production_guide",
+      "READ FIRST for character/prop/location pipelines. Explains unbuilt vs built states, when to use sheet vs upload refs, and direct-prompt generation defaults (unstyled + skipPromptEnhancement \u2014 no Flash rewrite before Seedance).",
+      {},
+      async () => jsonResult(await studioFetch("/elements/production-guide"))
+    );
+    server.tool(
+      "studio_element_sheet_guide",
+      "READ FIRST before character/prop/location sheets. Returns min/recommended reference photo counts, upload checklist, fidelity locks, output layout, and step-by-step MCP workflow.",
+      {
+        type: elementType.exclude(["doc"]).optional().describe(
+          "character, prop, or location \u2014 omit to return all three guides"
+        )
+      },
+      async ({ type }) => {
+        if (!type) {
+          return jsonResult({
+            character: (await studioFetch("/elements/sheet-guide?type=character")).guide,
+            prop: (await studioFetch("/elements/sheet-guide?type=prop")).guide,
+            location: (await studioFetch("/elements/sheet-guide?type=location")).guide,
+            production: (await studioFetch("/elements/production-guide")).guide,
+            note: "Workflow: upload refs \u2192 create_element (unbuilt) \u2192 generate_text_sheet (optional) \u2192 generate_element_sheet (built). Generation uses sheet only."
+          });
+        }
+        return jsonResult(await studioFetch(`/elements/sheet-guide?type=${encodeURIComponent(type)}`));
       }
-      return jsonResult(await studioFetch(`/elements/sheet-guide?type=${encodeURIComponent(type)}`));
-    }
-  );
+    );
+  }
   server.tool(
     "studio_list_elements",
     "List creative elements (characters, props, locations, docs). Filter by folderId or type.",
@@ -65,7 +68,7 @@ function registerElementTools(server) {
       name: z.string(),
       description: z.string().optional(),
       folderId: z.string().optional(),
-      referenceAssetIds: z.array(z.string()).optional().describe("Upload photo asset IDs \u2014 see studio_element_sheet_guide for minimum counts"),
+      referenceAssetIds: z.array(z.string()).optional().describe("One image or video asset id to attach (upload first with studio_upload_asset)"),
       sourceAssetIds: z.array(z.string()).optional().describe("Deprecated alias for referenceAssetIds"),
       sourceDocumentId: z.string().optional(),
       sourceMode: z.enum(["photographic", "designed"]).optional().describe(
@@ -144,105 +147,107 @@ function registerElementTools(server) {
       })
     )
   );
-  server.tool(
-    "studio_generate_element_text_sheet",
-    GENERATE_TEXT_SHEET_GUIDE,
-    {
-      elementId: z.string(),
-      referenceAssetIds: z.array(z.string()).optional().describe("Override element referenceAssetIds")
-    },
-    async ({ elementId, referenceAssetIds }) => jsonResult(
-      await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-text-sheet`, {
-        method: "POST",
-        body: JSON.stringify({ referenceAssetIds })
-      })
-    )
-  );
-  server.tool(
-    "studio_generate_element_sheet",
-    GENERATE_SHEET_GUIDE,
-    {
-      elementId: z.string(),
-      referenceAssetIds: z.array(z.string()).optional().describe("Override element referenceAssetIds for sheet build (photographic mode)"),
-      referenceElementIds: z.array(z.string()).optional().describe("Built prop/character element IDs to attach when composing location sheets"),
-      sourceMode: z.enum(["photographic", "designed"]).optional().describe("Override element sourceMode for this sheet build"),
-      resolution: z.enum(["1K", "2K"]).optional(),
-      stylePresetSlug: z.string().optional().describe(stylePresetSheetFieldDesc)
-    },
-    async ({ elementId, referenceAssetIds, referenceElementIds, sourceMode, resolution, stylePresetSlug }) => jsonResult(
-      await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-sheet`, {
-        method: "POST",
-        body: JSON.stringify({
-          referenceAssetIds,
-          referenceElementIds,
-          sourceMode,
-          resolution,
-          stylePresetSlug
+  if (includeSheets) {
+    server.tool(
+      "studio_generate_element_text_sheet",
+      GENERATE_TEXT_SHEET_GUIDE,
+      {
+        elementId: z.string(),
+        referenceAssetIds: z.array(z.string()).optional().describe("Override element referenceAssetIds")
+      },
+      async ({ elementId, referenceAssetIds }) => jsonResult(
+        await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-text-sheet`, {
+          method: "POST",
+          body: JSON.stringify({ referenceAssetIds })
         })
-      })
-    )
-  );
-  server.tool(
-    "studio_create_style_sheet",
-    STYLE_SHEET_CREATE_GUIDE,
-    {
-      name: z.string(),
-      styleRules: z.string().optional().describe("Markdown: palette, line weight, forbidden drift, render notes"),
-      renderMode: z.enum(["photoreal", "illustrated_2d", "illustrated_3d", "mixed"]).optional(),
-      folderId: z.string().optional(),
-      referenceAssetIds: z.array(z.string()).optional().describe("Mood reference images"),
-      sheetAssetId: z.string().optional().describe("Existing uploaded Cursor-generated image to use as the visual style sheet"),
-      description: z.string().optional()
-    },
-    async ({
-      name,
-      styleRules,
-      renderMode,
-      folderId,
-      referenceAssetIds,
-      sheetAssetId,
-      description
-    }) => jsonResult(
-      await studioFetch("/elements", {
-        method: "POST",
-        body: JSON.stringify({
-          type: "style_sheet",
-          name,
-          styleRules,
-          renderMode,
-          folderId,
-          referenceAssetIds,
-          sheetAssetId,
-          description
+      )
+    );
+    server.tool(
+      "studio_generate_element_sheet",
+      GENERATE_SHEET_GUIDE,
+      {
+        elementId: z.string(),
+        referenceAssetIds: z.array(z.string()).optional().describe("Override element referenceAssetIds for sheet build (photographic mode)"),
+        referenceElementIds: z.array(z.string()).optional().describe("Built prop/character element IDs to attach when composing location sheets"),
+        sourceMode: z.enum(["photographic", "designed"]).optional().describe("Override element sourceMode for this sheet build"),
+        resolution: z.enum(["1K", "2K"]).optional(),
+        stylePresetSlug: z.string().optional().describe(stylePresetSheetFieldDesc)
+      },
+      async ({ elementId, referenceAssetIds, referenceElementIds, sourceMode, resolution, stylePresetSlug }) => jsonResult(
+        await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-sheet`, {
+          method: "POST",
+          body: JSON.stringify({
+            referenceAssetIds,
+            referenceElementIds,
+            sourceMode,
+            resolution,
+            stylePresetSlug
+          })
         })
+      )
+    );
+    server.tool(
+      "studio_create_style_sheet",
+      STYLE_SHEET_CREATE_GUIDE,
+      {
+        name: z.string(),
+        styleRules: z.string().optional().describe("Markdown: palette, line weight, forbidden drift, render notes"),
+        renderMode: z.enum(["photoreal", "illustrated_2d", "illustrated_3d", "mixed"]).optional(),
+        folderId: z.string().optional(),
+        referenceAssetIds: z.array(z.string()).optional().describe("Mood reference images"),
+        sheetAssetId: z.string().optional().describe("Existing uploaded Cursor-generated image to use as the visual style sheet"),
+        description: z.string().optional()
+      },
+      async ({
+        name,
+        styleRules,
+        renderMode,
+        folderId,
+        referenceAssetIds,
+        sheetAssetId,
+        description
+      }) => jsonResult(
+        await studioFetch("/elements", {
+          method: "POST",
+          body: JSON.stringify({
+            type: "style_sheet",
+            name,
+            styleRules,
+            renderMode,
+            folderId,
+            referenceAssetIds,
+            sheetAssetId,
+            description
+          })
+        })
+      )
+    );
+    server.tool(
+      "studio_build_style_sheet",
+      STYLE_SHEET_BUILD_GUIDE,
+      {
+        elementId: z.string(),
+        referenceAssetIds: z.array(z.string()).optional(),
+        resolution: z.enum(["1K", "2K"]).optional()
+      },
+      async ({ elementId, referenceAssetIds, resolution }) => jsonResult(
+        await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-sheet`, {
+          method: "POST",
+          body: JSON.stringify({ referenceAssetIds, resolution, stylePresetSlug: "unstyled" })
+        })
+      )
+    );
+    server.tool(
+      "studio_set_active_style_sheet",
+      "MCP/API has no session store \u2014 pass styleSheetElementId on each studio_generate_image|video|script call for styled work (enhancement sticks style + context). Omit for Direct verbatim handoff.",
+      { styleSheetElementId: z.string().optional() },
+      async ({ styleSheetElementId }) => jsonResult({
+        ok: true,
+        note: "Pass styleSheetElementId on generate calls. UI users pick active sheet in Studio composer.",
+        styleSheetElementId: styleSheetElementId ?? null
       })
-    )
-  );
-  server.tool(
-    "studio_build_style_sheet",
-    STYLE_SHEET_BUILD_GUIDE,
-    {
-      elementId: z.string(),
-      referenceAssetIds: z.array(z.string()).optional(),
-      resolution: z.enum(["1K", "2K"]).optional()
-    },
-    async ({ elementId, referenceAssetIds, resolution }) => jsonResult(
-      await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-sheet`, {
-        method: "POST",
-        body: JSON.stringify({ referenceAssetIds, resolution, stylePresetSlug: "unstyled" })
-      })
-    )
-  );
-  server.tool(
-    "studio_set_active_style_sheet",
-    "MCP/API has no session store \u2014 pass styleSheetElementId on each studio_generate_image|video|script call for styled work (enhancement sticks style + context). Omit for Direct verbatim handoff.",
-    { styleSheetElementId: z.string().optional() },
-    async ({ styleSheetElementId }) => jsonResult({
-      ok: true,
-      note: "Pass styleSheetElementId on generate calls. UI users pick active sheet in Studio composer.",
-      styleSheetElementId: styleSheetElementId ?? null
-    })
-  );
+    );
+  }
 }
 export {
   registerElementTools

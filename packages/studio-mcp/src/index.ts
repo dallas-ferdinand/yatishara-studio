@@ -22,12 +22,13 @@ import { registerSocialTools } from "./tools/social.js";
 import { registerNetworkTools } from "./tools/network.js";
 import { registerTrashTools } from "./tools/trash.js";
 import { registerVoiceTools } from "./tools/voices.js";
+import { registerAcademyTools } from "./tools/academy.js";
 
 requireConfig();
 
 const server = new McpServer({
   name: "yatishara-studio",
-  version: "0.8.4",
+  version: "0.8.5",
 });
 
 /**
@@ -47,6 +48,7 @@ registerDocumentTools(server);
 registerElementTools(server, { includeSheets: !agentSurface });
 registerGenerationTools(server);
 registerVoiceTools(server);
+registerAcademyTools(server);
 if (!agentSurface) {
   registerAssistanceTools(server);
 } else {

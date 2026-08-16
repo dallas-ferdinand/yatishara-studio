@@ -4,6 +4,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
   WAM_CURRENCY,
@@ -443,6 +444,119 @@ async function applyProviderStatus(
   });
 }
 
+async function runStartCheckout(
+  ctx: ActionCtx,
+  userId: Id<"users">,
+  args: {
+    clientRequestId: string;
+    amountCents: number;
+    creditsRequested?: number;
+    reference?: string;
+    academyCourseId?: Id<"academyCourses">;
+  },
+): Promise<{ paymentId: Id<"payments">; checkoutUrl: string; status: string }> {
+  const user = await ctx.runQuery(getCheckoutUserRef, { userId });
+  if (!user) {
+    throw new Error("User not found");
+  }
+  if (!user.phone?.trim()) {
+    throw new Error("Add a phone number in Account details before topping up with Wam.");
+  }
+  if (!user.email?.trim()) {
+    throw new Error("Add an email address in Account details before topping up with Wam.");
+  }
+  const payerNames =
+    user.firstName?.trim() && user.lastName?.trim()
+      ? { firstName: user.firstName.trim(), lastName: user.lastName.trim() }
+      : splitDisplayName(user.name);
+  if (!payerNames.firstName.trim() || !payerNames.lastName.trim()) {
+    throw new Error(
+      "Add your first and last name in Account details before topping up with Wam.",
+    );
+  }
+
+  const prepared = await ctx.runMutation(prepareCheckoutRef, {
+    userId,
+    clientRequestId: args.clientRequestId,
+    amountCents: args.amountCents,
+    creditsRequested: args.creditsRequested,
+    reference: args.reference,
+    academyCourseId: args.academyCourseId,
+  });
+
+  if (prepared.alreadyReady && prepared.checkoutUrl) {
+    return {
+      paymentId: prepared.paymentId,
+      checkoutUrl: prepared.checkoutUrl,
+      status: prepared.status,
+    };
+  }
+
+  const appBase = requirePublicUrl("SITE_URL", siteUrl(), {
+    allowHttpLocalhost: true,
+  });
+  const academyCourseId = prepared.academyCourseId ?? args.academyCourseId;
+  const returnUrl = studioWamAppReturnUrl(appBase, String(prepared.paymentId));
+
+  let intent: Awaited<ReturnType<ReturnType<typeof getWamSDK>["createPaymentIntent"]>>;
+  try {
+    const wam = getWamSDK();
+    intent = await wam.createPaymentIntent({
+      amountCents: prepared.amountCents,
+      currency: WAM_CURRENCY,
+      orderReference: String(prepared.paymentId),
+      description:
+        args.reference?.trim() ||
+        (academyCourseId ? "Studio Academy course unlock" : "Studio credit top-up"),
+      returnUrl,
+      metadata: {
+        paymentId: String(prepared.paymentId),
+        userId: String(userId),
+        ...(academyCourseId ? { academyCourseId: String(academyCourseId) } : {}),
+      },
+      idempotencyKey: `wam:checkout:${prepared.paymentId}`,
+    });
+  } catch (error) {
+    const message = wamErrorMessage(error);
+    const shouldMarkFailed =
+      !(error instanceof WamPaymentError) ||
+      !String(error.code || "").includes("RATE");
+    if (shouldMarkFailed) {
+      await ctx.runMutation(markCheckoutFailedRef, {
+        paymentId: prepared.paymentId,
+        reason: message,
+      });
+    }
+    throw new Error(message);
+  }
+
+  try {
+    await ctx.runMutation(attachCheckoutRef, {
+      paymentId: prepared.paymentId,
+      externalPaymentId: intent.paymentId,
+      checkoutUrl: intent.checkoutUrl,
+      providerRequestId: intent.invoiceId,
+      providerStatus: intent.status,
+    });
+  } catch {
+    throw new Error(
+      "Wam created the checkout but Studio could not save it. Retry this same checkout attempt.",
+    );
+  }
+
+  return {
+    paymentId: prepared.paymentId,
+    checkoutUrl: intent.checkoutUrl,
+    status: "pending",
+  };
+}
+
+const checkoutReturn = v.object({
+  paymentId: v.id("payments"),
+  checkoutUrl: v.string(),
+  status: v.string(),
+});
+
 export const startCheckout = action({
   args: {
     clientRequestId: v.string(),
@@ -451,115 +565,29 @@ export const startCheckout = action({
     reference: v.optional(v.string()),
     academyCourseId: v.optional(v.id("academyCourses")),
   },
-  returns: v.object({
-    paymentId: v.id("payments"),
-    checkoutUrl: v.string(),
-    status: v.string(),
-  }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ paymentId: Id<"payments">; checkoutUrl: string; status: string }> => {
+  returns: checkoutReturn,
+  handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Sign in to top up.");
     }
-    const user = await ctx.runQuery(getCheckoutUserRef, {
-      userId: userId as Id<"users">,
-    });
-    if (!user) {
-      throw new Error("User not found");
-    }
-    if (!user.phone?.trim()) {
-      throw new Error("Add a phone number in Account details before topping up with Wam.");
-    }
-    if (!user.email?.trim()) {
-      throw new Error("Add an email address in Account details before topping up with Wam.");
-    }
-    const payerNames =
-      user.firstName?.trim() && user.lastName?.trim()
-        ? { firstName: user.firstName.trim(), lastName: user.lastName.trim() }
-        : splitDisplayName(user.name);
-    if (!payerNames.firstName.trim() || !payerNames.lastName.trim()) {
-      throw new Error(
-        "Add your first and last name in Account details before topping up with Wam.",
-      );
-    }
+    return runStartCheckout(ctx, userId as Id<"users">, args);
+  },
+});
 
-    const prepared = await ctx.runMutation(prepareCheckoutRef, {
-      userId: userId as Id<"users">,
-      clientRequestId: args.clientRequestId,
-      amountCents: args.amountCents,
-      creditsRequested: args.creditsRequested,
-      reference: args.reference,
-      academyCourseId: args.academyCourseId,
-    });
-
-    if (prepared.alreadyReady && prepared.checkoutUrl) {
-      return {
-        paymentId: prepared.paymentId,
-        checkoutUrl: prepared.checkoutUrl,
-        status: prepared.status,
-      };
-    }
-
-    const appBase = requirePublicUrl("SITE_URL", siteUrl(), {
-      allowHttpLocalhost: true,
-    });
-    const academyCourseId = prepared.academyCourseId ?? args.academyCourseId;
-    const returnUrl = studioWamAppReturnUrl(appBase, String(prepared.paymentId));
-
-    let intent: Awaited<ReturnType<ReturnType<typeof getWamSDK>["createPaymentIntent"]>>;
-    try {
-      const wam = getWamSDK();
-      intent = await wam.createPaymentIntent({
-        amountCents: prepared.amountCents,
-        currency: WAM_CURRENCY,
-        orderReference: String(prepared.paymentId),
-        description:
-          args.reference?.trim() ||
-          (academyCourseId ? "Studio Academy course unlock" : "Studio credit top-up"),
-        returnUrl,
-        metadata: {
-          paymentId: String(prepared.paymentId),
-          userId: String(userId),
-          ...(academyCourseId ? { academyCourseId: String(academyCourseId) } : {}),
-        },
-        idempotencyKey: `wam:checkout:${prepared.paymentId}`,
-      });
-    } catch (error) {
-      const message = wamErrorMessage(error);
-      const shouldMarkFailed =
-        !(error instanceof WamPaymentError) ||
-        !String(error.code || "").includes("RATE");
-      if (shouldMarkFailed) {
-        await ctx.runMutation(markCheckoutFailedRef, {
-          paymentId: prepared.paymentId,
-          reason: message,
-        });
-      }
-      throw new Error(message);
-    }
-
-    try {
-      await ctx.runMutation(attachCheckoutRef, {
-        paymentId: prepared.paymentId,
-        externalPaymentId: intent.paymentId,
-        checkoutUrl: intent.checkoutUrl,
-        providerRequestId: intent.invoiceId,
-        providerStatus: intent.status,
-      });
-    } catch {
-      throw new Error(
-        "Wam created the checkout but Studio could not save it. Retry this same checkout attempt.",
-      );
-    }
-
-    return {
-      paymentId: prepared.paymentId,
-      checkoutUrl: intent.checkoutUrl,
-      status: "pending",
-    };
+export const startCheckoutForApi = internalAction({
+  args: {
+    userId: v.id("users"),
+    clientRequestId: v.string(),
+    amountCents: v.number(),
+    creditsRequested: v.optional(v.number()),
+    reference: v.optional(v.string()),
+    academyCourseId: v.optional(v.id("academyCourses")),
+  },
+  returns: checkoutReturn,
+  handler: async (ctx, args) => {
+    const { userId, ...rest } = args;
+    return runStartCheckout(ctx, userId, rest);
   },
 });
 

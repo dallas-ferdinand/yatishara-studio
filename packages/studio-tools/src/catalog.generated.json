@@ -1796,6 +1796,72 @@
     "sourceFile": "generations.ts"
   },
   {
+    "name": "studio_get_academy_course",
+    "description": "Get one Academy course by courseId or slug (lessons, price, owned). Requires read scope.",
+    "category": "academy",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/academy/courses/{courseId}"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "academy.ts"
+  },
+  {
+    "name": "studio_get_academy_intro",
+    "description": "Signed intro/preview playback URL for a course (no purchase required). Requires read scope.",
+    "category": "academy",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/academy/courses/{courseId}/intro"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "academy.ts"
+  },
+  {
+    "name": "studio_get_academy_lesson",
+    "description": "Signed lesson playback URL. Course must already be owned. Requires read scope.",
+    "category": "academy",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/academy/lessons/{lessonId}/playback"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "academy.ts"
+  },
+  {
     "name": "studio_get_asset",
     "description": "Get asset metadata and signed read/thumbnail URLs (1h TTL).",
     "category": "assets",
@@ -2346,6 +2412,28 @@
     "sourceFile": "social.ts"
   },
   {
+    "name": "studio_list_academy_courses",
+    "description": "List published Studio Academy courses (price, sale, owned). Requires read scope.",
+    "category": "academy",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/academy/courses"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "academy.ts"
+  },
+  {
     "name": "studio_list_comment_replies",
     "description": "List replies under a parent comment.",
     "category": "social",
@@ -2608,6 +2696,28 @@
       "additionalProperties": true
     },
     "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_list_my_academy_courses",
+    "description": "List Academy courses this account owns or has an active deposit plan on. Requires read scope.",
+    "category": "academy",
+    "scope": "read",
+    "risk": "read",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/academy/courses/mine"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "academy.ts"
   },
   {
     "name": "studio_list_my_buyer_jobs",
@@ -3355,6 +3465,28 @@
     "sourceFile": "assistance.ts"
   },
   {
+    "name": "studio_patch_document",
+    "description": "Apply exact search/replace edit(s) to a document's markdown (coding-agent style). Prefer this over studio_update_document for small changes. Pass oldString+newString, or edits[{oldString,newString,replaceAll?}]. Fails if oldString missing or ambiguous (unless replaceAll). Requires write scope.",
+    "category": "documents",
+    "scope": "write",
+    "risk": "safe_write",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/documents/{documentId}/patch"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "documents.ts"
+  },
+  {
     "name": "studio_peer_panel",
     "description": "DM peer sidebar payload: profile, seller tag, labels, block state. Requires messages scope.",
     "category": "messages",
@@ -3529,6 +3661,28 @@
       "additionalProperties": true
     },
     "sourceFile": "assets.ts"
+  },
+  {
+    "name": "studio_purchase_academy_course",
+    "description": "Unlock an Academy course by spending Studio credits. If a Wam deposit is in progress this fails — use studio_start_checkout with academyCourseId instead. Requires generate scope. Confirm with the user before calling.",
+    "category": "academy",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/academy/courses/{courseId}/purchase"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "academy.ts"
   },
   {
     "name": "studio_purchase_network_listing",
@@ -3992,6 +4146,28 @@
     "sourceFile": "messages.ts"
   },
   {
+    "name": "studio_separate_music_stems",
+    "description": "Separate an existing Studio audio asset into stems via ElevenLabs. May require a higher ElevenLabs plan.",
+    "category": "generations",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/audio/stems"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "generations.ts"
+  },
+  {
     "name": "studio_set_active_style_sheet",
     "description": "MCP/API has no session store — pass styleSheetElementId on each studio_generate_image|video|script call for styled work (enhancement sticks style + context). Omit for Direct verbatim handoff.",
     "category": "elements",
@@ -4099,6 +4275,28 @@
       "additionalProperties": true
     },
     "sourceFile": "messages.ts"
+  },
+  {
+    "name": "studio_start_checkout",
+    "description": "Start a Wam checkout for credit top-up or an Academy course (returns checkoutUrl). Real money — confirm amount with the user first. Requires generate scope. Need phone + email + first/last name on the Studio account.",
+    "category": "account",
+    "scope": "generate",
+    "risk": "paid",
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/account/checkout"
+    },
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "accountExtra.ts"
   },
   {
     "name": "studio_submit_job_review",
@@ -4423,28 +4621,6 @@
     "http": {
       "method": "PATCH",
       "pathTemplate": "/documents/{documentId}"
-    },
-    "inputSchema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "sourceFile": "documents.ts"
-  },
-  {
-    "name": "studio_patch_document",
-    "description": "Apply exact search/replace edit(s) to a document's markdown (coding-agent style). Prefer this over studio_update_document for small changes. Pass oldString+newString, or edits[{oldString,newString,replaceAll?}]. Fails if oldString missing or ambiguous (unless replaceAll). Requires write scope.",
-    "category": "documents",
-    "scope": "write",
-    "risk": "safe_write",
-    "role": null,
-    "surfaces": [
-      "agent",
-      "mcp"
-    ],
-    "requiresApproval": false,
-    "http": {
-      "method": "POST",
-      "pathTemplate": "/documents/{documentId}/patch"
     },
     "inputSchema": {
       "type": "object",

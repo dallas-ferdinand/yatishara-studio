@@ -13,7 +13,7 @@ function registerTrashTools(server) {
   );
   server.tool(
     "studio_trash",
-    "Move a folder, asset, document, or element to trash (soft delete). Requires write scope.",
+    "Soft-delete one folder/asset/document/element. Args: {kind,id}. Destructive \u2014 needs approval in Agent.",
     {
       kind: trashKind,
       id: z.string()

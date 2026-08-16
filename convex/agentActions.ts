@@ -364,7 +364,7 @@ export const sendTurn = action({
       ownerId,
       threadId: args.threadId,
       userMessage: message,
-      catalogVersion: "2026-08-11.3",
+      catalogVersion: "2026-08-15.4",
       usedByok,
       model: usedByok && byokProvider ? `byok:${byokProvider}` : "platform",
     });
@@ -663,7 +663,7 @@ export const sendTurn = action({
           byokKey:
             process.env.STUDIO_AGENT_FORWARD_BYOK === "1" ? byokPlain : undefined,
           byokFallbackNote,
-          catalogVersion: "2026-08-11.3",
+          catalogVersion: "2026-08-15.4",
           seedPlanJson: args.seedPlanJson,
           seedTodosJson,
           currentFolderId: args.currentFolderId

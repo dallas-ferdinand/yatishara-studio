@@ -115,7 +115,7 @@ function registerSocialTools(server) {
   );
   server.tool(
     "studio_share_asset_post",
-    "Share an owned image/video asset to the public profile feed.",
+    "Post owned image/video to the public profile feed. Args: assetId, optional caption/hashtags. Use for post/share/publish \u2014 not advice.",
     {
       assetId: z.string(),
       caption: z.string().optional(),

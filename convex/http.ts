@@ -14,6 +14,10 @@ import {
   studioApiAccountExtra,
   studioApiAccountExtraOptions,
 } from "./studioApiAccountExtra";
+import {
+  studioApiAcademy,
+  studioApiAcademyOptions,
+} from "./studioApiAcademyHttp";
 import { paywiseCallback, paywiseNotify } from "./paywiseHttp";
 import { wamWebhook } from "./wamHttp";
 import {
@@ -54,6 +58,7 @@ const exactGetPost = [
   "/api/v1/generations/estimate",
   "/api/v1/generations/estimate-batch",
   "/api/v1/generations",
+  "/api/v1/audio/stems",
   "/api/v1/assistance/threads",
   "/api/v1/assistance/briefs",
   "/api/v1/assistance/approvals",
@@ -264,6 +269,33 @@ http.route({
   path: "/api/v1/notifications",
   method: "OPTIONS",
   handler: studioApiAccountExtraOptions,
+});
+
+http.route({
+  pathPrefix: "/api/v1/account/",
+  method: "POST",
+  handler: studioApiAccountExtra,
+});
+
+const academyExact = [
+  "/api/v1/academy/courses",
+  "/api/v1/academy/courses/mine",
+] as const;
+for (const path of academyExact) {
+  http.route({ path, method: "GET", handler: studioApiAcademy });
+  http.route({ path, method: "POST", handler: studioApiAcademy });
+}
+for (const method of ["GET", "POST"] as const) {
+  http.route({
+    pathPrefix: "/api/v1/academy/",
+    method,
+    handler: studioApiAcademy,
+  });
+}
+http.route({
+  pathPrefix: "/api/v1/academy/",
+  method: "OPTIONS",
+  handler: studioApiAcademyOptions,
 });
 
 http.route({

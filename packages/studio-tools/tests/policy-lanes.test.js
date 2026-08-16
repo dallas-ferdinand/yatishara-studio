@@ -35,7 +35,8 @@ test("approval policy lanes", () => {
   assert.equal(requiresApproval("studio_send_message"), true);
   assert.equal(requiresApproval("studio_share_asset_post"), true);
   assert.equal(requiresApproval("studio_trash"), true);
-  assert.equal(requiresApproval("studio_purchase_network_listing"), true);
+  assert.equal(requiresApproval("studio_purchase_academy_course"), true);
+  assert.equal(requiresApproval("studio_start_checkout"), true);
   assert.equal(requiresApproval("studio_admin_mark_payout_paid"), true);
 });
 
@@ -54,6 +55,8 @@ test("agent surface count is substantial (full access for role)", () => {
     "studio_send_message",
     "studio_list_feed",
     "studio_browse_network_listings",
+    "studio_list_academy_courses",
+    "studio_start_checkout",
   ]) {
     assert.ok(names.has(required), required);
   }

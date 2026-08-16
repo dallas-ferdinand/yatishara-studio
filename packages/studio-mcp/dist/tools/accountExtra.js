@@ -69,6 +69,31 @@ function registerAccountExtraTools(server) {
       })
     )
   );
+  server.tool(
+    "studio_start_checkout",
+    "Start a Wam checkout for credit top-up or an Academy course (returns checkoutUrl). Real money \u2014 confirm amount with the user first. Requires generate scope. Need phone + email + first/last name on the Studio account.",
+    {
+      amountCents: z.number().describe("Charge in cents (TTD)"),
+      creditsRequested: z.number().optional(),
+      academyCourseId: z.string().optional().describe("Unlock this course after payment"),
+      reference: z.string().optional(),
+      clientRequestId: z.string().optional().describe("Idempotency key; auto-generated if omitted"),
+      compact: z.boolean().optional()
+    },
+    async (args) => jsonResult(
+      await studioFetch("/account/checkout", {
+        method: "POST",
+        body: JSON.stringify({
+          amountCents: args.amountCents,
+          creditsRequested: args.creditsRequested,
+          academyCourseId: args.academyCourseId,
+          reference: args.reference,
+          clientRequestId: args.clientRequestId
+        })
+      }),
+      args.compact
+    )
+  );
 }
 export {
   registerAccountExtraTools

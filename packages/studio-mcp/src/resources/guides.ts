@@ -47,6 +47,7 @@ Read **these resources** before exploring dozens of tools. Prefer tools marked \
 | DMs / messaging | \`studio://guides/messages\` |
 | Feed / profiles / social | \`studio://guides/social\` |
 | Creative Network marketplace | \`studio://guides/network\` |
+| Academy courses | \`studio://guides/academy\` |
 | Credits / health / billing extras | \`studio://guides/account\` |
 
 ## Rules of thumb
@@ -482,8 +483,30 @@ const ACCOUNT = guide(
 - \`studio_credit_balance\` — alias of health
 - Notifications: \`studio_list_notifications\`, \`studio_mark_notification_read\`
 - Also available via account extras: payments list/get, credit transactions, subscription plans/pricing/storage/subscription
+- \`studio_start_checkout\` — Wam top-up / Academy unlock (real money; confirm amount first)
 
 Always estimate generation/export cost before large spends.
+`,
+);
+
+const ACADEMY = guide(
+  "academy",
+  "academy",
+  "Studio Academy: catalog, unlock with credits, Wam checkout, playback URLs.",
+  `# Academy
+
+Browse and unlock courses the same way the Academy tab does.
+
+1. \`studio_list_academy_courses\` — catalog + owned flag + price
+2. \`studio_get_academy_course\` — lessons (use courseId or slug)
+3. Unlock:
+   - Enough credits → \`studio_purchase_academy_course\`
+   - Pay with Wam → \`studio_start_checkout\` with \`academyCourseId\` + \`amountCents\`
+4. Playback URLs: \`studio_get_academy_intro\` (free preview), \`studio_get_academy_lesson\` (must own)
+
+\`studio_list_my_academy_courses\` for already-owned / deposit-plan rows.
+
+Confirm any credit spend or Wam checkout with the user first.
 `,
 );
 
@@ -502,6 +525,7 @@ export const STUDIO_GUIDES: Guide[] = [
   MESSAGES,
   SOCIAL,
   NETWORK,
+  ACADEMY,
   ACCOUNT,
 ];
 

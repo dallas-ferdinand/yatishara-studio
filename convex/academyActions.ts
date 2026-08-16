@@ -3,8 +3,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { ActionCtx } from "./_generated/server";
-import { action } from "./_generated/server";
-import { api } from "./_generated/api";
+import { action, internalAction } from "./_generated/server";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   buildAcademyCoverPath,
@@ -352,6 +352,56 @@ export const getCoursePlayback = action({
       | { allowed: false };
     if (!access.allowed) {
       throw new Error("Course video is not available");
+    }
+    return mintPlaybackForVideo(access.bunnyStreamVideoId);
+  },
+});
+
+const playbackReturn = v.object({
+  embedUrl: v.string(),
+  expiresUnix: v.number(),
+  tokenAuth: v.boolean(),
+});
+
+export const getIntroPlaybackForApi = internalAction({
+  args: {
+    userId: v.id("users"),
+    courseId: v.id("academyCourses"),
+  },
+  returns: playbackReturn,
+  handler: async (ctx, args) => {
+    const access = (await ctx.runQuery(
+      internal.academy.getIntroPlaybackAccessForApi,
+      { userId: args.userId, courseId: args.courseId },
+    )) as
+      | { allowed: true; bunnyStreamVideoId: string }
+      | { allowed: false };
+    if (!access.allowed) {
+      throw new Error("Intro video is not available");
+    }
+    return mintPlaybackForVideo(access.bunnyStreamVideoId);
+  },
+});
+
+export const getLessonPlaybackForApi = internalAction({
+  args: {
+    userId: v.id("users"),
+    lessonId: v.id("academyLessons"),
+  },
+  returns: playbackReturn,
+  handler: async (ctx, args) => {
+    const access = (await ctx.runQuery(
+      internal.academy.getLessonPlaybackAccessForApi,
+      { userId: args.userId, lessonId: args.lessonId },
+    )) as
+      | {
+          allowed: true;
+          bunnyStreamVideoId: string;
+          courseId: Id<"academyCourses">;
+        }
+      | { allowed: false };
+    if (!access.allowed) {
+      throw new Error("Lesson video is not available");
     }
     return mintPlaybackForVideo(access.bunnyStreamVideoId);
   },

@@ -5,6 +5,10 @@ import { registerGuideResources } from "./resources/guides.js";
 import { registerAccountTools } from "./tools/account.js";
 import { registerAccountExtraTools } from "./tools/accountExtra.js";
 import { registerAssistanceTools } from "./tools/assistance.js";
+import {
+  AGENT_BLOCKED_TOOL_NAMES,
+  catalogVersion
+} from "@yatishara/studio-tools";
 import { registerAssetTools } from "./tools/assets.js";
 import { registerContextTools } from "./tools/context.js";
 import { registerDocumentTools } from "./tools/documents.js";
@@ -18,11 +22,13 @@ import { registerSocialTools } from "./tools/social.js";
 import { registerNetworkTools } from "./tools/network.js";
 import { registerTrashTools } from "./tools/trash.js";
 import { registerVoiceTools } from "./tools/voices.js";
+import { registerAcademyTools } from "./tools/academy.js";
 requireConfig();
 const server = new McpServer({
   name: "yatishara-studio",
-  version: "0.8.3"
+  version: "0.8.5"
 });
+const agentSurface = process.env.STUDIO_MCP_AGENT_SURFACE === "1";
 registerGuideResources(server);
 registerAccountTools(server);
 registerAccountExtraTools(server);
@@ -30,10 +36,17 @@ registerContextTools(server);
 registerFolderTools(server);
 registerAssetTools(server);
 registerDocumentTools(server);
-registerElementTools(server);
+registerElementTools(server, { includeSheets: !agentSurface });
 registerGenerationTools(server);
 registerVoiceTools(server);
-registerAssistanceTools(server);
+registerAcademyTools(server);
+if (!agentSurface) {
+  registerAssistanceTools(server);
+} else {
+  console.error(
+    `[studio-mcp] Agent surface (${catalogVersion()}): excluded ${AGENT_BLOCKED_TOOL_NAMES.length} non-agent tools`
+  );
+}
 registerEditTools(server);
 registerProductionTools(server);
 registerMessageTools(server);

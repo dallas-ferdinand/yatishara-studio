@@ -9,12 +9,12 @@ const estimateSchema = {
   characterCount: z.number().optional(),
   prompt: z.string().optional().describe("For mode=audio voiceover: character count is taken from prompt length when characterCount is omitted"),
   referenceAssetIds: z.array(z.string()).optional(),
-  referenceElementIds: z.array(z.string()).optional().describe("Built elements \u2014 video: prop/location sheets as [Image N] refs; characters prompt-only"),
+  referenceElementIds: z.array(z.string()).optional().describe("Elements \u2014 video: attached image/video files as @Image N / @Video N. Characters send their media too."),
   startFrameAssetId: z.string().optional().describe(
     "Storyboard / opening still for video (first_frame I2V). Required when people are on camera. Generate via studio_generate_image first."
   ),
   videoModel: z.string().optional().describe(
-    "Video model: seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s). MCP-only: kling-3.0-i2v, google-omni-flash. Call studio_list_video_models for caps."
+    "Video model: seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s). Call studio_list_video_models for caps."
   )
 };
 const directHandoffHint = "Direct handoff: omit styleSheetElementId (prompt reaches the model verbatim). Pass styleSheetElementId to run the enhancement sticking layer (style + script/elements).";
@@ -123,7 +123,7 @@ function registerGenerationTools(server) {
   );
   server.tool(
     "studio_list_video_models",
-    "List video models for MCP selection. Includes kling-3.0-i2v (MCP-only, not in Studio UI).",
+    "List Studio video models (Seedance 2.5 / 2.0).",
     {},
     async () => jsonResult(await studioFetch("/video-models?scope=mcp"))
   );
@@ -307,9 +307,7 @@ Rules:
   );
   server.tool(
     "studio_generate_image",
-    `[preferred] Generate an image and save it to a Studio folder. Call studio_estimate_generation first. Uses wait=true (usually completes in seconds).
-
-DEFAULT: Direct handoff (verbatim prompt). Pass styleSheetElementId to enable the enhancement sticking layer. ${directHandoffHint}`,
+    `[preferred] Create an image from a prompt into a Studio folder (paid). Call studio_estimate_generation first when cost matters. wait=true. DEFAULT: Direct verbatim prompt; pass styleSheetElementId for enhancement sticking. ${directHandoffHint}`,
     {
       prompt: z.string(),
       folderId: z.string().optional(),
@@ -319,7 +317,7 @@ DEFAULT: Direct handoff (verbatim prompt). Pass styleSheetElementId to enable th
       resolution: z.string().optional().describe("1K, 2K, or 4K"),
       quality: z.enum(["low", "medium", "high"]).optional().describe("GPT Image 2 quality"),
       referenceAssetIds: z.array(z.string()).optional().describe("Direct asset IDs (e.g. sheetAssetId)"),
-      referenceElementIds: z.array(z.string()).optional().describe("Built element IDs \u2014 uses sheet image + description, not upload refs"),
+      referenceElementIds: z.array(z.string()).optional().describe("Element IDs \u2014 uses the element's image/video file + description"),
       skipPromptEnhancement: z.boolean().optional().describe("Override. Default: true for Direct, false when styleSheetElementId is set."),
       referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc),
       compact: z.boolean().optional()
@@ -367,12 +365,12 @@ Wait \u226565s between video calls (1 req/min gateway quota). For packs use stud
       durationSeconds: z.number().optional().describe("4-15 seconds"),
       audioEnabled: z.boolean().optional().describe("UI: Synced audio \u2014 Seedance native audio bed with the video"),
       referenceAssetIds: z.array(z.string()).optional(),
-      referenceElementIds: z.array(z.string()).optional().describe("Prop + location element IDs for [Image N] refs"),
+      referenceElementIds: z.array(z.string()).optional().describe("Element IDs \u2014 send each element's image or video as @Image N / @Video N"),
       startFrameAssetId: z.string().optional().describe("Storyboard asset ID \u2014 first_frame I2V. Required when people appear on camera."),
       skipPromptEnhancement: z.boolean().optional().describe("Override. Default: true for Direct, false when styleSheetElementId is set."),
       referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc),
       videoModel: z.string().optional().describe(
-        "seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s). MCP-only: kling-3.0-i2v, google-omni-flash."
+        "seedance-2.5 (default, 480p/720p, max 30s) or seedance-2.0 (480p/720p/1080p/4k, max 15s)."
       ),
       compact: z.boolean().optional()
     },
@@ -443,8 +441,11 @@ Wait \u226565s between video calls (1 req/min gateway quota). For packs use stud
 
 Voiceover: requires elevenVoiceId (from studio_explore_voices or studio_list_saved_voices). Prompt = spoken text (max ~3000 chars).
 SFX: prompt = sound description; optional durationSeconds 0.5\u201330 (omit = Auto ~5s).
-Music: prompt = track description; durationSeconds 3\u2013300 (default 30); forceInstrumental defaults true.
-Async by default (wait=false) then polls up to 3 min (music may need longer \u2014 raise wait or poll).`,
+Music: prompt = track description; durationSeconds 3\u2013600 or omit for Auto; forceInstrumental defaults true.
+Music model: musicModelId music_v1 | music_v2 (default v2). Optional musicFinetuneId.
+Music workflows: composition_plan (default \u2014 free plan then compose), prompt (quick), extend (needs musicSourceSongId from a Keep-for-extend track).
+musicStoreForInpainting defaults true so songs can be extended later.
+Async by default (wait=false) then polls up to 5 min for music.`,
     {
       prompt: z.string(),
       audioType: z.enum(["voiceover", "sfx", "music"]),
@@ -452,10 +453,18 @@ Async by default (wait=false) then polls up to 3 min (music may need longer \u20
       elevenVoiceId: z.string().optional().describe("Required for voiceover"),
       elevenVoiceName: z.string().optional(),
       elevenPublicOwnerId: z.string().optional().describe("Library owner id; omit for account/premade voices"),
-      durationSeconds: z.number().optional().describe("SFX: 0.5\u201330; Music: 3\u2013300"),
+      durationSeconds: z.number().optional().describe("SFX: 0.5\u201330; Music: 3\u2013600 or omit Auto"),
       audioLoop: z.boolean().optional(),
       promptInfluence: z.number().optional().describe("SFX only: 0\u20131"),
       forceInstrumental: z.boolean().optional().describe("Music only; default true"),
+      musicWorkflow: z.enum(["composition_plan", "prompt", "extend"]).optional().describe("Music only; default composition_plan"),
+      musicModelId: z.enum(["music_v1", "music_v2"]).optional().describe("Music only; default music_v2"),
+      musicFinetuneId: z.string().optional().describe("Music only; optional finetune id"),
+      musicCustomLyrics: z.string().optional().describe("Music only; custom lyrics for plan/prompt"),
+      musicCompositionPlanJson: z.string().optional().describe("Optional prebuilt music_v2 plan JSON"),
+      musicStoreForInpainting: z.boolean().optional().describe("Music only; default true"),
+      musicSourceSongId: z.string().optional().describe("Required for extend workflow"),
+      musicKeepMs: z.number().optional().describe("Extend: ms of source to keep"),
       wait: z.boolean().optional().describe("Default false (poll). Set true for sync wait on server."),
       compact: z.boolean().optional()
     },
@@ -479,13 +488,36 @@ Async by default (wait=false) then polls up to 3 min (music may need longer \u20
           durationSeconds: args.durationSeconds,
           audioLoop: args.audioLoop,
           promptInfluence: args.promptInfluence,
-          forceInstrumental: args.forceInstrumental
+          forceInstrumental: args.forceInstrumental,
+          musicWorkflow: args.musicWorkflow,
+          musicModelId: args.musicModelId,
+          musicFinetuneId: args.musicFinetuneId,
+          musicCustomLyrics: args.musicCustomLyrics,
+          musicCompositionPlanJson: args.musicCompositionPlanJson,
+          musicStoreForInpainting: args.musicStoreForInpainting,
+          musicSourceSongId: args.musicSourceSongId,
+          musicKeepMs: args.musicKeepMs
         })
       });
       if (wait) return jsonResult(queued, args.compact);
       const jobId = queued.id;
       const result = await pollGeneration(jobId, { timeoutMs: pollMs });
       return jsonResult({ ...queued, ...result }, args.compact);
+    }
+  );
+  server.tool(
+    "studio_separate_music_stems",
+    "Separate an existing Studio audio asset into stems via ElevenLabs. May require a higher ElevenLabs plan.",
+    {
+      assetId: z.string(),
+      compact: z.boolean().optional()
+    },
+    async (args) => {
+      const result = await studioFetch("/audio/stems", {
+        method: "POST",
+        body: JSON.stringify({ assetId: args.assetId })
+      });
+      return jsonResult(result, args.compact);
     }
   );
 }

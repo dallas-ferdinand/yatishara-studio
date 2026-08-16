@@ -37,6 +37,7 @@ Read **these resources** before exploring dozens of tools. Prefer tools marked \
 | DMs / messaging | \`studio://guides/messages\` |
 | Feed / profiles / social | \`studio://guides/social\` |
 | Creative Network marketplace | \`studio://guides/network\` |
+| Academy courses | \`studio://guides/academy\` |
 | Credits / health / billing extras | \`studio://guides/account\` |
 
 ## Rules of thumb
@@ -147,29 +148,44 @@ const ELEMENTS = guide(
   "elements",
   "elements",
   "Elements, character/prop sheets, style sheets.",
-  `# Elements & style sheets
+  `# Elements
 
-## Before building sheets
+## Why
+
+A \`.element\` is a **reusable Seedance/Create identity lock** (product, character, prop, location).
+Bare \`asset://\` refs are one-shot. \`@name\` + \`element://\` hydrates chips on paste/Run and keeps the same lock across prompts and gens.
+Do **not** treat "create element" as a keyword-only ask \u2014 when the job is identity continuity, elementize first.
+
+## When
+
+- User asks to create / lock / elementize media
+- Attached product / character / prop / location stills + a prompt/ad/script that must keep that identity
+- Upcoming generate that should bind those locks
+
+Style/mood-only refs may stay \`asset://\`.
+
+## How (Create / Agent default)
+
+1. \`studio_list_elements\` in CWD \u2014 reuse live matches
+2. Else \`studio_upload_asset\` (image or video) if needed
+3. \`studio_create_element\` \u2014 unique \`@name\` (no spaces), optional description, \`referenceAssetIds\`
+4. In prompts: \`@name\` inside the sealed text + \`- [name](element://{elementId})\` under \`## References\`
+5. Generate with \`referenceElementIds\`
+
+\`studio_get_element\`, \`studio_update_element\` (swap media)
+
+Never claim Elements are retired or unavailable.
+
+## Sheets (MCP only \u2014 not Agent)
 
 1. \`studio_production_guide\`
-2. \`studio_element_sheet_guide\` when generating sheets
+2. \`studio_element_sheet_guide\`
+3. \`studio_generate_element_text_sheet\` / \`studio_generate_element_sheet\`
 
-## CRUD
-
-\`studio_list_elements\`, \`studio_get_element\`, \`studio_create_element\`, \`studio_update_element\`
-
-## Sheets
-
-- \`studio_generate_element_text_sheet\` \u2014 text lock / bible-style
-- \`studio_generate_element_sheet\` \u2014 visual sheet
-
-## Style sheets
+## Style sheets (MCP only)
 
 - \`studio_create_style_sheet\` / \`studio_build_style_sheet\`
-- \`studio_set_active_style_sheet\`
-- \`studio_list_style_sheets\`
-
-Pass the built style sheet element id into \`studio_generate_*\` as \`styleSheetElementId\` when you want enhancement to stick look + context.
+- Pass \`styleSheetElementId\` on \`studio_generate_*\` for styled work
 `
 );
 const EDITING = guide(
@@ -443,8 +459,29 @@ const ACCOUNT = guide(
 - \`studio_credit_balance\` \u2014 alias of health
 - Notifications: \`studio_list_notifications\`, \`studio_mark_notification_read\`
 - Also available via account extras: payments list/get, credit transactions, subscription plans/pricing/storage/subscription
+- \`studio_start_checkout\` \u2014 Wam top-up / Academy unlock (real money; confirm amount first)
 
 Always estimate generation/export cost before large spends.
+`
+);
+const ACADEMY = guide(
+  "academy",
+  "academy",
+  "Studio Academy: catalog, unlock with credits, Wam checkout, playback URLs.",
+  `# Academy
+
+Browse and unlock courses the same way the Academy tab does.
+
+1. \`studio_list_academy_courses\` \u2014 catalog + owned flag + price
+2. \`studio_get_academy_course\` \u2014 lessons (use courseId or slug)
+3. Unlock:
+   - Enough credits \u2192 \`studio_purchase_academy_course\`
+   - Pay with Wam \u2192 \`studio_start_checkout\` with \`academyCourseId\` + \`amountCents\`
+4. Playback URLs: \`studio_get_academy_intro\` (free preview), \`studio_get_academy_lesson\` (must own)
+
+\`studio_list_my_academy_courses\` for already-owned / deposit-plan rows.
+
+Confirm any credit spend or Wam checkout with the user first.
 `
 );
 const STUDIO_GUIDES = [
@@ -462,6 +499,7 @@ const STUDIO_GUIDES = [
   MESSAGES,
   SOCIAL,
   NETWORK,
+  ACADEMY,
   ACCOUNT
 ];
 const STUDIO_GUIDE_URIS = STUDIO_GUIDES.map((g) => g.uri);

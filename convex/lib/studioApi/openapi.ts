@@ -2,7 +2,7 @@ export const STUDIO_API_OPENAPI = {
   openapi: "3.1.0",
   info: {
     title: "Yatishara Studio API",
-    version: "1.4.1",
+    version: "1.5.0",
     description:
       "REST API for folders, assets, documents, elements, audio, assistance, video edits, AI generation, and direct messaging. Authenticate with Bearer ysk_live_… keys. Messaging routes require the messages scope and are not limited to the API key sandbox folder.",
   },
@@ -98,6 +98,9 @@ export const STUDIO_API_OPENAPI = {
     "/generations/estimate": { post: { summary: "Estimate credit cost" } },
     "/generations/estimate-batch": { post: { summary: "Estimate multi-item production budget" } },
     "/generations/{id}": { get: { summary: "Get generation job" } },
+    "/audio/stems": {
+      post: { summary: "Separate a Studio audio asset into stems (ElevenLabs)" },
+    },
     "/assistance/briefs": { post: { summary: "Ensure assisted brief (+ thread)" } },
     "/assistance/briefs/{briefId}": {
       get: { summary: "Get assisted brief" },
@@ -240,6 +243,19 @@ export const STUDIO_API_OPENAPI = {
     "/account/pricing": { get: { summary: "Credit unit price + sample generation costs" } },
     "/account/storage": { get: { summary: "Storage usage and projected charge" } },
     "/account/subscription": { get: { summary: "Balance + active subscription summary" } },
+    "/account/checkout": {
+      post: { summary: "Start Wam checkout for credit top-up or Academy course" },
+    },
+    "/academy/courses": { get: { summary: "List published Academy courses" } },
+    "/academy/courses/mine": { get: { summary: "List owned / deposit-plan Academy courses" } },
+    "/academy/courses/{idOrSlug}": { get: { summary: "Get Academy course by id or slug" } },
+    "/academy/courses/{id}/purchase": {
+      post: { summary: "Unlock Academy course with Studio credits" },
+    },
+    "/academy/courses/{id}/intro": { get: { summary: "Signed intro playback URL" } },
+    "/academy/lessons/{id}/playback": {
+      get: { summary: "Signed lesson playback URL (must own course)" },
+    },
     "/notifications": { get: { summary: "List in-app notifications" } },
     "/notifications/{id}/read": { post: { summary: "Mark notification read" } },
     "/network/offers": { get: { summary: "List published Creative Network offers" } },
@@ -286,7 +302,7 @@ export const STUDIO_API_OPENAPI = {
 
 export const STUDIO_API_ROOT = {
   name: "Yatishara Studio API",
-  version: "1.4.1",
+  version: "1.5.0",
   documentation: "/api/v1/openapi.json",
   scopes: ["read", "write", "generate", "messages", "social", "marketplace"],
   endpoints: [
@@ -298,6 +314,14 @@ export const STUDIO_API_ROOT = {
     "GET /account/pricing",
     "GET /account/storage",
     "GET /account/subscription",
+    "POST /account/checkout",
+    "POST /audio/stems",
+    "GET /academy/courses",
+    "GET /academy/courses/mine",
+    "GET /academy/courses/:idOrSlug",
+    "POST /academy/courses/:id/purchase",
+    "GET /academy/courses/:id/intro",
+    "GET /academy/lessons/:id/playback",
     "GET /notifications",
     "POST /notifications/:id/read",
     "GET /trash",

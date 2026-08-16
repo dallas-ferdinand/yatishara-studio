@@ -95,6 +95,10 @@ export function normalizeStudioToolArgs(toolName, args = {}) {
   const input = normalizeAgentGenerationArgs(toolName, args);
   const name = String(toolName || "");
 
+  if (name === "studio_get_academy_course" && !input.courseId && input.slug) {
+    input.courseId = input.slug;
+  }
+
   if (name === "studio_trash" || name === "studio_restore") {
     const kindRaw = String(input.kind || "").trim().toLowerCase();
     const collectionRaw = String(input.collection || "").trim().toLowerCase();

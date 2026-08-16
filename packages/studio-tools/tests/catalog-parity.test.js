@@ -33,12 +33,12 @@ test('catalog version present', () => {
   assert.ok(catalogVersion());
 });
 
-test('catalog has 214 tools matching MCP registrations', () => {
+test('catalog has 222 tools matching MCP registrations', () => {
   const registered = mcpRegisteredNames();
   const report = catalogParityReport(registered);
   assert.equal(report.missingInCatalog.length, 0, JSON.stringify(report.missingInCatalog));
   assert.equal(report.missingInMcp.length, 0, JSON.stringify(report.missingInMcp));
-  assert.equal(STUDIO_TOOL_CATALOG.length, 214);
+  assert.equal(STUDIO_TOOL_CATALOG.length, 222);
 });
 
 test('positive surfaces: agent excludes retired tools', () => {

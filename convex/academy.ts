@@ -526,6 +526,257 @@ export const purchaseCourse = authedMutation({
   },
 });
 
+async function requireApiUser(ctx: QueryCtx | MutationCtx, userId: Id<"users">) {
+  const user = await ctx.db.get("users", userId);
+  if (!user) throw new Error("User not found");
+  return user;
+}
+
+export const listPublishedCoursesForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.array(catalogCourseReturn),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const rows = await listCatalogCourses(ctx);
+    const out = [];
+    for (const course of rows) {
+      const purchase = await findPurchase(ctx, args.userId, course._id);
+      const plan = purchase
+        ? null
+        : await findActivePaymentPlan(ctx, args.userId, course._id);
+      const lessons = await listLessonsForCourse(ctx, course._id, {
+        publishedOnly: true,
+      });
+      out.push({
+        _id: course._id,
+        title: course.title,
+        slug: course.slug,
+        blurb: blurbFromMarkdown(course.descriptionMarkdown),
+        ...pricingFieldsForCourse(course),
+        coverUrl: await coverUrlFor(course.coverBunnyPath, CN_CARD_TRANSFORM),
+        owned: Boolean(purchase),
+        paymentPlan: paymentPlanForLearner(plan),
+        lessonCount: lessons.length,
+        sortOrder: course.sortOrder,
+        updatedAt: course.updatedAt,
+      });
+    }
+    return out;
+  },
+});
+
+export const listMyCoursesForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.array(catalogCourseReturn),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const purchases = await ctx.db
+      .query("academyPurchases")
+      .withIndex("by_user_and_purchased", (q) => q.eq("userId", args.userId))
+      .order("desc")
+      .collect();
+    const ownedIds = new Set(purchases.map((p) => String(p.courseId)));
+    const out = [];
+    for (const purchase of purchases) {
+      const course = await ctx.db.get("academyCourses", purchase.courseId);
+      if (!course || course.status !== "published") continue;
+      const lessons = await listLessonsForCourse(ctx, course._id, {
+        publishedOnly: true,
+      });
+      out.push({
+        _id: course._id,
+        title: course.title,
+        slug: course.slug,
+        blurb: blurbFromMarkdown(course.descriptionMarkdown),
+        ...pricingFieldsForCourse(course),
+        coverUrl: await coverUrlFor(course.coverBunnyPath, CN_CARD_TRANSFORM),
+        owned: true,
+        lessonCount: lessons.length,
+        sortOrder: course.sortOrder,
+        updatedAt: course.updatedAt,
+      });
+    }
+    const activePlans = await ctx.db
+      .query("academyCoursePaymentPlans")
+      .withIndex("by_user_and_status", (q) =>
+        q.eq("userId", args.userId).eq("status", "active"),
+      )
+      .collect();
+    const now = Date.now();
+    for (const plan of activePlans) {
+      if (ownedIds.has(String(plan.courseId))) continue;
+      if (planIsExpired(plan, now)) continue;
+      const course = await ctx.db.get("academyCourses", plan.courseId);
+      if (!course || course.status !== "published") continue;
+      const lessons = await listLessonsForCourse(ctx, course._id, {
+        publishedOnly: true,
+      });
+      out.push({
+        _id: course._id,
+        title: course.title,
+        slug: course.slug,
+        blurb: blurbFromMarkdown(course.descriptionMarkdown),
+        ...pricingFieldsForCourse(course),
+        coverUrl: await coverUrlFor(course.coverBunnyPath, CN_CARD_TRANSFORM),
+        owned: false,
+        paymentPlan: paymentPlanForLearner(plan, now),
+        lessonCount: lessons.length,
+        sortOrder: course.sortOrder,
+        updatedAt: course.updatedAt,
+      });
+    }
+    return out;
+  },
+});
+
+export const getCourseForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    courseId: v.optional(v.id("academyCourses")),
+    slug: v.optional(v.string()),
+  },
+  returns: v.union(courseDetailReturn, v.null()),
+  handler: async (ctx, args) => {
+    const user = await requireApiUser(ctx, args.userId);
+    let course: Doc<"academyCourses"> | null = null;
+    if (args.courseId) {
+      course = await ctx.db.get("academyCourses", args.courseId);
+    } else if (args.slug?.trim()) {
+      course = await ctx.db
+        .query("academyCourses")
+        .withIndex("by_slug", (q) => q.eq("slug", args.slug!.trim().toLowerCase()))
+        .unique();
+    }
+    if (!course) return null;
+    const admin = isAdminRole(user.role);
+    const purchase = await findPurchase(ctx, args.userId, course._id);
+    const owned = Boolean(purchase);
+    const plan = owned
+      ? null
+      : await findActivePaymentPlan(ctx, args.userId, course._id);
+    if (course.status !== "published" && !admin) return null;
+    const lessonDocs = await listLessonsForCourse(ctx, course._id, {
+      publishedOnly: !admin,
+    });
+    const lessons = [];
+    for (const lesson of lessonDocs) {
+      lessons.push({
+        _id: lesson._id,
+        title: lesson.title,
+        slug: lesson.slug,
+        blurb: blurbFromMarkdown(lesson.descriptionMarkdown),
+        descriptionMarkdown: lesson.descriptionMarkdown,
+        coverUrl: await coverUrlFor(lesson.coverBunnyPath, ACADEMY_COVER_TRANSFORM),
+        coverThumbUrl: await coverUrlFor(lesson.coverBunnyPath, THUMB_TRANSFORM),
+        hasVideo: Boolean(lesson.bunnyStreamVideoId) && owned,
+        sortOrder: lesson.sortOrder,
+        status: lesson.status,
+        commentCount: lesson.commentCount ?? 0,
+      });
+    }
+    return {
+      _id: course._id,
+      title: course.title,
+      slug: course.slug,
+      descriptionMarkdown: course.descriptionMarkdown,
+      ...pricingFieldsForCourse(course),
+      coverUrl: await coverUrlFor(course.coverBunnyPath, ACADEMY_COVER_TRANSFORM),
+      owned,
+      paymentPlan: paymentPlanForLearner(plan),
+      hasIntroVideo: Boolean(courseIntroVideoId(course)),
+      lessonCount: lessonDocs.filter((l) => l.status === "published").length,
+      lessons,
+      commentCount: course.commentCount ?? 0,
+      status: course.status,
+      sortOrder: course.sortOrder,
+      updatedAt: course.updatedAt,
+    };
+  },
+});
+
+export const purchaseCourseForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    courseId: v.id("academyCourses"),
+  },
+  returns: v.object({
+    purchaseId: v.id("academyPurchases"),
+    alreadyOwned: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const plan = await findActivePaymentPlan(ctx, args.userId, args.courseId);
+    if (plan) {
+      throw new Error(
+        "This course has a deposit in progress. Message Studio support on WhatsApp to pay the balance.",
+      );
+    }
+    return await purchaseCourseForUser(ctx, args.userId, args.courseId);
+  },
+});
+
+export const getIntroPlaybackAccessForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    courseId: v.id("academyCourses"),
+  },
+  returns: v.union(
+    v.object({
+      allowed: v.literal(true),
+      bunnyStreamVideoId: v.string(),
+    }),
+    v.object({ allowed: v.literal(false) }),
+  ),
+  handler: async (ctx, args) => {
+    const user = await requireApiUser(ctx, args.userId);
+    const course = await ctx.db.get("academyCourses", args.courseId);
+    if (!course) return { allowed: false as const };
+    const videoId = courseIntroVideoId(course);
+    if (!videoId) return { allowed: false as const };
+    const admin = isAdminRole(user.role);
+    if (!admin && course.status !== "published") {
+      return { allowed: false as const };
+    }
+    return { allowed: true as const, bunnyStreamVideoId: videoId };
+  },
+});
+
+export const getLessonPlaybackAccessForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    lessonId: v.id("academyLessons"),
+  },
+  returns: v.union(
+    v.object({
+      allowed: v.literal(true),
+      bunnyStreamVideoId: v.string(),
+      courseId: v.id("academyCourses"),
+    }),
+    v.object({ allowed: v.literal(false) }),
+  ),
+  handler: async (ctx, args) => {
+    const user = await requireApiUser(ctx, args.userId);
+    const lesson = await ctx.db.get("academyLessons", args.lessonId);
+    if (!lesson?.bunnyStreamVideoId) return { allowed: false as const };
+    const course = await ctx.db.get("academyCourses", lesson.courseId);
+    if (!course) return { allowed: false as const };
+    const admin = isAdminRole(user.role);
+    const published =
+      course.status === "published" && lesson.status === "published";
+    if (!published) {
+      if (!admin) return { allowed: false as const };
+    } else {
+      const purchase = await findPurchase(ctx, args.userId, course._id);
+      if (!purchase) return { allowed: false as const };
+    }
+    return {
+      allowed: true as const,
+      bunnyStreamVideoId: lesson.bunnyStreamVideoId,
+      courseId: course._id,
+    };
+  },
+});
+
 /** After PayWise shortfall top-up: debit wallet and unlock the course. */
 export const internalPurchaseCourseForUser = internalMutation({
   args: {
