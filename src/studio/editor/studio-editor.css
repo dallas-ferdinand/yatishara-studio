@@ -127,7 +127,13 @@
   background: var(--mos-panel, #f5f5f7);
 }
 
-.studio-editor-mode-icon {
+.studio-editor-mode-stack-spacer {
+  flex: 1;
+  min-height: 0.5rem;
+}
+
+.studio-editor-mode-icon,
+.studio-editor-mode-export {
   display: grid;
   place-items: center;
   width: 26px;
@@ -139,7 +145,8 @@
   flex-shrink: 0;
 }
 
-.studio-editor-mode-icon:hover:not(:disabled) {
+.studio-editor-mode-icon:hover:not(:disabled),
+.studio-editor-mode-export:hover:not(:disabled) {
   background: var(--mos-hover);
   color: var(--mos-text);
 }
@@ -155,6 +162,22 @@
   opacity: 0.35;
   cursor: not-allowed;
   color: var(--mos-muted);
+}
+
+.studio-editor-mode-export {
+  border-color: var(--mos-border);
+  background: var(--mos-plate-strong);
+  color: var(--cursor-accent);
+}
+
+.studio-editor-mode-export.is-active {
+  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-bg));
+  border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--mos-border));
+  color: var(--cursor-accent);
+}
+
+.studio-editor-mode-export:disabled {
+  opacity: 0.45;
 }
 
 .studio-editor-export-tiers {
@@ -322,44 +345,19 @@
   color: var(--color-cursor-text, var(--mos-text));
 }
 
-.studio-editor-inspector-name-field {
+.studio-editor-export-filename-row {
   display: flex;
   align-items: center;
-  gap: 2px;
-  min-width: 0;
+  gap: 6px;
+  width: 100%;
+}
+
+.studio-editor-export-filename-row input {
   flex: 1 1 auto;
-  height: 22px;
-  margin: 0;
-}
-
-.studio-editor-inspector-name-input {
   min-width: 0;
-  flex: 1 1 auto;
-  height: 22px;
-  margin: 0;
-  padding: 0 4px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--color-cursor-text, var(--mos-text));
-  font: inherit;
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  line-height: 1;
 }
 
-.studio-editor-inspector-name-input::placeholder {
-  color: var(--color-cursor-muted, var(--mos-muted));
-  font-weight: 560;
-}
-
-.studio-editor-inspector-name-input:focus {
-  outline: none;
-  background: var(--mos-plate-strong, var(--mos-hover));
-}
-
-.studio-editor-inspector-name-ext {
+.studio-editor-export-filename-ext {
   flex: 0 0 auto;
   font-size: 12px;
   font-weight: 600;
