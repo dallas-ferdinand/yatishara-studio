@@ -127,11 +127,6 @@
   background: var(--mos-panel, #f5f5f7);
 }
 
-.studio-editor-mode-stack-spacer {
-  flex: 1;
-  min-height: 0.5rem;
-}
-
 .studio-editor-mode-icon,
 .studio-editor-mode-export {
   display: grid;

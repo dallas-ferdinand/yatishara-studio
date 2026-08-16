@@ -466,7 +466,6 @@ export function EditorModeRail({
           </button>
         );
       })}
-      <div className="studio-editor-mode-stack-spacer" />
       <button
         type="button"
         role="tab"
