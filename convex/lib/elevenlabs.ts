@@ -48,6 +48,21 @@ export function resolveMusicModelId(
 
 const ELEVEN_API_BASE = "https://api.elevenlabs.io";
 
+/** Reject empty / non-MP3 provider payloads so Create never saves a silent stub. */
+function assertUsableAudioBuffer(buffer: Uint8Array, label: string) {
+  if (buffer.byteLength < 512) {
+    throw new Error(`${label} came back empty — try again.`);
+  }
+  const b0 = buffer[0];
+  const b1 = buffer[1];
+  const b2 = buffer[2];
+  const isId3 = b0 === 0x49 && b1 === 0x44 && b2 === 0x33;
+  const isMpegFrame = b0 === 0xff && b1 != null && (b1 & 0xe0) === 0xe0;
+  if (!isId3 && !isMpegFrame) {
+    throw new Error(`${label} response was not audio — try again.`);
+  }
+}
+
 /** Parse ELEVENLABS_API_KEYS (+ legacy ELEVENLABS_API_KEY). Deduped, order preserved. */
 export function parseConfiguredApiKeys(
   multiRaw?: string | null,
@@ -592,6 +607,7 @@ export async function textToSpeechV3(args: {
       throwIfElevenLabsFailed(response.status, detail);
     }
     const buffer = new Uint8Array(await response.arrayBuffer());
+    assertUsableAudioBuffer(buffer, "Voiceover");
     return { data: buffer, mediaType: "audio/mpeg" };
   });
 }
@@ -631,6 +647,7 @@ export async function soundGeneration(args: {
       throwIfElevenLabsFailed(response.status, detail);
     }
     const buffer = new Uint8Array(await response.arrayBuffer());
+    assertUsableAudioBuffer(buffer, "Sound effect");
     return { data: buffer, mediaType: "audio/mpeg" };
   });
 }

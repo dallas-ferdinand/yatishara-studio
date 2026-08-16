@@ -1912,7 +1912,15 @@ export function StudioShell({
   const feedModeMenuRef = useRef(null);
   const [feedModeMenuPos, setFeedModeMenuPos] = useState(null);
   const [entitlementNow] = useState(() => Date.now());
-  const [assetUrlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
+  const [assetUrlExpiresUnix, setAssetUrlExpiresUnix] = useState(
+    () => Math.floor(Date.now() / 1000) + 60 * 60 * 12,
+  );
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setAssetUrlExpiresUnix(Math.floor(Date.now() / 1000) + 60 * 60 * 12);
+    }, 45 * 60 * 1000);
+    return () => window.clearInterval(id);
+  }, []);
   // DM chat selection — shared by the chat-list sidebar and the Messages pane.
   const [activeDmConversationId, setActiveDmConversationId] = useState(null);
   // Desktop "pick from Files" session — forces the owner-scoped file explorer

@@ -1137,6 +1137,7 @@ export function StudioAgentPane({
                 activeRunId={cancellableRunId}
                 pendingUserText={pendingUserText}
                 pendingAttachments={pendingAttachments}
+                expiresUnix={expiresUnix}
                 onDecideApproval={handleDecide}
                 onAnswerQuestions={handleAnswerQuestions}
                 onOpenFolder={onOpenFolder}

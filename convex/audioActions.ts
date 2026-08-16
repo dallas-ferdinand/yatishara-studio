@@ -907,6 +907,9 @@ async function saveAudioAsset(
     mimeType: args.mediaType,
   });
   try {
+    if (args.body.byteLength < 512) {
+      throw new Error("Audio came back empty — try again.");
+    }
     await putObject({
       path: asset.bunnyPath,
       body: args.body,

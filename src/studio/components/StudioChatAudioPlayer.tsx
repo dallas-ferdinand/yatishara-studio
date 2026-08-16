@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AudioPlayerDuration,
   AudioPlayerProvider,
@@ -81,16 +81,31 @@ function seedWaveform(seedKey: string, bars = 96): number[] {
   return out;
 }
 
-function AudioPlayerTrack({ src, title }: { src: string; title?: string }) {
+function AudioPlayerTrack({
+  src,
+  title,
+  enabled,
+  attempt,
+}: {
+  src: string;
+  title?: string;
+  enabled: boolean;
+  attempt: number;
+}) {
   const { setActiveItem } = useAudioPlayer<{ title?: string }>();
 
   useEffect(() => {
+    if (!enabled || !src) {
+      void setActiveItem(null);
+      return;
+    }
+    // Attempt in id so failed loads can retry the same CDN URL.
     void setActiveItem({
-      id: src,
+      id: `${src}#r${attempt}`,
       src,
       data: title ? { title } : undefined,
     });
-  }, [setActiveItem, src, title]);
+  }, [setActiveItem, src, title, enabled, attempt]);
 
   return null;
 }
@@ -163,9 +178,15 @@ function WaveformScrubber({
 function PlayControl({
   disabled,
   size = "md",
+  onRequestLoad,
+  src,
+  title,
 }: {
   disabled?: boolean;
   size?: "sm" | "md";
+  onRequestLoad?: () => void;
+  src?: string;
+  title?: string;
 }) {
   const player = useAudioPlayer();
   const playing = player.isPlaying;
@@ -177,11 +198,24 @@ function PlayControl({
       playing={playing}
       loading={loading}
       showGlyph
-      disabled={disabled || !player.activeItem}
+      disabled={disabled || !src}
       seed={2100}
       onClick={() => {
-        if (playing) player.pause();
-        else void player.play();
+        onRequestLoad?.();
+        if (playing) {
+          player.pause();
+          return;
+        }
+        if (player.activeItem) {
+          void player.play();
+          return;
+        }
+        if (!src) return;
+        void player.play({
+          id: `${src}#force`,
+          src,
+          data: title ? { title } : undefined,
+        });
       }}
     />
   );
@@ -210,6 +244,7 @@ function AudioPlayerBody({
   headerEnd,
   footer,
   orbSeed = 2100,
+  onRequestLoad,
 }: {
   src: string;
   title?: string;
@@ -220,6 +255,7 @@ function AudioPlayerBody({
   headerEnd?: ReactNode;
   footer?: ReactNode;
   orbSeed?: number;
+  onRequestLoad?: () => void;
 }) {
   const player = useAudioPlayer();
   const failed = Boolean(player.error);
@@ -246,12 +282,31 @@ function AudioPlayerBody({
     </span>
   );
 
+  const play = () => {
+    onRequestLoad?.();
+    if (player.isPlaying) {
+      player.pause();
+      return;
+    }
+    if (player.activeItem) {
+      void player.play();
+      return;
+    }
+    // Lazy attach may not have run yet — play() can set the item directly.
+    void player.play({
+      id: `${src}#force`,
+      src,
+      data: title ? { title } : undefined,
+    });
+  };
+
   return (
     <div
       className={cn(
         "studio-chat-audio-player",
         isPane && "is-pane",
         compact && "is-compact",
+        failed && "is-failed",
       )}
       title={showTitle ? undefined : title}
     >
@@ -278,19 +333,22 @@ function AudioPlayerBody({
             playing={player.isPlaying}
             loading={player.isBuffering && player.isPlaying}
             showGlyph
-            disabled={failed || !player.activeItem}
+            disabled={failed || !src}
             seed={orbSeed}
-            onClick={() => {
-              if (player.isPlaying) player.pause();
-              else void player.play();
-            }}
+            onClick={play}
           />
         </div>
       ) : null}
 
       {isPane ? (
         <>
-          <div className="studio-chat-audio-meta">{timeBlock}</div>
+          <div className="studio-chat-audio-meta">
+            {failed ? (
+              <span className="studio-chat-audio-error">Couldn&apos;t load</span>
+            ) : (
+              timeBlock
+            )}
+          </div>
           <div className="studio-chat-audio-row is-wave-fill">
             <WaveformScrubber
               key={src}
@@ -302,14 +360,24 @@ function AudioPlayerBody({
         </>
       ) : (
         <div className="studio-chat-audio-row">
-          <PlayControl disabled={failed} size={compact ? "sm" : "md"} />
+          <PlayControl
+            disabled={failed}
+            size={compact ? "sm" : "md"}
+            onRequestLoad={onRequestLoad}
+            src={src}
+            title={title}
+          />
           <WaveformScrubber
             key={src}
             data={waveform}
             height={waveHeight}
             durationHint={durationHint}
           />
-          {timeBlock}
+          {failed ? (
+            <span className="studio-chat-audio-error">Couldn&apos;t load</span>
+          ) : (
+            timeBlock
+          )}
         </div>
       )}
 
@@ -328,11 +396,60 @@ export function StudioChatAudioPlayer({
   footer,
   compact = false,
   orbSeed,
-}: Props) {
+  lazy,
+}: Props & { lazy?: boolean }) {
   const isPane = variant === "pane";
+  // Create masonry mounts many <audio> at once — defer until near viewport.
+  const lazyLoad = lazy ?? (isPane && Boolean(compact));
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [inView, setInView] = useState(!lazyLoad);
+  const [attempt, setAttempt] = useState(0);
+  const [forceLoad, setForceLoad] = useState(false);
+  const enabled = Boolean(src) && (inView || forceLoad);
+
+  useEffect(() => {
+    setAttempt(0);
+    setForceLoad(false);
+    setInView(!lazyLoad);
+  }, [src, lazyLoad]);
+
+  useEffect(() => {
+    if (!lazyLoad || inView) return;
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "120px 0px", threshold: 0.01 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [lazyLoad, inView, src]);
+
+  const playerApiHost = (
+    <AudioPlayerLoadWatch
+      enabled={enabled}
+      attempt={attempt}
+      onRetry={() => setAttempt((n) => n + 1)}
+    />
+  );
+
   const player = (
     <AudioPlayerProvider>
-      <AudioPlayerTrack src={src} title={title} />
+      {playerApiHost}
+      <AudioPlayerTrack
+        src={src}
+        title={title}
+        enabled={enabled}
+        attempt={attempt}
+      />
       <AudioPlayerBody
         src={src}
         title={title}
@@ -343,12 +460,65 @@ export function StudioChatAudioPlayer({
         headerEnd={headerEnd}
         footer={footer}
         orbSeed={orbSeed}
+        onRequestLoad={() => setForceLoad(true)}
       />
     </AudioPlayerProvider>
   );
 
-  if (!isPane) return player;
-  return <div className="studio-chat-audio-pane">{player}</div>;
+  if (!isPane) {
+    return (
+      <div ref={rootRef} className="studio-chat-audio-host">
+        {player}
+      </div>
+    );
+  }
+  return (
+    <div ref={rootRef} className="studio-chat-audio-pane">
+      {player}
+    </div>
+  );
+}
+
+/** Retry CDN attach a few times when metadata never lands (edge lag / browser media caps). */
+function AudioPlayerLoadWatch({
+  enabled,
+  attempt,
+  onRetry,
+}: {
+  enabled: boolean;
+  attempt: number;
+  onRetry: () => void;
+}) {
+  const player = useAudioPlayer();
+  const duration = resolveDuration(player.duration, undefined);
+
+  useEffect(() => {
+    if (!enabled || !player.activeItem) return;
+    if (duration !== undefined) return;
+    if (attempt >= 3) return;
+
+    const errorTimer = window.setTimeout(() => {
+      if (player.error) onRetry();
+    }, 1200);
+    const stuckTimer = window.setTimeout(() => {
+      if (resolveDuration(player.duration, undefined) === undefined) onRetry();
+    }, 4500);
+
+    return () => {
+      window.clearTimeout(errorTimer);
+      window.clearTimeout(stuckTimer);
+    };
+  }, [
+    enabled,
+    attempt,
+    onRetry,
+    player.activeItem,
+    player.error,
+    player.duration,
+    duration,
+  ]);
+
+  return null;
 }
 
 /** Same chat-player footprint while generating or resolving a signed URL (no time). */

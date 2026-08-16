@@ -43,15 +43,20 @@ import "./agent-steps.css";
 function AgentPendingGenerationCard({
   pending,
   onOpenAsset,
+  expiresUnix,
 }: {
   pending: AgentPendingMedia;
   onOpenAsset?: (assetId: Id<"assets">) => void;
+  expiresUnix?: number;
 }) {
   const jobId = pending.generationJobId;
   const detail = useQuery(
     api.generationLibrary.getGenerationDetail,
     jobId
-      ? { jobId: jobId as Id<"generationJobs"> }
+      ? {
+          jobId: jobId as Id<"generationJobs">,
+          ...(typeof expiresUnix === "number" ? { expiresUnix } : {}),
+        }
       : "skip",
   );
 
@@ -182,6 +187,8 @@ type AgentTurnTimelineProps = {
   activeRunId?: Id<"agentRuns"> | null;
   pendingUserText?: string | null;
   pendingAttachments?: AgentAttachmentChip[] | null;
+  /** Bunny signed URL expiry — required for audio/video playable URLs. */
+  expiresUnix?: number;
   onDecideApproval: (
     approvalId: Id<"agentApprovals">,
     decision: "approve" | "deny",
@@ -284,6 +291,7 @@ function TurnBlock({
   onOpenAsset,
   thumbById,
   questions,
+  expiresUnix,
 }: {
   turn: AgentTurn;
   expandedStepId: string | null;
@@ -296,6 +304,7 @@ function TurnBlock({
   onOpenAsset?: (assetId: Id<"assets">) => void;
   thumbById: Map<string, { url: string; kind: string; readUrl?: string }>;
   questions: AgentQuestionRow[];
+  expiresUnix?: number;
 }) {
   const inline = useMemo(
     () => splitUserTextWithAttachments(turn.userText, turn.attachments ?? []),
@@ -517,6 +526,7 @@ function TurnBlock({
                 key={`pending-${pending.generationJobId || pending.kind}-${index}`}
                 pending={pending}
                 onOpenAsset={onOpenAsset}
+                expiresUnix={expiresUnix}
               />
             ))}
             {mediaItems.map((media, index) => {
@@ -719,6 +729,7 @@ export function AgentTurnTimeline({
   activeRunId,
   pendingUserText,
   pendingAttachments,
+  expiresUnix,
   onDecideApproval,
   onAnswerQuestions,
   onOpenFolder,
@@ -726,6 +737,11 @@ export function AgentTurnTimeline({
   onOpenAsset,
 }: AgentTurnTimelineProps) {
   const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
+  const [fallbackExpiresUnix] = useState(
+    () => Math.floor(Date.now() / 1000) + 60 * 60 * 12,
+  );
+  const signedExpiresUnix =
+    typeof expiresUnix === "number" ? expiresUnix : fallbackExpiresUnix;
 
   const approvalById = useMemo(
     () => new Map(approvals.map((row) => [String(row._id), row])),
@@ -762,7 +778,13 @@ export function AgentTurnTimeline({
   );
   const assets = useQuery(
     api.assets.listByIds,
-    assetIds.length ? { assetIds, quality: "thumb" as const } : "skip",
+    assetIds.length
+      ? {
+          assetIds,
+          quality: "thumb" as const,
+          expiresUnix: signedExpiresUnix,
+        }
+      : "skip",
   );
   const thumbById = useMemo(() => {
     const map = new Map<
@@ -838,6 +860,7 @@ export function AgentTurnTimeline({
             onOpenAsset={onOpenAsset}
             thumbById={thumbById}
             questions={attached}
+            expiresUnix={signedExpiresUnix}
           />
         );
       })}
