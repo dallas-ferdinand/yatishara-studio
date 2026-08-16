@@ -98,7 +98,6 @@ import {
   TEXT_PRESET_CATEGORIES,
   applyTextStylePreset,
   loadCustomTextPresets,
-  presetEffectLabels,
   presetPreviewStyle,
   saveCustomTextPresets,
   textStyleMatchesPreset,
@@ -1725,7 +1724,8 @@ function TextPresetCard({ preset, active, onApply, onDelete }) {
     <button
       type="button"
       className={`studio-editor-text-preset-card${active ? " is-active" : ""}`}
-      title={`Apply ${preset.name}`}
+      title={preset.name}
+      aria-label={`Apply ${preset.name}`}
       aria-pressed={active}
       onClick={() => onApply(preset)}
       onMouseEnter={() => {
@@ -1741,38 +1741,28 @@ function TextPresetCard({ preset, active, onApply, onDelete }) {
           {preset.sample}
         </span>
       </span>
-      <span className="studio-editor-text-preset-card-foot">
-        <span className="studio-editor-text-preset-card-meta">
-          <span className="studio-editor-text-preset-card-name">{preset.name}</span>
-          {presetEffectLabels(preset.style).length ? (
-            <span className="studio-editor-text-preset-card-fx">
-              {presetEffectLabels(preset.style).join(" · ")}
-            </span>
-          ) : null}
-        </span>
-        {onDelete ? (
-          <span
-            role="button"
-            tabIndex={0}
-            className="studio-editor-text-preset-card-delete"
-            title="Delete preset"
-            aria-label={`Delete ${preset.name}`}
-            onClick={(e) => {
+      {onDelete ? (
+        <span
+          role="button"
+          tabIndex={0}
+          className="studio-editor-text-preset-card-delete"
+          title="Delete preset"
+          aria-label={`Delete ${preset.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(preset.id);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
               e.stopPropagation();
               onDelete(preset.id);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                onDelete(preset.id);
-              }
-            }}
-          >
-            <Trash2 size={12} aria-hidden="true" />
-          </span>
-        ) : null}
-      </span>
+            }
+          }}
+        >
+          <Trash2 size={12} aria-hidden="true" />
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -1816,7 +1806,7 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
         onClick={() => setTextTab("presets")}
       >
         <LayoutTemplate size={13} aria-hidden="true" />
-        Preset library
+        Presets
       </button>
     </div>
   );
@@ -1881,7 +1871,7 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
     const preset = {
       id: `custom-${Date.now().toString(36)}`,
       name: sample.length > 18 ? `${sample.slice(0, 16)}…` : sample,
-      category: "pop",
+      category: "soft",
       sample,
       style: textStyleSnapshot(text),
     };
@@ -1926,59 +1916,43 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
     return (
       <div className="studio-editor-text-section">
         {tabs}
-        <InspectorSection
-          title="Preset library"
-          hint={
-            clip
-              ? "Tap a look to apply. Your wording stays; style updates."
-              : "Browse freely — tap a look to add text with that style."
-          }
-        >
-          <div className="studio-editor-text-preset-toolbar">
-            <button
-              type="button"
-              className="studio-editor-text-chip"
-              onClick={saveCurrentPreset}
-              disabled={!clip}
-              title={
-                clip
-                  ? "Save the current text style as a preset"
-                  : "Select text to save a custom preset"
-              }
-            >
-              <Sparkles size={14} aria-hidden="true" />
-              Save current
-            </button>
-          </div>
-          <div className="studio-editor-text-preset-cats" role="tablist" aria-label="Preset categories">
+        <div className="studio-editor-text-preset-panel">
+          <div className="studio-editor-text-preset-rail" role="tablist" aria-label="Preset filters">
             {TEXT_PRESET_CATEGORIES.map((cat) => {
               const active = presetCategory === cat.id;
-              const count =
-                cat.id === "mine"
-                  ? customPresets.length
-                  : cat.id === "all"
-                    ? BUILTIN_TEXT_PRESETS.length
-                    : BUILTIN_TEXT_PRESETS.filter((p) => p.category === cat.id).length;
               return (
                 <button
                   key={cat.id}
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  className={`studio-editor-text-preset-cat${active ? " is-active" : ""}`}
+                  className={`studio-editor-text-preset-tag${active ? " is-active" : ""}`}
                   onClick={() => setPresetCategory(cat.id)}
                 >
                   {cat.label}
-                  <span className="studio-editor-text-preset-cat-count">{count}</span>
                 </button>
               );
             })}
+            <button
+              type="button"
+              className="studio-editor-text-preset-tag is-save"
+              onClick={saveCurrentPreset}
+              disabled={!clip}
+              title={
+                clip
+                  ? "Save current style"
+                  : "Select text to save a custom preset"
+              }
+            >
+              <Sparkles size={12} aria-hidden="true" />
+              Save
+            </button>
           </div>
           {library.length === 0 ? (
             <p className="studio-editor-inspector-hint">
               {presetCategory === "mine"
-                ? "No saved presets yet. Style text on Edit, then Save current."
-                : "No presets in this category."}
+                ? "No saved presets yet. Style text on Edit, then Save."
+                : "No presets here."}
             </p>
           ) : (
             <div className="studio-editor-text-preset-grid">
@@ -1997,7 +1971,7 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
               ))}
             </div>
           )}
-        </InspectorSection>
+        </div>
       </div>
     );
   }

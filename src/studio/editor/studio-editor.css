@@ -2212,7 +2212,7 @@
   display: contents;
 }
 
-/* Text Edit / Presets — full-bleed under header; pills align with plate cards. */
+/* Text Edit / Presets — full-bleed under header; tight strip. */
 .studio-editor-text-tabs {
   display: flex;
   align-items: center;
@@ -2222,10 +2222,10 @@
   margin: -10px -10px 0;
   width: calc(100% + 20px);
   max-width: none;
-  padding: 4px 10px;
-  min-height: var(--cursor-head-h, 32px);
-  height: var(--cursor-head-h, 32px);
-  max-height: var(--cursor-head-h, 32px);
+  padding: 2px 10px;
+  min-height: 28px;
+  height: 28px;
+  max-height: 28px;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border)));
   background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel, #f5f5f7)));
   position: sticky;
@@ -2238,13 +2238,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   flex: 1 1 0;
   min-width: 0;
-  min-height: 24px;
-  height: 24px;
+  min-height: 22px;
+  height: 22px;
   margin: 0;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft, var(--mos-border)));
   border-radius: var(--cursor-radius-pill, 999px);
   background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel)));
@@ -2258,8 +2258,8 @@
 }
 
 .studio-editor-text-tab > svg {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   flex: 0 0 auto;
 }
 
@@ -2274,68 +2274,94 @@
   box-shadow: none;
 }
 
-.studio-editor-text-preset-toolbar {
+.studio-editor-text-preset-panel {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 
-.studio-editor-text-preset-cats {
+.studio-editor-text-preset-rail {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 10px;
-}
-
-.studio-editor-text-preset-cat {
-  display: inline-flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
-  min-height: 26px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.studio-editor-text-preset-rail::-webkit-scrollbar {
+  display: none;
+}
+
+/* DM-label-like filter chips — raised surface, not plate-strong grey. */
+.studio-editor-text-preset-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  height: 22px;
   padding: 0 8px;
   margin: 0;
-  border: 1px solid transparent;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
   border-radius: 999px;
-  background: var(--mos-plate-strong);
-  color: var(--color-cursor-muted, var(--mos-muted));
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.studio-editor-text-preset-cat:hover {
+  background: var(--cursor-surface-raised, var(--mos-surface, var(--mos-page)));
   color: var(--color-cursor-text, var(--mos-text));
-  background: var(--mos-hover);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
 }
 
-.studio-editor-text-preset-cat.is-active {
-  background: color-mix(in srgb, var(--cursor-accent, #c9a227) 22%, var(--mos-plate-strong));
-  border-color: color-mix(in srgb, var(--cursor-accent, #c9a227) 50%, transparent);
-  color: var(--cursor-accent, #c9a227);
+.studio-editor-text-preset-tag:hover {
+  color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
-.studio-editor-text-preset-cat-count {
-  opacity: 0.65;
-  font-variant-numeric: tabular-nums;
-  font-size: 10px;
+.studio-editor-text-preset-tag.is-active {
+  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 46%, var(--mos-border));
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 12%,
+    var(--cursor-surface-raised, var(--mos-surface, var(--mos-page)))
+  );
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-editor-text-preset-tag.is-save {
+  margin-left: auto;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-editor-text-preset-tag.is-save:hover:not(:disabled) {
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-editor-text-preset-tag.is-save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .studio-editor-text-preset-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .studio-editor-text-preset-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+  position: relative;
+  display: block;
   margin: 0;
   padding: 0;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
-  border-radius: 10px;
-  background: var(--mos-plate, var(--mos-bg));
+  border-radius: 12px;
+  background: var(--color-cursor-panel, var(--mos-page, #fff));
   color: inherit;
   overflow: hidden;
   cursor: pointer;
@@ -2343,96 +2369,58 @@
 }
 
 .studio-editor-text-preset-card:hover {
-  background: color-mix(in srgb, var(--cursor-accent, #c9a227) 6%, var(--mos-plate));
+  border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft, var(--mos-border)));
 }
 
 .studio-editor-text-preset-card.is-active {
-  border-color: color-mix(in srgb, var(--cursor-accent, #c9a227) 55%, var(--mos-border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent, #c9a227) 35%, transparent);
+  border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--mos-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 28%, transparent);
 }
 
 .studio-editor-text-preset-card-stage {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 96px;
-  /* Bleed room for stroke + glow + drop shadow — was clipping hard at 10px. */
-  padding: 28px 20px;
-  background: var(--mos-panel, var(--mos-page));
+  min-height: 72px;
+  padding: 16px 12px;
+  background: color-mix(in srgb, var(--mos-plate, #ececf0) 55%, var(--mos-page, #fff));
   overflow: hidden;
 }
 
 [data-appearance="dark"] .studio-editor-text-preset-card-stage {
-  background: var(--mos-plate, var(--mos-bg));
+  background: color-mix(in srgb, var(--mos-plate) 70%, transparent);
 }
 
 .studio-editor-text-preset-card-sample {
   display: inline-block;
   max-width: 100%;
-  font-size: 18px;
-  line-height: 1.35;
+  font-size: 20px;
+  line-height: 1.2;
   white-space: nowrap;
-  /* Never clip glyph stroke/glow — shrink with scale if needed, don't ellipsis-crop. */
   overflow: visible;
   text-align: center;
-  /* Extra ink box so webkit-text-stroke + text-shadow aren't cropped by the inline box. */
-  padding: 12px 14px;
-  margin: -12px -14px;
-  box-decoration-break: clone;
-}
-
-.studio-editor-text-preset-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  min-height: 34px;
-  padding: 4px 8px;
-  border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border));
-  background: var(--mos-panel, var(--mos-page));
-}
-
-.studio-editor-text-preset-card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.studio-editor-text-preset-card-fx {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.studio-editor-text-preset-card-name {
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--color-cursor-text, var(--mos-text));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  padding: 4px 6px;
 }
 
 .studio-editor-text-preset-card-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
   display: grid;
   place-items: center;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
+  background: var(--mos-page, #fff);
   color: var(--color-cursor-muted, var(--mos-muted));
-  flex-shrink: 0;
+  cursor: pointer;
 }
 
 .studio-editor-text-preset-card-delete:hover {
-  background: var(--mos-hover);
   color: var(--color-cursor-text, var(--mos-text));
 }
+
 
 .studio-editor-text-chip-row {
   display: flex;

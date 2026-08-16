@@ -509,9 +509,9 @@ function registerEditTools(server) {
   );
   server.tool(
     "studio_list_text_presets",
-    "[preferred] List CapCut-like built-in text style templates (Grease, Dark Pill, etc.). Use studio_edit_apply_text_preset to apply. Filter by category: title | pop | soft | neon | badge | all.",
+    "[preferred] List clean built-in text style presets. Use studio_edit_apply_text_preset to apply. Filter by category: title | soft | outline | badge | all.",
     {
-      category: z.enum(["all", "title", "pop", "soft", "neon", "badge"]).optional().describe("Default all")
+      category: z.enum(["all", "title", "soft", "outline", "badge"]).optional().describe("Default all")
     },
     async ({ category }) => {
       const presets = listTextPresets(
@@ -540,7 +540,7 @@ function registerEditTools(server) {
     "[preferred] Apply a built-in text style template by id (from studio_list_text_presets). Pass clipId to restyle an existing text clip, or omit clipId to add a new text clip with that look. Optional text overrides the caption body.",
     {
       projectId: z.string(),
-      presetId: z.string().describe("e.g. grease, pill-dark, lower-third"),
+      presetId: z.string().describe("e.g. clean-white, title-white, badge-dark"),
       clipId: z.string().optional().describe("Existing text clip to restyle; omit to create one"),
       text: z.string().optional().describe("Caption body override"),
       startTime: z.number().optional(),
