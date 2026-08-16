@@ -267,24 +267,55 @@ class EngineConsumer implements FrameConsumer {
     let textureKeyA = captured.textureKeyA ?? (slice.video[0] ? "play:a" : undefined);
     let textureKeyB =
       captured.textureKeyB ??
-      (slice.video[1] || slice.transition ? "play:b" : undefined);
+      (slice.video.length > 1 || slice.transition ? "play:b" : undefined);
+
+    const stillForSample = (
+      sample: (typeof slice.video)[number] | undefined,
+    ): { frame?: VideoFrame; textureKey: string } | null => {
+      if (!sample?.clip.assetId) return null;
+      const media = this.mediaRef.current.get(sample.clip.assetId);
+      if (media?.kind !== "image") return null;
+      const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
+      if (!url) return null;
+      const key = `image:${sample.clip.assetId}`;
+      const cacheKey = `${sample.clip.assetId}@${previewImageMaxEdge(this.previewLoadQualityRef.current)}:${url}`;
+      const cached = this.imageFrames.get(cacheKey);
+      void this.imageFrame(sample.clip.assetId, url, this.previewLoadQualityRef.current);
+      if (!this.warmedStills.has(key) && cached) {
+        return { frame: cached.clone(), textureKey: key };
+      }
+      return { textureKey: key };
+    };
+
     const top = slice.video[0];
-    if (top?.clip.assetId) {
-      const media = this.mediaRef.current.get(top.clip.assetId);
-      if (media?.kind === "image") {
-        const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
-        if (url) {
-          const key = `image:${top.clip.assetId}`;
-          const cacheKey = `${top.clip.assetId}@${previewImageMaxEdge(this.previewLoadQualityRef.current)}:${url}`;
-          const cached = this.imageFrames.get(cacheKey);
-          textureKeyA = key;
-          if (!this.warmedStills.has(key) && cached) {
-            frameA = cached.clone();
-          } else {
-            frameA?.close();
-            frameA = undefined;
-          }
-          void this.imageFrame(top.clip.assetId, url, this.previewLoadQualityRef.current);
+    const topStill = stillForSample(top);
+    if (topStill) {
+      textureKeyA = topStill.textureKey;
+      if (topStill.frame) {
+        frameA?.close();
+        frameA = topStill.frame;
+      } else {
+        frameA?.close();
+        frameA = undefined;
+      }
+    }
+
+    const sampleA = slice.video[0];
+    const sampleB =
+      slice.transition || slice.video.length <= 2
+        ? slice.video[1]
+        : slice.video[slice.video.length - 1];
+
+    if (!slice.transition) {
+      const bottomStill = stillForSample(sampleB);
+      if (bottomStill) {
+        textureKeyB = bottomStill.textureKey;
+        if (bottomStill.frame) {
+          frameB?.close();
+          frameB = bottomStill.frame;
+        } else {
+          frameB?.close();
+          frameB = undefined;
         }
       }
     }
@@ -300,17 +331,67 @@ class EngineConsumer implements FrameConsumer {
     const textsUnder = mapTextItems(slice.textUnder, slice.timelineTime);
     const textsOver = mapTextItems(slice.textOver, slice.timelineTime);
     // Fonts must already be on the worker from paused paints — never await here.
-    const sampleA = slice.video[0];
-    const sampleB =
-      slice.transition || slice.video.length <= 2
-        ? slice.video[1]
-        : slice.video[slice.video.length - 1];
     const opacityFor = (sample: typeof sampleA | undefined) => {
       if (!sample) return 1;
       const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
       const local = slice.timelineTime - sample.clip.timelineStart;
       return clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local);
     };
+
+    // Middles: PlayBus stack (videos) + image stills for PNG middles not on the bus.
+    const stack: Array<{
+      frame?: VideoFrame;
+      textureKey?: string;
+      transform: [number, number, number, number];
+      opacity: number;
+      width?: number;
+      height?: number;
+    }> = [];
+    const usedBusFrames = new Set<VideoFrame>();
+    if (!slice.transition && slice.video.length > 2) {
+      const midSamples = slice.video.slice(1, -1);
+      const byIndex = new Map(
+        (captured.stack ?? []).map((layer) => [layer.sampleIndex, layer]),
+      );
+      // Paint bottom→top (same order as paused prepare()).
+      for (let i = midSamples.length - 1; i >= 0; i -= 1) {
+        const sample = midSamples[i]!;
+        const sampleIndex = i + 1;
+        const fromBus = byIndex.get(sampleIndex);
+        const still = stillForSample(sample);
+        if (still) {
+          stack.push({
+            frame: still.frame,
+            textureKey: still.textureKey,
+            transform: transformTuple(sample.clip.clip.effects),
+            opacity: opacityFor(sample),
+            width: still.frame?.displayWidth,
+            height: still.frame?.displayHeight,
+          });
+          continue;
+        }
+        if (fromBus?.frame) {
+          usedBusFrames.add(fromBus.frame);
+          stack.push({
+            frame: fromBus.frame,
+            textureKey: fromBus.textureKey,
+            transform: transformTuple(sample.clip.clip.effects),
+            opacity: opacityFor(sample),
+            width: fromBus.width,
+            height: fromBus.height,
+          });
+        }
+      }
+    }
+    for (const layer of captured.stack ?? []) {
+      if (layer.frame && !usedBusFrames.has(layer.frame)) {
+        try {
+          layer.frame.close();
+        } catch {
+          /* already closed */
+        }
+      }
+    }
 
     const painted = this.compositor.paint({
       frameA,
@@ -321,6 +402,7 @@ class EngineConsumer implements FrameConsumer {
       transformB: transformTuple(sampleB?.clip.clip.effects),
       opacityA: opacityFor(sampleA),
       opacityB: opacityFor(sampleB),
+      stack: stack.length ? stack : undefined,
       transition: previewTransitionWhilePlaying(slice.transition?.type, true),
       progress: slice.transition?.progress,
       textsUnder,
@@ -328,6 +410,14 @@ class EngineConsumer implements FrameConsumer {
     });
     if (painted && textureKeyA?.startsWith("image:")) {
       this.warmedStills.add(textureKeyA);
+    }
+    if (painted && textureKeyB?.startsWith("image:")) {
+      this.warmedStills.add(textureKeyB);
+    }
+    if (painted) {
+      for (const layer of stack) {
+        if (layer.textureKey?.startsWith("image:")) this.warmedStills.add(layer.textureKey);
+      }
     }
 
     if (slice.transition && this.transitionStartedAt > 0 && painted) {

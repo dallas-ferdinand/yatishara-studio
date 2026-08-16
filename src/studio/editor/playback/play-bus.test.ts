@@ -161,6 +161,80 @@ describe("PlayBus", () => {
     bus.dispose();
   });
 
+  it("plays top, middle, and bottom stacked lanes live", async () => {
+    const videos: HTMLVideoElement[] = [];
+    const media = new Map([
+      ["top", mediaItem("top", "top")],
+      ["mid", mediaItem("mid", "mid")],
+      ["bot", mediaItem("bot", "bot")],
+    ]);
+    const bus = new PlayBus(
+      { current: media },
+      {
+        createVideo: () => {
+          const video = fakeVideo();
+          videos.push(video);
+          return video;
+        },
+      },
+    );
+    const project = createEmptyProject({ name: "t", folderId: "f" });
+    project.tracks = [
+      { id: "track-v1", kind: "video", label: "V1" },
+      { id: "track-v2", kind: "video", label: "V2" },
+      { id: "track-v3", kind: "video", label: "V3" },
+      { id: "track-audio", kind: "audio", label: "Audio" },
+    ];
+    project.clips = [
+      { ...clip("top", "top", 0, 0, 3), trackId: "track-v1" },
+      { ...clip("mid", "mid", 0, 0, 3), trackId: "track-v2" },
+      { ...clip("bot", "bot", 0, 0, 3), trackId: "track-v3" },
+    ];
+    project.duration = 3;
+    const plan = compileTimeline(project);
+    const slice = sliceAt(plan, 1);
+    expect(slice.video.map((s) => s.clip.clipId)).toEqual(["top", "mid", "bot"]);
+    await bus.play(plan, 1, media);
+    const srcs = videos.map((v) => v.src).filter(Boolean);
+    expect(srcs.some((s) => s.includes("top-720"))).toBe(true);
+    expect(srcs.some((s) => s.includes("bot-720"))).toBe(true);
+    expect(srcs.some((s) => s.includes("mid-720"))).toBe(true);
+    expect(videos.filter((v) => !v.paused).length).toBeGreaterThanOrEqual(3);
+    bus.dispose();
+  });
+
+  it("plays both lanes when two picture rows overlap (no transition)", async () => {
+    const videos: HTMLVideoElement[] = [];
+    const media = new Map([
+      ["a1", mediaItem("a1", "a")],
+      ["b1", mediaItem("b1", "b")],
+    ]);
+    const bus = new PlayBus(
+      { current: media },
+      {
+        createVideo: () => {
+          const video = fakeVideo();
+          videos.push(video);
+          return video;
+        },
+      },
+    );
+    const project = createEmptyProject({ name: "t", folderId: "f" });
+    project.tracks = [
+      { id: "track-v1", kind: "video", label: "V1" },
+      { id: "track-v2", kind: "video", label: "V2" },
+      { id: "track-audio", kind: "audio", label: "Audio" },
+    ];
+    project.clips = [
+      { ...clip("a", "a1", 0, 0, 3), trackId: "track-v1" },
+      { ...clip("b", "b1", 0, 0, 3), trackId: "track-v2" },
+    ];
+    const plan = compileTimeline(project);
+    await bus.play(plan, 1, media);
+    expect(videos.filter((v) => !v.paused).length).toBeGreaterThanOrEqual(2);
+    bus.dispose();
+  });
+
   it("reports waiting when program lacks current data", async () => {
     const videos: Array<HTMLVideoElement & { setReadyState?: (n: number) => void; emit?: (t: string) => void }> =
       [];

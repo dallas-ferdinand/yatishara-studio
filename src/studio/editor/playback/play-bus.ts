@@ -18,6 +18,15 @@ export type PlayBusSlot = {
   speed: number;
 };
 
+export type PlayBusStackFrame = {
+  frame?: VideoFrame;
+  textureKey?: string;
+  width?: number;
+  height?: number;
+  /** Index into slice.video (top→bottom) for opacity/transform. */
+  sampleIndex: number;
+};
+
 export type PlayBusFrames = {
   frameA?: VideoFrame;
   frameB?: VideoFrame;
@@ -28,6 +37,8 @@ export type PlayBusFrames = {
   widthB?: number;
   heightB?: number;
   assetIdA?: string;
+  /** Middle picture lanes (between top A and bottom B), bottom→top paint order. */
+  stack?: PlayBusStackFrame[];
 };
 
 type SlotId = "a" | "b";
@@ -41,6 +52,8 @@ type SlotState = {
   presented: number;
   lastCaptured: number;
   rvfcId: number | null;
+  /** Index into slice.video when this is a middle stack slot. */
+  sampleIndex?: number;
 };
 
 export type PlayBusOptions = {
@@ -49,6 +62,12 @@ export type PlayBusOptions = {
 };
 
 const HAVE_CURRENT_DATA = 2;
+/**
+ * Top + bottom use A/B; remaining slots hold middle stacked lanes.
+ * Keep in sync with MAX_PREVIEW_VIDEO_STACK (8) in timeline-compiler.
+ * Do not import that const at module init — circular eval can leave it undefined.
+ */
+const MAX_STACK_SLOTS = 6;
 
 function makeVideo(): HTMLVideoElement {
   const video = document.createElement("video");
@@ -81,7 +100,7 @@ function slotFromSample(sample: VideoSample, url: string): PlayBusSlot {
 }
 
 /**
- * Realtime play clock + two hidden HTMLVideoElements (program + partner/preroll).
+ * Realtime play clock + hidden HTMLVideoElements (program + partner + middles).
  * Time never waits on decode — Chrome owns GOP/Range/hardware decode.
  */
 export class PlayBus {
@@ -98,6 +117,8 @@ export class PlayBus {
   private disposed = false;
   private program: SlotId = "a";
   private readonly slots: Record<SlotId, SlotState>;
+  /** Middle stacked lanes (slice.video[1..n-2]), paint order bottom→top. */
+  private readonly stackSlots: SlotState[];
   private onWaitingChange: ((waiting: boolean) => void) | null = null;
   private syncChain: Promise<void> = Promise.resolve();
 
@@ -113,6 +134,10 @@ export class PlayBus {
       a: this.wrap(this.createVideo()),
       b: this.wrap(this.createVideo()),
     };
+    this.stackSlots = [];
+    for (let i = 0; i < MAX_STACK_SLOTS; i += 1) {
+      this.stackSlots.push(this.wrap(this.createVideo()));
+    }
   }
 
   private wrap(video: HTMLVideoElement): SlotState {
@@ -244,12 +269,19 @@ export class PlayBus {
         /* ignore */
       }
     }
+    for (const state of this.stackSlots) {
+      try {
+        state.video.pause();
+      } catch {
+        /* ignore */
+      }
+    }
     this.refreshWaiting();
     return t;
   }
 
   /**
-   * Keep A/B assignments in sync with the current slice (cuts + transitions).
+   * Keep A/B/stack assignments in sync with the current slice (cuts + transitions).
    * Call from the play tick after reading timelineTime().
    */
   syncSlice(
@@ -267,9 +299,8 @@ export class PlayBus {
   }
 
   /**
-   * Capture VideoFrames for the compositor. Program → A, partner → B.
-   * Skips when rVFC says unchanged. CORS failures skip (warn once) — never
-   * fall back to WebCodecs play.
+   * Capture VideoFrames for the compositor. Program → A, partner → B,
+   * middle lanes → stack (bottom→top).
    */
   captureFrames(): PlayBusFrames {
     const out: PlayBusFrames = {};
@@ -279,6 +310,21 @@ export class PlayBus {
     if (this.slots[partnerId].assignment) {
       this.captureSlot(partnerId, "b", out);
     }
+    const stack: PlayBusStackFrame[] = [];
+    for (let i = 0; i < this.stackSlots.length; i += 1) {
+      const state = this.stackSlots[i]!;
+      if (!state.assignment || state.sampleIndex == null) continue;
+      const frame = this.captureStackSlot(state);
+      if (!frame) continue;
+      stack.push({
+        frame,
+        textureKey: `play:stack:${i}`,
+        width: frame.displayWidth,
+        height: frame.displayHeight,
+        sampleIndex: state.sampleIndex,
+      });
+    }
+    if (stack.length) out.stack = stack;
     return out;
   }
 
@@ -323,12 +369,31 @@ export class PlayBus {
     }
   }
 
+  private captureStackSlot(state: SlotState): VideoFrame | null {
+    // Stack layers re-upload every paint (no sticky GPU key across frames).
+    if (state.video.readyState < HAVE_CURRENT_DATA) return null;
+    try {
+      const frame = new VideoFrame(state.video);
+      state.lastCaptured = state.presented;
+      this.paintedOnce = true;
+      return frame;
+    } catch {
+      if (!this.corsWarned) {
+        this.corsWarned = true;
+        console.warn(
+          "[PlayBus] VideoFrame(video) failed (CORS?). Skipping frame; not falling back to WebCodecs play.",
+        );
+      }
+      return null;
+    }
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.playing = false;
-    for (const id of ["a", "b"] as SlotId[]) {
-      const state = this.slots[id];
+    const all = [this.slots.a, this.slots.b, ...this.stackSlots];
+    for (const state of all) {
       const video = state.video as HTMLVideoElement & {
         cancelVideoFrameCallback?: (id: number) => void;
       };
@@ -374,11 +439,35 @@ export class PlayBus {
     mediaById: ReadonlyMap<string, EditorMediaItem>,
     opts: { playProgram: boolean },
   ): Promise<void> {
-    const primary = slice.video[0];
-    const secondary =
-      slice.transition && slice.video[1]
-        ? slice.video[1]
-        : slice.video[1] ?? slice.preload[0] ?? null;
+    const videos = slice.video;
+    const primary = videos[0];
+    const stacking = !slice.transition && videos.length >= 2;
+
+    let secondary: VideoSample | null = null;
+    let middles: Array<{ sample: VideoSample; sampleIndex: number }> = [];
+
+    if (slice.transition) {
+      secondary = videos[1] ?? null;
+    } else if (videos.length <= 1) {
+      secondary = slice.preload[0] ?? null;
+    } else if (videos.length === 2) {
+      secondary = videos[1]!;
+    } else {
+      // Top = [0], bottom = last, middles = [1..n-2] (cap stack slots).
+      secondary = videos[videos.length - 1]!;
+      const midSamples = videos.slice(1, -1);
+      const capped =
+        midSamples.length > MAX_STACK_SLOTS
+          ? midSamples.slice(midSamples.length - MAX_STACK_SLOTS)
+          : midSamples;
+      const indexOffset = 1 + (midSamples.length - capped.length);
+      middles = capped.map((sample, i) => ({
+        sample,
+        sampleIndex: indexOffset + i,
+      }));
+      // Compositor paints bottom→top: reverse so first stack slot is lowest mid.
+      middles = middles.reverse();
+    }
 
     const primaryUrl = primary ? this.resolveUrl(primary, mediaById) : null;
     const secondaryUrl = secondary ? this.resolveUrl(secondary, mediaById) : null;
@@ -405,10 +494,24 @@ export class PlayBus {
 
     const partnerId: SlotId = this.program === "a" ? "b" : "a";
     await this.ensureSlot(partnerId, wantPartner, {
-      play: Boolean(opts.playProgram && slice.transition && wantPartner),
+      // Stack overlays must play live (not only transitions).
+      play: Boolean(opts.playProgram && (slice.transition || stacking) && wantPartner),
       sourceTime: secondary?.sourceTime ?? wantPartner?.trimIn,
-      preroll: !slice.transition,
+      preroll: !slice.transition && !stacking,
     });
+
+    for (let i = 0; i < this.stackSlots.length; i += 1) {
+      const mid = middles[i];
+      const url = mid ? this.resolveUrl(mid.sample, mediaById) : null;
+      const want = mid && url ? slotFromSample(mid.sample, url) : null;
+      const state = this.stackSlots[i]!;
+      state.sampleIndex = mid?.sampleIndex;
+      await this.ensureSlotState(state, want, {
+        play: Boolean(opts.playProgram && stacking && want),
+        sourceTime: mid?.sample.sourceTime ?? want?.trimIn,
+        preroll: false,
+      });
+    }
 
     this.refreshWaiting();
   }
@@ -418,7 +521,14 @@ export class PlayBus {
     next: PlayBusSlot | null,
     opts: { play: boolean; sourceTime?: number; preroll?: boolean },
   ): Promise<void> {
-    const state = this.slots[id];
+    await this.ensureSlotState(this.slots[id], next, opts);
+  }
+
+  private async ensureSlotState(
+    state: SlotState,
+    next: PlayBusSlot | null,
+    opts: { play: boolean; sourceTime?: number; preroll?: boolean },
+  ): Promise<void> {
     if (!next) {
       if (state.assignment) {
         try {
