@@ -175,3 +175,29 @@ export const listFoldersForOwner = internalQuery({
     }));
   },
 });
+
+/** Walk parents from one folder — not capped like listFoldersForOwner. */
+export const folderPathForOwner = internalQuery({
+  args: { ownerId: v.id("users"), folderId: v.id("folders") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      name: v.string(),
+      path: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const names: string[] = [];
+    let cursor: typeof args.folderId | undefined = args.folderId;
+    const seen = new Set<string>();
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      const row = await ctx.db.get("folders", cursor);
+      if (!row || row.ownerId !== args.ownerId || row.deletedAt) break;
+      names.unshift(row.name);
+      cursor = row.parentId;
+    }
+    if (!names.length) return null;
+    return { name: names[names.length - 1]!, path: `/${names.join("/")}` };
+  },
+});

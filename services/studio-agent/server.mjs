@@ -144,6 +144,27 @@ function textValue(value) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
 }
 
+/** Files UI never says "Studio" — show Files / parent / name. */
+function filesDisplayPath(path, name) {
+  const parts = String(path || "")
+    .split(/[/]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part, index) => !(index === 0 && /^studio$/i.test(part)));
+  if (parts.length) return `Files / ${parts.join(" / ")}`;
+  const leaf = textValue(name);
+  return leaf ? `Files / ${leaf}` : "";
+}
+
+function leafFolderName(path, name) {
+  if (textValue(name)) return textValue(name);
+  const parts = String(path || "")
+    .split(/[/]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts[parts.length - 1] || "";
+}
+
 function pickImageUrl(media) {
   const root = objectValue(media) ?? {};
   const data = objectValue(root.data) ?? root;
@@ -206,6 +227,7 @@ async function runPiTurn(body, abortSignal) {
     seedTodosJson,
     currentFolderId,
     currentFolderPath,
+    currentFolderName,
     cwdFolderId,
     cwdFolderPath,
     threadSummary,
@@ -302,6 +324,8 @@ async function runPiTurn(body, abortSignal) {
     /** @type {{ documents: Array<{ documentId: string, title?: string, updatedAt?: number }>, assets: Array<{ assetId: string, name?: string, updatedAt?: number }> }|null} */
     let cwdIndex = null;
     let cwdIndexBlock = "";
+    let listedFolderName = textValue(currentFolderName);
+    let listedFolderPath = textValue(currentFolderPath || cwdFolderPath);
     if (cwdIdEarly) {
       try {
         const listed = await invokeStudioTool(
@@ -311,6 +335,18 @@ async function runPiTurn(body, abortSignal) {
           { folderId: cwdIdEarly },
         );
         const raw = listed?.data && typeof listed.data === "object" ? listed.data : {};
+        const folderMeta = raw.folder && typeof raw.folder === "object" ? raw.folder : null;
+        if (textValue(folderMeta?.name)) listedFolderName = textValue(folderMeta.name);
+        const crumbs = Array.isArray(raw.breadcrumb) ? raw.breadcrumb : [];
+        if (crumbs.length) {
+          listedFolderPath = `/${crumbs
+            .map((crumb) => textValue(crumb?.name))
+            .filter(Boolean)
+            .join("/")}`;
+          if (!listedFolderName) {
+            listedFolderName = textValue(crumbs[crumbs.length - 1]?.name);
+          }
+        }
         const documents = Array.isArray(raw.documents)
           ? raw.documents
               .map((doc) => ({
@@ -332,7 +368,9 @@ async function runPiTurn(body, abortSignal) {
         if (documents.length || assets.length) {
           cwdIndex = { documents, assets };
           const lines = [
-            "CWD index (real ids — NEVER invent documentId/assetId; memories may be stale):",
+            listedFolderName
+              ? `Open folder "${listedFolderName}" contents (real ids — NEVER invent documentId/assetId; never show ids to the user):`
+              : "Open folder contents (real ids — NEVER invent documentId/assetId; never show ids to the user):",
             ...documents
               .slice(0, 12)
               .map(
@@ -430,7 +468,21 @@ async function runPiTurn(body, abortSignal) {
             title: String(args.title || "Memory"),
             body: String(args.body || ""),
             kind: args.kind,
-            projectFolderId: args.projectFolderId,
+            projectFolderId:
+              args.projectFolderId || currentFolderId || cwdFolderId || undefined,
+          }),
+        studio_agent_update_memory: async (args) =>
+          callback(callbackBase, workerCallbackToken, "memory-update", {
+            ownerId: userId,
+            memoryId: args.memoryId,
+            title: args.title,
+            body: args.body,
+            pinned: args.pinned,
+          }),
+        studio_agent_archive_memory: async (args) =>
+          callback(callbackBase, workerCallbackToken, "memory-archive", {
+            ownerId: userId,
+            memoryId: args.memoryId,
           }),
       },
     });
@@ -446,6 +498,43 @@ async function runPiTurn(body, abortSignal) {
     });
     sessionEntry.session = session;
     sessions.set(key, sessionEntry);
+
+    // Mid-turn chat updates: when the model narrates before tool calls, show it live.
+    const extractAssistantText = (message) => {
+      if (!message || typeof message !== "object") return "";
+      if (typeof message.content === "string") return message.content.trim();
+      if (!Array.isArray(message.content)) return "";
+      return message.content
+        .filter((part) => part && part.type === "text" && typeof part.text === "string")
+        .map((part) => part.text.trim())
+        .filter(Boolean)
+        .join("\n")
+        .trim();
+    };
+    const assistantHasToolCalls = (message) => {
+      if (!message || !Array.isArray(message.content)) return false;
+      return message.content.some(
+        (part) => part && (part.type === "toolCall" || part.type === "tool_use"),
+      );
+    };
+    const unsubProgress =
+      typeof session.subscribe === "function"
+        ? session.subscribe((event) => {
+            if (!event || event.type !== "message_end") return;
+            const msg = event.message;
+            if (!msg || msg.role !== "assistant") return;
+            const text = extractAssistantText(msg);
+            if (!text || text.length < 8) return;
+            // Only stream interim narration that precedes tools — final reply is saved at turn end.
+            if (!assistantHasToolCalls(msg)) return;
+            void callback(callbackBase, workerCallbackToken, "assistant-progress", {
+              ownerId: userId,
+              threadId,
+              runId,
+              content: text.slice(0, 4000),
+            }).catch(() => undefined);
+          })
+        : null;
 
     // Switch to plan model if lane/message demand it (platform-only; BYOK unchanged).
     if (usePlanModel && typeof session.setModel === "function") {
@@ -534,10 +623,11 @@ async function runPiTurn(body, abortSignal) {
     const lane = laneEarly || detectActionLane(userMessage, workingSet);
 
     const cwdId = textValue(currentFolderId || cwdFolderId);
-    const cwdPath = textValue(currentFolderPath || cwdFolderPath);
+    const cwdName = leafFolderName(listedFolderPath, listedFolderName);
+    const cwdShown = filesDisplayPath(listedFolderPath, cwdName);
     const cwdBlock = cwdId
-      ? `Current folder (CWD): id=${cwdId}${cwdPath ? ` path=${cwdPath}` : ""}. Default folderId for studio_create_document, studio_generate_*, studio_create_folder (as parent), uploads, and other saves — unless the user names another folder or attaches a different target.`
-      : "Current folder (CWD): none open — if saving, ask once or use an attached folder id.";
+      ? `Open Files folder: ${cwdName || "the folder they have open"}${cwdShown ? ` (${cwdShown})` : ""}. This is the project they are in — default folderId for studio_create_document, studio_generate_*, studio_create_folder (as parent), uploads, and other saves unless they name another folder. Tool folderId=${cwdId}. NEVER say CWD, folderId, or ids to the user — say the folder name.`
+      : "No Files folder is open. If saving, ask once which folder, or use an attached folder. NEVER say CWD to the user.";
 
     const memoryBlock =
       Array.isArray(memories) && memories.length
@@ -559,10 +649,10 @@ async function runPiTurn(body, abortSignal) {
     if (textValue(workingScratchJson)) {
       try {
         const scratch = JSON.parse(String(workingScratchJson));
-        const lines = ["Working state (reuse these ids — verify with CWD index if unsure):"];
+        const lines = ["Working state (reuse these ids — verify with open-folder contents if unsure):"];
         if (scratch.cwdFolderId) {
           lines.push(
-            `- cwd folderId=${scratch.cwdFolderId}${scratch.cwdFolderPath ? ` path=${scratch.cwdFolderPath}` : ""}`,
+            `- open folder${scratch.cwdFolderName ? ` "${scratch.cwdFolderName}"` : ""}${scratch.cwdFolderPath ? ` path=${scratch.cwdFolderPath}` : ""} folderId=${scratch.cwdFolderId}`,
           );
         }
         if (Array.isArray(scratch.lastDocumentIds) && scratch.lastDocumentIds.length) {
@@ -649,6 +739,7 @@ async function runPiTurn(body, abortSignal) {
       "ELEMENT FLOW (understand why — do not only react to the words \"create element\"): WHY — a .element is a reusable Seedance/Create identity lock (product, character, prop, location). Bare asset:// refs are one-shot; @name + element:// hydrates chips on paste/Run and keeps the same lock across prompts/gens. WHEN — (1) they ask to create/lock/elementize media, OR (2) they attach product/character/prop/location stills and want a prompt/ad/script that must keep that identity, OR (3) they will generate with those locks. Style/mood-only refs may stay asset://. HOW — studio_list_elements in CWD (reuse live matches) → else studio_upload_asset if needed → studio_create_element {type:character|prop|location,name,folderId:CWD,description?,referenceAssetIds} with unique @name (no spaces) → tag @name inside sealed ```text``` → `- [name](element://{elementId})` under ## References → generate with referenceElementIds. studio_update_element to swap media. Sheet-build tools only if asked. NEVER claim Elements are retired, removed, unavailable, or skip create because asset:// \"is enough\" when identity lock is the job.",
       "Video models: only from studio_list_video_models (or known slugs seedance-2.5 / seedance-2.0). Talk about motion/light/res/length. Never invent caps, features, or legacy/pipeline marketing.",
       "Bias to action: for vague creative asks, assume strong defaults and DO the next useful tool step (usually estimate, then generate). Do not offer a menu of options.",
+      "Between tool batches, write a short plain update to the user (1–2 sentences) BEFORE more tools — like Cursor status lines. Example: \"Making the product sheet folder next.\" Never dump ids/JSON. Do this when the next step takes noticeable time (generate, element, archive).",
       "Assumptions: pick model seedance-2.5, duration ~8s (clamp to model max), aspect from attached still or 16:9, cinematic unless they said hypermotion/chaos. Disclose assumptions in one short line after tools run.",
       "Generate returns: if stillRendering/queued, tell the user it's rendering in Files and STOP — do not spin/poll forever inside the turn.",
       "TODO: if the job needs 2+ tool steps, call plan {action:\"create\", title, steps:[...]} first (cancelActive true if replacing direction). Mark steps doing/done with update_step as you go. add_step/remove_step/set_list_status when needed. Latest board reinjects on every tool result.",
@@ -668,8 +759,9 @@ async function runPiTurn(body, abortSignal) {
       "Done criteria: never claim success unless the tool ok (or pendingAsk). Follow verifyHint / verified.",
       "Failures: on error → fix args → retry ONCE → then tell the user the real error and stop. Never invent 'tool unavailable'. Never thrash the same broken call.",
       "See images: attached stills are already in vision. For other folder images, inspect { assetIds }. Videos → pull_frames first, then inspect those frames.",
-      "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets. No ids/JSON/debug talk.",
-      "remember: ONLY short pointers — where a script/prompt lives (document title + folder path), durable prefs, decisions. NEVER store full prompts, shot lists, or script bodies in memory — those go in studio_create_document .md Scripts. Saying \"saved to memory\" for a prompt is wrong.",
+      "Voice: warm, short, creator-friendly. Light emoji ok. Markdown bullets. No ids/JSON/debug talk. Never say CWD — name the Files folder they have open.",
+      "remember: ONLY short pointers for THIS project — where a script/prompt lives (document title + folder path), durable prefs, decisions. ALWAYS pass projectFolderId=the open Files folder when remembering project facts. NEVER store full prompts, shot lists, or script bodies in memory — those go in studio_create_document .md Scripts. Saying \"saved to memory\" for a prompt is wrong. Use remember_update / remember_forget to fix stale memories; do not pile duplicates.",
+      "Memories already injected above are the only ones relevant — ignore unrelated past projects. If nothing relevant loaded, do not invent recall.",
       summaryBlock,
       workingBlock,
       seedBoard
@@ -742,6 +834,11 @@ async function runPiTurn(body, abortSignal) {
       await session.prompt(prompt, images.length ? { images } : undefined);
     } finally {
       abortSignal?.removeEventListener?.("abort", onAbort);
+      try {
+        unsubProgress?.();
+      } catch {
+        // ignore
+      }
     }
 
     if (abortSignal?.aborted || cancelNotified) {
@@ -832,6 +929,8 @@ const server = createServer(async (req, res) => {
             ...DIRECT_TOOL_NAMES,
             "inspect",
             "remember",
+            "remember_update",
+            "remember_forget",
             "skills",
             "plan",
             "ask",

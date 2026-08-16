@@ -247,6 +247,71 @@ export const agentWorkerCallback = httpAction(async (ctx, request) => {
       return jsonResponse({ ok: true, memoryId });
     }
 
+    if (request.method === "POST" && path.endsWith("/agent-worker/memory-update")) {
+      const body = await readJsonBody<{
+        ownerId: string;
+        memoryId: string;
+        title?: string;
+        body?: string;
+        pinned?: boolean;
+      }>(request);
+      await ctx.runMutation(internal.agentMemory.updateMemoryInternal, {
+        ownerId: body.ownerId as Id<"users">,
+        memoryId: body.memoryId as Id<"agentMemories">,
+        title: body.title,
+        body: body.body,
+        pinned: body.pinned,
+      });
+      return jsonResponse({ ok: true, memoryId: body.memoryId });
+    }
+
+    if (request.method === "POST" && path.endsWith("/agent-worker/memory-archive")) {
+      const body = await readJsonBody<{
+        ownerId: string;
+        memoryId: string;
+      }>(request);
+      await ctx.runMutation(internal.agentMemory.archiveMemoryInternal, {
+        ownerId: body.ownerId as Id<"users">,
+        memoryId: body.memoryId as Id<"agentMemories">,
+      });
+      return jsonResponse({ ok: true, memoryId: body.memoryId });
+    }
+
+    if (request.method === "POST" && path.endsWith("/agent-worker/assistant-progress")) {
+      const body = await readJsonBody<{
+        ownerId: string;
+        threadId: string;
+        runId?: string;
+        content: string;
+      }>(request);
+      const content = String(body.content || "").trim().slice(0, 4000);
+      if (!content) {
+        return jsonResponse({ ok: true, skipped: true });
+      }
+      const recent = await ctx.runQuery(internal.agentMessages.listRecentMessagesInternal, {
+        ownerId: body.ownerId as Id<"users">,
+        threadId: body.threadId as Id<"agentThreads">,
+        limit: 8,
+      });
+      const last = [...recent].reverse().find((row) => row.role === "assistant");
+      if (
+        last &&
+        last.toolName === "progress" &&
+        String(last.content || "").trim() === content
+      ) {
+        return jsonResponse({ ok: true, skipped: true, duplicate: true });
+      }
+      const messageId = await ctx.runMutation(internal.agentMessages.appendMessageInternal, {
+        ownerId: body.ownerId as Id<"users">,
+        threadId: body.threadId as Id<"agentThreads">,
+        role: "assistant",
+        content,
+        toolName: "progress",
+        status: "complete",
+      });
+      return jsonResponse({ ok: true, messageId });
+    }
+
     if (request.method === "POST" && path.endsWith("/agent-worker/plan-sync")) {
       const body = await readJsonBody<{
         runId?: string;

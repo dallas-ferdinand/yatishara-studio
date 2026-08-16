@@ -405,6 +405,14 @@ export const sendTurn = action({
       }
       return names.length ? `/${names.join("/")}` : undefined;
     };
+    const openFolder = args.currentFolderId
+      ? await ctx.runQuery(internal.agentMessages.folderPathForOwner, {
+          ownerId,
+          folderId: args.currentFolderId,
+        })
+      : null;
+    const openFolderPath = openFolder?.path || folderPathFor(String(args.currentFolderId || ""));
+    const openFolderName = openFolder?.name;
 
     let workingScratchJson = await ctx.runQuery(
       internal.agentThreads.getWorkingScratchInternal,
@@ -415,8 +423,8 @@ export const sendTurn = action({
     const cueParts: string[] = [];
     if (args.currentFolderId) {
       cueParts.push(`cwd:${args.currentFolderId}`);
-      const cwdPath = folderPathFor(String(args.currentFolderId));
-      if (cwdPath) cueParts.push(`path:${cwdPath}`);
+      if (openFolderPath) cueParts.push(`path:${openFolderPath}`);
+      if (openFolderName) cueParts.push(`folder:${openFolderName}`);
     }
     if (/^\s*continue\.?\s*$/i.test(message)) cueParts.push("continue");
     for (const att of attachments) {
@@ -453,7 +461,8 @@ export const sendTurn = action({
         threadId: args.threadId,
         patchJson: JSON.stringify({
           cwdFolderId: String(args.currentFolderId),
-          cwdFolderPath: folderPathFor(String(args.currentFolderId)),
+          cwdFolderPath: openFolderPath,
+          cwdFolderName: openFolderName,
         }),
       });
       workingScratchJson = await ctx.runQuery(
@@ -681,9 +690,8 @@ export const sendTurn = action({
           currentFolderId: args.currentFolderId
             ? String(args.currentFolderId)
             : undefined,
-          currentFolderPath: args.currentFolderId
-            ? folderPathFor(String(args.currentFolderId))
-            : undefined,
+          currentFolderPath: openFolderPath || undefined,
+          currentFolderName: openFolderName || undefined,
         }),
       });
 
@@ -825,11 +833,29 @@ export const sendTurn = action({
           ? `${byokFallbackNote}\n\nDone.`
           : "Done.");
 
-      await ctx.runMutation(api.agentMessages.appendMessage, {
-        threadId: args.threadId,
-        role: "assistant",
-        content: assistantText,
-      });
+      // Mid-turn progress bubbles already saved — skip duplicate final if identical.
+      const recentForDedupe = await ctx.runQuery(
+        internal.agentMessages.listRecentMessagesInternal,
+        {
+          ownerId,
+          threadId: args.threadId,
+          limit: 12,
+        },
+      );
+      const lastAssistant = [...recentForDedupe]
+        .reverse()
+        .find((row) => row.role === "assistant");
+      const skipDuplicateFinal =
+        lastAssistant &&
+        lastAssistant.toolName === "progress" &&
+        String(lastAssistant.content || "").trim() === assistantText;
+      if (!skipDuplicateFinal) {
+        await ctx.runMutation(api.agentMessages.appendMessage, {
+          threadId: args.threadId,
+          role: "assistant",
+          content: assistantText,
+        });
+      }
 
       // Always bill platform LLM usage (measured tokens; exact BytePlus COGS ×2).
       // BYOK: no LLM ledger charge. Paid tools still charge via Studio API.

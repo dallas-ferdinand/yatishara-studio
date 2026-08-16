@@ -73,13 +73,15 @@
   min-width: 0;
 }
 
-/* Thinking always owns its own row — never sits beside tool chips. */
-.studio-agent-turn-activity > .studio-agent-step.is-thinking {
+/* Mid-turn status lines — slightly quieter than the final reply. */
+.studio-chat-bubble.is-assistant.is-progress {
+  opacity: 0.92;
+}
+
+.studio-agent-turn-media > .studio-agent-step.is-thinking,
+.studio-agent-turn-media > .studio-agent-thinking {
   width: 100%;
-  max-width: 100%;
-  margin: 2px 0;
-  padding: 0 0 0 4px;
-  box-sizing: border-box;
+  margin: 6px 0 2px;
 }
 
 .studio-agent-step {

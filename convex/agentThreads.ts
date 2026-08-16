@@ -300,6 +300,9 @@ export const patchWorkingScratchInternal = internalMutation({
       ...(typeof patch.cwdFolderPath === "string"
         ? { cwdFolderPath: patch.cwdFolderPath }
         : {}),
+      ...(typeof patch.cwdFolderName === "string"
+        ? { cwdFolderName: patch.cwdFolderName }
+        : {}),
       lastDocumentIds: mergeIds("lastDocumentIds", patch.lastDocumentIds ?? patch.documentId),
       lastAssetIds: mergeIds("lastAssetIds", patch.lastAssetIds ?? patch.assetId),
       lastElementIds: mergeIds("lastElementIds", patch.lastElementIds ?? patch.elementId),

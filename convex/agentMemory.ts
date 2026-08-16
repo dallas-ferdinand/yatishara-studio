@@ -261,16 +261,24 @@ export const retrieveForRun = internalQuery({
 
     scored.sort((a, b) => b.score - a.score || b.row.updatedAt - a.row.updatedAt);
 
-    const relevant = scored.filter(
-      (s) =>
+    // When a Files folder is open: only same-project memories, or globals with
+    // real query/cue overlap. Stops Degreaser-style bleed into headphones chats.
+    const relevant = scored.filter((s) => {
+      const overlap = s.tokenHits >= 1 || s.cueHits >= 1;
+      if (args.projectFolderId) {
+        if (s.projectHit) return true;
+        if (s.row.projectFolderId) return false;
+        if (!overlap) return false;
+        return s.row.pinned || s.score >= 28;
+      }
+      return (
         s.row.pinned ||
-        s.projectHit ||
-        s.tokenHits >= 1 ||
-        s.cueHits >= 1 ||
+        overlap ||
         ((s.row.kind === "preference" || s.row.kind === "decision") &&
-          s.score >= 20) ||
-        s.score >= 36,
-    );
+          s.score >= 28) ||
+        s.score >= 42
+      );
+    });
 
     return relevant.slice(0, limit).map(({ row }) => ({
       _id: row._id,
@@ -411,5 +419,54 @@ export const saveThreadSummary = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+export const updateMemoryInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    memoryId: v.id("agentMemories"),
+    title: v.optional(v.string()),
+    body: v.optional(v.string()),
+    pinned: v.optional(v.boolean()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("agentMemories", args.memoryId);
+    if (!row || row.ownerId !== args.ownerId || row.archivedAt) {
+      throw new Error("Memory not found");
+    }
+    const title =
+      args.title != null ? args.title.trim().slice(0, 200) : row.title;
+    const body = args.body != null ? args.body.trim().slice(0, 8000) : row.body;
+    await ctx.db.patch(row._id, {
+      ...(args.title != null ? { title } : {}),
+      ...(args.body != null ? { body } : {}),
+      ...(args.pinned != null ? { pinned: args.pinned } : {}),
+      ...(args.title != null || args.body != null
+        ? { embeddingJson: memoryEmbedding(title, body) }
+        : {}),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const archiveMemoryInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    memoryId: v.id("agentMemories"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("agentMemories", args.memoryId);
+    if (!row || row.ownerId !== args.ownerId) {
+      throw new Error("Memory not found");
+    }
+    await ctx.db.patch(row._id, {
+      archivedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });

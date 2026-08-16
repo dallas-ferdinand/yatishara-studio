@@ -1221,7 +1221,7 @@ export function createStudioPiTools(opts) {
     name: "remember",
     label: "Remember",
     description:
-      "Store a short owner-scoped pointer/pref for future turns (never cross-user). Use for WHERE a script lives (title + folder), prefs, decisions — NEVER full prompts, shot lists, or script bodies (those go in studio_create_document .md Scripts).",
+      "Store a short owner-scoped pointer/pref for future turns (never cross-user). Use for WHERE a script lives (title + folder), prefs, decisions — NEVER full prompts, shot lists, or script bodies (those go in studio_create_document .md Scripts). Prefer projectFolderId = open Files folder.",
     promptSnippet: "Save a short location/pref pointer — not script bodies",
     parameters: Type.Object({
       title: Type.String(),
@@ -1248,6 +1248,52 @@ export function createStudioPiTools(opts) {
           ok: false,
           error: "remember handler not configured",
         };
+      });
+    },
+  });
+
+  const remember_update = defineTool({
+    name: "remember_update",
+    label: "Update memory",
+    description:
+      "Update an existing memory by id (title/body/pinned). Use when a prior memory is stale or wrong.",
+    promptSnippet: "Update a saved memory",
+    parameters: Type.Object({
+      memoryId: Type.String(),
+      title: Type.Optional(Type.String()),
+      body: Type.Optional(Type.String()),
+      pinned: Type.Optional(Type.Boolean()),
+    }),
+    async execute(_toolCallId, params) {
+      return trackPiTool("remember_update", params, async () => {
+        if (typeof localHandlers.studio_agent_update_memory === "function") {
+          const data = await localHandlers.studio_agent_update_memory(params);
+          return data && typeof data === "object"
+            ? { ok: true, ...data }
+            : { ok: true };
+        }
+        return { ok: false, error: "remember_update handler not configured" };
+      });
+    },
+  });
+
+  const remember_forget = defineTool({
+    name: "remember_forget",
+    label: "Forget memory",
+    description: "Archive a memory that is wrong, duplicate, or no longer useful.",
+    promptSnippet: "Archive a stale memory",
+    parameters: Type.Object({
+      memoryId: Type.String(),
+    }),
+    async execute(_toolCallId, params) {
+      return trackPiTool("remember_forget", params, async () => {
+        if (typeof localHandlers.studio_agent_archive_memory === "function") {
+          const data = await localHandlers.studio_agent_archive_memory(params);
+          return data && typeof data === "object"
+            ? { ok: true, ...data }
+            : { ok: true };
+        }
+        return { ok: false, error: "remember_forget handler not configured" };
       });
     },
   });
@@ -1412,6 +1458,8 @@ export function createStudioPiTools(opts) {
     ...directTools,
     inspect,
     remember,
+    remember_update,
+    remember_forget,
     skills,
     plan,
     ask,

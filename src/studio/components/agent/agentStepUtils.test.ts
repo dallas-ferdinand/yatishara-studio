@@ -145,6 +145,93 @@ describe("buildAgentTurns optimistic send", () => {
     expect(formatWorkedLabel(turns[0]!.workedMs!)).toBe("Worked 2.5 mins");
   });
 
+  it("keeps mid-turn progress bubbles and does not blank the live turn", () => {
+    const turns = buildAgentTurns({
+      messages: [
+        {
+          _id: "u1" as Id<"agentMessages">,
+          role: "user",
+          content: "make folder",
+          createdAt: 1,
+        },
+        {
+          _id: "p1" as Id<"agentMessages">,
+          role: "assistant",
+          content: "Making the product sheet folder next.",
+          toolName: "progress",
+          createdAt: 2,
+        },
+      ],
+      toolCalls: [
+        {
+          _id: "t1" as Id<"agentToolCalls">,
+          runId: "r1" as Id<"agentRuns">,
+          toolName: "studio_create_folder",
+          argsJson: "{}",
+          status: "started",
+          startedAt: 2,
+        },
+      ],
+      runs: [
+        {
+          _id: "r1" as Id<"agentRuns">,
+          status: "running",
+          userMessage: "make folder",
+          createdAt: 1,
+        },
+      ],
+      approvals: [],
+      busy: true,
+      activeRunId: "r1" as Id<"agentRuns">,
+      pendingUserText: "make folder",
+    });
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0].isLive).toBe(true);
+    expect(turns[0].assistantBubbles?.map((b) => b.kind)).toEqual(["progress"]);
+    expect(turns[0].assistantText).toBe("Making the product sheet folder next.");
+  });
+
+  it("dedupes final reply that matches a progress bubble", () => {
+    const turns = buildAgentTurns({
+      messages: [
+        {
+          _id: "u1" as Id<"agentMessages">,
+          role: "user",
+          content: "go",
+          createdAt: 1,
+        },
+        {
+          _id: "p1" as Id<"agentMessages">,
+          role: "assistant",
+          content: "All set.",
+          toolName: "progress",
+          createdAt: 2,
+        },
+        {
+          _id: "a1" as Id<"agentMessages">,
+          role: "assistant",
+          content: "All set.",
+          createdAt: 3,
+        },
+      ],
+      toolCalls: [],
+      runs: [
+        {
+          _id: "r1" as Id<"agentRuns">,
+          status: "completed",
+          userMessage: "go",
+          createdAt: 1,
+        },
+      ],
+      approvals: [],
+    });
+
+    expect(turns[0].assistantBubbles).toHaveLength(1);
+    expect(turns[0].assistantBubbles?.[0]?.kind).toBe("final");
+    expect(turns[0].assistantText).toBe("All set.");
+  });
+
   it("lists video models in the step gutter without legacy framing", () => {
     const outcome = extractOutcome(
       "studio_list_video_models",

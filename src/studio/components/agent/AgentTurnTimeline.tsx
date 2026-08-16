@@ -340,10 +340,30 @@ function TurnBlock({
       step.status === "queued" ||
       step.status === "pending_approval",
   );
+  const pendingMediaLive = turn.steps.some(
+    (step) =>
+      step.pendingMedia &&
+      !(step.media && step.media.length) &&
+      (step.status === "started" ||
+        step.status === "pending_approval" ||
+        Boolean(step.pendingMedia.generationJobId)),
+  );
+  const progressBubbles = (turn.assistantBubbles ?? []).filter(
+    (b) => b.kind === "progress",
+  );
+  const finalBubbles = (turn.assistantBubbles ?? []).filter(
+    (b) => b.kind === "final",
+  );
+  const hasSpoken =
+    progressBubbles.length > 0 ||
+    finalBubbles.length > 0 ||
+    Boolean(turn.assistantText && !(turn.assistantBubbles?.length));
+  // While generating media: Waiting under plates — not Thinking in the tool stack.
   const showThinking =
     turn.isLive &&
-    !turn.assistantText &&
+    !hasSpoken &&
     !hasPendingQuestion &&
+    !pendingMediaLive &&
     (inspectThinking || !hasVisibleActiveStep);
   const showLiveSteps = !turnDone && (baseSteps.length > 0 || showThinking);
   const showWorked = turnDone && baseSteps.length > 0;
@@ -439,6 +459,15 @@ function TurnBlock({
           {showThinking ? <AgentThinkingCard key="thinking" label="Thinking" /> : null}
         </div>
       ) : null}
+
+      {progressBubbles.map((bubble) => (
+        <article
+          key={bubble.id}
+          className="studio-chat-bubble is-assistant is-progress"
+        >
+          <StudioChatMarkdown text={bubble.content} />
+        </article>
+      ))}
 
       {showWorked ? (
         <div className="studio-agent-turn-activity">
@@ -590,15 +619,26 @@ function TurnBlock({
               }
               return null;
             })}
+            {turn.isLive && pendingItems.length > 0 ? (
+              <AgentThinkingCard key="waiting" label="Waiting" />
+            ) : null}
           </div>
         );
       })()}
 
-      {turn.assistantText ? (
-        <article className="studio-chat-bubble is-assistant">
-          <StudioChatMarkdown text={turn.assistantText} />
-        </article>
-      ) : null}
+      {finalBubbles.length
+        ? finalBubbles.map((bubble) => (
+            <article key={bubble.id} className="studio-chat-bubble is-assistant">
+              <StudioChatMarkdown text={bubble.content} />
+            </article>
+          ))
+        : !turn.assistantBubbles?.length && turn.assistantText
+          ? (
+              <article className="studio-chat-bubble is-assistant">
+                <StudioChatMarkdown text={turn.assistantText} />
+              </article>
+            )
+          : null}
     </section>
   );
 }

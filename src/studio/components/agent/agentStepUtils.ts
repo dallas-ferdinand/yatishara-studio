@@ -26,6 +26,7 @@ export type AgentMessageRow = {
   content: string;
   attachmentsJson?: string;
   approvalId?: Id<"agentApprovals">;
+  toolName?: string;
   createdAt: number;
 };
 
@@ -115,12 +116,22 @@ export type DisplayStep = {
   summarySegments?: string[];
 };
 
+export type AgentAssistantBubble = {
+  id: string;
+  content: string;
+  kind: "progress" | "final";
+  createdAt: number;
+};
+
 export type AgentTurn = {
   id: string;
   runId?: Id<"agentRuns">;
   userText: string;
   attachments?: AgentAttachmentChip[];
   userMessageId?: Id<"agentMessages">;
+  /** Mid-turn status + final reply bubbles (chronological). */
+  assistantBubbles?: AgentAssistantBubble[];
+  /** Final assistant text (last non-progress bubble) — compat for Thinking gate. */
   assistantText?: string;
   assistantMessageId?: Id<"agentMessages">;
   steps: DisplayStep[];
@@ -985,20 +996,43 @@ export function buildAgentTurns(args: {
 
   const runsAsc = [...runs].sort((a, b) => a.createdAt - b.createdAt);
   const userMessages = messages.filter((m) => m.role === "user");
-  const assistantByRun = new Map<string, string>();
-  for (const run of runsAsc) {
-    if (run.userMessage) {
-      assistantByRun.set(String(run._id), "");
+
+  // Chronological assistant grouping per user turn (progress mid-turn + final).
+  const assistantsByTurn: AgentAssistantBubble[][] = [];
+  {
+    const chrono = [...messages].sort((a, b) => a.createdAt - b.createdAt);
+    let turnIdx = -1;
+    for (const m of chrono) {
+      if (m.role === "user") {
+        turnIdx += 1;
+        assistantsByTurn[turnIdx] = assistantsByTurn[turnIdx] ?? [];
+        continue;
+      }
+      if (m.role !== "assistant" || turnIdx < 0) continue;
+      const content = String(m.content || "").trim();
+      if (!content) continue;
+      const kind = m.toolName === "progress" ? "progress" : "final";
+      const list = assistantsByTurn[turnIdx] ?? [];
+      // Drop exact duplicate final after matching progress.
+      if (
+        kind === "final" &&
+        list.some(
+          (b) =>
+            b.kind === "progress" &&
+            b.content.trim() === content,
+        )
+      ) {
+        continue;
+      }
+      list.push({
+        id: String(m._id),
+        content,
+        kind,
+        createdAt: m.createdAt,
+      });
+      assistantsByTurn[turnIdx] = list;
     }
   }
-  // Pair assistant messages to runs by order
-  const assistantMessages = messages.filter((m) => m.role === "assistant");
-  runsAsc.forEach((run, idx) => {
-    const assistant = assistantMessages[idx];
-    if (assistant) {
-      assistantByRun.set(String(run._id), assistant.content);
-    }
-  });
 
   const turns: AgentTurn[] = [];
 
@@ -1037,7 +1071,23 @@ export function buildAgentTurns(args: {
       rawSteps.push(...orphanApprovalSteps);
     }
     const steps = rawSteps;
-    const assistant = assistantMessages[idx];
+    let bubbles = assistantsByTurn[idx] ?? [];
+    // If final append was deduped against progress, promote last progress when run finished.
+    const runFinished =
+      run &&
+      ["completed", "failed", "cancelled"].includes(String(run.status || ""));
+    if (
+      runFinished &&
+      bubbles.length > 0 &&
+      !bubbles.some((b) => b.kind === "final")
+    ) {
+      bubbles = bubbles.map((b, i) =>
+        i === bubbles.length - 1 ? { ...b, kind: "final" as const } : b,
+      );
+    }
+    const finals = bubbles.filter((b) => b.kind === "final");
+    const lastFinal = finals[finals.length - 1];
+    const lastAny = bubbles[bubbles.length - 1];
 
     turns.push({
       id: String(userMsg._id),
@@ -1045,8 +1095,13 @@ export function buildAgentTurns(args: {
       userText: userMsg.content,
       attachments: parseAgentAttachments(userMsg.attachmentsJson),
       userMessageId: userMsg._id,
-      assistantText: assistant?.content,
-      assistantMessageId: assistant?._id,
+      assistantBubbles: bubbles.length ? bubbles : undefined,
+      assistantText: lastFinal?.content ?? (lastAny?.kind === "progress" ? lastAny.content : undefined),
+      assistantMessageId: lastFinal
+        ? (lastFinal.id as Id<"agentMessages">)
+        : lastAny
+          ? (lastAny.id as Id<"agentMessages">)
+          : undefined,
       steps,
       isLive: false,
       workedMs: steps.length ? turnWorkedMs(steps, run) : undefined,
@@ -1074,13 +1129,17 @@ export function buildAgentTurns(args: {
     const hasPendingAttachments = Boolean(pendingAttachments?.length);
     const hasOptimisticSend = Boolean(pendingText) || hasPendingAttachments;
     const lastTurn = turns[turns.length - 1];
-    // Convex caught up: newest user row is this send and still has no assistant.
+    // Convex caught up: newest user row is this send and still has no final reply.
+    // Progress mid-turn bubbles do not count as finished — keep the live turn.
     // Never fall back to an older completed turn — that blanks prior reply/steps for a beat.
+    const lastHasFinalReply = Boolean(
+      lastTurn?.assistantBubbles?.some((b) => b.kind === "final"),
+    );
     const lastIsThisSend =
       hasOptimisticSend &&
       Boolean(lastTurn) &&
       (!pendingText || lastTurn!.userText === pendingText) &&
-      !lastTurn!.assistantText;
+      !lastHasFinalReply;
 
     const markLiveSteps = (steps: DisplayStep[]) =>
       steps.map((step) => ({
