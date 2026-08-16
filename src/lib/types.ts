@@ -1,8 +1,20 @@
-export type ThreadStatus = "idle" | "streaming" | "awaiting" | "error" | "cancelled";
+/**
+ * SOT: desk-chat-types
+ * WHAT: Derived Studio-copied Desk chat/session types (keep in sync with mercuryos-desk-next).
+ * WHY: One const object — do not re-declare ThreadStatus elsewhere.
+ * HOW: typeof THREAD_STATUSES[number]
+ * WHERE: /opt/yatishara-studio/src/lib/types.ts
+ */
+
+export const THREAD_STATUSES = ["idle", "streaming", "awaiting", "error", "cancelled"] as const;
+export type ThreadStatus = (typeof THREAD_STATUSES)[number];
+
+export const CHAT_ROLES = ["user", "assistant"] as const;
+export type ChatRole = (typeof CHAT_ROLES)[number];
 
 export type ChatMessage = {
   id: string;
-  role: "user" | "assistant";
+  role: ChatRole;
   content: string;
   streaming?: boolean;
 };

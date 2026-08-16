@@ -9,12 +9,13 @@ const eslintConfig = defineConfig([
     files: ["**/*.{js,jsx,ts,tsx}"],
     rules: {
       "@next/next/no-html-link-for-pages": "off",
+      "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/ban-ts-comment": [
-        "warn",
+        "error",
         {
           "ts-check": false,
           "ts-expect-error": "allow-with-description",
-          "ts-ignore": "allow-with-description",
+          "ts-ignore": false,
           "ts-nocheck": true,
           minimumDescriptionLength: 3,
         },
