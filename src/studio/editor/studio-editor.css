@@ -302,6 +302,89 @@
   cursor: not-allowed;
 }
 
+.studio-editor-inspector-back {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  cursor: pointer;
+}
+
+.studio-editor-inspector-back:hover {
+  background: var(--mos-hover);
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.studio-editor-inspector-name-field {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 22px;
+  margin: 0;
+}
+
+.studio-editor-inspector-name-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 22px;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-cursor-text, var(--mos-text));
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.studio-editor-inspector-name-input::placeholder {
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-weight: 560;
+}
+
+.studio-editor-inspector-name-input:focus {
+  outline: none;
+  background: var(--mos-plate-strong, var(--mos-hover));
+}
+
+.studio-editor-inspector-name-ext {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  line-height: 1;
+  user-select: none;
+}
+
+.studio-editor-export-chips {
+  margin-bottom: 0;
+}
+
+.studio-editor-export-chips .studio-editor-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  padding: 0.35rem 0.45rem;
+  border-radius: var(--cursor-radius-sm, 6px);
+  font-size: 0.72rem;
+}
+
+
 .studio-editor-inspector-thumb {
   position: relative;
   display: grid;

@@ -175,7 +175,12 @@ function InspectorSection({
             <ArrowDown size={14} aria-hidden="true" className="studio-editor-inspector-section-caret" />
           </button>
         ) : (
-          <h4>{title}</h4>
+          <>
+            <h4>{title}</h4>
+            {meta ? (
+              <span className="studio-editor-inspector-section-meta">{meta}</span>
+            ) : null}
+          </>
         )}
         {onReset ? (
           <button
@@ -509,6 +514,18 @@ function ExportProgressPill({
   );
 }
 
+function exportExtension({
+  exportKind,
+  videoFormat,
+  audioFormat,
+}) {
+  if (exportKind === "studio") return ".studio";
+  if (exportKind === "audio") {
+    return `.${String(audioFormat || "mp3").toLowerCase()}`;
+  }
+  return `.${String(videoFormat || "mp4").toLowerCase()}`;
+}
+
 function ExportPanel({
   project,
   exportKind,
@@ -531,11 +548,15 @@ function ExportPanel({
   onFilenameChange,
   onExport,
   onDismissExport,
+  onCloseExport,
   onUpdateProject,
 }) {
   const frameRatio = normalizeFrameRatio(project.frameRatio);
   const size = exportSizeForRatioAndResolution(frameRatio, resolution);
-  const placeholder = project.name?.trim() || "export";
+  const projectName = project.name?.trim() || "export";
+  const nameValue = exportKind === "studio" ? project.name || "" : filename;
+  const namePlaceholder = projectName;
+  const extension = exportExtension({ exportKind, videoFormat, audioFormat });
   const canExport =
     exportKind === "studio"
       ? canExportStudio
@@ -553,8 +574,41 @@ function ExportPanel({
     <>
       <header className="studio-editor-inspector-panel-head">
         <div className="studio-editor-inspector-identity">
-          <InspectorThumb kind="canvas" />
-          <span className="studio-editor-inspector-name">Export as</span>
+          {onCloseExport ? (
+            <button
+              type="button"
+              className="studio-editor-inspector-back"
+              aria-label="Back to inspector"
+              title="Back"
+              onClick={onCloseExport}
+            >
+              <ArrowLeft size={14} aria-hidden="true" />
+            </button>
+          ) : (
+            <InspectorThumb kind="canvas" />
+          )}
+          <label className="studio-editor-inspector-name-field">
+            <span className="sr-only">Export filename</span>
+            <input
+              type="text"
+              className="studio-editor-inspector-name-input"
+              value={nameValue}
+              placeholder={namePlaceholder}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (exportKind === "studio") {
+                  onUpdateProject?.({ name: next });
+                } else {
+                  onFilenameChange(next);
+                }
+              }}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <span className="studio-editor-inspector-name-ext" aria-hidden="true">
+              {extension}
+            </span>
+          </label>
         </div>
         <InspectorExportButton
           busy={exporting}
@@ -571,15 +625,38 @@ function ExportPanel({
       </header>
 
       <div className="studio-editor-inspector-body">
-        <InspectorSection title="Type" hint="What to export from this timeline.">
-          <div className="studio-editor-export-tiers" role="group" aria-label="Export type">
+        {exporting || exportError || exportResultName ? (
+          <div className="studio-editor-export-progress" aria-live="polite">
+            <ExportProgressPill
+              status={
+                exportError ? "error" : exporting ? "uploading" : "done"
+              }
+              progress={exportProgress}
+              label={
+                exportError
+                  ? exportError
+                  : exporting
+                    ? `${exportPhase || "Exporting…"}${
+                        typeof exportProgress === "number" && exportProgress > 0
+                          ? ` · ${Math.round(exportProgress)}%`
+                          : ""
+                      }`
+                    : `Done · ${exportResultName || namePlaceholder}`
+              }
+              onDismiss={exporting ? undefined : onDismissExport}
+            />
+          </div>
+        ) : null}
+
+        <InspectorSection title="Type">
+          <div className="studio-editor-chip-row studio-editor-export-chips" role="group" aria-label="Export type">
             {EXPORT_KIND_PRESETS.map((preset) => {
               const active = exportKind === preset.id;
               return (
                 <button
                   key={preset.id}
                   type="button"
-                  className={`studio-editor-export-tier${active ? " is-active" : ""}`}
+                  className={`studio-editor-chip${active ? " is-active" : ""}`}
                   aria-pressed={active}
                   title={preset.hint}
                   onClick={() => onExportKindChange(preset.id)}
@@ -593,15 +670,15 @@ function ExportPanel({
 
         {exportKind === "video" ? (
           <>
-            <InspectorSection title="Format" hint="Container for the rendered video.">
-              <div className="studio-editor-export-tiers" role="group" aria-label="Video format">
+            <InspectorSection title="Format">
+              <div className="studio-editor-chip-row studio-editor-export-chips" role="group" aria-label="Video format">
                 {EXPORT_VIDEO_FORMAT_PRESETS.map((preset) => {
                   const active = videoFormat === preset.id;
                   return (
                     <button
                       key={preset.id}
                       type="button"
-                      className={`studio-editor-export-tier${active ? " is-active" : ""}`}
+                      className={`studio-editor-chip${active ? " is-active" : ""}`}
                       aria-pressed={active}
                       onClick={() => onVideoFormatChange?.(preset.id)}
                     >
@@ -614,16 +691,16 @@ function ExportPanel({
 
             <InspectorSection
               title="Resolution"
-              hint="How many pixels to render. Does not change frame shape."
+              meta={`${size.width} × ${size.height}`}
             >
-              <div className="studio-editor-export-tiers" role="group" aria-label="Export resolution">
+              <div className="studio-editor-chip-row studio-editor-export-chips" role="group" aria-label="Export resolution">
                 {EXPORT_RESOLUTION_PRESETS.map((preset) => {
                   const active = resolution === preset.id;
                   return (
                     <button
                       key={preset.id}
                       type="button"
-                      className={`studio-editor-export-tier${active ? " is-active" : ""}`}
+                      className={`studio-editor-chip${active ? " is-active" : ""}`}
                       aria-pressed={active}
                       title={preset.label}
                       onClick={() => onResolutionChange(preset.id)}
@@ -633,15 +710,9 @@ function ExportPanel({
                   );
                 })}
               </div>
-              <p className="studio-editor-export-size">
-                {size.width} × {size.height}
-              </p>
             </InspectorSection>
 
-            <InspectorSection
-              title="Frame"
-              hint="Output canvas ratio. Zoom the preview separately with canvas controls."
-            >
+            <InspectorSection title="Frame">
               <div className="studio-editor-frame-presets" role="group" aria-label="Frame ratio">
                 {FRAME_RATIO_PRESETS.map((preset) => {
                   const active = frameRatio === preset.id;
@@ -667,15 +738,15 @@ function ExportPanel({
         ) : null}
 
         {exportKind === "audio" ? (
-          <InspectorSection title="Format" hint="Audio container for the mixed soundtrack.">
-            <div className="studio-editor-export-tiers" role="group" aria-label="Audio format">
+          <InspectorSection title="Format">
+            <div className="studio-editor-chip-row studio-editor-export-chips" role="group" aria-label="Audio format">
               {EXPORT_AUDIO_FORMAT_PRESETS.map((preset) => {
                 const active = audioFormat === preset.id;
                 return (
                   <button
                     key={preset.id}
                     type="button"
-                    className={`studio-editor-export-tier${active ? " is-active" : ""}`}
+                    className={`studio-editor-chip${active ? " is-active" : ""}`}
                     aria-pressed={active}
                     onClick={() => onAudioFormatChange?.(preset.id)}
                   >
@@ -690,51 +761,12 @@ function ExportPanel({
         {exportKind === "studio" ? (
           <InspectorSection
             title="Package"
-            hint="Open zip with timeline + original clip media. Anyone can unzip it."
+            hint="Zip with timeline + original clip media. Anyone can unzip it."
           >
-            <p className="studio-editor-export-size">Saves as {placeholder}.studio</p>
+            <p className="studio-editor-export-size">
+              Saves as {(nameValue.trim() || namePlaceholder)}.studio
+            </p>
           </InspectorSection>
-        ) : null}
-
-        {exportKind !== "studio" ? (
-          <InspectorSection title="Filename" hint="Optional. Leave blank to use the project name.">
-            <label className="studio-editor-field-full">
-              <span className="sr-only">Export filename</span>
-              <input
-                type="text"
-                value={filename}
-                placeholder={placeholder}
-                onChange={(event) => onFilenameChange(event.target.value)}
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </label>
-          </InspectorSection>
-        ) : null}
-
-        {exporting || exportError || exportResultName ? (
-          <div className="studio-editor-export-progress" aria-live="polite">
-            <ExportProgressPill
-              status={
-                exportError ? "error" : exporting ? "uploading" : "done"
-              }
-              progress={exportProgress}
-              label={
-                exportError
-                  ? exportError
-                  : exporting
-                    ? `${exportPhase || "Exporting…"}${
-                        typeof exportProgress === "number" && exportProgress > 0
-                          ? ` · ${Math.round(exportProgress)}%`
-                          : ""
-                      }`
-                    : `Done · ${exportResultName || placeholder}`
-              }
-              onDismiss={
-                exporting ? undefined : onDismissExport
-              }
-            />
-          </div>
         ) : null}
       </div>
     </>
@@ -893,6 +925,7 @@ export function EditorInspector({
   onExport,
   onDismissExport,
   onOpenExport,
+  onCloseExport,
 }) {
   const joint = jointByKey(project, jointKey);
   const jointLeft = joint ? leftClipForJoint(project, joint) : null;
@@ -939,6 +972,7 @@ export function EditorInspector({
             onFilenameChange={onExportFilenameChange}
             onExport={onExport}
             onDismissExport={onDismissExport}
+            onCloseExport={onCloseExport}
             onUpdateProject={onUpdateProject}
           />
         </div>

@@ -1265,6 +1265,7 @@ export function StudioVideoEditor({
                   setExportJobId(null);
                 }}
                 onOpenExport={() => dispatch({ type: "set_side_panel", panel: "export" })}
+                onCloseExport={() => dispatch({ type: "set_side_panel", panel: "inspect" })}
               />
             ) : null}
           </aside>
