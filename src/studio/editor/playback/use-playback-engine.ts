@@ -348,15 +348,20 @@ class EngineConsumer implements FrameConsumer {
       height?: number;
     }> = [];
     const usedBusFrames = new Set<VideoFrame>();
-    if (!slice.transition && slice.video.length > 2) {
-      const midSamples = slice.video.slice(1, -1);
+    const midSamples = slice.transition
+      ? slice.video.slice(2)
+      : slice.video.length > 2
+        ? slice.video.slice(1, -1)
+        : [];
+    if (midSamples.length > 0) {
+      const indexBase = slice.transition ? 2 : 1;
       const byIndex = new Map(
         (captured.stack ?? []).map((layer) => [layer.sampleIndex, layer]),
       );
       // Paint bottom→top (same order as paused prepare()).
       for (let i = midSamples.length - 1; i >= 0; i -= 1) {
         const sample = midSamples[i]!;
-        const sampleIndex = i + 1;
+        const sampleIndex = indexBase + i;
         const fromBus = byIndex.get(sampleIndex);
         const still = stillForSample(sample);
         if (still) {
@@ -533,8 +538,16 @@ class EngineConsumer implements FrameConsumer {
         : null,
     );
     const top = valid[0];
-    const bottom = valid.length > 1 ? valid[valid.length - 1] : undefined;
-    const middles = valid.length > 2 ? valid.slice(1, -1).reverse() : [];
+    const bottom = slice.transition
+      ? valid[1]
+      : valid.length > 1
+        ? valid[valid.length - 1]
+        : undefined;
+    const middles = slice.transition
+      ? valid.slice(2).reverse()
+      : valid.length > 2
+        ? valid.slice(1, -1).reverse()
+        : [];
     const frameA = top?.frame;
     let frameB = bottom?.frame;
     if (frameA && frameB && frameA === frameB) {

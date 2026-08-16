@@ -990,6 +990,57 @@ function render(message: RenderMessage): void {
         background: message.background,
       });
       gl.flush();
+    } else if (stack.length > 0) {
+      // Transition A/B first, then source-over remaining picture lanes on top.
+      const hasA = upload(gl, textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
+      const hasB = upload(gl, textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
+      applyLayerUniforms({
+        hasA,
+        hasB,
+        transformA,
+        transformB,
+        opacityA,
+        opacityB,
+        pass: 0,
+        bIsCanvas: false,
+        effect,
+        progress: message.progress,
+        background: message.background,
+      });
+      copyCanvasToB();
+      for (const layer of stack) {
+        const hasLayer = upload(gl, textureA, gl.TEXTURE0, layer.frame, layer.textureKey, "a");
+        if (!hasLayer) continue;
+        if (layer.width && layer.height) lastASize = [layer.width, layer.height];
+        applyLayerUniforms({
+          hasA: true,
+          hasB: true,
+          transformA: layer.transform ?? identity,
+          transformB: identity,
+          opacityA: Number.isFinite(layer.opacity) ? Number(layer.opacity) : 1,
+          opacityB: 1,
+          pass: 2,
+          bIsCanvas: true,
+          effect: TRANSITION_SHADER_IDS.none,
+          progress: 0,
+          background: message.background,
+        });
+        copyCanvasToB();
+      }
+      applyLayerUniforms({
+        hasA: false,
+        hasB: true,
+        transformA: identity,
+        transformB: identity,
+        opacityA: 1,
+        opacityB: 1,
+        pass: 3,
+        bIsCanvas: true,
+        effect: TRANSITION_SHADER_IDS.none,
+        progress: 0,
+        background: message.background,
+      });
+      gl.flush();
     } else {
     const hasA = upload(gl, textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
     const hasB = upload(gl, textureB, gl.TEXTURE1, b, message.textureKeyB, "b");

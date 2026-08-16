@@ -253,6 +253,23 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
         role: "incoming",
       });
     }
+    // Keep other overlapping picture lanes (overlays) during the transition —
+    // previously only A/B showed so middle/top media rows vanished on play/export feel.
+    const transitionIds = new Set(video.map((sample) => sample.clip.clipId));
+    const overlays = plan.video
+      .filter(
+        (clip) =>
+          !transitionIds.has(clip.clipId) &&
+          contains(clip.timelineStart, clip.timelineEnd, time),
+      )
+      .sort((a, b) => a.trackIndex - b.trackIndex || a.timelineStart - b.timelineStart);
+    for (const clip of stackOverlappingVideo(overlays, Math.max(0, MAX_PREVIEW_VIDEO_STACK - 2))) {
+      video.push({
+        clip,
+        sourceTime: sourceAt(clip, time),
+        role: "single",
+      });
+    }
   } else {
     // Lowest trackIndex = top of timeline = drawn last (over). Stack every
     // overlapping picture lane so middle rows render, not only first+last.

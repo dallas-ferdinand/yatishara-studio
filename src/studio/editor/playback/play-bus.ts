@@ -448,6 +448,18 @@ export class PlayBus {
 
     if (slice.transition) {
       secondary = videos[1] ?? null;
+      // Extra overlapping lanes after A/B (overlays on other rows).
+      const midSamples = videos.slice(2);
+      const capped =
+        midSamples.length > MAX_STACK_SLOTS
+          ? midSamples.slice(midSamples.length - MAX_STACK_SLOTS)
+          : midSamples;
+      const indexOffset = 2 + (midSamples.length - capped.length);
+      middles = capped.map((sample, i) => ({
+        sample,
+        sampleIndex: indexOffset + i,
+      }));
+      middles = middles.reverse();
     } else if (videos.length <= 1) {
       secondary = slice.preload[0] ?? null;
     } else if (videos.length === 2) {
@@ -500,6 +512,9 @@ export class PlayBus {
       preroll: !slice.transition && !stacking,
     });
 
+    const stackPlay = Boolean(
+      opts.playProgram && (stacking || (slice.transition && middles.length > 0)),
+    );
     for (let i = 0; i < this.stackSlots.length; i += 1) {
       const mid = middles[i];
       const url = mid ? this.resolveUrl(mid.sample, mediaById) : null;
@@ -507,7 +522,7 @@ export class PlayBus {
       const state = this.stackSlots[i]!;
       state.sampleIndex = mid?.sampleIndex;
       await this.ensureSlotState(state, want, {
-        play: Boolean(opts.playProgram && stacking && want),
+        play: Boolean(stackPlay && want),
         sourceTime: mid?.sample.sourceTime ?? want?.trimIn,
         preroll: false,
       });

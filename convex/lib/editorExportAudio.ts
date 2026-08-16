@@ -72,7 +72,11 @@ export function collectExportVideoSoundtracks<T extends ExportAudioBedClip>(
     tracks: Array<{ id: string; kind: string; muted?: boolean }>;
     clips: T[];
   },
-  primaryVideoTrackId: string,
+  /**
+   * Video track whose embedded audio is already in the picture segments.
+   * Pass null when picture is silent and every unmuted video row should mix here.
+   */
+  primaryVideoTrackId: string | null,
 ): T[] {
   const unmutedVideoTrackIds = new Set(
     project.tracks
@@ -82,7 +86,7 @@ export function collectExportVideoSoundtracks<T extends ExportAudioBedClip>(
   return project.clips
     .filter((clip) => {
       if (clip.kind !== "video" || !clip.assetId) return false;
-      if (clip.trackId === primaryVideoTrackId) return false;
+      if (primaryVideoTrackId && clip.trackId === primaryVideoTrackId) return false;
       if (!unmutedVideoTrackIds.has(clip.trackId)) return false;
       const volume = Math.max(0, Math.min(2, clip.effects?.volume ?? 1));
       return volume > 0.001;

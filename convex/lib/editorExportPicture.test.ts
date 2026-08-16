@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   clipSourceInputArgs,
+  collectExportPictureClips,
   isStillExportSource,
   isStillImageCodec,
+  pictureTimelineSegments,
   safeContainVf,
 } from "./editorExportPicture";
 
@@ -67,5 +69,72 @@ describe("safeContainVf", () => {
   it("forces even dimensions for yuv420p", () => {
     expect(safeContainVf(1920, 1080)).toContain("scale=trunc(iw/2)*2:trunc(ih/2)*2");
     expect(safeContainVf(1920, 1080)).toContain("pad=1920:1080");
+  });
+});
+
+describe("collectExportPictureClips / pictureTimelineSegments", () => {
+  it("stacks overlapping lanes bottom-to-top across cut points", () => {
+    const project = {
+      tracks: [
+        { id: "v1", kind: "video" },
+        { id: "v2", kind: "video" },
+        { id: "v3", kind: "video" },
+        { id: "a1", kind: "audio" },
+      ],
+      clips: [
+        {
+          id: "top",
+          assetId: "a-top",
+          trackId: "v1",
+          startTime: 0,
+          trimIn: 0,
+          trimOut: 4,
+          label: "top",
+          kind: "image",
+        },
+        {
+          id: "mid",
+          assetId: "a-mid",
+          trackId: "v2",
+          startTime: 1,
+          trimIn: 0,
+          trimOut: 2,
+          label: "mid",
+          kind: "video",
+        },
+        {
+          id: "bot",
+          assetId: "a-bot",
+          trackId: "v3",
+          startTime: 0,
+          trimIn: 0,
+          trimOut: 5,
+          label: "bot",
+          kind: "video",
+        },
+      ],
+    };
+    const clips = collectExportPictureClips(project);
+    expect(clips.map((c) => c.id)).toEqual(["top", "bot", "mid"]);
+    const segments = pictureTimelineSegments(clips, 0);
+    // 0-1: bot+top; 1-3: bot+mid+top; 3-4: bot+top; 4-5: bot
+    expect(segments).toHaveLength(4);
+    expect(segments[0]).toMatchObject({ type: "layers", startTime: 0, duration: 1 });
+    expect((segments[0] as { layers: Array<{ id: string }> }).layers.map((l) => l.id)).toEqual([
+      "bot",
+      "top",
+    ]);
+    expect((segments[1] as { layers: Array<{ id: string }> }).layers.map((l) => l.id)).toEqual([
+      "bot",
+      "mid",
+      "top",
+    ]);
+    expect((segments[2] as { layers: Array<{ id: string }> }).layers.map((l) => l.id)).toEqual([
+      "bot",
+      "top",
+    ]);
+    expect((segments[3] as { layers: Array<{ id: string }> }).layers.map((l) => l.id)).toEqual([
+      "bot",
+    ]);
   });
 });

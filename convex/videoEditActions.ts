@@ -25,8 +25,11 @@ import {
 } from "./lib/editorExportAudio";
 import {
   clipSourceInputArgs,
+  collectExportPictureClips,
   isStillExportSource,
+  pictureTimelineSegments,
   safeContainVf,
+  type ExportPictureClip,
 } from "./lib/editorExportPicture";
 import {
   buildNaturalSpeedAudioFilters,
@@ -224,20 +227,27 @@ async function buildSegmentVideoFilters(
 
 const EXPORT_FPS = 30;
 
-/** Contain-crop to the project frame so every segment matches export canvas. */
+/**
+ * Contain-crop to the project frame so every segment matches export canvas.
+ * Overlay layers use a transparent pad + rgba so PNG cutouts reveal underlays.
+ */
 function normalizeVf(
   width: number,
   height: number,
   effects?: ClipEffects,
+  opts?: { overlay?: boolean },
 ): string {
   // Draft effects.speed is process-on-demand (bake → new asset). Do not setpts here.
+  const overlay = Boolean(opts?.overlay);
+  const padColor = overlay ? "black@0" : "black";
+  const outFormat = overlay ? "rgba" : "yuv420p";
   const scale = Number.isFinite(effects?.scale) ? Number(effects?.scale) : 1;
   const panX = Number.isFinite(effects?.x) ? Number(effects?.x) : 0;
   const panY = Number.isFinite(effects?.y) ? Number(effects?.y) : 0;
   const rotation = Number.isFinite(effects?.rotation) ? Number(effects?.rotation) : 0;
   const safeScale = Math.min(4, Math.max(0, Number.isFinite(scale) ? scale : 1));
   if (safeScale < 0.005) {
-    return `scale=2:2,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black,fps=${EXPORT_FPS},setsar=1,format=yuv420p`;
+    return `scale=2:2,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:${padColor},fps=${EXPORT_FPS},setsar=1,format=${outFormat}`;
   }
   const scaledW = Math.max(2, Math.round(width * safeScale));
   const scaledH = Math.max(2, Math.round(height * safeScale));
@@ -254,10 +264,10 @@ function normalizeVf(
   }
   filters.push(
     `crop='min(iw,${width})':'min(ih,${height})':'max(0,min(iw-${width},(iw-${width})/2-${panPxX}))':'max(0,min(ih-${height},(ih-${height})/2-${panPxY}))'`,
-    `pad=${width}:${height}:'max(0,min(ow-iw,(ow-iw)/2+${panPxX}))':'max(0,min(oh-ih,(oh-ih)/2+${panPxY}))':black`,
+    `pad=${width}:${height}:'max(0,min(ow-iw,(ow-iw)/2+${panPxX}))':'max(0,min(oh-ih,(oh-ih)/2+${panPxY}))':${padColor}`,
     `fps=${EXPORT_FPS}`,
     "setsar=1",
-    "format=yuv420p",
+    `format=${outFormat}`,
   );
   const opacity = Number(effects?.opacity);
   const safeOpacity = Number.isFinite(opacity)
@@ -267,7 +277,9 @@ function normalizeVf(
     filters.splice(
       filters.length - 1,
       0,
-      `lutrgb=r='val*${safeOpacity.toFixed(4)}':g='val*${safeOpacity.toFixed(4)}':b='val*${safeOpacity.toFixed(4)}'`,
+      overlay
+        ? `colorchannelmixer=aa=${safeOpacity.toFixed(4)}`
+        : `lutrgb=r='val*${safeOpacity.toFixed(4)}':g='val*${safeOpacity.toFixed(4)}':b='val*${safeOpacity.toFixed(4)}'`,
     );
   }
   return filters.join(",");
@@ -631,6 +643,124 @@ async function renderClipSegment(args: {
     if (raw) console.error(`export clip render failed (${args.clip.label}): ${raw.slice(0, 800)}`);
     throw new Error(detail && detail !== fallback ? `${fallback} ${detail}` : fallback);
   }
+}
+
+/**
+ * Composite bottom→top picture lanes into one silent segment (audio mixed later).
+ * Single-layer stacks reuse renderClipSegment for fades/text.
+ */
+async function renderStackedPictureSegment(args: {
+  layers: Array<{ clip: ExportPictureClip; sourcePath: string }>;
+  dest: string;
+  startTime: number;
+  duration: number;
+  textClips: ExportTextClip[];
+  width: number;
+  height: number;
+  fontCacheDir: string;
+}): Promise<void> {
+  const { layers, dest, duration, width, height } = args;
+  if (layers.length === 0) {
+    throw new Error("Nothing to composite.");
+  }
+  if (layers.length === 1) {
+    const only = layers[0]!;
+    await renderClipSegment({
+      sourcePath: only.sourcePath,
+      dest,
+      clip: only.clip as unknown as EditorClip,
+      duration,
+      textClips: args.textClips,
+      width,
+      height,
+      fontCacheDir: args.fontCacheDir,
+      muteAudio: true,
+    });
+    return;
+  }
+
+  const inputArgs: string[] = [];
+  for (const layer of layers) {
+    const picture = await probePictureStream(layer.sourcePath);
+    const sourceDurationSec = picture.present
+      ? await probeMediaDurationSeconds(layer.sourcePath)
+      : 0;
+    const isStill = isStillExportSource({
+      kind: layer.clip.kind,
+      codec: picture.codec,
+      nbFrames: picture.nbFrames,
+      sourceDurationSec,
+    });
+    const sourceLen = Math.max(0.05, layer.clip.trimOut - layer.clip.trimIn);
+    const localTime = Math.max(0, args.startTime - layer.clip.startTime);
+    const trimIn = isStill ? 0 : layer.clip.trimIn + localTime;
+    inputArgs.push(
+      ...clipSourceInputArgs({
+        sourcePath: layer.sourcePath,
+        trimIn,
+        sourceLen: Math.max(0.05, sourceLen - localTime),
+        identitySpeed: isIdentitySpeed(clipSpeedFromEffects(layer.clip.effects)),
+        isStill,
+        fps: EXPORT_FPS,
+      }),
+    );
+  }
+
+  const graphParts: string[] = [];
+  for (const [index, layer] of layers.entries()) {
+    const overlay = index > 0;
+    const vf = normalizeVf(width, height, layer.clip.effects, { overlay });
+    graphParts.push(`[${index}:v]${vf}[v${index}]`);
+  }
+  let cur = "v0";
+  for (let i = 1; i < layers.length; i += 1) {
+    const next = `vx${i}`;
+    graphParts.push(`[${cur}][v${i}]overlay=0:0:format=auto[${next}]`);
+    cur = next;
+  }
+  graphParts.push(`[${cur}]format=yuv420p,setsar=1[vout]`);
+
+  const textParts = await buildTextOverlayParts(
+    args.textClips,
+    args.startTime,
+    duration,
+    args.fontCacheDir,
+  );
+  let videoMap = "vout";
+  if (textParts.length) {
+    graphParts.push(`[vout]${textParts.join(",")}[vtext]`);
+    videoMap = "vtext";
+  }
+
+  await runFfmpeg([
+    "-y",
+    ...inputArgs,
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=channel_layout=stereo:sample_rate=44100",
+    "-filter_complex",
+    graphParts.join(";"),
+    "-map",
+    `[${videoMap}]`,
+    "-map",
+    `${layers.length}:a`,
+    "-t",
+    String(duration),
+    ...exportH264Args(width, height),
+    "-c:a",
+    "aac",
+    "-b:a",
+    EXPORT_AUDIO_BITRATE,
+    "-ar",
+    "44100",
+    "-ac",
+    "2",
+    "-shortest",
+    "-movflags",
+    "+faststart",
+    dest,
+  ]);
 }
 
 function timelineSegments(
@@ -1051,11 +1181,7 @@ async function runExportVideo(
     renderResolution,
   );
   const videoTracks = project.tracks.filter((track) => track.kind === "video");
-  const videoTrack =
-    videoTracks.find((track) =>
-      project.clips.some((clip) => clip.trackId === track.id && clip.assetId),
-    ) ?? videoTracks[0];
-  if (!videoTrack) {
+  if (!videoTracks.length) {
     const message = "No video track in project.";
     if (args.jobId) {
       await ctx.runMutation(internal.exportJobs.fail, { jobId: args.jobId, error: message });
@@ -1063,9 +1189,7 @@ async function runExportVideo(
     throw new Error(message);
   }
 
-  const clips = project.clips
-    .filter((clip) => clip.trackId === videoTrack.id && clip.assetId)
-    .sort((a, b) => a.startTime - b.startTime);
+  const pictureClips = collectExportPictureClips(project);
 
   const textClips =
     exportKind === "video"
@@ -1073,17 +1197,17 @@ async function runExportVideo(
           Math.max(0.05, Number(clip.trimOut ?? 3) - Number(clip.trimIn ?? 0) || 3),
         )
       : [];
-  // Audio lanes + unmuted video rows under the picture track (V2+ soundtrack).
+  // Picture segments are silent — mix every unmuted video-row soundtrack + audio beds.
   const audioClips = [
     ...collectExportAudioBeds(project),
-    ...collectExportVideoSoundtracks(project, videoTrack.id),
+    ...collectExportVideoSoundtracks(project, null),
   ];
   const coverUntil = exportCoverUntilSec({
     textEnds: textClips.map((clip) => clip.startTime + clip.duration),
     audioClips,
   });
 
-  if (!clips.length && coverUntil <= 0.02) {
+  if (!pictureClips.length && coverUntil <= 0.02) {
     const message = "Add a video or audio clip before exporting.";
     if (args.jobId) {
       await ctx.runMutation(internal.exportJobs.fail, { jobId: args.jobId, error: message });
@@ -1097,11 +1221,12 @@ async function runExportVideo(
   await mkdir(fontCacheDir, { recursive: true });
   const segmentPaths: string[] = [];
   const transitionClips: Array<EditorClip | null> = [];
+  const sourceCache = new Map<string, string>();
 
   try {
     await report("Preparing clips…", 5);
     // coverUntil pads black after the last video so trailing audio/text still render.
-    const segments = timelineSegments(clips, coverUntil);
+    const segments = pictureTimelineSegments(pictureClips, coverUntil);
     if (!segments.length) {
       throw new Error("Nothing to export on the timeline.");
     }
@@ -1123,30 +1248,36 @@ async function runExportVideo(
         );
         transitionClips.push(null);
       } else {
-        const asset = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
-          userId,
-          assetId: segment.clip.assetId as Id<"assets">,
-        });
-        if (!asset?.bunnyPath) {
-          throw new Error(`Missing media for clip "${segment.clip.label}".`);
+        const resolvedLayers: Array<{ clip: ExportPictureClip; sourcePath: string }> = [];
+        for (const layer of segment.layers) {
+          let sourcePath = sourceCache.get(layer.assetId);
+          if (!sourcePath) {
+            const asset = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+              userId,
+              assetId: layer.assetId as Id<"assets">,
+            });
+            if (!asset?.bunnyPath) {
+              throw new Error(`Missing media for clip "${layer.label}".`);
+            }
+            const url = await signBunnyCdnUrl(asset.bunnyPath, expiresUnix);
+            sourcePath = join(tempDir, `source-${layer.assetId}.bin`);
+            await downloadToFile(url, sourcePath);
+            sourceCache.set(layer.assetId, sourcePath);
+          }
+          resolvedLayers.push({ clip: layer, sourcePath });
         }
-        const url = await signBunnyCdnUrl(asset.bunnyPath, expiresUnix);
-        const sourcePath = join(tempDir, `source-${index}.bin`);
-        await downloadToFile(url, sourcePath);
-        await renderClipSegment({
-          sourcePath,
+        await renderStackedPictureSegment({
+          layers: resolvedLayers,
           dest: segmentPath,
-          clip: segment.clip,
+          startTime: segment.startTime,
           duration: segment.duration,
           textClips,
           width: exportWidth,
           height: exportHeight,
           fontCacheDir,
-          muteAudio: Boolean(
-            project.tracks.find((track) => track.id === segment.clip.trackId)?.muted,
-          ),
         });
-        transitionClips.push(segment.clip);
+        // Multi-lane cuts hard-cut; single-track xfade stays future work on stack edges.
+        transitionClips.push(null);
       }
       segmentPaths.push(segmentPath);
       const pct = 5 + Math.round(((index + 1) / Math.max(1, segments.length)) * 50);
