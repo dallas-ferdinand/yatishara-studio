@@ -100,13 +100,21 @@ export function stripDocumentTabsFromOpenSession(userId?: string | null): void {
         !String(parsed.activeTab).startsWith("document:")
           ? parsed.activeTab
           : openTabs[0] || "composer";
+      const prevSnapshots =
+        parsed?.snapshots && typeof parsed.snapshots === "object"
+          ? parsed.snapshots
+          : {};
+      const snapshots: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(prevSnapshots)) {
+        if (!key.startsWith("document:")) snapshots[key] = value;
+      }
       window.localStorage.setItem(
         storageKey,
         JSON.stringify({
           ...parsed,
           openTabs,
           activeTab,
-          snapshots: {},
+          snapshots,
         }),
       );
     } catch {

@@ -1505,12 +1505,13 @@ export function StudioShell({
 
   const lastGenerationModeRef = useRef("image");
 
-  // Never hydrate from unscoped localStorage — wait for Convex user id.
-  const bootTabSession = defaultTabSession();
+  // Boot empty until Convex user id restores the per-account session.
+  // Starting on defaultTabSession() used to flash a composer tab and — on a
+  // fast reload race — persist that singleton over the real open edits/files.
   const [activeFolderId, setActiveFolderId] = useState(null);
-  const [openTabs, setOpenTabs] = useState(() => bootTabSession.openTabs);
+  const [openTabs, setOpenTabs] = useState(() => []);
   const [tabEntrySnapshots, setTabEntrySnapshots] = useState(() => ({}));
-  const [activeTab, setActiveTab] = useState(() => bootTabSession.activeTab);
+  const [activeTab, setActiveTab] = useState(() => "");
   const [navTrail, setNavTrail] = useState(() => []);
   const [viewMode, setViewMode] = useState("grid");
   const [browserFullscreen, setBrowserFullscreen] = useState(false);
@@ -1520,7 +1521,6 @@ export function StudioShell({
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const composerContextsRef = useRef({});
   const composerPersistTimerRef = useRef(0);
-  const initialComposerKey = composerContextKeyForTab(bootTabSession.activeTab);
   const initialComposerCtx = {};
   const [draft, setDraft] = useState(() => initialComposerCtx.draft ?? "");
   const [attachments, setAttachments] = useState(() => initialComposerCtx.attachments ?? []);
@@ -1552,6 +1552,20 @@ export function StudioShell({
   const tabAccountIdRef = useRef(null);
   const skipNextTabPersistRef = useRef(false);
   const lastPersistedTabSessionRef = useRef("");
+  const latestTabSessionRef = useRef({
+    openTabs: [],
+    activeTab: "",
+    activeFolderId: null,
+    navTrail: [],
+    snapshots: {},
+  });
+  latestTabSessionRef.current = {
+    openTabs,
+    activeTab,
+    activeFolderId,
+    navTrail,
+    snapshots: tabEntrySnapshots,
+  };
 
   useEffect(() => {
     if (isVideoEditorPreviewEnabled()) return;
@@ -1590,11 +1604,61 @@ export function StudioShell({
       navTrail,
       snapshots: slimTabEntrySnapshots(tabEntrySnapshots),
     };
+    // Never clobber a richer stored workspace with a boot/empty flash.
+    try {
+      const key = studioOpenTabsKey(userId);
+      const raw = key ? window.localStorage.getItem(key) : null;
+      if (raw) {
+        const prev = JSON.parse(raw);
+        const prevTabs = Array.isArray(prev?.openTabs) ? prev.openTabs : [];
+        if (
+          prevTabs.length > 1 &&
+          slimmed.openTabs.length <= 1 &&
+          prevTabs.length > slimmed.openTabs.length
+        ) {
+          const justReloaded = Boolean(
+            sessionStorage.getItem("yatishara-studio-reloaded-build"),
+          );
+          if (justReloaded || slimmed.openTabs.length === 0) {
+            return;
+          }
+        }
+      }
+    } catch {
+      /* ignore */
+    }
     const serialized = JSON.stringify(slimmed);
     if (serialized === lastPersistedTabSessionRef.current) return;
     lastPersistedTabSessionRef.current = serialized;
     writePersistedTabSession(slimmed, userId);
   }, [openTabs, activeTab, activeFolderId, navTrail, tabEntrySnapshots]);
+
+  // Soft update / beforeunload: flush the live session so reload cannot race
+  // past an in-memory-only tab open.
+  useEffect(() => {
+    const flush = () => {
+      const userId = tabAccountIdRef.current;
+      if (!userId || !tabSessionReadyRef.current) return;
+      const live = latestTabSessionRef.current;
+      writePersistedTabSession(
+        {
+          openTabs: live.openTabs,
+          activeTab: live.activeTab,
+          activeFolderId: live.activeFolderId,
+          navTrail: live.navTrail,
+          snapshots: slimTabEntrySnapshots(live.snapshots),
+        },
+        userId,
+      );
+    };
+    const onFlush = () => flush();
+    window.addEventListener("studio:flush-tab-session", onFlush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("studio:flush-tab-session", onFlush);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, []);
 
   const [aspectRatio, setAspectRatio] = useState(() => initialComposerCtx.aspectRatio ?? "16:9");
   const [imageResolution, setImageResolution] = useState(
@@ -1993,16 +2057,11 @@ export function StudioShell({
   const openMobileSectionRef = useRef(null);
   const deferMobileFilesForComposerKeyboardRef = useRef(null);
   const restoreMobileFilesAfterKeyboardRef = useRef(null);
-  const composerKeyRef = useRef(initialComposerKey);
+  const composerKeyRef = useRef(COMPOSER_TAB);
   const composerTabIndexRef = useRef(0);
   const agentTabIndexRef = useRef(0);
   const createTabIndexRef = useRef(0);
-  const lastChatTabRef = useRef(
-    (() => {
-      const tab = bootTabSession.activeTab;
-      return tab.startsWith("composer:") || tab.startsWith("thread:") ? tab : COMPOSER_TAB;
-    })(),
-  );
+  const lastChatTabRef = useRef(COMPOSER_TAB);
   const folderByIdRef = useRef(new Map());
   const currentEntriesCacheRef = useRef(new Map());
   const lastRootEntriesRef = useRef(null);
@@ -2036,6 +2095,13 @@ export function StudioShell({
     setActiveFolderId(session.activeFolderId);
     setNavTrail(session.navTrail);
     setTabEntrySnapshots(session.snapshots || {});
+    if (
+      typeof session.activeTab === "string" &&
+      (session.activeTab.startsWith("composer:") ||
+        session.activeTab.startsWith("thread:"))
+    ) {
+      lastChatTabRef.current = session.activeTab;
+    }
     composerContextsRef.current = readPersistedComposerContexts(userId);
     const ctxKey = composerContextKeyForTab(session.activeTab);
     const ctx = composerContextsRef.current[ctxKey] ?? {};

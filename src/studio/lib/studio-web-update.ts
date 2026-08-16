@@ -88,6 +88,12 @@ export function isStudioUpdateDismissed(buildId: string): boolean {
  */
 export async function applyStudioUpdate(buildId?: string): Promise<void> {
   try {
+    // Ask StudioShell to sync open tabs/edits to localStorage before we unload.
+    window.dispatchEvent(new Event("studio:flush-tab-session"));
+  } catch {
+    /* ignore */
+  }
+  try {
     if ("serviceWorker" in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map((r) => r.unregister()));

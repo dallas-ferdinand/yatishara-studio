@@ -72,6 +72,8 @@ export function getDeskBuildGuardInlineScript() {
             keys.push(key);
           }
         }
+        // Explicit Reset only — never rely on the startsWith sweep alone for
+        // open-tabs (scoped keys must clear on Reset; listed for clarity).
         keys.push(
           "yatishara-studio-open-tabs-v1",
           "yatishara-studio-main-panel-sizes",
