@@ -1,7 +1,10 @@
 /**
  * Studio live update — poll /version.json vs the build baked into this tab.
  * Apply keeps workspace tabs/local prefs; only drops SW + Cache Storage, then reloads.
+ * Preview/local hosts never show the Update bar (HMR owns refresh there).
  */
+
+import { isStudioPreviewHost } from "@/studio/lib/studio-preview-host";
 
 const DISMISS_KEY = "yatishara-studio-update-dismiss";
 const BUILD_KEY = "yatishara-studio-build";
@@ -47,6 +50,7 @@ export async function fetchStudioVersionJson(): Promise<{
 }
 
 export async function checkStudioUpdate(): Promise<StudioUpdateOffer | null> {
+  if (typeof window !== "undefined" && isStudioPreviewHost()) return null;
   const localId = getRunningStudioBuildId();
   if (!localId || localId === "dev") return null;
   let remote: Awaited<ReturnType<typeof fetchStudioVersionJson>>;
@@ -151,6 +155,10 @@ export function startStudioUpdatePoll(
   onUpdate: (offer: StudioUpdateOffer | null) => void,
 ): void {
   stopStudioUpdatePoll();
+  if (typeof window !== "undefined" && isStudioPreviewHost()) {
+    onUpdate(null);
+    return;
+  }
   const tick = async () => {
     if (typeof document !== "undefined" && document.hidden) return;
     try {

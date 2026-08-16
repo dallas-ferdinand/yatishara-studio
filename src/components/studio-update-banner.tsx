@@ -7,13 +7,15 @@ import {
   stopStudioUpdatePoll,
   type StudioUpdateOffer,
 } from "@/studio/lib/studio-web-update";
+import { isStudioPreviewHost } from "@/studio/lib/studio-preview-host";
 
-/** 32px chrome head — click anywhere to soft-reload. */
+/** 32px chrome head — click anywhere to soft-reload. Hidden on preview/local. */
 export function StudioUpdateBanner() {
   const [offer, setOffer] = useState<StudioUpdateOffer | null>(null);
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
+    if (isStudioPreviewHost()) return;
     startStudioUpdatePoll((next) => setOffer(next));
     return () => stopStudioUpdatePoll();
   }, []);
