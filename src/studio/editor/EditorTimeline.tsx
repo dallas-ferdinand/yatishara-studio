@@ -53,6 +53,9 @@ import {
   TRACK_INSERT_HIT_PX,
   TRACK_RAIL_WIDTH,
   VIDEO_TRACK_HEIGHT,
+  clampTimelinePps,
+  MAX_PPS,
+  MIN_PPS,
   stepTimelineZoom,
 } from "./types";
 
@@ -1157,6 +1160,24 @@ export function EditorTransportBar({
   overlaySnapEnabled = true,
   onOverlaySnapChange,
 }) {
+  const [zoomDraft, setZoomDraft] = useState(() =>
+    String(Math.round(pixelsPerSecond * 100) / 100),
+  );
+  useEffect(() => {
+    setZoomDraft(String(Math.round(pixelsPerSecond * 100) / 100));
+  }, [pixelsPerSecond]);
+
+  const commitZoomDraft = () => {
+    const parsed = Number(String(zoomDraft).replace(/,/g, "").trim());
+    if (!Number.isFinite(parsed)) {
+      setZoomDraft(String(Math.round(pixelsPerSecond * 100) / 100));
+      return;
+    }
+    const next = clampTimelinePps(parsed);
+    setZoomDraft(String(Math.round(next * 100) / 100));
+    if (next !== pixelsPerSecond) onZoom(next);
+  };
+
   return (
     <div className="studio-editor-transport">
       <div className="studio-editor-transport-left">
@@ -1217,6 +1238,30 @@ export function EditorTransportBar({
           <button type="button" aria-label="Zoom out" onClick={() => onZoom(stepTimelineZoom(pixelsPerSecond, 0.9))}>
             <ZoomOut size={ICON} aria-hidden="true" />
           </button>
+          <input
+            type="number"
+            className="studio-editor-zoom-input"
+            inputMode="decimal"
+            min={MIN_PPS}
+            max={MAX_PPS}
+            step="any"
+            value={zoomDraft}
+            aria-label="Timeline zoom (pixels per second)"
+            title={`Timeline zoom — pixels per second (${MIN_PPS}–${MAX_PPS})`}
+            onChange={(event) => setZoomDraft(event.target.value)}
+            onBlur={commitZoomDraft}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitZoomDraft();
+                event.currentTarget.blur();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                setZoomDraft(String(Math.round(pixelsPerSecond * 100) / 100));
+                event.currentTarget.blur();
+              }
+            }}
+          />
           <button type="button" aria-label="Zoom in" onClick={() => onZoom(stepTimelineZoom(pixelsPerSecond, 1.12))}>
             <ZoomIn size={ICON} aria-hidden="true" />
           </button>
@@ -2046,7 +2091,7 @@ export function EditorTimeline({
             );
             const insertActive = lanePreview?.index === trackIndex;
             return (
-              <div key={track.id}>
+              <div key={track.id} className="studio-editor-track-block">
                 <div
                   ref={(node) => {
                     if (node) insertZoneRefs.current.set(trackIndex, node);
@@ -2234,6 +2279,7 @@ export function EditorTimeline({
             );
           })}
           <div
+            className="studio-editor-track-block"
             ref={(node) => {
               if (node) insertZoneRefs.current.set(project.tracks.length, node);
               else insertZoneRefs.current.delete(project.tracks.length);

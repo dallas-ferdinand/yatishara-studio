@@ -384,7 +384,6 @@
   font-size: 0.72rem;
 }
 
-
 .studio-editor-inspector-thumb {
   position: relative;
   display: grid;
@@ -2788,7 +2787,37 @@
 
 .studio-editor-zoom {
   display: inline-flex;
+  align-items: center;
   gap: 0;
+}
+
+.studio-editor-zoom-input {
+  box-sizing: border-box;
+  width: 3.25rem;
+  height: 26px;
+  margin: 0 2px;
+  padding: 0 4px;
+  border: 1px solid var(--mos-border);
+  border-radius: 6px;
+  background: var(--mos-bg);
+  color: var(--mos-text);
+  font: inherit;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.studio-editor-zoom-input::-webkit-outer-spin-button,
+.studio-editor-zoom-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.studio-editor-zoom-input:focus {
+  outline: none;
+  border-color: var(--cursor-accent, var(--mos-border-strong, var(--mos-border)));
 }
 
 .studio-editor-export-btn {
@@ -2840,8 +2869,9 @@
   overflow: auto;
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
+  /* Block, not flex: a stretched flex canvas gives lanes a definite height
+     smaller than their content, so extra rows shrink and the middle one
+     disappears under the first and last. */
   overscroll-behavior: contain;
   background: var(--mos-panel, #f5f5f7);
 }
@@ -2850,11 +2880,17 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  flex: 1 0 auto;
-  /* Fill the timeline viewport so the scrub line reaches the bottom
-     even when there are only a few tracks. */
+  /* Size to lanes; min-height fills the viewport so the scrub line still
+     reaches the bottom when there are only a few tracks. */
   min-height: 100%;
   box-sizing: border-box;
+}
+
+/* One insert-slot + row. Never shrink — extra lanes must scroll, not overlap. */
+.studio-editor-track-block {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Dead space under the last lane is still timeline (marquee/scrub) but looks blank. */
@@ -2886,6 +2922,7 @@
 .studio-editor-ruler {
   position: sticky;
   top: 0;
+  flex-shrink: 0;
   z-index: 6;
   border-bottom: none;
   cursor: var(--studio-cursor-resize-x, ew-resize);
@@ -2934,6 +2971,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: stretch;
+  flex: 0 0 auto;
   border-bottom: none;
   background: var(--mos-panel, #f5f5f7);
   position: relative;

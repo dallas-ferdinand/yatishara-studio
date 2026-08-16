@@ -217,6 +217,122 @@ describe("add_text_clip main lane", () => {
   });
 });
 
+describe("stacked overlay lanes", () => {
+  it("keeps three video lanes after two insert-line drops", () => {
+    let state = createInitialState(
+      createEmptyProject({ name: "Test", folderId: "folder1" }),
+    );
+    state = reducer(state, {
+      type: "add_clip",
+      clip: {
+        assetId: "v1",
+        trackId: "track-v1",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 2,
+        sourceDuration: 2,
+        label: "Main",
+        kind: "video",
+      },
+    });
+    state = reducer(state, {
+      type: "ripple_add_clip",
+      clip: {
+        assetId: "v2",
+        trackId: "",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 2,
+        sourceDuration: 2,
+        label: "Overlay 2",
+        kind: "video",
+      },
+      centerTime: 0,
+      insertTrackAt: 1,
+    });
+    state = reducer(state, {
+      type: "ripple_add_clip",
+      clip: {
+        assetId: "v3",
+        trackId: "",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 2,
+        sourceDuration: 2,
+        label: "Overlay 3",
+        kind: "video",
+      },
+      centerTime: 0,
+      insertTrackAt: 2,
+    });
+    expect(visibleTracks(state.project).filter((t) => t.kind === "video").map((t) => t.id)).toEqual([
+      "track-v1",
+      "track-v2",
+      "track-v3",
+    ]);
+    expect(state.project.clips.map((c) => c.trackId).sort()).toEqual([
+      "track-v1",
+      "track-v2",
+      "track-v3",
+    ]);
+  });
+
+  it("keeps three audio lanes after two insert-line drops", () => {
+    let state = createInitialState(
+      createEmptyProject({ name: "Test", folderId: "folder1" }),
+    );
+    state = reducer(state, {
+      type: "add_clip",
+      clip: {
+        assetId: "a1",
+        trackId: "track-audio",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 2,
+        sourceDuration: 2,
+        label: "Bed 1",
+        kind: "audio",
+      },
+    });
+    const audioIdx = state.project.tracks.findIndex((t) => t.kind === "audio");
+    state = reducer(state, {
+      type: "ripple_add_clip",
+      clip: {
+        assetId: "a2",
+        trackId: "",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 2,
+        sourceDuration: 2,
+        label: "Bed 2",
+        kind: "audio",
+      },
+      centerTime: 0,
+      insertTrackAt: audioIdx + 1,
+    });
+    state = reducer(state, {
+      type: "ripple_add_clip",
+      clip: {
+        assetId: "a3",
+        trackId: "",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 2,
+        sourceDuration: 2,
+        label: "Bed 3",
+        kind: "audio",
+      },
+      centerTime: 0,
+      insertTrackAt: state.project.tracks.length,
+    });
+    expect(visibleTracks(state.project).filter((t) => t.kind === "audio").map((t) => t.id)).toEqual([
+      "track-audio",
+      "track-audio-2",
+      "track-audio-3",
+    ]);
+  });
+});
+
 describe("reorder_tracks cross-kind", () => {
   it("lets text move below then above video and stays there in visibleTracks", () => {
     let state = createInitialState(
