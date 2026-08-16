@@ -82,9 +82,26 @@ export function isStudioUpdateDismissed(buildId: string): boolean {
   }
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | void> {
+  return new Promise((resolve) => {
+    const t = window.setTimeout(() => resolve(undefined), ms);
+    promise.then(
+      (v) => {
+        window.clearTimeout(t);
+        resolve(v);
+      },
+      () => {
+        window.clearTimeout(t);
+        resolve(undefined);
+      },
+    );
+  });
+}
+
 /**
  * Soft apply: keep open tabs / prefs in localStorage. Purge SW + HTTP caches
  * so the next load gets new chunks, then reload the shell.
+ * SW/cache cleanup is time-boxed so the banner cannot stick on "Updating…".
  */
 export async function applyStudioUpdate(buildId?: string): Promise<void> {
   try {
@@ -94,14 +111,19 @@ export async function applyStudioUpdate(buildId?: string): Promise<void> {
     /* ignore */
   }
   try {
-    if ("serviceWorker" in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map((r) => r.unregister()));
-    }
-    if ("caches" in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
-    }
+    await withTimeout(
+      (async () => {
+        if ("serviceWorker" in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.allSettled(regs.map((r) => r.unregister()));
+        }
+        if ("caches" in window) {
+          const keys = await caches.keys();
+          await Promise.allSettled(keys.map((k) => caches.delete(k)));
+        }
+      })(),
+      2500,
+    );
   } catch {
     /* ignore */
   }
@@ -114,7 +136,15 @@ export async function applyStudioUpdate(buildId?: string): Promise<void> {
   }
   // Full document reload is required for new Next chunks after deploy —
   // workspace tabs restore from persisted session (we do not clear them).
-  window.location.reload();
+  // Cache-bust the document URL so a sticky HTML shell cannot keep the
+  // Update banner looping against a newer /version.json.
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("_ysFresh", String(Date.now()));
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
 }
 
 export function startStudioUpdatePoll(

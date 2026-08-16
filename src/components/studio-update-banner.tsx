@@ -29,7 +29,11 @@ export function StudioUpdateBanner() {
       onClick={() => {
         if (applying) return;
         setApplying(true);
-        void applyStudioUpdate(offer.buildId);
+        void applyStudioUpdate(offer.buildId).finally(() => {
+          // Reload should unload this tab; if purge hung past the timeout
+          // and navigation failed, unlock so Dallas can click again.
+          window.setTimeout(() => setApplying(false), 4000);
+        });
       }}
     >
       {applying ? "Updating…" : "Update"}

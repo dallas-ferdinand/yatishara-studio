@@ -132,23 +132,56 @@ NEXT_PUBLIC_CONVEX_URL="$(resolve_public NEXT_PUBLIC_CONVEX_URL)"
 NEXT_PUBLIC_CONVEX_SITE_URL="$(resolve_public NEXT_PUBLIC_CONVEX_SITE_URL)"
 NEXT_PUBLIC_STUDIO_BG_CDN="$(resolve_public NEXT_PUBLIC_STUDIO_BG_CDN)"
 NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY="$(resolve_public NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY)"
-NEXT_PUBLIC_DESK_BUILD="fast-${SHA}-$(date -u +%Y%m%d%H%M%S)"
 
 [[ -n "$NEXT_PUBLIC_CONVEX_URL" ]] || die "NEXT_PUBLIC_CONVEX_URL unresolved"
 [[ -n "$NEXT_PUBLIC_CONVEX_SITE_URL" ]] || die "NEXT_PUBLIC_CONVEX_SITE_URL unresolved"
 
-log "NEXT_PUBLIC_DESK_BUILD=${NEXT_PUBLIC_DESK_BUILD}"
+# Read the build id actually baked into Next HTML (x-studio-build meta).
+# version.json MUST match this or the Update banner loops forever (reload → still "new").
+baked_studio_build_id() {
+  local html=""
+  for html in \
+    "$ROOT/.next/server/app/index.html" \
+    "$ROOT/.next/standalone/.next/server/app/index.html"
+  do
+    [[ -f "$html" ]] || continue
+    local id
+    id="$(sed -n 's/.*name="x-studio-build" content="\([^"]*\)".*/\1/p' "$html" | head -n1 | tr -d '[:space:]')"
+    if [[ -n "$id" && "$id" != "dev" ]]; then
+      printf '%s' "$id"
+      return 0
+    fi
+  done
+  return 1
+}
+
 STARTED_AT="$(date +%s)"
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
+  NEXT_PUBLIC_DESK_BUILD="fast-${SHA}-$(date -u +%Y%m%d%H%M%S)"
+  log "NEXT_PUBLIC_DESK_BUILD=${NEXT_PUBLIC_DESK_BUILD}"
   log "next build (niced — low priority vs live traffic)…"
   nice -n 19 ionice -c3 npm run build
 else
-  log "skipping next build (--skip-build)"
+  # --skip-build reuses prior .next HTML — never mint a fresh timestamp or
+  # version.json drifts from x-studio-build and the Update bar sticks.
+  NEXT_PUBLIC_DESK_BUILD="$(baked_studio_build_id || true)"
+  [[ -n "$NEXT_PUBLIC_DESK_BUILD" ]] || die "--skip-build needs a prior next build (no x-studio-build in .next)"
+  log "skipping next build (--skip-build); reusing baked NEXT_PUBLIC_DESK_BUILD=${NEXT_PUBLIC_DESK_BUILD}"
 fi
 
 [[ -f .next/standalone/server.js ]] || die "missing .next/standalone/server.js — build failed or output:standalone off"
 [[ -d .next/static ]] || die "missing .next/static"
+
+# Lock version.json to whatever Next actually embedded (guards package.json post-write drift).
+BAKED_BUILD="$(baked_studio_build_id || true)"
+if [[ -n "$BAKED_BUILD" ]]; then
+  if [[ "$BAKED_BUILD" != "$NEXT_PUBLIC_DESK_BUILD" ]]; then
+    log "aligning NEXT_PUBLIC_DESK_BUILD to baked HTML meta (${NEXT_PUBLIC_DESK_BUILD} → ${BAKED_BUILD})"
+  fi
+  NEXT_PUBLIC_DESK_BUILD="$BAKED_BUILD"
+fi
+[[ -n "$NEXT_PUBLIC_DESK_BUILD" ]] || die "empty NEXT_PUBLIC_DESK_BUILD after build"
 
 STAGE="$(mktemp -d /tmp/studio-fast-XXXXXX)"
 ENV_FILE=""
@@ -171,6 +204,8 @@ if [[ -d public ]]; then
 fi
 # Stamp deploy build id so open tabs can poll /version.json for updates.
 NEXT_PUBLIC_DESK_BUILD="$NEXT_PUBLIC_DESK_BUILD" node "$ROOT/scripts/write-studio-version.mjs" --out="$STAGE/public"
+# Keep repo public/ in sync so a later --skip-build cannot copy a stale stamp.
+NEXT_PUBLIC_DESK_BUILD="$NEXT_PUBLIC_DESK_BUILD" node "$ROOT/scripts/write-studio-version.mjs" --out="$ROOT/public"
 cp "$ROOT/Dockerfile.fast" "$STAGE/Dockerfile"
 
 log "docker build ${LOCAL_IMAGE} (niced)"
