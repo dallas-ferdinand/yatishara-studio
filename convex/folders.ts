@@ -70,8 +70,13 @@ const folderWithPeeksReturn = v.object({
 const PEEK_LIMIT = 3;
 /** Max folders visited per peek (BFS) — finds nested media without deep recursion. */
 const MAX_PEEK_FOLDER_VISITS = 8;
-/** Cap signed peeks per listWithPeeks call — more folders get empty peeks to stay under 1s. */
-const MAX_SIGNED_PEEK_FOLDERS = 10;
+/**
+ * Cap CDN-signed peeks per listWithPeeks call (1s query budget).
+ * System folders never show peek stacks in the UI — do not spend this budget on them.
+ * Remaining non-system folders still get unsigned peeks (icon/label cards) so new
+ * root projects are not stuck on the empty folder glyph.
+ */
+const MAX_SIGNED_PEEK_FOLDERS = 16;
 
 type PeekCandidate = {
   kind: "image" | "video" | "audio" | "document" | "element" | "file";
@@ -404,19 +409,42 @@ export const listWithPeeks = authedQuery({
       ? folders
       : folders.filter((folder) => !folder.deletedAt);
 
-    // Sign peeks for a bounded prefix only — signing every folder BFS blew the 1s budget.
-    const signedCount = args.expiresUnix
-      ? Math.min(visibleFolders.length, MAX_SIGNED_PEEK_FOLDERS)
-      : 0;
+    // Prefer recently updated *user* folders for CDN signing. Collect order used to
+    // burn the budget on Messages/Purchased/My Public/Shared + the oldest projects,
+    // so new root folders (Course Videos, etc.) got empty peeks forever.
+    const signedFolderIds = new Set<string>();
+    if (args.expiresUnix) {
+      const signTargets = visibleFolders
+        .filter((folder) => !folder.systemKind)
+        .sort(
+          (a, b) =>
+            b.updatedAt - a.updatedAt ||
+            b._creationTime - a._creationTime ||
+            a.name.localeCompare(b.name),
+        )
+        .slice(0, MAX_SIGNED_PEEK_FOLDERS);
+      for (const folder of signTargets) {
+        signedFolderIds.add(folder._id);
+      }
+    }
 
     return await Promise.all(
-      visibleFolders.map(async (folder, index) => ({
-        ...folder,
-        peekItems:
-          index < signedCount
-            ? await collectFolderPeekItems(ctx, ctx.user._id, folder._id, args.expiresUnix)
-            : [],
-      })),
+      visibleFolders.map(async (folder) => {
+        if (folder.systemKind) {
+          return { ...folder, peekItems: [] };
+        }
+        const shouldSign = signedFolderIds.has(folder._id);
+        return {
+          ...folder,
+          peekItems: await collectFolderPeekItems(
+            ctx,
+            ctx.user._id,
+            folder._id,
+            // Unsigned overflow still builds the 3-card stack (icons/labels).
+            shouldSign ? args.expiresUnix : undefined,
+          ),
+        };
+      }),
     );
   },
 });
