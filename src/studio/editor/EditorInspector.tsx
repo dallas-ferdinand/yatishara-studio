@@ -616,32 +616,39 @@ function ExportPanel({
         />
       </header>
 
-      <div className="studio-editor-inspector-body">
-        <InspectorSection title="Filename">
-          <label className="studio-editor-field-full studio-editor-export-filename">
-            <span className="sr-only">Export filename</span>
-            <span className="studio-editor-export-filename-row">
-              <input
-                type="text"
-                value={nameValue}
-                placeholder={namePlaceholder}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  if (exportKind === "studio") {
-                    onUpdateProject?.({ name: next });
-                  } else {
-                    onFilenameChange(next);
-                  }
-                }}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <span className="studio-editor-export-filename-ext" aria-hidden="true">
-                {extension}
+      <div className="studio-editor-inspector-body studio-editor-export-body">
+        <div className="studio-editor-export-stack">
+        <section className="studio-editor-export-card">
+          <div className="studio-editor-export-card-head">
+            <h4>Filename</h4>
+          </div>
+          <div className="studio-editor-export-card-body">
+            <label className="studio-editor-export-filename">
+              <span className="sr-only">Export filename</span>
+              <span className="studio-editor-export-filename-row">
+                <input
+                  type="text"
+                  className="cursor-input"
+                  value={nameValue}
+                  placeholder={namePlaceholder}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    if (exportKind === "studio") {
+                      onUpdateProject?.({ name: next });
+                    } else {
+                      onFilenameChange(next);
+                    }
+                  }}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <span className="studio-editor-export-filename-ext" aria-hidden="true">
+                  {extension}
+                </span>
               </span>
-            </span>
-          </label>
-        </InspectorSection>
+            </label>
+          </div>
+        </section>
 
         {exporting || exportError || exportResultName ? (
           <div className="studio-editor-export-progress" aria-live="polite">
@@ -666,126 +673,157 @@ function ExportPanel({
           </div>
         ) : null}
 
-        <InspectorSection title="Type">
-          <div className="studio-editor-chip-row studio-editor-export-chips" role="group" aria-label="Export type">
-            {EXPORT_KIND_PRESETS.map((preset) => {
-              const active = exportKind === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={`studio-editor-chip${active ? " is-active" : ""}`}
-                  aria-pressed={active}
-                  title={preset.hint}
-                  onClick={() => onExportKindChange(preset.id)}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
+        <section className="studio-editor-export-card">
+          <div className="studio-editor-export-card-head">
+            <h4>Type</h4>
           </div>
-        </InspectorSection>
-
-        {exportKind === "video" ? (
-          <>
-            <InspectorSection title="Format">
-              <div className="studio-editor-chip-row studio-editor-export-chips" role="group" aria-label="Video format">
-                {EXPORT_VIDEO_FORMAT_PRESETS.map((preset) => {
-                  const active = videoFormat === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      className={`studio-editor-chip${active ? " is-active" : ""}`}
-                      aria-pressed={active}
-                      onClick={() => onVideoFormatChange?.(preset.id)}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </InspectorSection>
-
-            <InspectorSection
-              title="Resolution"
-              meta={`${size.width} × ${size.height}`}
-            >
-              <div className="studio-editor-chip-row studio-editor-export-chips" role="group" aria-label="Export resolution">
-                {EXPORT_RESOLUTION_PRESETS.map((preset) => {
-                  const active = resolution === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      className={`studio-editor-chip${active ? " is-active" : ""}`}
-                      aria-pressed={active}
-                      title={preset.label}
-                      onClick={() => onResolutionChange(preset.id)}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </InspectorSection>
-
-            <InspectorSection title="Frame">
-              <div className="studio-editor-frame-presets" role="group" aria-label="Frame ratio">
-                {FRAME_RATIO_PRESETS.map((preset) => {
-                  const active = frameRatio === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      className={`studio-editor-frame-preset${active ? " is-active" : ""}`}
-                      aria-pressed={active}
-                      title={`${preset.label} ${preset.shortLabel}`}
-                      onClick={() => onUpdateProject?.({ frameRatio: preset.id })}
-                    >
-                      <span className="studio-editor-frame-preset-glyph">
-                        <StudioRatioGlyph ratio={preset.id} />
-                      </span>
-                      <span className="studio-editor-frame-preset-label">{preset.shortLabel}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </InspectorSection>
-          </>
-        ) : null}
-
-        {exportKind === "audio" ? (
-          <InspectorSection title="Format">
-            <div className="studio-editor-chip-row studio-editor-export-chips" role="group" aria-label="Audio format">
-              {EXPORT_AUDIO_FORMAT_PRESETS.map((preset) => {
-                const active = audioFormat === preset.id;
+          <div className="studio-editor-export-card-body">
+            <div className="studio-editor-export-pills" role="group" aria-label="Export type">
+              {EXPORT_KIND_PRESETS.map((preset) => {
+                const active = exportKind === preset.id;
                 return (
                   <button
                     key={preset.id}
                     type="button"
-                    className={`studio-editor-chip${active ? " is-active" : ""}`}
+                    className={`studio-settings-pill${active ? " is-active" : ""}`}
                     aria-pressed={active}
-                    onClick={() => onAudioFormatChange?.(preset.id)}
+                    title={preset.hint}
+                    onClick={() => onExportKindChange(preset.id)}
                   >
                     {preset.label}
                   </button>
                 );
               })}
             </div>
-          </InspectorSection>
+          </div>
+        </section>
+
+        {exportKind === "video" ? (
+          <>
+            <section className="studio-editor-export-card">
+              <div className="studio-editor-export-card-head">
+                <h4>Format</h4>
+              </div>
+              <div className="studio-editor-export-card-body">
+                <div className="studio-editor-export-pills" role="group" aria-label="Video format">
+                  {EXPORT_VIDEO_FORMAT_PRESETS.map((preset) => {
+                    const active = videoFormat === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className={`studio-settings-pill${active ? " is-active" : ""}`}
+                        aria-pressed={active}
+                        onClick={() => onVideoFormatChange?.(preset.id)}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            <section className="studio-editor-export-card">
+              <div className="studio-editor-export-card-head">
+                <h4>Resolution</h4>
+                <span className="studio-editor-export-card-meta">
+                  {size.width} × {size.height}
+                </span>
+              </div>
+              <div className="studio-editor-export-card-body">
+                <div className="studio-editor-export-pills" role="group" aria-label="Export resolution">
+                  {EXPORT_RESOLUTION_PRESETS.map((preset) => {
+                    const active = resolution === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className={`studio-settings-pill${active ? " is-active" : ""}`}
+                        aria-pressed={active}
+                        title={preset.label}
+                        onClick={() => onResolutionChange(preset.id)}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            <section className="studio-editor-export-card">
+              <div className="studio-editor-export-card-head">
+                <h4>Frame</h4>
+              </div>
+              <div className="studio-editor-export-card-body">
+                <div className="studio-editor-frame-presets" role="group" aria-label="Frame ratio">
+                  {FRAME_RATIO_PRESETS.map((preset) => {
+                    const active = frameRatio === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className={`studio-editor-frame-preset${active ? " is-active" : ""}`}
+                        aria-pressed={active}
+                        title={`${preset.label} ${preset.shortLabel}`}
+                        onClick={() => onUpdateProject?.({ frameRatio: preset.id })}
+                      >
+                        <span className="studio-editor-frame-preset-glyph">
+                          <StudioRatioGlyph ratio={preset.id} />
+                        </span>
+                        <span className="studio-editor-frame-preset-label">{preset.shortLabel}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          </>
+        ) : null}
+
+        {exportKind === "audio" ? (
+          <section className="studio-editor-export-card">
+            <div className="studio-editor-export-card-head">
+              <h4>Format</h4>
+            </div>
+            <div className="studio-editor-export-card-body">
+              <div className="studio-editor-export-pills" role="group" aria-label="Audio format">
+                {EXPORT_AUDIO_FORMAT_PRESETS.map((preset) => {
+                  const active = audioFormat === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`studio-settings-pill${active ? " is-active" : ""}`}
+                      aria-pressed={active}
+                      onClick={() => onAudioFormatChange?.(preset.id)}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
         ) : null}
 
         {exportKind === "studio" ? (
-          <InspectorSection
-            title="Package"
-            hint="Zip with timeline + original clip media. Anyone can unzip it."
-          >
-            <p className="studio-editor-export-size">
-              Saves as {(nameValue.trim() || namePlaceholder)}.studio
-            </p>
-          </InspectorSection>
+          <section className="studio-editor-export-card">
+            <div className="studio-editor-export-card-head">
+              <h4>Package</h4>
+            </div>
+            <div className="studio-editor-export-card-body">
+              <p className="studio-editor-export-size">
+                Saves as {(nameValue.trim() || namePlaceholder)}.studio
+              </p>
+              <p className="studio-editor-export-note">
+                Zip with timeline + original clip media. Anyone can unzip it.
+              </p>
+            </div>
+          </section>
         ) : null}
+        </div>
       </div>
     </>
   );
