@@ -2209,45 +2209,57 @@
 
 
 .studio-editor-text-section {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  /* Span body width so the tab strip can full-bleed like Files chrome. */
+  margin: 0 -10px;
+  width: calc(100% + 20px);
+  padding: 0 10px;
+  min-width: 0;
 }
 
-/* Text Edit / Presets — full-bleed under header; tight strip. */
+/* Text Edit / Presets — same strip as Files “Your files / Asset library”. */
+.studio-editor-inspector-body:has(.studio-editor-text-tabs) {
+  padding-top: 0;
+}
+
 .studio-editor-text-tabs {
   display: flex;
   align-items: center;
   gap: 4px;
   box-sizing: border-box;
-  /* Cancel inspector-body padding so the divider is edge-to-edge. */
-  margin: -10px -10px 0;
+  flex: 0 0 auto;
+  /* Bleed into body side padding; sit flush under panel head. */
+  margin: 0 -10px 0;
   width: calc(100% + 20px);
   max-width: none;
-  padding: 2px 10px;
-  min-height: 28px;
-  height: 28px;
-  max-height: 28px;
+  padding: 0 8px;
+  min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border)));
   background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel, #f5f5f7)));
   position: sticky;
   top: 0;
   z-index: 3;
-  flex: 0 0 auto;
 }
 
 .studio-editor-text-tab {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   flex: 1 1 0;
   min-width: 0;
-  min-height: 22px;
-  height: 22px;
+  min-height: 24px;
+  height: 24px;
   margin: 0;
-  padding: 0 8px;
-  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft, var(--mos-border)));
+  padding: 0 10px;
+  border: 1px solid transparent;
   border-radius: var(--cursor-radius-pill, 999px);
-  background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel)));
+  background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
   font: inherit;
   font-size: 11px;
@@ -2255,21 +2267,25 @@
   cursor: pointer;
   box-shadow: none;
   white-space: nowrap;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease;
 }
 
 .studio-editor-text-tab > svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   flex: 0 0 auto;
 }
 
 .studio-editor-text-tab:hover {
-  color: var(--color-cursor-text, var(--mos-text));
+  color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
 .studio-editor-text-tab.is-active {
-  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 42%, var(--color-cursor-border, var(--mos-border)));
-  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 12%, transparent);
+  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 42%, var(--color-cursor-border-soft, var(--mos-border)));
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 14%, transparent);
   color: var(--color-cursor-text-bright, var(--mos-text));
   box-shadow: none;
 }
