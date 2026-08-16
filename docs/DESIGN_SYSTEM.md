@@ -730,6 +730,17 @@ blue, review/amber for receipts, soft rose for failed (never harsh bordered red)
 
 ---
 
+## 8b. Agent chat tools
+
+Live turn: each tool call is its own **vertical** row (icon + label), same stack as
+messages — never a wrapping chip strip.
+
+After the turn finishes: collapse the list into one muted line, **Worked 2.5 mins**
+(seconds under a minute). Clicking that text drops the full vertical tool list.
+Do not collapse while the turn is still running.
+
+---
+
 ## Memory
 
 These are mirrored as MercuryOS pinned/namespaced decisions (`namespace: yatishara-studio`).
@@ -748,4 +759,5 @@ Update memory when you change a rule here:
 - **807** — Landing auth embeds in content; dark Sign in pill; Continue = flat dark (not 3D green).
 - Button/chip heights — profile compact actions **28px** / chrome heads **32px** / form primaries 34–36px (`docs/DESIGN_SYSTEM.md` §5b).
 - **668** (pinned) — Chrome + inline panel heads = `--cursor-head-h` 32px (DM New label, Offers steps, etc.); close 24px.
+- **1388** — Agent tools: vertical rows while live; after the turn, one **Worked 2.5 mins** disclosure (not summary chips).
 - **Preview load quality** — Video editor preview header center `CursorSelect` (40/60/80/100%, default **60%**), same plate greys as zoom controls. ≤60% loads 720 edit proxy; ≥80% prefers 1080 proxy. Also drives opened-image Bunny `signedReadUrl.quality`. Downloads / generation stay at 100%. Persisted `yatishara-studio-preview-load-quality`.

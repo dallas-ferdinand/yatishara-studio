@@ -351,6 +351,7 @@ export const listForThread = authedQuery({
       model: v.optional(v.string()),
       planJson: v.optional(v.string()),
       createdAt: v.number(),
+      startedAt: v.optional(v.number()),
       finishedAt: v.optional(v.number()),
     }),
   ),
@@ -374,6 +375,7 @@ export const listForThread = authedQuery({
       model: row.model,
       planJson: row.planJson,
       createdAt: row.createdAt,
+      startedAt: row.startedAt,
       finishedAt: row.finishedAt,
     }));
   },

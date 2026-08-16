@@ -45,6 +45,8 @@ export type AgentRunRow = {
   userMessage: string;
   status: string;
   createdAt: number;
+  startedAt?: number;
+  finishedAt?: number;
   planJson?: string;
 };
 
@@ -98,7 +100,7 @@ export type DisplayStep = {
   subtitle?: string;
   status: AgentToolCallRow["status"] | "summary";
   durationMs?: number;
-  /** Epoch ms when the tool finished — used for brief settle-into-summary. */
+  startedAt?: number;
   finishedAt?: number;
   argsJson?: string;
   resultJson?: string;
@@ -123,6 +125,8 @@ export type AgentTurn = {
   assistantMessageId?: Id<"agentMessages">;
   steps: DisplayStep[];
   isLive?: boolean;
+  /** Wall time from first tool/run start to last finish — shown after the turn. */
+  workedMs?: number;
 };
 
 export function parseJsonSafe(raw?: string | null): unknown {
@@ -165,6 +169,44 @@ export function parseAgentAttachments(raw?: string | null): AgentAttachmentChip[
 export function formatStepDuration(startedAt: number, finishedAt?: number): number | undefined {
   if (!finishedAt || finishedAt <= startedAt) return undefined;
   return finishedAt - startedAt;
+}
+
+/** Human label for a finished turn, e.g. "Worked 2.5 mins". */
+export function formatWorkedLabel(ms: number): string {
+  const sec = Math.max(1, ms / 1000);
+  if (sec < 60) return `Worked ${Math.round(sec)}s`;
+  const min = sec / 60;
+  if (min < 60) {
+    const rounded = min < 10 ? Math.round(min * 10) / 10 : Math.round(min);
+    if (rounded === 1) return "Worked 1 min";
+    const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    return `Worked ${text} mins`;
+  }
+  const hrs = min / 60;
+  const rounded = hrs < 10 ? Math.round(hrs * 10) / 10 : Math.round(hrs);
+  if (rounded === 1) return "Worked 1 hr";
+  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return `Worked ${text} hrs`;
+}
+
+export function turnWorkedMs(
+  steps: DisplayStep[],
+  run?: { createdAt?: number; startedAt?: number; finishedAt?: number } | null,
+): number {
+  const starts = steps
+    .map((step) => step.startedAt)
+    .filter((n): n is number => typeof n === "number" && n > 0);
+  const ends = steps
+    .map((step) => step.finishedAt)
+    .filter((n): n is number => typeof n === "number" && n > 0);
+  const start =
+    run?.startedAt || (starts.length ? Math.min(...starts) : run?.createdAt);
+  const end = run?.finishedAt || (ends.length ? Math.max(...ends) : undefined);
+  if (!start || !end || end <= start) {
+    const fallback = steps.reduce((sum, step) => sum + (step.durationMs || 0), 0);
+    return Math.max(1000, fallback);
+  }
+  return Math.max(1000, end - start);
 }
 
 export function extractOutcome(
@@ -659,6 +701,7 @@ function toolCallToStep(
     subtitle,
     status: effectiveStatus,
     durationMs: formatStepDuration(row.startedAt, row.finishedAt),
+    startedAt: row.startedAt,
     finishedAt: row.finishedAt,
     argsJson: row.argsJson,
     resultJson: row.resultJson,
@@ -831,7 +874,7 @@ export function foldableCompletedIds(
 
 /** Collapse only long runs of quiet folder peeks — never hide skills/memory/plan/tools. */
 export function collapseQuietSteps(steps: DisplayStep[]): DisplayStep[] {
-  // Kept for tests / legacy; new UI uses foldSettledSteps.
+  // Kept for tests / legacy; live UI shows vertical rows, then a Worked disclosure.
   const out: DisplayStep[] = [];
   const visibleTail = 3;
   let i = 0;
@@ -1006,6 +1049,7 @@ export function buildAgentTurns(args: {
       assistantMessageId: assistant?._id,
       steps,
       isLive: false,
+      workedMs: steps.length ? turnWorkedMs(steps, run) : undefined,
     });
   });
 

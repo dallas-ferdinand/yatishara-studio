@@ -3,8 +3,8 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   buildAgentTurns,
   extractOutcome,
-  foldableCompletedIds,
-  foldSettledSteps,
+  formatWorkedLabel,
+  turnWorkedMs,
   type DisplayStep,
 } from "./agentStepUtils";
 
@@ -102,6 +102,49 @@ describe("buildAgentTurns optimistic send", () => {
     expect(turns[1].userText).toBe("ok");
   });
 
+  it("records workedMs from the run window", () => {
+    const turns = buildAgentTurns({
+      messages: [
+        {
+          _id: "u1" as Id<"agentMessages">,
+          role: "user",
+          content: "go",
+          createdAt: 1_000,
+        },
+        {
+          _id: "a1" as Id<"agentMessages">,
+          role: "assistant",
+          content: "done",
+          createdAt: 151_000,
+        },
+      ],
+      toolCalls: [
+        {
+          _id: "t1" as Id<"agentToolCalls">,
+          runId: "r1" as Id<"agentRuns">,
+          toolName: "studio_workspace_tree",
+          argsJson: "{}",
+          status: "completed",
+          startedAt: 1_000,
+          finishedAt: 2_000,
+        },
+      ],
+      runs: [
+        {
+          _id: "r1" as Id<"agentRuns">,
+          status: "completed",
+          createdAt: 1_000,
+          startedAt: 1_000,
+          finishedAt: 151_000,
+        },
+      ],
+      approvals: [],
+    });
+
+    expect(turns[0]?.workedMs).toBe(150_000);
+    expect(formatWorkedLabel(turns[0]!.workedMs!)).toBe("Worked 2.5 mins");
+  });
+
   it("lists video models in the step gutter without legacy framing", () => {
     const outcome = extractOutcome(
       "studio_list_video_models",
@@ -127,33 +170,30 @@ describe("buildAgentTurns optimistic send", () => {
   });
 });
 
-describe("foldSettledSteps", () => {
-  it("folds every completed tool into compact summary chips", () => {
-    const steps = [
-      step({ id: "1", toolName: "studio_workspace_tree", status: "completed" }),
-      step({ id: "2", toolName: "studio_get_document", status: "completed" }),
-      step({ id: "3", toolName: "remember", status: "completed" }),
-    ];
-    const folded = foldSettledSteps(steps, new Set(foldableCompletedIds(steps)));
-    expect(folded).toHaveLength(1);
-    expect(folded[0]?.isGroupSummary).toBe(true);
-    expect(folded[0]?.summarySegments).toEqual([
-      "Explored workspace",
-      "Read 1 script",
-      "Used memory",
-    ]);
+describe("formatWorkedLabel", () => {
+  it("uses seconds under a minute and 2.5 mins style after", () => {
+    expect(formatWorkedLabel(8000)).toBe("Worked 8s");
+    expect(formatWorkedLabel(45000)).toBe("Worked 45s");
+    expect(formatWorkedLabel(60000)).toBe("Worked 1 min");
+    expect(formatWorkedLabel(150000)).toBe("Worked 2.5 mins");
+    expect(formatWorkedLabel(10 * 60 * 1000)).toBe("Worked 10 mins");
+    expect(formatWorkedLabel(60 * 60 * 1000)).toBe("Worked 1 hr");
   });
+});
 
-  it("folds a leftover last live tool after the turn is done", () => {
+describe("turnWorkedMs", () => {
+  it("uses run start/finish when present", () => {
     const steps = [
-      step({ id: "1", toolName: "studio_workspace_tree", status: "completed" }),
-      step({ id: "2", toolName: "remember", status: "started" }),
+      step({
+        id: "1",
+        toolName: "studio_workspace_tree",
+        status: "completed",
+        startedAt: 1_000,
+        finishedAt: 2_000,
+      }),
     ];
-    const ids = foldableCompletedIds(steps, { includeActive: true });
-    expect(ids).toEqual(["1", "2"]);
-    const folded = foldSettledSteps(steps, new Set(ids), { includeActive: true });
-    expect(folded.every((row) => row.isGroupSummary || row.status === "summary")).toBe(true);
-    expect(folded.some((row) => row.id === "2")).toBe(false);
-    expect(folded[0]?.summarySegments).toEqual(["Explored workspace", "Used memory"]);
+    expect(
+      turnWorkedMs(steps, { startedAt: 1_000, finishedAt: 151_000 }),
+    ).toBe(150_000);
   });
 });

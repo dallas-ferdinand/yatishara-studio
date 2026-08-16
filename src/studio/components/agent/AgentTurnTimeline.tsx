@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
+  ArrowDown,
   FileText,
   Folder,
   Image as ImageIcon,
@@ -25,8 +26,7 @@ import { AgentStepRow } from "./AgentStepRow";
 import { AgentThinkingCard } from "./AgentThinkingCard";
 import {
   buildAgentTurns,
-  foldableCompletedIds,
-  foldSettledSteps,
+  formatWorkedLabel,
   type AgentAttachmentChip,
   type AgentApprovalRow,
   type AgentMessageRow,
@@ -34,11 +34,10 @@ import {
   type AgentRunRow,
   type AgentToolCallRow,
   type AgentTurn,
+  type DisplayStep,
 } from "./agentStepUtils";
 import { isMediaInspectTool } from "./agentToolTitles";
 import "./agent-steps.css";
-
-const SETTLE_MS = 600;
 
 /** Follow a Create generation job until the asset lands in chat. */
 function AgentPendingGenerationCard({
@@ -319,72 +318,23 @@ function TurnBlock({
     (step) => !isMediaInspectTool(step.toolName),
   );
 
+  const [toolsOpen, setToolsOpen] = useState(false);
+
   const hasActiveTool = baseSteps.some(
     (step) =>
       step.status === "started" ||
       step.status === "queued" ||
       step.status === "pending_approval",
   );
-  // Turn finished (or reply already landed with no live tools): fold every leftover row now.
-  const foldTurnNow = !turn.isLive || (Boolean(turn.assistantText) && !hasActiveTool);
+  // Collapse only after the turn is done — live tools stay one vertical row each.
+  const turnDone = !turn.isLive && !hasActiveTool;
 
-  // Historical / finished turns: fold immediately. Live: brief settle, then fold.
-  const [settledIds, setSettledIds] = useState<Set<string>>(() =>
-    foldTurnNow
-      ? new Set(foldableCompletedIds(baseSteps, { includeActive: true }))
-      : new Set(),
-  );
-
-  useEffect(() => {
-    if (foldTurnNow) {
-      setSettledIds(new Set(foldableCompletedIds(baseSteps, { includeActive: true })));
-      return;
-    }
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    const foldable = foldableCompletedIds(baseSteps);
-    const lastFoldable = foldable[foldable.length - 1];
-    const onlyLastLeft =
-      foldable.length > 0 &&
-      !hasActiveTool &&
-      foldable.every((id) => id === lastFoldable || settledIds.has(id));
-    for (const id of foldable) {
-      if (settledIds.has(id)) continue;
-      const step = baseSteps.find((s) => s.id === id);
-      const finishedAt = step?.finishedAt ?? Date.now();
-      const wait = onlyLastLeft
-        ? 0
-        : Math.max(0, SETTLE_MS - (Date.now() - finishedAt));
-      timers.push(
-        setTimeout(() => {
-          setSettledIds((prev) => {
-            if (prev.has(id)) return prev;
-            const next = new Set(prev);
-            next.add(id);
-            return next;
-          });
-        }, wait),
-      );
-    }
-    return () => {
-      for (const t of timers) clearTimeout(t);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- settle from step ids + finishedAt
-  }, [
-    foldTurnNow,
-    hasActiveTool,
-    baseSteps.map((s) => `${s.id}:${s.status}:${s.finishedAt ?? 0}`).join("|"),
-  ]);
-
-  const visibleSteps = useMemo(
-    () => foldSettledSteps(baseSteps, settledIds, { includeActive: foldTurnNow }),
-    [baseSteps, foldTurnNow, settledIds],
-  );
   const inspectThinking = turn.steps.some(
     (step) =>
       isMediaInspectTool(step.toolName) &&
       (step.status === "started" || step.status === "queued"),
   );
-  const hasVisibleActiveStep = visibleSteps.some(
+  const hasVisibleActiveStep = baseSteps.some(
     (step) =>
       step.status === "started" ||
       step.status === "queued" ||
@@ -395,6 +345,9 @@ function TurnBlock({
     !turn.assistantText &&
     !hasPendingQuestion &&
     (inspectThinking || !hasVisibleActiveStep);
+  const showLiveSteps = !turnDone && (baseSteps.length > 0 || showThinking);
+  const showWorked = turnDone && baseSteps.length > 0;
+  const workedLabel = formatWorkedLabel(turn.workedMs ?? 1000);
   const primaryPreview = (turn.attachments ?? [])
     .map((attachment) => {
       const preview = previewFor(attachment);
@@ -405,6 +358,38 @@ function TurnBlock({
       };
     })
     .find(Boolean) as { url: string; kind?: string } | undefined;
+
+  function renderStep(step: DisplayStep) {
+    const approval =
+      step.approvalId != null
+        ? approvalById.get(String(step.approvalId))
+        : undefined;
+    if (step.kind === "approval" && approval) {
+      return (
+        <AgentApprovalStep
+          key={step.id}
+          step={step}
+          approval={approval}
+          expanded={expandedStepId === step.id}
+          onToggle={() => onToggleStep(step.id)}
+          onDecide={onDecideApproval}
+          onOpenFolder={onOpenFolder}
+          previewUrl={primaryPreview?.url}
+          previewKind={primaryPreview?.kind}
+        />
+      );
+    }
+    return (
+      <AgentStepRow
+        key={step.id}
+        step={step}
+        expanded={expandedStepId === step.id}
+        onToggle={() => onToggleStep(step.id)}
+        onOpenFolder={onOpenFolder}
+        onOpenDocument={onOpenDocument}
+      />
+    );
+  }
 
   return (
     <section className="studio-agent-turn" aria-label="Agent turn">
@@ -444,44 +429,34 @@ function TurnBlock({
         </div>
       ) : null}
 
-      {visibleSteps.length > 0 || showThinking ? (
+      {showLiveSteps ? (
         <div className="studio-agent-turn-activity">
-          {visibleSteps.length > 0 ? (
+          {baseSteps.length > 0 ? (
             <div className="studio-agent-turn-steps" role="list">
-              {visibleSteps.map((step) => {
-                const approval =
-                  step.approvalId != null
-                    ? approvalById.get(String(step.approvalId))
-                    : undefined;
-                if (step.kind === "approval" && approval) {
-                  return (
-                    <AgentApprovalStep
-                      key={step.id}
-                      step={step}
-                      approval={approval}
-                      expanded={expandedStepId === step.id}
-                      onToggle={() => onToggleStep(step.id)}
-                      onDecide={onDecideApproval}
-                      onOpenFolder={onOpenFolder}
-                      previewUrl={primaryPreview?.url}
-                      previewKind={primaryPreview?.kind}
-                    />
-                  );
-                }
-                return (
-                  <AgentStepRow
-                    key={step.id}
-                    step={step}
-                    expanded={expandedStepId === step.id}
-                    onToggle={() => onToggleStep(step.id)}
-                    onOpenFolder={onOpenFolder}
-                    onOpenDocument={onOpenDocument}
-                  />
-                );
-              })}
+              {baseSteps.map(renderStep)}
             </div>
           ) : null}
           {showThinking ? <AgentThinkingCard key="thinking" label="Thinking" /> : null}
+        </div>
+      ) : null}
+
+      {showWorked ? (
+        <div className="studio-agent-turn-activity">
+          <button
+            type="button"
+            className={`studio-agent-worked${toolsOpen ? " is-open" : ""}`}
+            aria-expanded={toolsOpen}
+            aria-label={`${workedLabel}. ${toolsOpen ? "Hide" : "Show"} tool calls`}
+            onClick={() => setToolsOpen((open) => !open)}
+          >
+            <span className="studio-agent-worked-label">{workedLabel}</span>
+            <ArrowDown size={11} aria-hidden="true" />
+          </button>
+          {toolsOpen ? (
+            <div className="studio-agent-turn-steps" role="list">
+              {baseSteps.map(renderStep)}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
