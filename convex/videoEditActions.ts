@@ -2197,12 +2197,22 @@ export const sampleAssetFramesForApi = internalAction({
       const sourcePath = join(tempDir, "source.bin");
       await downloadToFile(signedSource, sourcePath);
       const probed = await probeMediaDurationSeconds(sourcePath);
-      const durationSec: number =
+      const stored =
         typeof source.durationSeconds === "number" && source.durationSeconds > 0.05
           ? source.durationSeconds
-          : probed;
+          : 0;
+      // Prefer the shorter of metadata vs probe so we never seek past EOF
+      // (stale durationSec caused ENOENT on last-frame pulls, e.g. 14.56s).
+      const durationSec =
+        probed > 0.05 && stored > 0.05
+          ? Math.min(stored, probed)
+          : probed > 0.05
+            ? probed
+            : stored > 0.05
+              ? stored
+              : 1;
 
-      const maxT = Math.max(0, durationSec - 0.05);
+      const maxT = Math.max(0, durationSec - 0.12);
       let times: number[] = [];
       if (Array.isArray(args.timesSec) && args.timesSec.length > 0) {
         times = args.timesSec.map((t) => Math.max(0, Math.min(maxT, Number(t) || 0)));
@@ -2241,18 +2251,26 @@ export const sampleAssetFramesForApi = internalAction({
 
       for (const seekTime of times) {
         const framePath = join(tempDir, `frame-${seekTime}.jpg`);
-        await runFfmpeg([
-          "-y",
-          "-ss",
-          String(seekTime),
-          "-i",
-          sourcePath,
-          "-frames:v",
-          "1",
-          "-q:v",
-          "3",
-          framePath,
-        ]);
+        const extract = async (t: number, outPath: string) => {
+          await runFfmpeg([
+            "-y",
+            "-ss",
+            String(t),
+            "-i",
+            sourcePath,
+            "-frames:v",
+            "1",
+            "-q:v",
+            "3",
+            outPath,
+          ]);
+        };
+        await extract(seekTime, framePath);
+        if (!existsSync(framePath)) {
+          const retryTime = Math.max(0, seekTime - 0.35);
+          await extract(retryTime, framePath);
+        }
+        if (!existsSync(framePath)) continue;
         const body = await readFile(framePath);
         const timeLabel = seekTime.toFixed(2).replace(".", "s");
         const filename = `Frame · ${safeBase} · ${timeLabel}.jpg`;
@@ -2282,6 +2300,12 @@ export const sampleAssetFramesForApi = internalAction({
           thumbnailUrl: url,
           preferredViewUrl: url,
         });
+      }
+
+      if (!frames.length) {
+        throw new Error(
+          "Could not pull frames from this video. Try a shorter window inside the clip.",
+        );
       }
 
       return {
