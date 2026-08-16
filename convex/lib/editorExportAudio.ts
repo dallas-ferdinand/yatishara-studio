@@ -189,23 +189,40 @@ export function videoClipAudioFilter(
   muteAudio: boolean,
   durationSec?: number,
   channels?: number,
+  /**
+   * Where this render starts inside the clip. An overlapping picture lane splits
+   * a clip into several segments; fades still belong to the whole clip, so shift
+   * PTS into clip-local time rather than restarting the fade on every piece
+   * (`afade` rejects a negative `st`).
+   */
+  opts?: { localStartSec?: number; clipDurationSec?: number },
 ): string | null {
   const volume = Math.max(0, Math.min(2, clip.effects?.volume ?? 1));
   if (muteAudio || volume <= 0.001) return null;
 
-  const duration = Math.max(
+  const segmentDuration = Math.max(
     0.05,
     durationSec != null && Number.isFinite(durationSec)
       ? durationSec
       : timelineDurationSec(clip),
   );
+  const localStart = Math.max(0, Number(opts?.localStartSec) || 0);
+  const duration = Math.max(
+    0.05,
+    Number(opts?.clipDurationSec) || localStart + segmentDuration,
+  );
   const { fadeIn, fadeOut } = resolveExportAudioFades(clip.effects, duration, false);
+  const fadeOutStart = Math.max(0, duration - fadeOut);
+  const localEnd = localStart + segmentDuration;
+  const wantIn = fadeIn > 0 && localStart < fadeIn - 0.001;
+  const wantOut = fadeOut > 0 && localEnd > fadeOutStart + 0.001;
+  const shift = localStart > 0.001 && (wantIn || wantOut);
 
   let af = exportAudioLayoutFilter(channels);
-  if (fadeIn > 0) af += `,afade=t=in:st=0:d=${fadeIn}:curve=qsin`;
-  if (fadeOut > 0) {
-    af += `,afade=t=out:st=${Math.max(0, duration - fadeOut)}:d=${fadeOut}:curve=qsin`;
-  }
+  if (shift) af += `,asetpts=PTS+${localStart.toFixed(4)}/TB`;
+  if (wantIn) af += `,afade=t=in:st=0:d=${fadeIn}:curve=qsin`;
+  if (wantOut) af += `,afade=t=out:st=${fadeOutStart}:d=${fadeOut}:curve=qsin`;
+  if (shift) af += `,asetpts=PTS-${localStart.toFixed(4)}/TB`;
   if (Math.abs(volume - 1) > 0.001) af += `,volume=${volume}`;
   return af;
 }

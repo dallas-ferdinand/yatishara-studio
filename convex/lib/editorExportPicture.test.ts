@@ -4,8 +4,11 @@ import {
   collectExportPictureClips,
   isStillExportSource,
   isStillImageCodec,
+  pictureFadeFilterParts,
   pictureTimelineSegments,
   safeContainVf,
+  segmentTransitionClip,
+  type PictureTimelineSegment,
 } from "./editorExportPicture";
 
 describe("isStillImageCodec", () => {
@@ -136,5 +139,137 @@ describe("collectExportPictureClips / pictureTimelineSegments", () => {
     expect((segments[3] as { layers: Array<{ id: string }> }).layers.map((l) => l.id)).toEqual([
       "bot",
     ]);
+  });
+});
+
+describe("pictureFadeFilterParts", () => {
+  it("fades an unsplit clip from its own start", () => {
+    expect(
+      pictureFadeFilterParts({
+        effects: { fadeIn: 1, fadeOut: 0.5 },
+        clipDurationSec: 4,
+        localStartSec: 0,
+        segmentDurationSec: 4,
+      }),
+    ).toEqual(["fade=t=in:st=0:d=1.000", "fade=t=out:st=3.500:d=0.500"]);
+  });
+
+  it("keeps fade timing clip-relative when a lane splits the clip", () => {
+    // Tail piece of a 4s clip: only the fade-out belongs here, at 3.5s into the clip.
+    expect(
+      pictureFadeFilterParts({
+        effects: { fadeIn: 1, fadeOut: 0.5 },
+        clipDurationSec: 4,
+        localStartSec: 2,
+        segmentDurationSec: 2,
+      }),
+    ).toEqual([
+      "setpts=PTS+2.0000/TB",
+      "fade=t=out:st=3.500:d=0.500",
+      "setpts=PTS-2.0000/TB",
+    ]);
+  });
+
+  it("does not restart the fade-in on a piece that starts mid-fade", () => {
+    const parts = pictureFadeFilterParts({
+      effects: { fadeIn: 2 },
+      clipDurationSec: 6,
+      localStartSec: 0.5,
+      segmentDurationSec: 1,
+    });
+    expect(parts[0]).toBe("setpts=PTS+0.5000/TB");
+    expect(parts).toContain("fade=t=in:st=0:d=2.000");
+  });
+
+  it("emits nothing for a middle piece with no fade in range", () => {
+    expect(
+      pictureFadeFilterParts({
+        effects: { fadeIn: 0.5, fadeOut: 0.5 },
+        clipDurationSec: 10,
+        localStartSec: 3,
+        segmentDurationSec: 2,
+      }),
+    ).toEqual([]);
+  });
+
+  it("fades overlay alpha so the lane underneath shows through", () => {
+    expect(
+      pictureFadeFilterParts({
+        effects: { fadeIn: 1 },
+        clipDurationSec: 3,
+        localStartSec: 0,
+        segmentDurationSec: 3,
+        overlay: true,
+      }),
+    ).toEqual(["fade=t=in:st=0:d=1.000:alpha=1"]);
+  });
+
+  it("scales a fade pair that is longer than the clip", () => {
+    const parts = pictureFadeFilterParts({
+      effects: { fadeIn: 3, fadeOut: 3 },
+      clipDurationSec: 2,
+      localStartSec: 0,
+      segmentDurationSec: 2,
+    });
+    expect(parts).toEqual(["fade=t=in:st=0:d=1.000", "fade=t=out:st=1.000:d=1.000"]);
+  });
+});
+
+describe("segmentTransitionClip", () => {
+  const layer = {
+    id: "c1",
+    assetId: "a1",
+    trackId: "v1",
+    trackIndex: 0,
+    startTime: 2,
+    trimIn: 0,
+    trimOut: 3,
+    label: "c1",
+    kind: "video",
+    transitionOut: { type: "fade", duration: 0.5 },
+  };
+
+  it("carries the transition on the piece that ends where the clip ends", () => {
+    const segment: PictureTimelineSegment = {
+      type: "layers",
+      startTime: 3,
+      duration: 2,
+      layers: [layer],
+    };
+    expect(segmentTransitionClip(segment)?.id).toBe("c1");
+  });
+
+  it("skips a piece that ends mid-clip", () => {
+    expect(
+      segmentTransitionClip({
+        type: "layers",
+        startTime: 2,
+        duration: 1,
+        layers: [layer],
+      }),
+    ).toBeNull();
+  });
+
+  it("hard-cuts a stack instead of dragging overlays through the wipe", () => {
+    expect(
+      segmentTransitionClip({
+        type: "layers",
+        startTime: 3,
+        duration: 2,
+        layers: [layer, { ...layer, id: "c2", trackId: "v2", trackIndex: 1 }],
+      }),
+    ).toBeNull();
+  });
+
+  it("ignores none/absent transitions and gaps", () => {
+    expect(
+      segmentTransitionClip({
+        type: "layers",
+        startTime: 3,
+        duration: 2,
+        layers: [{ ...layer, transitionOut: { type: "none" } }],
+      }),
+    ).toBeNull();
+    expect(segmentTransitionClip({ type: "gap", startTime: 0, duration: 1 })).toBeNull();
   });
 });

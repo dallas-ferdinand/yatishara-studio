@@ -27,8 +27,11 @@ import {
   clipSourceInputArgs,
   collectExportPictureClips,
   isStillExportSource,
+  pictureClipDuration,
+  pictureFadeFilterParts,
   pictureTimelineSegments,
   safeContainVf,
+  segmentTransitionClip,
   type ExportPictureClip,
 } from "./lib/editorExportPicture";
 import {
@@ -200,28 +203,35 @@ async function buildSegmentVideoFilters(
   duration: number,
   textClips: ExportTextClip[],
   fontCacheDir: string,
+  /**
+   * A clip crossed by another picture lane renders as several segments, so the
+   * segment is not always the whole clip and does not always start where the
+   * clip starts. Text timing and fades both need the real offsets.
+   */
+  opts?: {
+    segmentStartSec?: number;
+    localStartSec?: number;
+    clipDurationSec?: number;
+    overlay?: boolean;
+  },
 ): Promise<string> {
   const parts: string[] = [];
-  const dur = Math.max(0.05, duration);
-  let fadeIn = Math.max(0, Number(clip.effects?.fadeIn) || 0);
-  let fadeOut = Math.max(0, Number(clip.effects?.fadeOut) || 0);
-  fadeIn = Math.min(dur, fadeIn);
-  fadeOut = Math.min(dur, fadeOut);
-  if (fadeIn + fadeOut > dur) {
-    const scale = dur / (fadeIn + fadeOut);
-    fadeIn *= scale;
-    fadeOut *= scale;
-  }
+  const localStart = Math.max(0, Number(opts?.localStartSec) || 0);
+  const segmentStart = Number.isFinite(opts?.segmentStartSec)
+    ? Number(opts?.segmentStartSec)
+    : clip.startTime;
   // Video `fade` has no `curve` option (that's afade-only). Passing curve=qsin
   // crashes export on the action host: "Option not found".
-  if (fadeIn > 0.001) {
-    parts.push(`fade=t=in:st=0:d=${fadeIn.toFixed(3)}`);
-  }
-  if (fadeOut > 0.001) {
-    const st = Math.max(0, dur - fadeOut);
-    parts.push(`fade=t=out:st=${st.toFixed(3)}:d=${fadeOut.toFixed(3)}`);
-  }
-  parts.push(...(await buildTextOverlayParts(textClips, clip.startTime, duration, fontCacheDir)));
+  parts.push(
+    ...pictureFadeFilterParts({
+      effects: clip.effects,
+      clipDurationSec: Number(opts?.clipDurationSec) || localStart + duration,
+      localStartSec: localStart,
+      segmentDurationSec: duration,
+      overlay: opts?.overlay,
+    }),
+  );
+  parts.push(...(await buildTextOverlayParts(textClips, segmentStart, duration, fontCacheDir)));
   return parts.length ? parts.join(",") : "null";
 }
 
@@ -463,12 +473,28 @@ async function renderClipSegment(args: {
   fontCacheDir: string;
   /** When the video track is muted in the timeline, keep picture but silence audio. */
   muteAudio?: boolean;
+  /** Segment start on the timeline — defaults to the clip start (unsplit clip). */
+  segmentStartSec?: number;
+  /** Segment start measured from the clip start, for clips split by another lane. */
+  localStartSec?: number;
+  /** Full timeline length of the clip, when this segment is only a slice of it. */
+  clipDurationSec?: number;
 }): Promise<void> {
+  const localStart = Math.max(0, Number(args.localStartSec) || 0);
+  const clipDurationSec = Math.max(
+    0.05,
+    Number(args.clipDurationSec) || localStart + args.duration,
+  );
   const effects = await buildSegmentVideoFilters(
     args.clip,
     args.duration,
     args.textClips,
     args.fontCacheDir,
+    {
+      segmentStartSec: args.segmentStartSec,
+      localStartSec: localStart,
+      clipDurationSec,
+    },
   );
   const baseVf = normalizeVf(args.width, args.height, args.clip.effects);
   const videoFilter = effects === "null" ? baseVf : `${baseVf},${effects}`;
@@ -505,14 +531,16 @@ async function renderClipSegment(args: {
     Boolean(args.muteAudio),
     args.duration,
     sourceAudio.channels,
+    { localStartSec: localStart, clipDurationSec },
   );
   // ffmpeg silently emits a video-only file when `-af` matches no audio, so
   // probe first: silent / muted sources must get anullsrc or concat/xfade
   // graphs fail with "Stream specifier ':a' matches no streams".
-  const sourceLen = sourceTrim(args.clip);
+  const sourceLen = Math.max(0.05, sourceTrim(args.clip) - localStart);
   const inputTrimArgs = clipSourceInputArgs({
     sourcePath: args.sourcePath,
-    trimIn: args.clip.trimIn,
+    // A lane crossing this clip splits it — seek to where the piece really starts.
+    trimIn: args.clip.trimIn + localStart,
     sourceLen,
     identitySpeed: isIdentitySpeed(clipSpeedFromEffects(args.clip.effects)),
     isStill,
@@ -658,11 +686,21 @@ async function renderStackedPictureSegment(args: {
   width: number;
   height: number;
   fontCacheDir: string;
+  /**
+   * Lane whose soundtrack rides along with the picture. It has to stay embedded
+   * so a transition dip lands on the same frames as the xfade; every other lane
+   * is mixed in later as a bed.
+   */
+  audioTrackId: string | null;
+  mutedTrackIds: ReadonlySet<string>;
 }): Promise<void> {
   const { layers, dest, duration, width, height } = args;
   if (layers.length === 0) {
     throw new Error("Nothing to composite.");
   }
+  const ownsAudio = (clip: ExportPictureClip) =>
+    clip.trackId === args.audioTrackId && !args.mutedTrackIds.has(clip.trackId);
+
   if (layers.length === 1) {
     const only = layers[0]!;
     await renderClipSegment({
@@ -674,13 +712,18 @@ async function renderStackedPictureSegment(args: {
       width,
       height,
       fontCacheDir: args.fontCacheDir,
-      muteAudio: true,
+      muteAudio: !ownsAudio(only.clip),
+      segmentStartSec: args.startTime,
+      localStartSec: Math.max(0, args.startTime - only.clip.startTime),
+      clipDurationSec: pictureClipDuration(only.clip),
     });
     return;
   }
 
   const inputArgs: string[] = [];
-  for (const layer of layers) {
+  const graphParts: string[] = [];
+  let audioChain: string | null = null;
+  for (const [index, layer] of layers.entries()) {
     const picture = await probePictureStream(layer.sourcePath);
     const sourceDurationSec = picture.present
       ? await probeMediaDurationSeconds(layer.sourcePath)
@@ -691,27 +734,50 @@ async function renderStackedPictureSegment(args: {
       nbFrames: picture.nbFrames,
       sourceDurationSec,
     });
-    const sourceLen = Math.max(0.05, layer.clip.trimOut - layer.clip.trimIn);
-    const localTime = Math.max(0, args.startTime - layer.clip.startTime);
-    const trimIn = isStill ? 0 : layer.clip.trimIn + localTime;
+    const clipDurationSec = pictureClipDuration(layer.clip);
+    const localStart = Math.max(0, args.startTime - layer.clip.startTime);
+    const sourceLen = Math.max(0.05, layer.clip.trimOut - layer.clip.trimIn - localStart);
+    const trimIn = isStill ? 0 : layer.clip.trimIn + localStart;
     inputArgs.push(
       ...clipSourceInputArgs({
         sourcePath: layer.sourcePath,
         trimIn,
-        sourceLen: Math.max(0.05, sourceLen - localTime),
+        sourceLen,
         identitySpeed: isIdentitySpeed(clipSpeedFromEffects(layer.clip.effects)),
         isStill,
         fps: EXPORT_FPS,
       }),
     );
+
+    // Index 0 is the bottom lane — it owns the black frame; the rest keep alpha.
+    const overlay = index > 0;
+    const chain = [normalizeVf(width, height, layer.clip.effects, { overlay })];
+    chain.push(
+      ...pictureFadeFilterParts({
+        effects: layer.clip.effects,
+        clipDurationSec,
+        localStartSec: localStart,
+        segmentDurationSec: duration,
+        overlay,
+      }),
+    );
+    graphParts.push(`[${index}:v]${chain.join(",")}[v${index}]`);
+
+    if (!audioChain && ownsAudio(layer.clip) && picture.present && !isStill) {
+      const sourceAudio = await probeAudioStream(layer.sourcePath);
+      const audioFilter = videoClipAudioFilter(
+        layer.clip as unknown as EditorClip,
+        false,
+        duration,
+        sourceAudio.channels,
+        { localStartSec: localStart, clipDurationSec },
+      );
+      if (audioFilter && sourceAudio.present) {
+        audioChain = `[${index}:a]${audioFilter},apad[aout]`;
+      }
+    }
   }
 
-  const graphParts: string[] = [];
-  for (const [index, layer] of layers.entries()) {
-    const overlay = index > 0;
-    const vf = normalizeVf(width, height, layer.clip.effects, { overlay });
-    graphParts.push(`[${index}:v]${vf}[v${index}]`);
-  }
   let cur = "v0";
   for (let i = 1; i < layers.length; i += 1) {
     const next = `vx${i}`;
@@ -731,6 +797,7 @@ async function renderStackedPictureSegment(args: {
     graphParts.push(`[vout]${textParts.join(",")}[vtext]`);
     videoMap = "vtext";
   }
+  if (audioChain) graphParts.push(audioChain);
 
   await runFfmpeg([
     "-y",
@@ -744,7 +811,7 @@ async function renderStackedPictureSegment(args: {
     "-map",
     `[${videoMap}]`,
     "-map",
-    `${layers.length}:a`,
+    audioChain ? "[aout]" : `${layers.length}:a`,
     "-t",
     String(duration),
     ...exportH264Args(width, height),
@@ -756,7 +823,6 @@ async function renderStackedPictureSegment(args: {
     "44100",
     "-ac",
     "2",
-    "-shortest",
     "-movflags",
     "+faststart",
     dest,
@@ -1197,10 +1263,18 @@ async function runExportVideo(
           Math.max(0.05, Number(clip.trimOut ?? 3) - Number(clip.trimIn ?? 0) || 3),
         )
       : [];
-  // Picture segments are silent — mix every unmuted video-row soundtrack + audio beds.
+  // The top video lane with picture keeps its soundtrack inside the segments, so a
+  // transition dip stays locked to the xfade that shortens the picture. Lanes below
+  // it are mixed in afterwards as beds.
+  const pictureTrackIds = new Set(pictureClips.map((clip) => clip.trackId));
+  const audioBaseTrackId =
+    videoTracks.find((track) => pictureTrackIds.has(track.id))?.id ?? null;
+  const mutedTrackIds = new Set(
+    project.tracks.filter((track) => track.muted).map((track) => track.id),
+  );
   const audioClips = [
     ...collectExportAudioBeds(project),
-    ...collectExportVideoSoundtracks(project, null),
+    ...collectExportVideoSoundtracks(project, audioBaseTrackId),
   ];
   const coverUntil = exportCoverUntilSec({
     textEnds: textClips.map((clip) => clip.startTime + clip.duration),
@@ -1221,6 +1295,7 @@ async function runExportVideo(
   await mkdir(fontCacheDir, { recursive: true });
   const segmentPaths: string[] = [];
   const transitionClips: Array<EditorClip | null> = [];
+  const clipById = new Map(project.clips.map((clip) => [clip.id, clip]));
   const sourceCache = new Map<string, string>();
 
   try {
@@ -1275,9 +1350,13 @@ async function runExportVideo(
           width: exportWidth,
           height: exportHeight,
           fontCacheDir,
+          audioTrackId: audioBaseTrackId,
+          mutedTrackIds,
         });
-        // Multi-lane cuts hard-cut; single-track xfade stays future work on stack edges.
-        transitionClips.push(null);
+        const transitionClip = segmentTransitionClip(segment);
+        transitionClips.push(
+          transitionClip ? (clipById.get(transitionClip.id) ?? null) : null,
+        );
       }
       segmentPaths.push(segmentPath);
       const pct = 5 + Math.round(((index + 1) / Math.max(1, segments.length)) * 50);

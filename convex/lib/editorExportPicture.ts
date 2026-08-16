@@ -35,6 +35,7 @@ export type ExportPictureClip = {
     fadeOut?: number;
     speed?: number;
   };
+  transitionOut?: { type?: string; duration?: number } | null;
 };
 
 export type PictureTimelineSegment =
@@ -60,6 +61,7 @@ export function collectExportPictureClips(project: {
     label: string;
     kind: string;
     effects?: ExportPictureClip["effects"];
+    transitionOut?: ExportPictureClip["transitionOut"];
   }>;
 }): ExportPictureClip[] {
   const trackIndexById = new Map(
@@ -85,6 +87,7 @@ export function collectExportPictureClips(project: {
       label: clip.label,
       kind: clip.kind,
       effects: clip.effects,
+      transitionOut: clip.transitionOut ?? null,
     }))
     .sort(
       (a, b) =>
@@ -92,8 +95,35 @@ export function collectExportPictureClips(project: {
     );
 }
 
-function pictureClipEnd(clip: { startTime: number; trimIn: number; trimOut: number }): number {
-  return clip.startTime + Math.max(0.05, Number(clip.trimOut) - Number(clip.trimIn) || 0.05);
+export function pictureClipDuration(clip: { trimIn: number; trimOut: number }): number {
+  return Math.max(0.05, Number(clip.trimOut) - Number(clip.trimIn) || 0.05);
+}
+
+export function pictureClipEnd(clip: {
+  startTime: number;
+  trimIn: number;
+  trimOut: number;
+}): number {
+  return clip.startTime + pictureClipDuration(clip);
+}
+
+/**
+ * The clip whose transition should play at the end of this segment.
+ *
+ * Segments are cut at every layer edge, so one clip can span several segments —
+ * only the piece that ends where the clip ends may carry the transition. xfade
+ * blends whole segments, so a stack of lanes has to hard-cut instead: blending
+ * the composite would drag the overlays through the wipe too.
+ */
+export function segmentTransitionClip(
+  segment: PictureTimelineSegment,
+): ExportPictureClip | null {
+  if (segment.type !== "layers" || segment.layers.length !== 1) return null;
+  const only = segment.layers[0]!;
+  const type = only.transitionOut?.type;
+  if (!type || type === "none") return null;
+  const segmentEnd = segment.startTime + segment.duration;
+  return Math.abs(pictureClipEnd(only) - segmentEnd) <= 0.02 ? only : null;
 }
 
 /**
@@ -135,6 +165,62 @@ export function pictureTimelineSegments(
     }
   }
   return segments;
+}
+
+/** Clip fades, scaled so a long fade pair never exceeds the clip. */
+export function resolveClipFades(
+  effects: { fadeIn?: number; fadeOut?: number } | undefined,
+  clipDurationSec: number,
+): { fadeIn: number; fadeOut: number } {
+  const dur = Math.max(0.05, clipDurationSec);
+  let fadeIn = Math.min(dur, Math.max(0, Number(effects?.fadeIn) || 0));
+  let fadeOut = Math.min(dur, Math.max(0, Number(effects?.fadeOut) || 0));
+  if (fadeIn + fadeOut > dur) {
+    const scale = dur / (fadeIn + fadeOut);
+    fadeIn *= scale;
+    fadeOut *= scale;
+  }
+  return { fadeIn, fadeOut };
+}
+
+/**
+ * Fade filters for one segment of a clip.
+ *
+ * Fades belong to the whole clip, but an overlapping lane splits that clip into
+ * several segments. Timing each piece from its own start made every piece fade
+ * in and out again (black flashes mid-clip), so shift PTS into clip-local time,
+ * fade there, then shift back: `fade` rejects a negative `st`.
+ *
+ * Overlay lanes fade their alpha so the lane underneath shows through instead of
+ * black.
+ */
+export function pictureFadeFilterParts(args: {
+  effects?: { fadeIn?: number; fadeOut?: number };
+  clipDurationSec: number;
+  /** Segment start measured from the clip start. */
+  localStartSec: number;
+  segmentDurationSec: number;
+  overlay?: boolean;
+}): string[] {
+  const clipDur = Math.max(0.05, args.clipDurationSec);
+  const { fadeIn, fadeOut } = resolveClipFades(args.effects, clipDur);
+  const localStart = Math.max(0, args.localStartSec);
+  const localEnd = localStart + Math.max(0.05, args.segmentDurationSec);
+  const fadeOutStart = Math.max(0, clipDur - fadeOut);
+  const wantIn = fadeIn > 0.001 && localStart < fadeIn - 0.001;
+  const wantOut = fadeOut > 0.001 && localEnd > fadeOutStart + 0.001;
+  if (!wantIn && !wantOut) return [];
+
+  const alpha = args.overlay ? ":alpha=1" : "";
+  const shift = localStart > 0.001;
+  const parts: string[] = [];
+  if (shift) parts.push(`setpts=PTS+${localStart.toFixed(4)}/TB`);
+  if (wantIn) parts.push(`fade=t=in:st=0:d=${fadeIn.toFixed(3)}${alpha}`);
+  if (wantOut) {
+    parts.push(`fade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeOut.toFixed(3)}${alpha}`);
+  }
+  if (shift) parts.push(`setpts=PTS-${localStart.toFixed(4)}/TB`);
+  return parts;
 }
 
 export function isStillImageCodec(codec: string | undefined): boolean {
