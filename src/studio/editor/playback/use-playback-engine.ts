@@ -28,6 +28,7 @@ import {
   previewImageMaxEdge,
 } from "../previewLoadQuality";
 import { previewTransitionWhilePlaying } from "./preview-transition-play";
+import { setEditorPlaybackBusy } from "../filmstripGate";
 
 /**
  * A stall has to last this long before the preview admits to loading. The
@@ -253,70 +254,87 @@ class EngineConsumer implements FrameConsumer {
       this.onAudioReady();
     });
     const playing = this.playingRef.current;
-    const decoded = await Promise.all(
-      slice.video.map(async (sample, index): Promise<{
-        assetId: string;
-        sourceTime: number;
-        generation: number;
-        frame?: VideoFrame;
-        textureKey?: string;
-        width?: number;
-        height?: number;
-        sample: (typeof slice.video)[number];
-      } | null> => {
-        const assetId = sample.clip.assetId;
-        if (!assetId) return null;
-        const media = this.mediaRef.current.get(assetId);
-        const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
-        if (!media || !url) return null;
-        if (media.kind === "image") {
-          const frame = await this.imageFrame(
-            assetId,
-            url,
-            this.previewLoadQualityRef.current,
-          );
-          const textureKey = `image:${assetId}`;
-          const warmed = this.warmedStills.has(textureKey);
-          return {
-            assetId,
-            sourceTime: sample.sourceTime,
-            generation,
-            textureKey,
-            frame: warmed ? undefined : frame.clone(),
-            width: frame.displayWidth,
-            height: frame.displayHeight,
-            sample,
-          };
-        }
-        try {
-          const decoded = await this.decoder.requestFrame(
-            assetId,
-            url,
-            sample.sourceTime,
-            generation,
-            {
-              speed: clipSpeed(sample.clip.clip.effects),
-              aheadSec: playing ? 1.5 : 0.35,
-              // Paused review shows the sample under the playhead, not a
-              // neighbour — otherwise stepping frames never changes the image.
-              exact: !playing,
-              // Outgoing stays hard; incoming partner must not stall play.
-              soft: playing && index > 0,
-            },
-          );
-          if (!decoded) return null;
-          return {
-            ...decoded,
-            textureKey: `video:${assetId}:${sample.sourceTime.toFixed(3)}`,
-            sample,
-          };
-        } catch {
-          // Skip broken/slow samples — underrun/buffer; never throw into a
-          // red "Frame decode timeout." overlay.
-          return null;
-        }
-      }),
-    );
+    type DecodedLayer = {
+      assetId: string;
+      sourceTime: number;
+      generation: number;
+      frame?: VideoFrame;
+      textureKey?: string;
+      width?: number;
+      height?: number;
+      sample: (typeof slice.video)[number];
+    };
+    const decodeSample = async (
+      sample: (typeof slice.video)[number],
+      index: number,
+    ): Promise<DecodedLayer | null> => {
+      const assetId = sample.clip.assetId;
+      if (!assetId) return null;
+      const media = this.mediaRef.current.get(assetId);
+      const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
+      if (!media || !url) return null;
+      if (media.kind === "image") {
+        const frame = await this.imageFrame(
+          assetId,
+          url,
+          this.previewLoadQualityRef.current,
+        );
+        const textureKey = `image:${assetId}`;
+        const warmed = this.warmedStills.has(textureKey);
+        return {
+          assetId,
+          sourceTime: sample.sourceTime,
+          generation,
+          textureKey,
+          frame: warmed ? undefined : frame.clone(),
+          width: frame.displayWidth,
+          height: frame.displayHeight,
+          sample,
+        };
+      }
+      try {
+        const decoded = await this.decoder.requestFrame(
+          assetId,
+          url,
+          sample.sourceTime,
+          generation,
+          {
+            speed: clipSpeed(sample.clip.clip.effects),
+            aheadSec: playing ? 1.5 : 0.35,
+            // Paused review shows the sample under the playhead, not a
+            // neighbour — otherwise stepping frames never changes the image.
+            exact: !playing,
+            // Primary stays hard; every other stack/partner layer is soft so
+            // multi-row timelines never stall the display clock.
+            soft: playing && index > 0,
+          },
+        );
+        if (!decoded) return null;
+        return {
+          ...decoded,
+          textureKey: `video:${assetId}:${sample.sourceTime.toFixed(3)}`,
+          sample,
+        };
+      } catch {
+        // Skip broken/slow samples — underrun/buffer; never throw into a
+        // red "Frame decode timeout." overlay.
+        return null;
+      }
+    };
+    // During play, finish the top lane first so the clock keeps moving; then
+    // soft-fill the rest. Parallel-all used to let middle rows starve primary.
+    let decoded: Array<DecodedLayer | null>;
+    if (playing && slice.video.length > 1) {
+      const primary = await decodeSample(slice.video[0], 0);
+      const rest = await Promise.all(
+        slice.video.slice(1).map((sample, i) => decodeSample(sample, i + 1)),
+      );
+      decoded = [primary, ...rest];
+    } else {
+      decoded = await Promise.all(
+        slice.video.map((sample, index) => decodeSample(sample, index)),
+      );
+    }
     // Touch the promise so failures aren't unhandled; do not await for readiness.
     void audioReady;
     const valid = decoded.filter((item): item is NonNullable<typeof item> => item != null);
@@ -634,6 +652,13 @@ export function usePlaybackEngine(args: {
   playingRef.current = playing;
   callbacksRef.current = { onPlayheadChange, onPlayingChange };
   projectRef.current = project;
+
+  // Pause timeline filmstrip HTML5 seeks while transport is live — they fight
+  // the WebCodecs preview decoder for bandwidth and GPU.
+  useEffect(() => {
+    setEditorPlaybackBusy(playing);
+    return () => setEditorPlaybackBusy(false);
+  }, [playing]);
 
   const canvasRef = useCallback((element: HTMLCanvasElement | null) => {
     setCanvas(element);

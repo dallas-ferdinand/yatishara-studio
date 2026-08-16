@@ -6,7 +6,7 @@ import { MERCURY_LOGO_SIDEBAR } from "@/lib/brand-assets";
 import { isImageThumbUrl, resolveClipFilmstrip } from "./videoPoster";
 
 const TILE_W = 28;
-const MAX_FILMSTRIP_FRAMES = 48;
+const MAX_FILMSTRIP_FRAMES = 16;
 const LOGO_PLACEHOLDER = MERCURY_LOGO_SIDEBAR;
 
 function LogoFilmstrip({ label, width, tileCount }) {
@@ -69,15 +69,13 @@ export function ClipFilmstrip({ media, label, widthPx, trimIn = 0, trimOut = 4 }
       };
     }
 
-    // CDN video thumbs: one paint when already an image URL.
+    // Paint CDN thumb immediately so the lane isn't blank while seeks wait
+    // for idle play (and so live preview keeps the decoder).
     const instantThumb =
       (media.thumbnailUrl && isImageThumbUrl(media.thumbnailUrl) && media.thumbnailUrl) || null;
-    if (instantThumb && media.kind !== "video") {
+    if (instantThumb) {
       setFrames([instantThumb]);
       setReady(true);
-      return () => {
-        cancelled = true;
-      };
     }
 
     void resolveClipFilmstrip(media, {
@@ -86,8 +84,14 @@ export function ClipFilmstrip({ media, label, widthPx, trimIn = 0, trimOut = 4 }
       count: tileCount,
     }).then((result) => {
       if (cancelled) return;
-      setFrames(result.frames ?? []);
-      setReady(true);
+      const next = result.frames ?? [];
+      if (next.length) {
+        setFrames(next);
+        setReady(true);
+      } else if (!instantThumb) {
+        setFrames([]);
+        setReady(true);
+      }
     });
 
     return () => {
@@ -97,6 +101,7 @@ export function ClipFilmstrip({ media, label, widthPx, trimIn = 0, trimOut = 4 }
     media?.assetId,
     media?.url,
     media?.proxyUrl,
+    media?.proxyStatus,
     media?.thumbnailUrl,
     media?.kind,
     trimIn,

@@ -1,10 +1,14 @@
 // @ts-nocheck
 
+import { whenFilmstripIdle } from "./filmstripGate";
+
 const posterCache = new Map();
 const filmstripCache = new Map();
 
 /** At most two timeline video decodes at once — browsers choke on parallel seeks. */
 const MAX_CONCURRENT_CAPTURES = 2;
+/** Cap strip density so seeks don't starve live preview. */
+const MAX_FILMSTRIP_CAPTURE_FRAMES = 16;
 let activeCaptures = 0;
 const captureWaiters = [];
 
@@ -139,8 +143,10 @@ export function captureVideoPoster(videoUrl, { trimIn = 0, trimOut } = {}) {
   if (posterCache.has(cacheKey)) return posterCache.get(cacheKey);
 
   const promise = (async () => {
+    await whenFilmstripIdle();
     await acquireCaptureSlot();
     try {
+      await whenFilmstripIdle();
       const video = await loadVideoElement(videoUrl);
       const end = trimOut ?? (Number.isFinite(video.duration) ? video.duration : trimIn + 4);
       const { sampleStart } = sampleWindow(trimIn, end);
@@ -165,17 +171,20 @@ export function captureVideoPoster(videoUrl, { trimIn = 0, trimOut } = {}) {
  */
 export async function captureVideoFilmstrip(videoUrl, { trimIn = 0, trimOut = 4, count = 1 } = {}) {
   if (!videoUrl || count < 1) return [];
-  const safeCount = Math.max(1, Math.min(48, count));
+  const safeCount = Math.max(1, Math.min(MAX_FILMSTRIP_CAPTURE_FRAMES, count));
   const { sampleStart, sampleEnd } = sampleWindow(trimIn, trimOut);
   const key = `${videoUrl}|${sampleStart.toFixed(2)}|${sampleEnd.toFixed(2)}|${safeCount}`;
   if (filmstripCache.has(key)) return filmstripCache.get(key);
 
   const promise = (async () => {
+    await whenFilmstripIdle();
     await acquireCaptureSlot();
     try {
+      await whenFilmstripIdle();
       const video = await loadVideoElement(videoUrl);
       const frames = [];
       for (let i = 0; i < safeCount; i += 1) {
+        await whenFilmstripIdle();
         const u = safeCount === 1 ? 0 : i / Math.max(1, safeCount - 1);
         const t = sampleStart + (sampleEnd - sampleStart) * u;
         await seekVideo(video, t);
@@ -277,9 +286,19 @@ export async function resolveClipFilmstrip(media, { trimIn, trimOut, count }) {
 
   const videoUrl = previewVideoUrl(media);
   if (videoUrl && (media.kind === "video" || isVideoFileUrl(videoUrl))) {
-    // Always sample past the black open — never tile a t=0 CDN thumb that
-    // gets replaced later (that swap is what feels jarring).
-    const tileCount = Math.max(1, Math.min(48, count || 1));
+    // Skip heavy seeks on the full original while the edit proxy is still
+    // building — leave bandwidth for live preview; CDN thumb is enough.
+    const proxyPending =
+      !media.proxyUrl &&
+      (media.proxyStatus === "pending" || media.proxyStatus === "processing");
+    if (proxyPending) {
+      const thumb =
+        (media.thumbnailUrl && isImageThumbUrl(media.thumbnailUrl) && media.thumbnailUrl) ||
+        null;
+      return { frames: thumb ? [thumb] : [], fallback: thumb };
+    }
+    // Sample past the black open once proxy/original is ready for seeks.
+    const tileCount = Math.max(1, Math.min(MAX_FILMSTRIP_CAPTURE_FRAMES, count || 1));
     if (tileCount >= 2) {
       const frames = await captureVideoFilmstrip(videoUrl, {
         trimIn,
