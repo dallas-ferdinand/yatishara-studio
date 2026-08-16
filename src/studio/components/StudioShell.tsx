@@ -34747,6 +34747,7 @@ function StudioElementDetailPane({
 
 function StudioAssetPreview({ entry, initialScale, hideName }) {
   const convex = useConvex();
+  const ensureEditProxy = useMutation(api.assets.ensureEditProxy);
   const kind = inferAttachmentKind(entry);
   const [previewExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   const needsFullSignedRead =
@@ -34755,6 +34756,12 @@ function StudioAssetPreview({ entry, initialScale, hideName }) {
   // Full-view image tabs/lightboxes always load Bunny quality=100.
   // Editor timeline proxy quality (40–100%) is separate and must not affect this.
   const needsImagePreviewSign = Boolean(entry.studioId) && kind === "image";
+  // Videos/audio already prefer signedEditProxyUrl on the entry — only fall
+  // back to a full signed read when there is no playable mediaUrl yet.
+  const needsVideoSignedRead =
+    Boolean(entry.studioId) &&
+    (kind === "video" || kind === "audio") &&
+    !entry.mediaUrl;
   const signedMediaUrl = useQuery(
     api.assets.signedReadUrl,
     needsImagePreviewSign
@@ -34763,16 +34770,34 @@ function StudioAssetPreview({ entry, initialScale, hideName }) {
           expiresUnix: previewExpiresUnix,
           quality: 100,
         }
-      : needsFullSignedRead
+      : needsVideoSignedRead || (needsFullSignedRead && kind === "image")
         ? { assetId: entry.studioId, expiresUnix: previewExpiresUnix }
         : "skip",
   );
+
+  // Kick a 720 proxy when opening a video that still only has the original.
+  useEffect(() => {
+    if (
+      (kind !== "video" && kind !== "audio") ||
+      !entry.studioId ||
+      entry.editProxyStatus === "ready" ||
+      entry.editProxyStatus === "processing"
+    ) {
+      return;
+    }
+    void ensureEditProxy({ assetId: entry.studioId }).catch(() => undefined);
+  }, [ensureEditProxy, entry.editProxyStatus, entry.studioId, kind]);
+
   const mediaUrl =
     kind === "image"
       ? (signedMediaUrl ?? entry.mediaUrl)
-      : (fullQualityUrl(signedMediaUrl, entry.mediaUrl) ??
-        signedMediaUrl ??
-        entry.mediaUrl);
+      : kind === "video" || kind === "audio"
+        ? (entry.mediaUrl ??
+          fullQualityUrl(signedMediaUrl) ??
+          signedMediaUrl)
+        : (fullQualityUrl(signedMediaUrl, entry.mediaUrl) ??
+          signedMediaUrl ??
+          entry.mediaUrl);
   const thumbUrl =
     thumbnailDisplayUrl(entry.thumbnailUrl, entry.thumbnailLqipUrl) ?? mediaUrl;
   const videoPosterUrl = isVideoFileUrl(thumbUrl) ? undefined : thumbUrl;
@@ -34846,6 +34871,9 @@ function StudioAssetPreview({ entry, initialScale, hideName }) {
             name={hideName ? undefined : entry.name}
             poster={videoPosterUrl}
             fileSize={entry.byteSize ?? null}
+            // Let <video> buffer itself — duplicate range prefetch was fighting
+            // the player on originals and made single-clip open feel stuck.
+            prefetch={false}
             onDownload={downloadAsset}
           />
         ) : kind === "audio" && mediaUrl ? (
@@ -38893,6 +38921,20 @@ function assetToEntry(asset) {
     kindLabel: asset.kind === "image" ? "Image" : asset.kind === "video" ? "Video" : asset.kind === "audio" ? "Audio" : "Content",
   });
   const mediaUrl = fullQualityUrl(asset.signedReadUrl, asset.mediaUrl);
+  // Playback in Files/open tabs must prefer the 720 edit proxy — originals
+  // (Seedance/etc.) stick while the HTML5 player + range prefetch fight the full file.
+  const playbackMediaUrl =
+    asset.kind === "video" || asset.kind === "audio"
+      ? fullQualityUrl(
+          asset.signedEditProxyUrl,
+          asset.signedEditProxy1080Url,
+          asset.signedReadUrl,
+          asset.mediaUrl,
+        ) ??
+        asset.signedEditProxyUrl ??
+        asset.signedEditProxy1080Url ??
+        mediaUrl
+      : mediaUrl;
   // Audio has no image poster — never fall back to the .mp3/.m4a URL (tabs
   // would render <img src=audio> → browser broken-landscape icon).
   const thumbnailUrl =
@@ -38902,6 +38944,7 @@ function assetToEntry(asset) {
           asset.signedThumbnailUrl,
           asset.thumbnailUrl,
           asset.previewUrl,
+          playbackMediaUrl,
           mediaUrl,
           asset.signedReadUrl,
           asset.mediaUrl,
@@ -38920,11 +38963,18 @@ function assetToEntry(asset) {
     kind: asset.kind,
     kindLabel: asset.kind === "image" ? "Image" : asset.kind === "video" ? "Video" : asset.kind === "audio" ? "Audio" : "Content",
     description: asset.mimeType,
-    mediaUrl,
+    mediaUrl: playbackMediaUrl,
+    originalMediaUrl: mediaUrl,
     thumbnailUrl,
     thumbnailLqipUrl: asset.signedThumbnailLqipUrl ?? asset.thumbnailLqipUrl,
     mimeType: asset.mimeType,
-    byteSize: asset.byteSize,
+    byteSize:
+      (asset.kind === "video" || asset.kind === "audio") &&
+      asset.editProxyStatus === "ready" &&
+      asset.editProxyByteSize
+        ? asset.editProxyByteSize
+        : asset.byteSize,
+    editProxyStatus: asset.editProxyStatus,
     durationSeconds: asset.durationSeconds,
     width: asset.width,
     height: asset.height,

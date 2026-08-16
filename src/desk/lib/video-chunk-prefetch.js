@@ -23,10 +23,12 @@ function isPrefetchableUrl(url) {
 }
 
 export class VideoChunkPrefetcher {
-  constructor(url, { fileSize = null, credentials = "include" } = {}) {
+  constructor(url, { fileSize = null, credentials = "omit" } = {}) {
     this.url = url;
     this.fileSize = fileSize > 0 ? fileSize : null;
-    this.credentials = credentials;
+    // Bunny/CDN signed URLs are query-auth. credentials:"include" turns them into
+    // credentialed CORS requests that fail (and never share cache with <video>).
+    this.credentials = credentials === "include" ? "include" : "omit";
     this.fetched = new Set();
     this.queue = [];
     this.inFlight = 0;
