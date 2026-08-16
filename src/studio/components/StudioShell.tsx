@@ -658,8 +658,25 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
   return mobileSection || null;
 }
 const STUDIO_CUSTOM_CURSOR_KEY = "yatishara-studio-custom-cursor";
-/** localStorage: dismissed | enabled — controls auto fullscreen push prompt. */
+/** localStorage: shown | dismissed | enabled — auto prompt once per browser. */
 const STUDIO_PUSH_PROMPT_KEY = "yatishara-studio-push-prompt-v1";
+
+function readStudioPushPromptState() {
+  if (typeof window === "undefined") return "";
+  try {
+    return String(window.localStorage.getItem(STUDIO_PUSH_PROMPT_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeStudioPushPromptState(value) {
+  try {
+    window.localStorage.setItem(STUDIO_PUSH_PROMPT_KEY, value);
+  } catch {
+    /* ignore */
+  }
+}
 function readWamReturnCookie() {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(
@@ -5534,16 +5551,18 @@ export function StudioShell({
     if (typeof window === "undefined") return;
     if (paymentCelebration || wamHandoff) return;
     if (!isStudioWebPushAvailable()) return;
-    if (window.localStorage.getItem(STUDIO_PUSH_PROMPT_KEY) === "dismissed") return;
-    if (getNotificationPermission() === "denied") return;
+    if (readStudioPushPromptState()) return;
+    const permission = getNotificationPermission();
+    if (permission === "denied" || permission === "granted") return;
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void (async () => {
         if (cancelled) return;
+        if (readStudioPushPromptState()) return;
         if (await hasStudioWebPushSubscription()) return;
         if (cancelled) return;
-        if (window.localStorage.getItem(STUDIO_PUSH_PROMPT_KEY) === "dismissed") return;
+        writeStudioPushPromptState("shown");
         setPushPromptOpen(true);
       })();
     }, 1800);
@@ -37131,18 +37150,14 @@ function PushNotificationsPromptOverlay({ onClose }) {
 
   useEffect(() => {
     const onKey = (event) => {
-      if (event.key === "Escape" && !busy) onClose?.();
+      if (event.key === "Escape" && !busy) dismiss();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
 
   function dismiss() {
-    try {
-      window.localStorage.setItem(STUDIO_PUSH_PROMPT_KEY, "dismissed");
-    } catch {
-      /* ignore */
-    }
+    writeStudioPushPromptState("dismissed");
     onClose?.();
   }
 
@@ -37180,22 +37195,14 @@ function PushNotificationsPromptOverlay({ onClose }) {
               setBusy(true);
               void enableStudioWebPush({ save: savePushSubscription })
                 .then(() => {
-                  try {
-                    window.localStorage.setItem(STUDIO_PUSH_PROMPT_KEY, "enabled");
-                  } catch {
-                    /* ignore */
-                  }
+                  writeStudioPushPromptState("enabled");
                   toast.success("Browser notifications enabled");
                   onClose?.();
                 })
                 .catch((err) => {
                   toast.error(friendlyConvexError(err, "Could not enable notifications"));
                   if (getNotificationPermission() === "denied") {
-                    try {
-                      window.localStorage.setItem(STUDIO_PUSH_PROMPT_KEY, "dismissed");
-                    } catch {
-                      /* ignore */
-                    }
+                    writeStudioPushPromptState("dismissed");
                     onClose?.();
                   }
                 })
