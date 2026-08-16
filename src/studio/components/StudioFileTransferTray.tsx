@@ -25,15 +25,20 @@ export function StudioFileTransferTray({
   onCancel,
   onDismiss,
   onRetry,
+  floating = false,
 }: {
   transfers: StudioFileTransfer[];
   onCancel: (id: string) => void;
   onDismiss: (id: string) => void;
   onRetry: (id: string) => void;
+  floating?: boolean;
 }) {
   if (!transfers.length) return null;
   return (
-    <section className="studio-file-transfer-tray shrink-0" aria-label="File transfers">
+    <section
+      className={`studio-file-transfer-tray shrink-0${floating ? " is-floating" : ""}`}
+      aria-label="File transfers"
+    >
       {transfers.map((transfer) => {
         const progress =
           transfer.status === "done"
@@ -47,7 +52,9 @@ export function StudioFileTransferTray({
             ? transfer.error || "Transfer failed"
             : transfer.status === "done"
               ? `Done · ${transfer.name}`
-              : transfer.detail || transfer.name;
+              : transfer.status === "queued"
+                ? transfer.detail || `Waiting · ${transfer.name}`
+                : transfer.detail || transfer.name;
         const bytes =
           active && transfer.loaded > 0
             ? transfer.total > 0

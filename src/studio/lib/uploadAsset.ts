@@ -45,6 +45,9 @@ export async function uploadStudioAsset(args: {
     mimeType,
   });
 
+  if (args.signal?.aborted) {
+    throw new DOMException("Upload canceled", "AbortError");
+  }
   const stagedJson = await new Promise<{ storageId?: string }>((resolve, reject) => {
     const request = new XMLHttpRequest();
     const abort = () => request.abort();
@@ -55,7 +58,15 @@ export async function uploadStudioAsset(args: {
       args.onProgress?.(event.loaded, event.lengthComputable ? event.total : args.file.size);
     };
     request.onerror = () => reject(new Error("Staging upload failed"));
-    request.onabort = () => reject(new DOMException("Upload canceled", "AbortError"));
+    // Only treat AbortError as user-cancel when our signal fired. Browser tab
+    // freeze / connection drop also aborts XHR — those should be retryable.
+    request.onabort = () => {
+      if (args.signal?.aborted) {
+        reject(new DOMException("Upload canceled", "AbortError"));
+        return;
+      }
+      reject(new Error("Staging upload interrupted"));
+    };
     request.onload = () => {
       if (request.status < 200 || request.status >= 300) {
         reject(new Error(`Staging upload failed (${request.status})`));

@@ -1784,6 +1784,13 @@ export function StudioShell({
   const [fileTransfers, setFileTransfers] = useState([]);
   const fileTransferControllersRef = useRef(new Map());
   const fileTransferPayloadsRef = useRef(new Map());
+  /** User hit cancel — do not auto-retry these. */
+  const fileTransferUserCanceledRef = useRef(new Set());
+  const fileTransferAttemptsRef = useRef(new Map());
+  /** Bound parallel uploads so tab switches / Feed thumb loads don't starve staging XHRs. */
+  const FILE_UPLOAD_MAX_PARALLEL = 3;
+  const fileUploadActiveRef = useRef(0);
+  const fileUploadWaitersRef = useRef([]);
   const selectedFilePaths = useMemo(
     () => new Set(selectedFileEntries.map((entry) => entry.path)),
     [selectedFileEntries],
@@ -7504,10 +7511,49 @@ export function StudioShell({
   function finishFileTransfer(id, patch) {
     updateFileTransfer(id, patch);
     fileTransferControllersRef.current.delete(id);
+    fileTransferUserCanceledRef.current.delete(id);
+    fileTransferAttemptsRef.current.delete(id);
     window.setTimeout(() => {
       setFileTransfers((current) => current.filter((transfer) => transfer.id !== id));
       fileTransferPayloadsRef.current.delete(id);
     }, 4500);
+  }
+
+  function acquireFileUploadSlot(signal) {
+    if (fileUploadActiveRef.current < FILE_UPLOAD_MAX_PARALLEL) {
+      fileUploadActiveRef.current += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const entry = { resolve, reject };
+      fileUploadWaitersRef.current.push(entry);
+      if (!signal) return;
+      const onAbort = () => {
+        const idx = fileUploadWaitersRef.current.indexOf(entry);
+        if (idx >= 0) fileUploadWaitersRef.current.splice(idx, 1);
+        reject(new DOMException("Upload canceled", "AbortError"));
+      };
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+
+  function releaseFileUploadSlot() {
+    const next = fileUploadWaitersRef.current.shift();
+    if (next) next.resolve();
+    else fileUploadActiveRef.current = Math.max(0, fileUploadActiveRef.current - 1);
+  }
+
+  function isTransientFileTransferError(error) {
+    if (!error) return false;
+    if (error.name === "AbortError") return false;
+    const message = String(error.message || error || "");
+    return /staging upload|interrupted|network|failed to fetch|timed out|timeout|connection/i.test(
+      message,
+    );
   }
 
   async function importParsedStudioPackage(pkg, folderId, signal, onProgress) {
@@ -7623,13 +7669,31 @@ export function StudioShell({
     if (!payload) return;
     const controller = new AbortController();
     fileTransferControllersRef.current.set(id, controller);
+    fileTransferUserCanceledRef.current.delete(id);
     updateFileTransfer(id, {
       status: "active",
       loaded: 0,
       total: payload.file?.size ?? 0,
       error: "",
     });
+    const needsUploadSlot =
+      payload.type === "upload" ||
+      payload.type === "studio-package-import" ||
+      payload.type === "zip-import";
+    let uploadSlotHeld = false;
     try {
+      if (needsUploadSlot) {
+        updateFileTransfer(id, {
+          status: "queued",
+          detail: payload.file?.name ? `Waiting · ${payload.file.name}` : "Waiting…",
+        });
+        await acquireFileUploadSlot(controller.signal);
+        uploadSlotHeld = true;
+        updateFileTransfer(id, {
+          status: "active",
+          detail: payload.file?.name || "",
+        });
+      }
       if (payload.type === "upload") {
         const assetId = await uploadStudioAsset({
           file: payload.file,
@@ -7874,12 +7938,40 @@ export function StudioShell({
         finishFileTransfer(id, { status: "done", name });
       }
     } catch (error) {
-      const canceled = error?.name === "AbortError";
+      const userCanceled = fileTransferUserCanceledRef.current.has(id);
+      const canceled = error?.name === "AbortError" || userCanceled;
+      const attempts = fileTransferAttemptsRef.current.get(id) ?? 0;
+      const canRetry =
+        !userCanceled &&
+        attempts < 2 &&
+        (isTransientFileTransferError(error) ||
+          /interrupted/i.test(String(error?.message || "")));
+      if (canRetry) {
+        fileTransferAttemptsRef.current.set(id, attempts + 1);
+        fileTransferControllersRef.current.delete(id);
+        updateFileTransfer(id, {
+          status: "queued",
+          error: "",
+          detail: `Retrying · ${payload.file?.name || "file"}`,
+        });
+        window.setTimeout(() => {
+          if (fileTransferUserCanceledRef.current.has(id)) return;
+          if (!fileTransferPayloadsRef.current.has(id)) return;
+          void runFileTransfer(id);
+        }, 700 + attempts * 500);
+        return null;
+      }
       updateFileTransfer(id, {
         status: "error",
-        error: canceled ? "Canceled" : friendlyConvexError(error, "Transfer failed"),
+        error: canceled
+          ? "Canceled"
+          : /interrupted/i.test(String(error?.message || ""))
+            ? "Interrupted — tap retry"
+            : friendlyConvexError(error, "Transfer failed"),
       });
       fileTransferControllersRef.current.delete(id);
+    } finally {
+      if (uploadSlotHeld) releaseFileUploadSlot();
     }
     return null;
   }
@@ -7997,16 +8089,23 @@ export function StudioShell({
   }
 
   function cancelFileTransfer(id) {
+    fileTransferUserCanceledRef.current.add(id);
     fileTransferControllersRef.current.get(id)?.abort();
+    updateFileTransfer(id, { status: "error", error: "Canceled" });
   }
 
   function dismissFileTransfer(id) {
+    fileTransferUserCanceledRef.current.add(id);
+    fileTransferControllersRef.current.get(id)?.abort();
     fileTransferControllersRef.current.delete(id);
     fileTransferPayloadsRef.current.delete(id);
+    fileTransferAttemptsRef.current.delete(id);
     setFileTransfers((current) => current.filter((transfer) => transfer.id !== id));
   }
 
   function retryFileTransfer(id) {
+    fileTransferUserCanceledRef.current.delete(id);
+    fileTransferAttemptsRef.current.delete(id);
     void runFileTransfer(id);
   }
 
@@ -25797,10 +25896,6 @@ export function StudioShell({
               void runCopyHere();
             }}
             onCancelCopy={endCopyDest}
-            transfers={fileTransfers}
-            onCancelTransfer={cancelFileTransfer}
-            onDismissTransfer={dismissFileTransfer}
-            onRetryTransfer={retryFileTransfer}
             pickedPaths={
               pickingFromFiles
                 ? assetPickSelected.map((item) => item.path).filter(Boolean)
@@ -26444,10 +26539,6 @@ export function StudioShell({
                   void runCopyHere();
                 }}
                 onCancelCopy={endCopyDest}
-                transfers={fileTransfers}
-                onCancelTransfer={cancelFileTransfer}
-                onDismissTransfer={dismissFileTransfer}
-                onRetryTransfer={retryFileTransfer}
                 pickedPaths={null}
                 filesBrowseMode={filesBrowseMode}
                 onFilesBrowseModeChange={setFilesBrowseMode}
@@ -27205,10 +27296,6 @@ export function StudioShell({
             void runCopyHere();
           }}
           onCancelCopy={endCopyDest}
-          transfers={fileTransfers}
-          onCancelTransfer={cancelFileTransfer}
-          onDismissTransfer={dismissFileTransfer}
-          onRetryTransfer={retryFileTransfer}
           pickedPaths={
             assetPickRequest
               ? assetPickSelected.map((item) => item.path).filter(Boolean)
@@ -27851,6 +27938,18 @@ export function StudioShell({
         onClose={() => setRenameTarget(null)}
         onRename={confirmRenameEntry}
       />
+      {fileTransfers.length && typeof document !== "undefined"
+        ? createPortal(
+            <StudioFileTransferTray
+              floating
+              transfers={fileTransfers}
+              onCancel={cancelFileTransfer}
+              onDismiss={dismissFileTransfer}
+              onRetry={retryFileTransfer}
+            />,
+            shellRef.current instanceof HTMLElement ? shellRef.current : document.body,
+          )
+        : null}
     </div>
     </StudioCreativeNetworkProvider>
     </StudioAcademyProvider>
@@ -35592,10 +35691,6 @@ function StudioFilesExplorerBody({
   copyDestBusy = false,
   onCopyHere,
   onCancelCopy,
-  transfers = [],
-  onCancelTransfer,
-  onDismissTransfer,
-  onRetryTransfer,
   filesBrowseMode = "yours",
   onFilesBrowseModeChange,
   assetUrlExpiresUnix,
@@ -35886,12 +35981,6 @@ function StudioFilesExplorerBody({
           </div>
         </div>
       ) : null}
-      <StudioFileTransferTray
-        transfers={transfers}
-        onCancel={onCancelTransfer}
-        onDismiss={onDismissTransfer}
-        onRetry={onRetryTransfer}
-      />
     </div>
   );
 }
