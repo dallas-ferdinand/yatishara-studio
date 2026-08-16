@@ -12,11 +12,20 @@ export type SchedulerMetrics = {
 
 export type FrameConsumer = {
   /**
-   * Prepare all media needed for a slice. Implementations must discard work
-   * whose generation no longer matches after a seek/project edit.
+   * Scrub / paused: prepare media for a slice. Discard work whose generation
+   * no longer matches after a seek/project edit.
    */
   prepare(slice: RenderSlice, generation: number): Promise<boolean>;
   render(slice: RenderSlice, generation: number): Promise<void> | void;
+  /**
+   * Play path: non-blocking. Sync PlayBus, capture frames, fire-and-forget
+   * compositor paint. Must not await decode.
+   */
+  paintPlay?(slice: RenderSlice, generation: number): void;
+  /** Program element waiting / not yet HAVE_CURRENT_DATA. */
+  isPlayWaiting?(): boolean;
+  /** At least one play frame reached the compositor this Play. */
+  hasPlayPainted?(): boolean;
 };
 
 export type SchedulerOptions = {
@@ -36,11 +45,9 @@ const requestFrameDefault = (callback: FrameRequestCallback): number =>
 const cancelFrameDefault = (id: number): void => cancelAnimationFrame(id);
 
 /**
- * Only hold the clock on a true underrun (prepare returned false / took too
- * long). While the continuous decode pump is healthy, time keeps advancing.
+ * Display clock for live play. Never awaits prepare / never holds transport.
+ * Scrub still uses renderNow → prepare + render (WebCodecs).
  */
-const UNDERRUN_HOLD_MS = 80;
-
 export class FrameScheduler {
   private plan: PlaybackPlan;
   private readonly clock: TransportClock;
@@ -50,7 +57,7 @@ export class FrameScheduler {
   private readonly options: SchedulerOptions;
   private frameId: number | null = null;
   private started = false;
-  private renderPending = false;
+  private paintInFlight = false;
   private lastUiAt = 0;
   private bufferingSince: number | null = null;
   private metricsValue: SchedulerMetrics = {
@@ -89,9 +96,11 @@ export class FrameScheduler {
     this.started = false;
     if (this.frameId != null) this.cancelFrame(this.frameId);
     this.frameId = null;
+    this.paintInFlight = false;
     this.finishBuffering(performance.now());
   }
 
+  /** Paused scrub / exact review — WebCodecs path. */
   async renderNow(time = this.clock.currentTime()): Promise<void> {
     const generation = this.clock.generation;
     const slice = sliceAt(this.plan, time);
@@ -115,7 +124,7 @@ export class FrameScheduler {
     if (!this.started || this.frameId != null) return;
     this.frameId = this.requestFrame((now) => {
       this.frameId = null;
-      void this.tick(now);
+      this.tick(now);
     });
   }
 
@@ -125,7 +134,7 @@ export class FrameScheduler {
     this.options.onBuffering?.(true);
   }
 
-  private async tick(now: number): Promise<void> {
+  private tick(now: number): void {
     if (!this.started) return;
     this.metricsValue.requestedFrames += 1;
     const timelineTime = this.clock.currentTime();
@@ -151,50 +160,30 @@ export class FrameScheduler {
       return;
     }
 
-    if (this.renderPending) {
-      // Drop this display frame — clock keeps running (real player behavior).
+    const waiting = this.consumer.isPlayWaiting?.() ?? false;
+    const painted = this.consumer.hasPlayPainted?.() ?? true;
+    if (waiting && !painted) {
+      // Cold start only — spinner. Clock keeps running (PlayBus / external time).
+      this.beginBuffering(now);
+    } else if (!waiting) {
+      this.finishBuffering(now);
+    }
+
+    if (this.paintInFlight) {
       this.metricsValue.droppedFrames += 1;
       this.queueFrame();
       return;
     }
 
-    this.renderPending = true;
     const workStarted = performance.now();
-    const wasPlaying = this.clock.playing;
-    // Only freeze transport on a lasting underrun — not on every prepare.
-    let heldForUnderrun = false;
-    const underrunTimer = setTimeout(() => {
-      if (!this.clock.playing) return;
-      this.clock.hold();
-      heldForUnderrun = true;
-      this.beginBuffering(performance.now());
-    }, UNDERRUN_HOLD_MS);
+    this.paintInFlight = true;
     try {
       const slice = sliceAt(this.plan, timelineTime);
-      const ready = await this.consumer.prepare(slice, generation);
-      if (!this.started || generation !== this.clock.generation) return;
-      if (!ready) {
-        if (wasPlaying && this.clock.playing) {
-          this.clock.hold();
-          heldForUnderrun = true;
-        }
-        this.beginBuffering(performance.now());
-        return;
+      if (this.consumer.paintPlay) {
+        this.consumer.paintPlay(slice, generation);
       }
-      const wasBuffering = this.bufferingSince != null;
-      this.finishBuffering(performance.now());
-      await this.consumer.render(slice, generation);
       if (generation === this.clock.generation) {
         this.metricsValue.renderedFrames += 1;
-      }
-      if (
-        this.started &&
-        !this.clock.ended() &&
-        (heldForUnderrun || wasBuffering) &&
-        !this.clock.playing &&
-        (wasPlaying || wasBuffering)
-      ) {
-        this.clock.play();
       }
     } catch (reason) {
       if (generation === this.clock.generation) {
@@ -203,13 +192,12 @@ export class FrameScheduler {
         );
       }
     } finally {
-      clearTimeout(underrunTimer);
       const elapsed = Math.max(0, performance.now() - workStarted);
       this.metricsValue.maxLatenessMs = Math.max(
         this.metricsValue.maxLatenessMs,
         Math.max(0, elapsed - 16.67),
       );
-      this.renderPending = false;
+      this.paintInFlight = false;
       this.queueFrame();
     }
   }

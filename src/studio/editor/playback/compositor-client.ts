@@ -14,6 +14,8 @@ export class CompositorClient {
   private ready: Promise<void>;
   private disposed = false;
   private ensuredFonts = new Set<string>();
+  /** Play-path: drop overlapping paints instead of queuing. */
+  private paintBusy = false;
 
   constructor(canvas: HTMLCanvasElement, width: number, height: number) {
     if (!("transferControlToOffscreen" in canvas)) {
@@ -209,6 +211,92 @@ export class CompositorClient {
         transfer,
       );
     });
+  }
+
+  /**
+   * Live play: post render and return immediately. If a paint is already in
+   * flight, drop this one (close frames) so the clock never waits on GPU.
+   * @returns false when dropped
+   */
+  paint(
+    args: Parameters<CompositorClient["render"]>[0],
+  ): boolean {
+    if (this.disposed) {
+      args.frameA?.close();
+      args.frameB?.close();
+      for (const layer of args.stack ?? []) layer.frame?.close();
+      return false;
+    }
+    if (this.paintBusy) {
+      args.frameA?.close();
+      args.frameB?.close();
+      for (const layer of args.stack ?? []) layer.frame?.close();
+      return false;
+    }
+    this.paintBusy = true;
+    const requestId = ++this.requestId;
+    const frameA = args.frameA;
+    let frameB = args.frameB;
+    const stack = args.stack ?? [];
+    if (frameA && frameB && frameA === frameB) {
+      frameB = frameA.clone();
+    }
+    const transfer: Transferable[] = [];
+    if (frameA) transfer.push(frameA);
+    if (frameB) transfer.push(frameB);
+    for (const layer of stack) {
+      if (layer.frame) transfer.push(layer.frame);
+    }
+    const finish = () => {
+      this.paintBusy = false;
+    };
+    void this.ready
+      .then(() => {
+        if (this.disposed) {
+          frameA?.close();
+          frameB?.close();
+          for (const layer of stack) layer.frame?.close();
+          finish();
+          return;
+        }
+        return new Promise<void>((resolve, reject) => {
+          this.pending.set(requestId, {
+            resolve: () => {
+              finish();
+              resolve();
+            },
+            reject: (error) => {
+              finish();
+              reject(error);
+            },
+          });
+          this.worker.postMessage(
+            {
+              type: "render",
+              requestId,
+              frameA,
+              frameB,
+              textureKeyA: args.textureKeyA,
+              textureKeyB: args.textureKeyB,
+              transformA: args.transformA ?? [1, 0, 0, 0],
+              transformB: args.transformB ?? [1, 0, 0, 0],
+              opacityA: args.opacityA ?? 1,
+              opacityB: args.opacityB ?? 1,
+              stack,
+              transition: args.transition ?? "none",
+              progress: args.progress ?? 0,
+              background: args.background ?? [0, 0, 0, 1],
+              textsUnder: args.textsUnder ?? [],
+              textsOver: args.textsOver ?? [],
+            },
+            transfer,
+          );
+        });
+      })
+      .catch(() => {
+        finish();
+      });
+    return true;
   }
 
   updateTransform(

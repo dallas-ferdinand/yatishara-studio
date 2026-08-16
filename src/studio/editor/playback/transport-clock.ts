@@ -13,8 +13,9 @@ function defaultClock(): number {
 }
 
 /**
- * Monotonic timeline transport. Media never writes into this clock: decoders
- * render the requested timestamp, so a seek or decode stall cannot move time back.
+ * Monotonic timeline transport. While playing with an external source (PlayBus),
+ * currentTime() reads that source — media never waits on the display tick.
+ * Paused scrub uses seek() without generation wipe.
  */
 export class TransportClock {
   private readonly now: ClockSource;
@@ -24,6 +25,8 @@ export class TransportClock {
   private rate = 1;
   private running = false;
   private generationValue = 0;
+  /** Live play master (e.g. PlayBus.timelineTime). Null when paused / scrubbing. */
+  private externalTime: (() => number) | null = null;
 
   constructor(duration: number, now: ClockSource = defaultClock) {
     this.duration = Math.max(0, duration);
@@ -42,7 +45,18 @@ export class TransportClock {
     return this.rate;
   }
 
+  /**
+   * While playing, drive currentTime from PlayBus (or similar). Pass null on
+   * pause so scrub uses the anchored timeline again.
+   */
+  setExternalTimeSource(source: (() => number) | null): void {
+    this.externalTime = source;
+  }
+
   currentTime(): number {
+    if (this.running && this.externalTime) {
+      return Math.max(0, Math.min(this.duration, this.externalTime()));
+    }
     if (!this.running) return this.anchorTimeline;
     const elapsed = Math.max(0, this.now() - this.anchorClock) * this.rate;
     return Math.max(0, Math.min(this.duration, this.anchorTimeline + elapsed));
@@ -60,17 +74,14 @@ export class TransportClock {
     if (this.running) {
       this.anchorTimeline = this.currentTime();
       this.running = false;
-      // Keep decode generation — wiping cache on pause blanks the still
-      // frame and makes the next scrub/play a cold keyframe.
+      this.externalTime = null;
     }
     return this.snapshot();
   }
 
   /**
-   * Freeze transport for a decode stall without bumping generation.
-   * Unlike pause(), this keeps in-flight frames and the decoder cache valid —
-   * critical when clip speed > 1× makes sourceTime advance faster and stalls
-   * more often (pause→generation wipe→cold keyframe = sticky playback).
+   * Freeze transport without bumping generation. Unused on the HTMLVideo play
+   * path (clock must never wait on a picture). Kept for tests / scrub tools.
    */
   hold(): TransportSnapshot {
     if (this.running) {

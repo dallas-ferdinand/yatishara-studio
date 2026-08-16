@@ -506,10 +506,8 @@ function upload(
   }
   context.activeTexture(unit);
   context.bindTexture(context.TEXTURE_2D, texture);
-  const prev = slot === "a" ? uploadedAKey : uploadedBKey;
-  if (cacheKey && cacheKey === prev) {
-    return true;
-  }
+  // play:a / play:b reuse stable keys but pixels change every frame — always
+  // upload when a VideoFrame is present. Timestamp video keys also always upload.
   context.pixelStorei(context.UNPACK_FLIP_Y_WEBGL, true);
   context.pixelStorei(context.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
   context.texImage2D(

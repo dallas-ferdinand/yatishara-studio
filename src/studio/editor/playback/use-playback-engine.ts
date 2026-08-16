@@ -29,11 +29,11 @@ import {
 } from "../previewLoadQuality";
 import { previewTransitionWhilePlaying } from "./preview-transition-play";
 import { setEditorPlaybackBusy } from "../filmstripGate";
+import { PlayBus } from "./play-bus";
 
 /**
- * A stall has to last this long before the preview admits to loading. The
- * transport still holds at the first sign of underrun; this only governs the
- * spinner, which used to blink on every sub-100ms decode.
+ * Spinner only after a lasting cold-buffer on PlayBus (element waiting before
+ * first paint). Clock never holds.
  */
 const BUFFER_SPINNER_DELAY_MS = 400;
 
@@ -54,45 +54,16 @@ function clockDuration(project: EditorProject, playing: boolean): number {
   return compileTimeline(project).duration;
 }
 
-/** Kick the continuous decode pump for video assets in/near the playhead. */
-function startDecodePumps(
-  decoder: MediaDecoderClient,
-  plan: PlaybackPlan,
-  mediaById: ReadonlyMap<string, EditorMediaItem>,
-  timelineTime: number,
-  generation: number,
-  previewLoadQuality: number = DEFAULT_PREVIEW_LOAD_QUALITY,
-): void {
-  const slice = sliceAt(plan, timelineTime);
-  const samples = [...slice.video, ...slice.preload];
-  const seen = new Set<string>();
-  for (const sample of samples) {
-    const assetId = sample.clip.assetId;
-    if (!assetId || seen.has(assetId)) continue;
-    const media = mediaById.get(assetId);
-    const url = playbackUrlForMedia(media, previewLoadQuality);
-    if (!media || media.kind !== "video" || !url) continue;
-    seen.add(assetId);
-    decoder.startPlayback({
-      assetId,
-      url,
-      sourceTime: sample.sourceTime,
-      generation,
-      speed: clipSpeed(sample.clip.clip.effects),
-      aheadSec: 1.25,
-    });
-  }
-}
-
-/** Idle: open demux + decode the playhead sample so Play isn't a cold start. */
+/** Idle: open demux so paused scrub is warm (not used for live play). */
 function warmPlayheadVideos(
-  decoder: MediaDecoderClient,
+  decoder: MediaDecoderClient | null,
   plan: PlaybackPlan,
   mediaById: ReadonlyMap<string, EditorMediaItem>,
   timelineTime: number,
   generation: number,
   previewLoadQuality: number = DEFAULT_PREVIEW_LOAD_QUALITY,
 ): void {
+  if (!decoder) return;
   const slice = sliceAt(plan, timelineTime);
   for (const sample of slice.video.slice(0, 2)) {
     const assetId = sample.clip.assetId;
@@ -191,10 +162,11 @@ type EngineRuntime = {
   plan: PlaybackPlan;
   clock: TransportClock;
   scheduler: FrameScheduler;
-  decoder: MediaDecoderClient;
+  decoder: MediaDecoderClient | null;
   compositor: CompositorClient;
   audio: AudioMixer;
   consumer: EngineConsumer;
+  playBus: PlayBus;
 };
 
 type Prepared = {
@@ -215,9 +187,10 @@ type Prepared = {
 };
 
 class EngineConsumer implements FrameConsumer {
-  private readonly decoder: MediaDecoderClient;
+  private readonly decoder: MediaDecoderClient | null;
   private readonly compositor: CompositorClient;
   private readonly audio: AudioMixer;
+  private playBus: PlayBus | null = null;
   private readonly mediaRef: React.MutableRefObject<ReadonlyMap<string, EditorMediaItem>>;
   private readonly previewLoadQualityRef: React.MutableRefObject<number>;
   private readonly playingRef: React.MutableRefObject<boolean>;
@@ -235,7 +208,7 @@ class EngineConsumer implements FrameConsumer {
   private transitionStartedAt = 0;
 
   constructor(args: {
-    decoder: MediaDecoderClient;
+    decoder: MediaDecoderClient | null;
     compositor: CompositorClient;
     audio: AudioMixer;
     mediaRef: React.MutableRefObject<ReadonlyMap<string, EditorMediaItem>>;
@@ -258,8 +231,25 @@ class EngineConsumer implements FrameConsumer {
     this.onSourceSize = args.onSourceSize;
   }
 
-  async prepare(slice: RenderSlice, generation: number): Promise<boolean> {
-    this.closePrepared();
+  setPlayBus(playBus: PlayBus | null): void {
+    this.playBus = playBus;
+  }
+
+  isPlayWaiting(): boolean {
+    return this.playBus?.isWaiting() ?? false;
+  }
+
+  hasPlayPainted(): boolean {
+    return this.playBus?.hasPainted ?? false;
+  }
+
+  /**
+   * Live play — never awaits decode. Clock is PlayBus; compositor paint is FF.
+   */
+  paintPlay(slice: RenderSlice, generation: number): void {
+    const bus = this.playBus;
+    if (!bus || !this.playingRef.current) return;
+
     const transitionKey = slice.transition?.key ?? null;
     if (transitionKey && transitionKey !== this.transitionKey) {
       this.transitionKey = transitionKey;
@@ -267,13 +257,112 @@ class EngineConsumer implements FrameConsumer {
     } else if (!transitionKey) {
       this.transitionKey = null;
     }
-    // Warm beds in parallel with video — never gate video frames on audio I/O
-    // (long voiceovers would stall the whole preview). Sync kicks in via
-    // onAudioReady once decode settles (even partial — sync plays what it has).
+
+    bus.syncSlice(slice, this.mediaRef.current);
+    const captured = bus.captureFrames();
+
+    // PNG stills from cache only — never await fetch on the play tick.
+    let frameA = captured.frameA;
+    let frameB = captured.frameB;
+    let textureKeyA = captured.textureKeyA ?? (slice.video[0] ? "play:a" : undefined);
+    let textureKeyB =
+      captured.textureKeyB ??
+      (slice.video[1] || slice.transition ? "play:b" : undefined);
+    const top = slice.video[0];
+    if (top?.clip.assetId) {
+      const media = this.mediaRef.current.get(top.clip.assetId);
+      if (media?.kind === "image") {
+        const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
+        if (url) {
+          const key = `image:${top.clip.assetId}`;
+          const cacheKey = `${top.clip.assetId}@${previewImageMaxEdge(this.previewLoadQualityRef.current)}:${url}`;
+          const cached = this.imageFrames.get(cacheKey);
+          textureKeyA = key;
+          if (!this.warmedStills.has(key) && cached) {
+            frameA = cached.clone();
+          } else {
+            frameA?.close();
+            frameA = undefined;
+          }
+          void this.imageFrame(top.clip.assetId, url, this.previewLoadQualityRef.current);
+        }
+      }
+    }
+
+    if (captured.assetIdA && captured.widthA && captured.heightA) {
+      this.onSourceSize({
+        assetId: captured.assetIdA,
+        width: captured.widthA,
+        height: captured.heightA,
+      });
+    }
+
+    const textsUnder = mapTextItems(slice.textUnder, slice.timelineTime);
+    const textsOver = mapTextItems(slice.textOver, slice.timelineTime);
+    // Fonts must already be on the worker from paused paints — never await here.
+    const sampleA = slice.video[0];
+    const sampleB =
+      slice.transition || slice.video.length <= 2
+        ? slice.video[1]
+        : slice.video[slice.video.length - 1];
+    const opacityFor = (sample: typeof sampleA | undefined) => {
+      if (!sample) return 1;
+      const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
+      const local = slice.timelineTime - sample.clip.timelineStart;
+      return clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local);
+    };
+
+    const painted = this.compositor.paint({
+      frameA,
+      frameB,
+      textureKeyA,
+      textureKeyB,
+      transformA: transformTuple(sampleA?.clip.clip.effects),
+      transformB: transformTuple(sampleB?.clip.clip.effects),
+      opacityA: opacityFor(sampleA),
+      opacityB: opacityFor(sampleB),
+      transition: previewTransitionWhilePlaying(slice.transition?.type, true),
+      progress: slice.transition?.progress,
+      textsUnder,
+      textsOver,
+    });
+    if (painted && textureKeyA?.startsWith("image:")) {
+      this.warmedStills.add(textureKeyA);
+    }
+
+    if (slice.transition && this.transitionStartedAt > 0 && painted) {
+      reportPerfMetric(
+        "editor-transition-start",
+        performance.now() - this.transitionStartedAt,
+        {
+          transition: slice.transition.type,
+          transitionKey: slice.transition.key,
+        },
+        "video-editor",
+      );
+      this.transitionStartedAt = 0;
+    }
+
+    void this.audio.prepare(slice, this.mediaRef.current).then(() => {
+      this.onAudioReady();
+    });
+    this.audio.sync(slice, generation, this.mediaRef.current, true);
+  }
+
+  /** Paused scrub — WebCodecs exact frames. */
+  async prepare(slice: RenderSlice, generation: number): Promise<boolean> {
+    this.closePrepared();
+    if (!this.decoder) return false;
+    const transitionKey = slice.transition?.key ?? null;
+    if (transitionKey && transitionKey !== this.transitionKey) {
+      this.transitionKey = transitionKey;
+      this.transitionStartedAt = performance.now();
+    } else if (!transitionKey) {
+      this.transitionKey = null;
+    }
     const audioReady = this.audio.prepare(slice, this.mediaRef.current).then(() => {
       this.onAudioReady();
     });
-    const playing = this.playingRef.current;
     type DecodedLayer = {
       assetId: string;
       sourceTime: number;
@@ -286,7 +375,6 @@ class EngineConsumer implements FrameConsumer {
     };
     const decodeSample = async (
       sample: (typeof slice.video)[number],
-      index: number,
     ): Promise<DecodedLayer | null> => {
       const assetId = sample.clip.assetId;
       if (!assetId) return null;
@@ -313,20 +401,16 @@ class EngineConsumer implements FrameConsumer {
         };
       }
       try {
-        const decoded = await this.decoder.requestFrame(
+        const decoded = await this.decoder!.requestFrame(
           assetId,
           url,
           sample.sourceTime,
           generation,
           {
             speed: clipSpeed(sample.clip.clip.effects),
-            aheadSec: playing ? 0.6 : 0.35,
-            // Paused review shows the sample under the playhead, not a
-            // neighbour — otherwise stepping frames never changes the image.
-            exact: !playing,
-            // Primary stays hard; every other stack/partner layer is soft so
-            // multi-row timelines never stall the display clock.
-            soft: playing && index > 0,
+            aheadSec: 0.35,
+            exact: true,
+            soft: false,
           },
         );
         if (!decoded) return null;
@@ -336,56 +420,25 @@ class EngineConsumer implements FrameConsumer {
           sample,
         };
       } catch {
-        // Skip broken/slow samples — underrun/buffer; never throw into a
-        // red "Frame decode timeout." overlay.
         return null;
       }
     };
-    // During play, finish the top lane first so the clock keeps moving; then
-    // soft-fill the rest. Parallel-all used to let middle rows starve primary.
-    let decoded: Array<DecodedLayer | null>;
-    if (playing && slice.video.length > 1) {
-      const primary = await decodeSample(slice.video[0], 0);
-      const rest = await Promise.all(
-        slice.video.slice(1).map((sample, i) => decodeSample(sample, i + 1)),
-      );
-      decoded = [primary, ...rest];
-    } else {
-      decoded = await Promise.all(
-        slice.video.map((sample, index) => decodeSample(sample, index)),
-      );
-    }
-    // Touch the promise so failures aren't unhandled; do not await for readiness.
+    const decoded = await Promise.all(slice.video.map((sample) => decodeSample(sample)));
     void audioReady;
     const valid = decoded.filter((item): item is NonNullable<typeof item> => item != null);
     const hasText = slice.textOver.length > 0 || slice.textUnder.length > 0;
     if (valid.length === 0 && slice.video.length > 0 && !hasText) {
-      // Keep fade envelopes moving even when video decode isn't ready yet.
-      this.audio.sync(
-        slice,
-        generation,
-        this.mediaRef.current,
-        this.playingRef.current,
-      );
+      this.audio.sync(slice, generation, this.mediaRef.current, false);
       return false;
     }
-    if (valid.length < slice.video.length) {
-      this.audio.sync(
-        slice,
-        generation,
-        this.mediaRef.current,
-        this.playingRef.current,
-      );
-    }
-    // Sync whatever audio is already cached (video stems and/or beds).
     this.onAudioReady();
     const primary = valid[0];
     this.onSourceSize(
       primary
         ? {
             assetId: primary.assetId,
-            width: primary.frame.displayWidth,
-            height: primary.frame.displayHeight,
+            width: primary.width ?? primary.frame?.displayWidth ?? 0,
+            height: primary.height ?? primary.frame?.displayHeight ?? 0,
           }
         : null,
     );
@@ -419,8 +472,6 @@ class EngineConsumer implements FrameConsumer {
       }),
     };
 
-    // Only after the primary paint is ready — prefetch/warm used to steal
-    // bandwidth from the first frame on cold play.
     for (const sample of [...slice.video, ...slice.preload]) {
       if (!sample.clip.assetId) continue;
       const media = this.mediaRef.current.get(sample.clip.assetId);
@@ -431,18 +482,9 @@ class EngineConsumer implements FrameConsumer {
           url,
           sample.sourceTime,
           generation,
-          playing ? 1.25 : 2.0,
+          2.0,
         );
-      }
-    }
-    if (!playing) {
-      for (const sample of slice.preload) {
-        if (!sample.clip.assetId) continue;
-        const media = this.mediaRef.current.get(sample.clip.assetId);
-        const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
-        if (url && media?.kind === "video") {
-          this.decoder.warm(sample.clip.assetId, url, sample.sourceTime, generation);
-        }
+        this.decoder.warm(sample.clip.assetId, url, sample.sourceTime, generation);
       }
     }
     return true;
@@ -698,16 +740,15 @@ export function usePlaybackEngine(args: {
     runtimeRef.current = null;
     runtime?.scheduler.stop();
     runtime?.consumer.dispose();
-    runtime?.decoder.dispose();
+    runtime?.playBus.dispose();
+    runtime?.decoder?.dispose();
     runtime?.compositor.dispose();
     void runtime?.audio.dispose();
   }, []);
 
   useEffect(() => {
-    if (!canvas || !capabilities.supported) {
-      if (!capabilities.supported) setError(capabilities.reason ?? "Preview unsupported.");
-      return;
-    }
+    // Play uses HTMLVideoElement — WebCodecs is optional (scrub / frame-step).
+    if (!canvas) return;
     if (disposeTimerRef.current != null) {
       window.clearTimeout(disposeTimerRef.current);
       disposeTimerRef.current = null;
@@ -719,10 +760,6 @@ export function usePlaybackEngine(args: {
         disposeTimerRef.current = window.setTimeout(disposeRuntime, 0);
       };
     }
-    const bufferHold = {
-      resumeAfterBuffer: false,
-      hardStopTimer: null as number | null,
-    };
     try {
       const audio = new AudioMixer();
       audio.setNaturalAudioUrls(naturalAudioByClipId);
@@ -731,8 +768,18 @@ export function usePlaybackEngine(args: {
         audio.clockSeconds,
       );
       clock.seek(playhead);
-      const decoder = new MediaDecoderClient();
+      const decoder = capabilities.supported ? new MediaDecoderClient() : null;
+      if (!capabilities.supported) {
+        // Scrub exact frames unavailable — play still works via PlayBus.
+        console.warn(
+          "[playback]",
+          capabilities.reason ?? "WebCodecs unavailable; scrub exact disabled.",
+        );
+      }
       const compositor = new CompositorClient(canvas, width, height);
+      const playBus = new PlayBus(mediaRef, {
+        previewLoadQuality: previewLoadQualityRef.current,
+      });
       const syncAudioNow = () => {
         const runtime = runtimeRef.current;
         if (!runtime || !playingRef.current) return;
@@ -765,7 +812,10 @@ export function usePlaybackEngine(args: {
           });
         },
       });
+      consumer.setPlayBus(playBus);
       const plan = compileTimeline(projectRef.current);
+      playBus.setPlan(plan);
+      playBus.setDuration(plan.duration);
       playbackSignatureRef.current = playbackSignature(plan);
       const scheduler = new FrameScheduler(plan, clock, consumer, {
         loop: true,
@@ -776,45 +826,41 @@ export function usePlaybackEngine(args: {
         onLoop: () => {
           const runtime = runtimeRef.current;
           if (!runtime || !playingRef.current) return;
-          const time = runtime.clock.currentTime();
-          runtime.decoder.stopPlayback();
-          startDecodePumps(
-            runtime.decoder,
-            runtime.plan,
-            mediaRef.current,
-            time,
-            runtime.clock.generation,
-            previewLoadQualityRef.current,
-          );
-          void runtime.audio.prepare(sliceAt(runtime.plan, time), mediaRef.current).then(() => {
-            if (!playingRef.current || runtimeRef.current !== runtime) return;
-            runtime.audio.sync(
-              sliceAt(runtime.plan, runtime.clock.currentTime()),
-              runtime.clock.generation,
-              mediaRef.current,
-              true,
-            );
-          });
+          // Pin time at 0 immediately so the next rAF does not re-trigger ended().
+          runtime.clock.setExternalTimeSource(() => 0);
+          void runtime.playBus
+            .play(runtime.plan, 0, mediaRef.current)
+            .then(() => {
+              if (!playingRef.current || runtimeRef.current !== runtime) return;
+              runtime.clock.setExternalTimeSource(() => runtime.playBus.timelineTime());
+              void runtime.audio.prepare(sliceAt(runtime.plan, 0), mediaRef.current).then(() => {
+                if (!playingRef.current || runtimeRef.current !== runtime) return;
+                runtime.audio.sync(
+                  sliceAt(runtime.plan, runtime.clock.currentTime()),
+                  runtime.clock.generation,
+                  mediaRef.current,
+                  true,
+                );
+              });
+            });
         },
         onBuffering: (value) => {
+          // Spinner only — clock never holds. Soft-pause audio on cold wait.
           if (value) {
-            // Clock is already held by the scheduler during prepare. Soft-pause
-            // audio for brief stalls; only tear down media elements if held long.
-            if (!bufferHold.resumeAfterBuffer) {
-              audio.softPause();
-              bufferHold.resumeAfterBuffer = true;
-              bufferHold.hardStopTimer = window.setTimeout(() => {
-                if (bufferHold.resumeAfterBuffer) audio.stopAll();
-              }, 300);
-            }
-          } else if (bufferHold.resumeAfterBuffer && playingRef.current) {
-            bufferHold.resumeAfterBuffer = false;
-            if (bufferHold.hardStopTimer != null) {
-              window.clearTimeout(bufferHold.hardStopTimer);
-              bufferHold.hardStopTimer = null;
-            }
-            if (!clock.playing) clock.play();
-            // Restart beds after soft/hard pause once video is moving again.
+            audio.softPause();
+            if (bufferSpinnerTimerRef.current != null) return;
+            bufferSpinnerTimerRef.current = window.setTimeout(() => {
+              bufferSpinnerTimerRef.current = null;
+              if (runtimeRef.current && playingRef.current) setBuffering(true);
+            }, BUFFER_SPINNER_DELAY_MS);
+            return;
+          }
+          if (bufferSpinnerTimerRef.current != null) {
+            window.clearTimeout(bufferSpinnerTimerRef.current);
+            bufferSpinnerTimerRef.current = null;
+          }
+          setBuffering(false);
+          if (playingRef.current) {
             const runtime = runtimeRef.current;
             if (runtime) {
               const time = clock.currentTime();
@@ -828,26 +874,7 @@ export function usePlaybackEngine(args: {
                 );
               });
             }
-          } else {
-            bufferHold.resumeAfterBuffer = false;
-            if (bufferHold.hardStopTimer != null) {
-              window.clearTimeout(bufferHold.hardStopTimer);
-              bufferHold.hardStopTimer = null;
-            }
           }
-          if (!value) {
-            if (bufferSpinnerTimerRef.current != null) {
-              window.clearTimeout(bufferSpinnerTimerRef.current);
-              bufferSpinnerTimerRef.current = null;
-            }
-            setBuffering(false);
-            return;
-          }
-          if (bufferSpinnerTimerRef.current != null) return;
-          bufferSpinnerTimerRef.current = window.setTimeout(() => {
-            bufferSpinnerTimerRef.current = null;
-            if (runtimeRef.current && playingRef.current) setBuffering(true);
-          }, BUFFER_SPINNER_DELAY_MS);
         },
         onEnded: () => callbacksRef.current.onPlayingChange(false),
         onError: (reason) => {
@@ -865,10 +892,16 @@ export function usePlaybackEngine(args: {
         compositor,
         audio,
         consumer,
+        playBus,
       };
       metricsTimerRef.current = window.setInterval(() => {
         const metrics = scheduler.metrics();
-        const decoderMetrics = decoder.metrics();
+        const decoderMetrics = decoder?.metrics() ?? {
+          pendingRequests: 0,
+          framesReceived: 0,
+          errors: 0,
+          cacheBytes: 0,
+        };
         const audioMetrics = audio.metrics();
         const videoAssets = [...mediaRef.current.values()].filter(
           (media) => media.kind === "video",
@@ -893,10 +926,12 @@ export function usePlaybackEngine(args: {
             audioCacheBytes: audioMetrics.cacheBytes,
             activeAudioSources: audioMetrics.activeSources,
             proxyHitRate: videoAssets.length ? proxyHits / videoAssets.length : 1,
+            playBus: 1,
           },
           "video-editor",
         );
       }, 10_000);
+      playBus.idleAt(plan, playhead, mediaRef.current);
       void scheduler.renderNow(playhead).catch((reason) => {
         if (!runtimeRef.current || isSoftDecodeFailure(reason)) return;
         setError(reason instanceof Error ? reason.message : String(reason));
@@ -907,16 +942,11 @@ export function usePlaybackEngine(args: {
       }
     }
     return () => {
-      bufferHold.resumeAfterBuffer = false;
-      if (bufferHold.hardStopTimer != null) {
-        window.clearTimeout(bufferHold.hardStopTimer);
-        bufferHold.hardStopTimer = null;
-      }
       disposeTimerRef.current = window.setTimeout(disposeRuntime, 0);
     };
     // Canvas owns one OffscreenCanvas transfer for its lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, capabilities.reason, capabilities.supported, disposeRuntime]);
+  }, [canvas, disposeRuntime]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -924,29 +954,25 @@ export function usePlaybackEngine(args: {
     const plan = compileTimeline(project);
     runtime.plan = plan;
     runtime.scheduler.setPlan(plan);
+    runtime.playBus.setPlan(plan);
+    runtime.playBus.setDuration(clockDuration(projectRef.current, playingRef.current));
     runtime.clock.setDuration(clockDuration(projectRef.current, playingRef.current));
     const time = runtime.clock.currentTime();
     const slice = sliceAt(plan, time);
-    // Only a timeline change touches decode and audio. Dragging a transform or
-    // restyling text used to tear the pumps down on every pointer move, which
-    // read as the preview reloading constantly.
+    // Only a timeline change touches media. Dragging a transform or restyling
+    // text must not restart PlayBus / scrub decode.
     const signature = playbackSignature(plan);
     const structural = signature !== playbackSignatureRef.current;
     playbackSignatureRef.current = signature;
     if (structural) {
       runtime.audio.stopAll();
-      runtime.decoder.stopPlayback();
+      runtime.decoder?.stopPlayback();
       if (playingRef.current) {
-        startDecodePumps(
-          runtime.decoder,
-          plan,
-          mediaRef.current,
-          time,
-          runtime.clock.generation,
-          previewLoadQualityRef.current,
-        );
+        void runtime.playBus.play(plan, time, mediaRef.current).then(() => {
+          if (!playingRef.current || runtimeRef.current !== runtime) return;
+          runtime.clock.setExternalTimeSource(() => runtime.playBus.timelineTime());
+        });
       }
-      // Newly added audio beds decode async — resync once buffers land.
       void runtime.audio.prepare(slice, mediaRef.current).then(() => {
         if (!playingRef.current || runtimeRef.current !== runtime) return;
         runtime.audio.sync(
@@ -957,8 +983,8 @@ export function usePlaybackEngine(args: {
         );
       });
     }
-    // While playing the scheduler repaints every frame from the new plan.
     if (playingRef.current) return;
+    runtime.playBus.idleAt(plan, time, mediaRef.current);
     warmPlayheadVideos(
       runtime.decoder,
       plan,
@@ -979,6 +1005,7 @@ export function usePlaybackEngine(args: {
     // Resizing an OffscreenCanvas clears its buffer — always repaint or the
     // preview stays blank after aspect-ratio changes (including while playing).
     runtime.compositor.resize(width, height);
+    if (playingRef.current) return;
     void runtime.scheduler
       .renderNow(runtime.clock.currentTime())
       .catch((reason) => {
@@ -997,14 +1024,14 @@ export function usePlaybackEngine(args: {
         .then(async () => {
           if (!playingRef.current) return;
           const time = runtime.clock.currentTime();
-          // Continuous decode pump — fill ahead of the playhead, then sample.
-          startDecodePumps(runtime.decoder,
-            runtime.plan,
-            mediaRef.current,
-            time,
-            runtime.clock.generation, previewLoadQualityRef.current);
-          // Kick bed decode before the first paint; don't block play on it.
-          void runtime.audio.prepare(sliceAt(runtime.plan, time), mediaRef.current).then(() => {
+          runtime.decoder?.stopPlayback();
+          const end = clockDuration(projectRef.current, true);
+          runtime.clock.setDuration(end);
+          runtime.playBus.setDuration(end);
+          let startAt = time;
+          if (end > 0 && startAt >= end - 0.0005) startAt = 0;
+          // Do not await WebCodecs renderNow — PlayBus owns the first paint.
+          void runtime.audio.prepare(sliceAt(runtime.plan, startAt), mediaRef.current).then(() => {
             if (!playingRef.current || runtimeRef.current !== runtime) return;
             runtime.audio.sync(
               sliceAt(runtime.plan, runtime.clock.currentTime()),
@@ -1013,14 +1040,10 @@ export function usePlaybackEngine(args: {
               true,
             );
           });
-          // Paint the primed frame, then let the clock run (pump keeps filling).
-          await runtime.scheduler.renderNow(time);
+          await runtime.playBus.play(runtime.plan, startAt, mediaRef.current);
           if (!playingRef.current) return;
-          const end = clockDuration(projectRef.current, true);
-          runtime.clock.setDuration(end);
-          if (end > 0 && runtime.clock.currentTime() >= end - 0.0005) {
-            runtime.clock.seek(0);
-          }
+          runtime.clock.seek(startAt);
+          runtime.clock.setExternalTimeSource(() => runtime.playBus.timelineTime());
           runtime.clock.play();
           runtime.scheduler.start();
         })
@@ -1030,12 +1053,23 @@ export function usePlaybackEngine(args: {
           callbacksRef.current.onPlayingChange(false);
         });
     } else {
-      runtime.decoder.stopPlayback();
+      const pausedAt = runtime.playBus.pause();
       runtime.clock.pause();
+      runtime.clock.seek(pausedAt);
       runtime.clock.setDuration(clockDuration(projectRef.current, false));
       runtime.scheduler.stop();
       runtime.audio.stopAll();
-      void runtime.scheduler.renderNow(runtime.clock.currentTime()).catch(() => undefined);
+      runtime.decoder?.stopPlayback();
+      runtime.playBus.idleAt(runtime.plan, pausedAt, mediaRef.current);
+      warmPlayheadVideos(
+        runtime.decoder,
+        runtime.plan,
+        mediaRef.current,
+        pausedAt,
+        runtime.clock.generation,
+        previewLoadQualityRef.current,
+      );
+      void runtime.scheduler.renderNow(pausedAt).catch(() => undefined);
     }
   }, [playing]);
 
@@ -1057,19 +1091,22 @@ export function usePlaybackEngine(args: {
         runtime.clock.seek(time);
         runtime.audio.stopAll();
         emittedTimeRef.current = time;
+        runtime.playBus.idleAt(runtime.plan, time, mediaRef.current);
         const slice = sliceAt(runtime.plan, time);
-        for (const sample of slice.video) {
-          const assetId = sample.clip.assetId;
-          if (!assetId) continue;
-          const media = mediaRef.current.get(assetId);
-          const url = playbackUrlForMedia(media, previewLoadQualityRef.current);
-          if (!media || media.kind !== "video" || !url) continue;
-          runtime.decoder.scrub({
-            assetId,
-            url,
-            sourceTime: sample.sourceTime,
-            generation: runtime.clock.generation,
-          });
+        if (runtime.decoder) {
+          for (const sample of slice.video) {
+            const assetId = sample.clip.assetId;
+            if (!assetId) continue;
+            const media = mediaRef.current.get(assetId);
+            const url = playbackUrlForMedia(media, previewLoadQualityRef.current);
+            if (!media || media.kind !== "video" || !url) continue;
+            runtime.decoder.scrub({
+              assetId,
+              url,
+              sourceTime: sample.sourceTime,
+              generation: runtime.clock.generation,
+            });
+          }
         }
         const paint = async () => {
           try {
@@ -1082,8 +1119,6 @@ export function usePlaybackEngine(args: {
         };
         await paint();
         if (pendingScrubRef.current != null) continue;
-        // Settled here. A cold seek can time out and paint a neighbouring
-        // sample; the real one has usually landed by now, so repaint once.
         await paint();
       }
     } finally {
@@ -1094,8 +1129,7 @@ export function usePlaybackEngine(args: {
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    // While playing, the transport clock owns time. Echoed onPlayheadChange
-    // updates must not seek/stopAll — that continuously kills audio beds.
+    // While playing, PlayBus owns time. Echoed onPlayheadChange must not seek.
     if (playing) return;
     pendingScrubRef.current = playhead;
     if (scrubRafRef.current != null) return;
@@ -1115,9 +1149,6 @@ export function usePlaybackEngine(args: {
   }, []);
 
   // Proxy URLs, signed URLs, and preview load quality can change after hydrate.
-  // Restart decode pumps / scrub so the chosen 720/1080 proxy is used. Keyed on
-  // the URLs themselves: any other asset-row change (thumbnails, renames,
-  // Convex re-delivery) must not interrupt decoding.
   const playbackUrlSignature = useMemo(() => {
     const parts: string[] = [];
     for (const media of mediaById.values()) {
@@ -1136,30 +1167,30 @@ export function usePlaybackEngine(args: {
     setError(null);
     const time = runtime.clock.currentTime();
     const slice = sliceAt(runtime.plan, time);
-    runtime.decoder.stopPlayback();
+    runtime.playBus.setPreviewLoadQuality(previewLoadQualityRef.current);
+    runtime.decoder?.stopPlayback();
     runtime.consumer.clearImageFrames();
     if (playingRef.current) {
-      startDecodePumps(
-        runtime.decoder,
-        runtime.plan,
-        mediaRef.current,
-        time,
-        runtime.clock.generation,
-        previewLoadQualityRef.current,
-      );
+      void runtime.playBus.play(runtime.plan, time, mediaRef.current).then(() => {
+        if (!playingRef.current || runtimeRef.current !== runtime) return;
+        runtime.clock.setExternalTimeSource(() => runtime.playBus.timelineTime());
+      });
     } else {
-      for (const sample of slice.video) {
-        const assetId = sample.clip.assetId;
-        if (!assetId) continue;
-        const media = mediaRef.current.get(assetId);
-        const url = playbackUrlForMedia(media, previewLoadQualityRef.current);
-        if (!media || media.kind !== "video" || !url) continue;
-        runtime.decoder.scrub({
-          assetId,
-          url,
-          sourceTime: sample.sourceTime,
-          generation: runtime.clock.generation,
-        });
+      runtime.playBus.idleAt(runtime.plan, time, mediaRef.current);
+      if (runtime.decoder) {
+        for (const sample of slice.video) {
+          const assetId = sample.clip.assetId;
+          if (!assetId) continue;
+          const media = mediaRef.current.get(assetId);
+          const url = playbackUrlForMedia(media, previewLoadQualityRef.current);
+          if (!media || media.kind !== "video" || !url) continue;
+          runtime.decoder.scrub({
+            assetId,
+            url,
+            sourceTime: sample.sourceTime,
+            generation: runtime.clock.generation,
+          });
+        }
       }
       warmPlayheadVideos(
         runtime.decoder,
@@ -1209,7 +1240,7 @@ export function usePlaybackEngine(args: {
     canvasRef,
     buffering,
     error,
-    supported: capabilities.supported,
+    supported: true,
     sourceSize,
     previewTransform: (transform, target = "a") => {
       runtimeRef.current?.compositor.updateTransform(
