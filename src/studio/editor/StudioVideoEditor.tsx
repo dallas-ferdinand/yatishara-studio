@@ -58,7 +58,7 @@ import {
   sourceTrimSec,
 } from "./projectContract";
 import { clampAudioFadePair, resolveAudioFadePair } from "./editorEffects";
-import { MAX_PPS, MIN_PPS } from "./types";
+import { stepTimelineZoom } from "./types";
 
 const TRASH_FOLDER_ID = "__trash__";
 
@@ -949,14 +949,9 @@ export function StudioVideoEditor({
     onZoom: (delta) =>
       dispatch({
         type: "set_zoom",
-        pixelsPerSecond: Math.max(
-          MIN_PPS,
-          Math.min(
-            MAX_PPS,
-            Math.round(
-              delta > 0 ? state.ui.pixelsPerSecond * 1.12 : state.ui.pixelsPerSecond * 0.9,
-            ),
-          ),
+        pixelsPerSecond: stepTimelineZoom(
+          state.ui.pixelsPerSecond,
+          delta > 0 ? 1.12 : 0.9,
         ),
       }),
     onDeselect: () => {

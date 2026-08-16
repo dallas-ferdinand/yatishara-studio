@@ -1,4 +1,5 @@
 import {
+  clampTimelinePps,
   DEFAULT_PPS,
   DEFAULT_TRACKS,
   LEGACY_TRACK_MAP,
@@ -482,7 +483,13 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         ? state
         : { ...state, ui: { ...state.ui, playing: action.playing } };
     case "set_zoom":
-      return { ...state, ui: { ...state.ui, pixelsPerSecond: action.pixelsPerSecond } };
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          pixelsPerSecond: clampTimelinePps(action.pixelsPerSecond),
+        },
+      };
     case "set_inspector_open":
       return { ...state, ui: { ...state.ui, inspectorOpen: action.open } };
     case "set_editor_mode": {

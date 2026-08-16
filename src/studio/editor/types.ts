@@ -207,10 +207,33 @@ export const DEFAULT_TRACKS: EditorTrack[] = [
 export const TRACK_INSERT_HEIGHT = 1;
 export const TRACK_INSERT_HIT_PX = 16;
 
-export const MIN_PPS = 24;
+/** Floor so a long edit (e.g. 30–60 min) can still fit in view when zoomed out. */
+export const MIN_PPS = 2;
 /** ~48px per frame at 30fps — enough to land a 1-frame cut. */
 export const MAX_PPS = 1440;
 export const DEFAULT_PPS = 72;
+
+/** Next zoom level — always moves at least one discrete step so low pps is not stuck. */
+export function clampTimelinePps(pixelsPerSecond: number): number {
+  if (!Number.isFinite(pixelsPerSecond)) return DEFAULT_PPS;
+  return Math.max(MIN_PPS, Math.min(MAX_PPS, pixelsPerSecond));
+}
+
+export function stepTimelineZoom(current: number, factor: number): number {
+  const pps = Math.max(MIN_PPS, current);
+  if (!(factor > 0) || factor === 1) return clampTimelinePps(pps);
+  const raw = pps * factor;
+  let next: number;
+  if (factor < 1) {
+    // Zoom out: floor, and force a drop when rounding would stall.
+    next = Math.floor(raw * 100) / 100;
+    if (next >= pps) next = pps > 8 ? pps - 1 : Math.max(MIN_PPS, pps - 0.5);
+  } else {
+    next = Math.ceil(raw * 100) / 100;
+    if (next <= pps) next = pps < 8 ? pps + 0.5 : pps + 1;
+  }
+  return clampTimelinePps(next);
+}
 export const VIDEO_TRACK_HEIGHT = 50;
 export const TEXT_TRACK_HEIGHT = 28;
 export const AUDIO_TRACK_HEIGHT = VIDEO_TRACK_HEIGHT;

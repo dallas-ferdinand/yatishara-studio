@@ -47,14 +47,13 @@ import { ClipAudioWaveform } from "./ClipAudioWaveform";
 import { ClipFilmstrip } from "./ClipFilmstrip";
 import {
   AUDIO_TRACK_HEIGHT,
-  MAX_PPS,
-  MIN_PPS,
   RULER_HEIGHT,
   TEXT_TRACK_HEIGHT,
   TRACK_INSERT_HEIGHT,
   TRACK_INSERT_HIT_PX,
   TRACK_RAIL_WIDTH,
   VIDEO_TRACK_HEIGHT,
+  stepTimelineZoom,
 } from "./types";
 
 function trackHeightForKind(kind) {
@@ -1111,6 +1110,9 @@ const RULER_NICE_STEPS = [
   60,
   120,
   300,
+  600,
+  900,
+  1800,
 ];
 
 function pickNiceStep(pps, minPx) {
@@ -1212,10 +1214,10 @@ export function EditorTransportBar({
           <Magnet size={ICON} aria-hidden="true" />
         </button>
         <div className="studio-editor-zoom">
-          <button type="button" aria-label="Zoom out" onClick={() => onZoom(Math.max(MIN_PPS, Math.round(pixelsPerSecond * 0.9)))}>
+          <button type="button" aria-label="Zoom out" onClick={() => onZoom(stepTimelineZoom(pixelsPerSecond, 0.9))}>
             <ZoomOut size={ICON} aria-hidden="true" />
           </button>
-          <button type="button" aria-label="Zoom in" onClick={() => onZoom(Math.min(MAX_PPS, Math.round(pixelsPerSecond * 1.12)))}>
+          <button type="button" aria-label="Zoom in" onClick={() => onZoom(stepTimelineZoom(pixelsPerSecond, 1.12))}>
             <ZoomIn size={ICON} aria-hidden="true" />
           </button>
         </div>
@@ -1305,7 +1307,7 @@ export function EditorTimeline({
         (scroll.scrollLeft + xInView - TRACK_RAIL_WIDTH) / Math.max(pixelsPerSecond, 1),
       );
       const factor = deltaY > 0 ? 0.9 : 1.12;
-      const next = Math.max(MIN_PPS, Math.min(MAX_PPS, Math.round(pixelsPerSecond * factor)));
+      const next = stepTimelineZoom(pixelsPerSecond, factor);
       if (next === pixelsPerSecond) return;
       zoomAnchorRef.current = { time, xInView };
       onZoom(next);
@@ -1347,7 +1349,7 @@ export function EditorTimeline({
         const score = (moveEvent.clientX - startX) - (moveEvent.clientY - startY);
         const steps = Math.trunc(score / STEP_PX);
         const factor = Math.pow(1.1, steps);
-        const next = Math.max(MIN_PPS, Math.min(MAX_PPS, Math.round(startPps * factor)));
+        const next = stepTimelineZoom(startPps, factor);
         if (next === lastPps) return;
         lastPps = next;
         zoomAnchorRef.current = { time, xInView };
