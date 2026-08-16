@@ -229,6 +229,11 @@ export function MobileGestures() {
         // Clear inline transform so CSS free-spin can run.
         if (markRef.current) markRef.current.style.transform = "";
         window.setTimeout(() => {
+          try {
+            window.dispatchEvent(new Event("studio:flush-tab-session"));
+          } catch {
+            /* ignore */
+          }
           window.location.reload();
         }, 420);
       } else {

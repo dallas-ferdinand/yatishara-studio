@@ -1224,6 +1224,42 @@ function writePersistedTabSession(session, userId) {
   }
 }
 
+/** Sole persist path. Never overwrite a stored workspace with an empty boot flash. */
+function commitPersistedTabSession(session, userId, { allowWipe = false } = {}) {
+  if (!userId || typeof window === "undefined") return null;
+  const slimmed = {
+    openTabs: session?.openTabs ?? [],
+    activeTab: session?.activeTab ?? "",
+    activeFolderId: session?.activeFolderId ?? null,
+    navTrail: session?.navTrail ?? [],
+    snapshots: slimTabEntrySnapshots(session?.snapshots),
+  };
+  if (!allowWipe) {
+    try {
+      const key = studioOpenTabsKey(userId);
+      const raw = key ? window.localStorage.getItem(key) : null;
+      if (raw) {
+        const prevTabs = JSON.parse(raw)?.openTabs;
+        if (
+          Array.isArray(prevTabs) &&
+          prevTabs.length > 0 &&
+          slimmed.openTabs.length === 0
+        ) {
+          return null;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  writePersistedTabSession(slimmed, userId);
+  try {
+    return JSON.stringify(slimmed);
+  } catch {
+    return null;
+  }
+}
+
 function clearCachedTabSession() {
   cachedInitialTabSession = null;
   cachedInitialTabSessionUserId = null;
@@ -1588,72 +1624,55 @@ export function StudioShell({
     });
   }, []);
 
+  function commitLiveTabSession(session, { allowWipe = false } = {}) {
+    const userId = tabAccountIdRef.current;
+    if (!userId || !tabSessionReadyRef.current) return;
+    const payload = {
+      openTabs: session?.openTabs ?? [],
+      activeTab: session?.activeTab ?? "",
+      activeFolderId: session?.activeFolderId ?? null,
+      navTrail: session?.navTrail ?? [],
+      snapshots: slimTabEntrySnapshots(session?.snapshots),
+    };
+    let serialized = "";
+    try {
+      serialized = JSON.stringify(payload);
+    } catch {
+      return;
+    }
+    if (serialized === lastPersistedTabSessionRef.current) return;
+    const written = commitPersistedTabSession(payload, userId, {
+      allowWipe: allowWipe || userClearedTabsRef.current,
+    });
+    if (written) lastPersistedTabSessionRef.current = written;
+  }
+
   useEffect(() => {
     if (!tabSessionReadyRef.current) return;
     if (skipNextTabPersistRef.current) {
       skipNextTabPersistRef.current = false;
       return;
     }
-    const userId = tabAccountIdRef.current;
-    if (!userId) return;
-    // Script hydrate fills tabEntrySnapshots with full bodies; slim + skip
-    // identical writes so opening an MD doesn't spam localStorage / re-render churn.
-    const slimmed = {
+    commitLiveTabSession({
       openTabs,
       activeTab,
       activeFolderId,
       navTrail,
-      snapshots: slimTabEntrySnapshots(tabEntrySnapshots),
-    };
-    // Never clobber a stored workspace with a boot/empty flash (including a
-    // single open file tab — the old >1 guard missed that case).
-    try {
-      const key = studioOpenTabsKey(userId);
-      const raw = key ? window.localStorage.getItem(key) : null;
-      if (raw) {
-        const prev = JSON.parse(raw);
-        const prevTabs = Array.isArray(prev?.openTabs) ? prev.openTabs : [];
-        const shrinking = prevTabs.length > slimmed.openTabs.length;
-        const wiping = prevTabs.length > 0 && slimmed.openTabs.length === 0;
-        const justReloaded = Boolean(
-          sessionStorage.getItem("yatishara-studio-reloaded-build"),
-        );
-        if ((wiping && !userClearedTabsRef.current) || (justReloaded && shrinking)) {
-          return;
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-    const serialized = JSON.stringify(slimmed);
-    if (serialized === lastPersistedTabSessionRef.current) return;
-    lastPersistedTabSessionRef.current = serialized;
-    writePersistedTabSession(slimmed, userId);
+      snapshots: tabEntrySnapshots,
+    });
   }, [openTabs, activeTab, activeFolderId, navTrail, tabEntrySnapshots]);
 
-  // Soft update / beforeunload: flush the live session so reload cannot race
-  // past an in-memory-only tab open.
+  // Soft update / pull-refresh / pagehide: flush live tabs before unload.
   useEffect(() => {
     const flush = () => {
-      const userId = tabAccountIdRef.current;
-      if (!userId || !tabSessionReadyRef.current) return;
-      const live = latestTabSessionRef.current;
-      writePersistedTabSession(
-        {
-          openTabs: live.openTabs,
-          activeTab: live.activeTab,
-          activeFolderId: live.activeFolderId,
-          navTrail: live.navTrail,
-          snapshots: slimTabEntrySnapshots(live.snapshots),
-        },
-        userId,
-      );
+      commitLiveTabSession(latestTabSessionRef.current, {
+        allowWipe: userClearedTabsRef.current,
+      });
     };
-    const onFlush = () => flush();
-    window.addEventListener("studio:flush-tab-session", onFlush);
+    window.addEventListener("studio:flush-tab-session", flush);
     window.addEventListener("pagehide", flush);
     return () => {
-      window.removeEventListener("studio:flush-tab-session", onFlush);
+      window.removeEventListener("studio:flush-tab-session", flush);
       window.removeEventListener("pagehide", flush);
     };
   }, []);
@@ -2111,14 +2130,8 @@ export function StudioShell({
     }
     tabAccountIdRef.current = userId;
     tabSessionReadyRef.current = true;
-    // Soft-update guard only needs the first paint cycle.
-    window.setTimeout(() => {
-      try {
-        sessionStorage.removeItem("yatishara-studio-reloaded-build");
-      } catch {
-        /* ignore */
-      }
-    }, 2500);
+    // Keep yatishara-studio-reloaded-build for the session — desk-build-guard
+    // uses it as the one-shot deploy reload latch. Persist no longer reads it.
   }, [currentUser?._id]);
   const isGenerateSurface =
     typeof activeTab === "string" &&
@@ -4934,22 +4947,13 @@ export function StudioShell({
     userClearedTabsRef.current = false;
     setOpenTabs((tabs) => {
       const next = tabs.includes(key) ? tabs : [...tabs, key];
-      const userId = tabAccountIdRef.current;
-      if (userId && tabSessionReadyRef.current) {
-        const slimmed = {
-          openTabs: next,
-          activeTab: key,
-          activeFolderId: latestTabSessionRef.current.activeFolderId,
-          navTrail: latestTabSessionRef.current.navTrail,
-          snapshots: slimTabEntrySnapshots(latestTabSessionRef.current.snapshots),
-        };
-        writePersistedTabSession(slimmed, userId);
-        try {
-          lastPersistedTabSessionRef.current = JSON.stringify(slimmed);
-        } catch {
-          /* ignore */
-        }
-      }
+      commitLiveTabSession({
+        openTabs: next,
+        activeTab: key,
+        activeFolderId: latestTabSessionRef.current.activeFolderId,
+        navTrail: latestTabSessionRef.current.navTrail,
+        snapshots: latestTabSessionRef.current.snapshots,
+      });
       return next;
     });
     setActiveTab(key);
@@ -4975,22 +4979,13 @@ export function StudioShell({
       } else {
         next = [...tabs.filter((tab) => !tab.startsWith("feed:")), key];
       }
-      const userId = tabAccountIdRef.current;
-      if (userId && tabSessionReadyRef.current) {
-        const slimmed = {
-          openTabs: next,
-          activeTab: key,
-          activeFolderId: latestTabSessionRef.current.activeFolderId,
-          navTrail: latestTabSessionRef.current.navTrail,
-          snapshots: slimTabEntrySnapshots(latestTabSessionRef.current.snapshots),
-        };
-        writePersistedTabSession(slimmed, userId);
-        try {
-          lastPersistedTabSessionRef.current = JSON.stringify(slimmed);
-        } catch {
-          /* ignore */
-        }
-      }
+      commitLiveTabSession({
+        openTabs: next,
+        activeTab: key,
+        activeFolderId: latestTabSessionRef.current.activeFolderId,
+        navTrail: latestTabSessionRef.current.navTrail,
+        snapshots: latestTabSessionRef.current.snapshots,
+      });
       return next;
     });
     setActiveTab(key);
@@ -6430,28 +6425,19 @@ export function StudioShell({
     setOpenTabs((tabs) => {
       const next = tabs.filter((tab) => tab !== key);
       if (next.length === 0) userClearedTabsRef.current = true;
-      const userId = tabAccountIdRef.current;
-      if (userId && tabSessionReadyRef.current) {
-        const remainingActive =
-          activeTab === key
-            ? next.length
-              ? next[next.length - 1]
-              : ""
-            : activeTab;
-        const slimmed = {
-          openTabs: next,
-          activeTab: remainingActive,
-          activeFolderId: latestTabSessionRef.current.activeFolderId,
-          navTrail: latestTabSessionRef.current.navTrail,
-          snapshots: slimTabEntrySnapshots(latestTabSessionRef.current.snapshots),
-        };
-        writePersistedTabSession(slimmed, userId);
-        try {
-          lastPersistedTabSessionRef.current = JSON.stringify(slimmed);
-        } catch {
-          /* ignore */
-        }
-      }
+      const remainingActive =
+        activeTab === key
+          ? next.length
+            ? next[next.length - 1]
+            : ""
+          : activeTab;
+      commitLiveTabSession({
+        openTabs: next,
+        activeTab: remainingActive,
+        activeFolderId: latestTabSessionRef.current.activeFolderId,
+        navTrail: latestTabSessionRef.current.navTrail,
+        snapshots: latestTabSessionRef.current.snapshots,
+      });
       return next;
     });
     if (activeTab === key) {

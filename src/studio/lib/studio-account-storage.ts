@@ -36,7 +36,8 @@ export function purgeLegacyUnscopedStudioShellKeys(): void {
   const legacy = [
     STUDIO_OPEN_TABS_BASE,
     STUDIO_COMPOSER_CONTEXTS_BASE,
-    STUDIO_DEFAULT_TAB_BASE,
+    // Do not delete STUDIO_DEFAULT_TAB_BASE — that unscoped key is still the
+    // live default-tab preference (scoped studioDefaultTabKey is unused).
     "yatishara-studio-file-access",
     "yatishara-studio-folder-access",
     "mercuryos-explorer-pins",
