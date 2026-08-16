@@ -99,6 +99,7 @@ import {
   applyTextStylePreset,
   loadCustomTextPresets,
   presetPreviewStyle,
+  presetStageTone,
   saveCustomTextPresets,
   textStyleMatchesPreset,
   textStyleSnapshot,
@@ -1733,7 +1734,10 @@ function TextPresetCard({ preset, active, onApply, onDelete }) {
         if (family && family !== "system") void loadGoogleFont(family);
       }}
     >
-      <span className="studio-editor-text-preset-card-stage" aria-hidden="true">
+      <span
+        className={`studio-editor-text-preset-card-stage is-${presetStageTone(preset.style)}`}
+        aria-hidden="true"
+      >
         <span
           className="studio-editor-text-preset-card-sample"
           style={presetPreviewStyle(preset.style)}

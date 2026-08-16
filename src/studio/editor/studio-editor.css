@@ -2397,14 +2397,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 72px;
+  min-height: 76px;
   padding: 16px 12px;
-  background: color-mix(in srgb, var(--mos-plate, #ececf0) 55%, var(--mos-page, #fff));
   overflow: hidden;
+  /* Accent-tinted plate so light and dark ink both read. */
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 16%, #12141a);
 }
 
-[data-appearance="dark"] .studio-editor-text-preset-card-stage {
-  background: color-mix(in srgb, var(--mos-plate) 70%, transparent);
+.studio-editor-text-preset-card-stage.is-dark {
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 18%, #0e1016);
+}
+
+.studio-editor-text-preset-card-stage.is-light {
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 12%, #f4f2ef);
+}
+
+[data-appearance="dark"] .studio-editor-text-preset-card-stage.is-light {
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 14%, #ebe8e4);
+}
+
+[data-appearance="dark"] .studio-editor-text-preset-card-stage.is-dark {
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 22%, #0a0c10);
 }
 
 .studio-editor-text-preset-card-sample {
