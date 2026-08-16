@@ -14,26 +14,7 @@ export type StudioUpdateOffer = {
   buildId: string;
   versionName: string;
   localBuildId: string;
-  localVersionName?: string;
 };
-
-/** Short label for the update bar (fits a 32px chrome head). */
-export function shortStudioBuildLabel(buildId: string): string {
-  const raw = String(buildId ?? "").trim();
-  if (!raw) return "?";
-  // fast-<git12>-<timestamp> → git12
-  const fast = /^fast-([a-f0-9]{7,12})(?:-|$)/i.exec(raw);
-  if (fast?.[1]) return fast[1];
-  const stripped = raw.replace(/^fast-/i, "");
-  const beforeStamp = stripped.split("-")[0] ?? stripped;
-  return beforeStamp.slice(0, 12) || raw.slice(0, 12);
-}
-
-export function studioUpdateBannerLabel(offer: StudioUpdateOffer): string {
-  const from = shortStudioBuildLabel(offer.localBuildId);
-  const to = shortStudioBuildLabel(offer.buildId);
-  return `${from} → ${to}`;
-}
 
 /** Build id of the JS/HTML this tab is actually running. */
 export function getRunningStudioBuildId(): string {

@@ -5,7 +5,6 @@ import {
   applyStudioUpdate,
   startStudioUpdatePoll,
   stopStudioUpdatePoll,
-  studioUpdateBannerLabel,
   type StudioUpdateOffer,
 } from "@/studio/lib/studio-web-update";
 
@@ -33,7 +32,7 @@ export function StudioUpdateBanner() {
         void applyStudioUpdate(offer.buildId);
       }}
     >
-      {applying ? "Updating…" : studioUpdateBannerLabel(offer)}
+      {applying ? "Updating…" : "Update"}
       <style jsx>{`
         .studio-update-banner {
           box-sizing: border-box;
