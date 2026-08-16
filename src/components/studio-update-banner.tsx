@@ -23,7 +23,6 @@ export function StudioUpdateBanner() {
 
   return (
     <div className="studio-update-banner" role="status" aria-live="polite">
-      <span className="studio-update-banner-label">Update</span>
       <button
         type="button"
         className="studio-update-banner-btn studio-update-banner-btn-primary"
@@ -74,10 +73,6 @@ export function StudioUpdateBanner() {
           font-size: 12px;
           line-height: 1;
           white-space: nowrap;
-        }
-        .studio-update-banner-label {
-          margin-right: 2px;
-          font-weight: 650;
         }
         .studio-update-banner-btn {
           display: inline-flex;
