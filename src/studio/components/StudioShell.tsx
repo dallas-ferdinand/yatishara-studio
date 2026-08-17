@@ -23461,8 +23461,8 @@ export function StudioShell({
         }
         .studio-polish.is-studio-mobile .studio-academy-detail-top,
         .studio-polish.is-studio-mobile .studio-academy-body {
-          padding-left: 12px;
-          padding-right: 12px;
+          padding-left: 14px;
+          padding-right: 14px;
         }
         .studio-polish.is-studio-mobile .studio-academy-pane .public-offers-body {
           padding-left: 0;

@@ -1244,15 +1244,21 @@
   );
 }
 
-/* Title starts below the fade; title/body sit 2px further in from the edge. */
+/* Title starts below the fade; title/body sit 2px further in than the player. */
+.studio-academy-detail-top,
+.studio-academy-body {
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
 .studio-polish.is-studio-mobile .studio-cn-catalog.is-academy-watch .studio-academy-detail {
   padding-top: 28px;
 }
 
 .studio-polish.is-studio-mobile .studio-cn-catalog.is-academy-watch .studio-academy-detail-top,
 .studio-polish.is-studio-mobile .studio-cn-catalog.is-academy-watch .studio-academy-body {
-  padding-left: 14px;
-  padding-right: 14px;
+  padding-left: 16px;
+  padding-right: 16px;
 }
 
 /* Academy mobile catalog (list): book bar sibling — size main to remaining flex space. */
