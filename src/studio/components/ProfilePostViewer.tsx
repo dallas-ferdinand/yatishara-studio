@@ -2231,14 +2231,6 @@ export function ProfilePostViewer({
                         }
                       : undefined
                   }
-                  onOpenDescription={
-                    role === "current"
-                      ? () => {
-                          setSidePanelMode("description");
-                          if (isMobile) setCommentsOpen(true);
-                        }
-                      : undefined
-                  }
                 />
               </article>
             );

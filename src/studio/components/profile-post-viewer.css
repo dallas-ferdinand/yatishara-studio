@@ -1146,8 +1146,19 @@
   }
 
   .profile-post-caption.is-page .profile-post-caption-text {
+    display: block;
     font-size: 14px;
     line-height: 1.45;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    max-height: none;
+    overflow: visible;
+    text-overflow: unset;
+    pointer-events: auto;
+  }
+
+  .profile-post-caption.is-page .profile-post-caption-text .post-compose-inline-chip {
+    pointer-events: auto;
   }
 
   .profile-post-watch-frame .profile-post-like-burst {
