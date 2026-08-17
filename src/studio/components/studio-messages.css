@@ -3711,22 +3711,35 @@
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
-.studio-dm-dialog-head button {
+.studio-dm-dialog-head-actions {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  cursor: pointer;
+  gap: 6px;
+  margin-left: auto;
 }
 
-.studio-dm-dialog-head button:hover {
-  color: var(--color-cursor-text-bright, var(--mos-text));
-  background: color-mix(in srgb, var(--mos-text) 8%, transparent);
+.studio-dm-dialog-head .studio-dm-dialog-primary,
+.studio-dm-dialog-head .studio-dm-dialog-danger {
+  width: auto;
+  height: calc(var(--cursor-head-h, 32px) - 8px);
+  min-height: calc(var(--cursor-head-h, 32px) - 8px);
+  padding: 0 10px;
+}
+
+.studio-dm-dialog-head .studio-composer-circle-btn.studio-dm-label-close {
+  width: var(--studio-dm-chrome-circle, 28px) !important;
+  min-width: var(--studio-dm-chrome-circle, 28px) !important;
+  max-width: var(--studio-dm-chrome-circle, 28px) !important;
+  height: var(--studio-dm-chrome-circle, 28px) !important;
+  min-height: var(--studio-dm-chrome-circle, 28px) !important;
+  max-height: var(--studio-dm-chrome-circle, 28px) !important;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.studio-dm-dialog-head .studio-composer-circle-btn.studio-dm-label-close svg {
+  width: var(--studio-dm-chrome-glyph, 14px);
+  height: var(--studio-dm-chrome-glyph, 14px);
 }
 
 .studio-dm-dialog-body {

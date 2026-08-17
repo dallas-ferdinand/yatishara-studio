@@ -104,9 +104,38 @@ export function StudioDmLabelEditorDialog({
     >
       <header className="studio-dm-dialog-head">
         <strong>{labelId ? "Edit label" : "New label"}</strong>
-        <button type="button" onClick={onClose} aria-label="Close">
-          <X className="h-4 w-4" aria-hidden="true" />
-        </button>
+        <div className="studio-dm-dialog-head-actions">
+          {labelId ? (
+            <button
+              type="button"
+              className="studio-dm-dialog-danger"
+              onClick={() => void destroy()}
+              disabled={busy}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Delete
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="studio-dm-dialog-primary"
+            onClick={() => void save()}
+            disabled={busy || !name.trim()}
+          >
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : null}
+            {labelId ? "Save" : "Create"}
+          </button>
+          <button
+            type="button"
+            className="studio-composer-circle-btn studio-dm-label-close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
       </header>
       <div className="studio-dm-dialog-body">
         <label className="studio-dm-dialog-field">
@@ -145,37 +174,6 @@ export function StudioDmLabelEditorDialog({
         </div>
         {error ? <p className="studio-dm-error">{error}</p> : null}
       </div>
-      <footer className="studio-dm-dialog-foot">
-        {labelId ? (
-          <button
-            type="button"
-            className="studio-dm-dialog-danger"
-            onClick={() => void destroy()}
-            disabled={busy}
-          >
-            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-            Delete
-          </button>
-        ) : (
-          <span aria-hidden="true" />
-        )}
-        <div className="studio-dm-dialog-actions">
-          <button type="button" className="studio-dm-dialog-ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="studio-dm-dialog-primary"
-            onClick={() => void save()}
-            disabled={busy || !name.trim()}
-          >
-            {busy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            ) : null}
-            {labelId ? "Save" : "Create"}
-          </button>
-        </div>
-      </footer>
     </div>
   );
 
@@ -272,8 +270,13 @@ export function StudioDmAssignLabelsDialog({
           <span className="studio-dm-assign-peer-divider" aria-hidden="true" />
           <span className="studio-dm-assign-peer-action">Labels</span>
         </span>
-        <button type="button" onClick={onClose} aria-label="Close">
-          <X className="h-4 w-4" aria-hidden="true" />
+        <button
+          type="button"
+          className="studio-composer-circle-btn studio-dm-label-close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          <X aria-hidden="true" />
         </button>
       </header>
       <div className="studio-dm-dialog-body">
