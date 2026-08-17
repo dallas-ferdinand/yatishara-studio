@@ -20395,6 +20395,9 @@ export function StudioShell({
           align-items: stretch;
           padding-bottom: 6px;
         }
+        .studio-composer-options-head .studio-audio-type-switcher {
+          justify-self: start;
+        }
         .studio-composer-audio-type-tabs {
           display: flex;
           align-items: center;
@@ -29144,9 +29147,17 @@ function StudioComposer({
             }
           >
             <div
-              className={`studio-composer-options-head${isAudioMode && !isMobile ? " is-audio-tabs" : ""}`}
+              className={`studio-composer-options-head${isAudioMode ? " is-audio-tabs" : ""}`}
             >
-              {isAudioMode && !isMobile ? (
+              {isAudioMode && isMobile ? (
+                <StudioAudioTypeSwitcher
+                  audioType={audioType}
+                  setAudioType={(value) => {
+                    setAudioType?.(value);
+                    setVoicePickerOpen(false);
+                  }}
+                />
+              ) : isAudioMode ? (
                 <nav
                   className="studio-composer-audio-type-tabs"
                   role="tablist"
@@ -29612,15 +29623,6 @@ function StudioComposer({
         <div className="studio-composer-toolbar-left">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
           {!isAudioMode ? <StudioUploadButton inputRef={uploadInputRef} /> : null}
-          {isAudioMode && isMobile ? (
-            <StudioAudioTypeSwitcher
-              audioType={audioType}
-              setAudioType={(value) => {
-                setAudioType?.(value);
-                setVoicePickerOpen(false);
-              }}
-            />
-          ) : null}
           {isAudioMode && !isMobile ? (
             <button
               type="button"
@@ -29643,8 +29645,8 @@ function StudioComposer({
             <button
               type="button"
               className={`studio-composer-circle-btn studio-composer-options-btn${composerOptionsOpen ? " is-open" : ""}`}
-              title="Generation settings"
-              aria-label="Generation settings"
+              title={isAudioMode ? `${activeAudioTypeOption.label} settings` : "Generation settings"}
+              aria-label={isAudioMode ? `${activeAudioTypeOption.label} settings` : "Generation settings"}
               aria-expanded={composerOptionsOpen}
               onClick={() => {
                 setPresetGridOpen(false);
@@ -29653,7 +29655,11 @@ function StudioComposer({
                 setComposerOptionsOpen((open) => !open);
               }}
             >
-              <SlidersHorizontal size={14} strokeWidth={2.25} aria-hidden="true" />
+              {isAudioMode ? (
+                <ActiveAudioTypeIcon size={14} strokeWidth={2.25} aria-hidden="true" />
+              ) : (
+                <SlidersHorizontal size={14} strokeWidth={2.25} aria-hidden="true" />
+              )}
             </button>
           )}
         </div>
