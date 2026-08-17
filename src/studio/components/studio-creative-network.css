@@ -1720,8 +1720,8 @@ button.studio-cn-book-bar-price.is-discussion.has-preview {
 }
 
 .studio-cn-book-bar-preview-avatar.studio-profile-avatar {
-  --spa-size: 20px;
-  --spa-font: 8px;
+  --spa-size: 28px;
+  --spa-font: 10px;
   flex: 0 0 auto;
 }
 
