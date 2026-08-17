@@ -928,6 +928,8 @@ export function StudioAcademyPane({
     setPurchaseConfirmOpen(false);
     setCommentsOpen(false);
     clientRequestIdRef.current = null;
+    videoTimeSecRef.current = 0;
+    videoTimeHeardRef.current = false;
   }, [academy.courseId]);
 
   // Coming soon / draft courses return null — bounce to catalog.
@@ -1702,8 +1704,8 @@ export function StudioAcademyPane({
         sidebarTitle={commentsSidebarTitle}
         sidebarAvatarUrl={commentsSidebarAvatar}
         locked={!owned}
-        getVideoTimeSec={commentsLessonId ? getVideoTimeSec : undefined}
-        onSeekVideo={commentsLessonId ? seekVideoTo : undefined}
+        getVideoTimeSec={getVideoTimeSec}
+        onSeekVideo={seekVideoTo}
       />
     ) : null;
 

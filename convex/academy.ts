@@ -2098,7 +2098,6 @@ export const addComment = authedMutation({
       }
     }
     const videoTimeSec =
-      lesson &&
       typeof args.videoTimeSec === "number" &&
       Number.isFinite(args.videoTimeSec) &&
       args.videoTimeSec >= 0

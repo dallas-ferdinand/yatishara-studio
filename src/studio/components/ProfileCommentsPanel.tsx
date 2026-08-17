@@ -891,7 +891,7 @@ function CommentsBody({
             body,
             parentId: (parentId as Id<"academyComments"> | null) ?? undefined,
             imageAssetId,
-            ...(lessonId && getVideoTimeSec
+            ...(getVideoTimeSec
               ? (() => {
                   const t = getVideoTimeSec();
                   return typeof t === "number" && Number.isFinite(t)

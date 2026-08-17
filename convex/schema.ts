@@ -1879,7 +1879,7 @@ export default defineSchema({
     likeCount: v.optional(v.number()),
     replyCount: v.optional(v.number()),
     imageAssetId: v.optional(v.id("assets")),
-    /** Playback position (seconds) when the comment was posted on a lesson video. */
+    /** Playback position (seconds) when the comment was posted on intro or lesson video. */
     videoTimeSec: v.optional(v.number()),
   })
     .index("by_course_and_created", ["courseId", "createdAt"])
