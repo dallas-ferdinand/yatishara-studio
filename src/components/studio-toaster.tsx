@@ -40,9 +40,12 @@ const SKIP_CHROME_CLOSEST = [
 
 function measureMobileToastTop(): string {
   if (typeof document === "undefined") return MOBILE_TOP_FALLBACK;
+  const visual = window.visualViewport;
+  const viewTop = visual?.offsetTop ?? 0;
+  const viewH = visual?.height ?? window.innerHeight;
   const nodes = document.querySelectorAll(TOP_CHROME_SELECTOR);
   let bottom = 0;
-  const maxTop = Math.min(180, window.innerHeight * 0.42);
+  const maxTop = viewTop + Math.min(168, viewH * 0.36);
   for (const node of nodes) {
     if (!(node instanceof HTMLElement)) continue;
     if (node.closest(SKIP_CHROME_CLOSEST)) continue;
@@ -50,13 +53,15 @@ function measureMobileToastTop(): string {
     if (style.display === "none" || style.visibility === "hidden") continue;
     if (Number(style.opacity) === 0) continue;
     const rect = node.getBoundingClientRect();
-    if (rect.width < 8 || rect.height < 8) continue;
+    if (rect.width < 8 || rect.height < 24 || rect.height > 96) continue;
     if (rect.top > maxTop) continue;
-    if (rect.bottom > window.innerHeight * 0.5) continue;
+    if (rect.bottom > viewTop + viewH * 0.45) continue;
     if (rect.bottom > bottom) bottom = rect.bottom;
   }
-  if (bottom < 24) return MOBILE_TOP_FALLBACK;
-  return `${Math.round(bottom + 8)}px`;
+  if (bottom < viewTop + 24) return MOBILE_TOP_FALLBACK;
+  const top = Math.round(bottom + 8);
+  const cap = Math.round(viewTop + Math.min(176, viewH * 0.38));
+  return `${Math.min(top, cap)}px`;
 }
 
 function useMobileToastTop(isMobile: boolean): string {

@@ -411,9 +411,13 @@ summary {
     top: var(--mobile-offset-top, var(--offset-top, 0px)) !important;
   }
 
+  /* Inset left/right — do not use left:50% without translate (Sonner zeros transform). */
   [data-sonner-toaster][data-x-position="center"] {
-    width: calc(100vw - 24px) !important;
-    max-width: 380px !important;
+    left: max(12px, env(safe-area-inset-left, 0px)) !important;
+    right: max(12px, env(safe-area-inset-right, 0px)) !important;
+    transform: none !important;
+    width: auto !important;
+    max-width: none !important;
   }
 
   [data-sonner-toaster] [data-sonner-toast] {
