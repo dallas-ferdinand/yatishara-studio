@@ -218,6 +218,7 @@ function FeedMedia({
     expiresUnix,
   });
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mediaRootRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const chromeVisibleRef = useRef(false);
   const postIdRef = useRef(post._id);
@@ -236,6 +237,7 @@ function FeedMedia({
   const [seekValue, setSeekValue] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [policyMuted, setPolicyMuted] = useState(false);
+  const [mediaSize, setMediaSize] = useState<{ w: number; h: number } | null>(null);
   const policyMutedRef = useRef(false);
   const userPausedRef = useRef(false);
 
@@ -320,6 +322,7 @@ function FeedMedia({
     setSeekValue(0);
     setDuration(0);
     setPlaying(false);
+    setMediaSize(null);
     resumeAtRef.current = 0;
     wasPlayingRef.current = false;
   }, [post._id, hideChrome]);
@@ -427,7 +430,12 @@ function FeedMedia({
         setSeekValue(video.currentTime);
       }
     };
-    const onMeta = () => setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+    const onMeta = () => {
+      setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        setMediaSize({ w: video.videoWidth, h: video.videoHeight });
+      }
+    };
     const onPlay = () => {
       setPlaying(true);
       if (chromeVisibleRef.current) scheduleHide();
@@ -560,9 +568,31 @@ function FeedMedia({
   }
 
   const progressPct = duration > 0 ? Math.min(100, (seekValue / duration) * 100) : 0;
+  const aspectW =
+    mediaSize?.w && mediaSize.w > 0
+      ? mediaSize.w
+      : media?.width && media.width > 0
+        ? media.width
+        : 16;
+  const aspectH =
+    mediaSize?.h && mediaSize.h > 0
+      ? mediaSize.h
+      : media?.height && media.height > 0
+        ? media.height
+        : 9;
+
+  useLayoutEffect(() => {
+    const frame = mediaRootRef.current?.closest(".profile-post-watch-frame");
+    if (!(frame instanceof HTMLElement)) return;
+    frame.style.setProperty("--post-aw", String(aspectW));
+    frame.style.setProperty("--post-ah", String(aspectH));
+  }, [aspectW, aspectH]);
 
   return (
-    <div className={`profile-post-slide-media${isVideo ? " is-video" : ""}`}>
+    <div
+      ref={mediaRootRef}
+      className={`profile-post-slide-media${isVideo ? " is-video" : ""}`}
+    >
       {isVideo && playSrc ? (
         <MediaLoadFrame
           kind="video"
@@ -614,7 +644,13 @@ function FeedMedia({
               decoding="async"
               loading={shouldWarm ? "eager" : "lazy"}
               fetchPriority={active ? "high" : shouldWarm ? "low" : "auto"}
-              onLoad={onLoad}
+              onLoad={(event) => {
+                const img = event.currentTarget;
+                if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                  setMediaSize({ w: img.naturalWidth, h: img.naturalHeight });
+                }
+                onLoad(event);
+              }}
               onError={onError}
             />
           )}

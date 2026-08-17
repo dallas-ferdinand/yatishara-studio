@@ -1718,6 +1718,8 @@ export const getPublicPostMedia = query({
       kind: v.union(v.literal("image"), v.literal("video")),
       thumbnailUrl: v.optional(v.string()),
       mediaUrl: v.optional(v.string()),
+      width: v.optional(v.number()),
+      height: v.optional(v.number()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -1748,6 +1750,8 @@ export const getPublicPostMedia = query({
       kind: asset.kind,
       thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
       mediaUrl,
+      width: asset.width,
+      height: asset.height,
     };
   },
 });
