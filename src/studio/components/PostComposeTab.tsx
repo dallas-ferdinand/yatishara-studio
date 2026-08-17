@@ -498,7 +498,12 @@ export function PostComposeTab({
   const draftHydratedRef = useRef(false);
   const slotsRef = useRef<ComposeSlot[]>([]);
   const captionRef = useRef("");
-  const pendingVoiceRef = useRef(pendingVoice);
+  const pendingVoiceRef = useRef<{
+    file?: File;
+    assetId?: Id<"assets">;
+    previewUrl: string;
+    durationSec: number;
+  } | null>(null);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistBusyRef = useRef(false);
 
