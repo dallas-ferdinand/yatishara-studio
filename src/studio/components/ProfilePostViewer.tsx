@@ -906,7 +906,7 @@ function FeedCaption({
 
   if (!trimmed && !(hashtags?.length) && !username && !editing) return null;
 
-  return (
+  const node = (
     <div
       className={`profile-post-caption${
         placement === "page" ? " is-page" : ""
@@ -1092,6 +1092,9 @@ function FeedCaption({
       ) : null}
     </div>
   );
+
+  if (placement !== "page") return node;
+  return <div className="profile-post-caption-scroll">{node}</div>;
 }
 
 function FeedActions({

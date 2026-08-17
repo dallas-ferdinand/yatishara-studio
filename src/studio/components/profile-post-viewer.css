@@ -1001,7 +1001,7 @@
   flex: 0 1 auto;
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 10px 2px;
+  padding: 8px 10px 8px;
   overflow: visible;
   background: var(--mos-page, #f5f5f7);
   z-index: 2;
@@ -1009,6 +1009,7 @@
   display: flex;
   justify-content: center;
   max-height: min(72dvh, calc(100dvh - 12.5rem));
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
 }
 
 .profile-post-watch-frame {
@@ -1036,43 +1037,27 @@
     inset: 0;
   }
 
-  .profile-post-slide.is-watch .profile-post-caption.is-page {
+  .profile-post-caption-scroll {
     position: relative;
-    left: auto;
-    right: auto;
-    bottom: auto;
     flex: 1 1 auto;
     min-height: 0;
-    max-width: none;
     width: 100%;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    touch-action: pan-y;
-    padding: 0 16px 24px;
-    gap: 6px;
-    color: var(--color-cursor-text-bright, var(--mos-text));
-    text-shadow: none;
-    pointer-events: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
   }
 
-  .profile-post-slide.is-watch .profile-post-caption.is-page::before,
-  .profile-post-slide.is-watch .profile-post-caption.is-page::after {
+  .profile-post-caption-scroll::before,
+  .profile-post-caption-scroll::after {
     content: "";
+    position: absolute;
     left: 0;
     right: 0;
+    height: 16px;
     z-index: 4;
     pointer-events: none;
   }
 
-  .profile-post-slide.is-watch .profile-post-caption.is-page::before {
-    position: sticky;
+  .profile-post-caption-scroll::before {
     top: 0;
-    display: block;
-    flex: 0 0 auto;
-    height: 16px;
-    margin-bottom: -16px;
     background: linear-gradient(
       to bottom,
       var(--mos-page, #f5f5f7) 0%,
@@ -1081,17 +1066,36 @@
     );
   }
 
-  .profile-post-slide.is-watch .profile-post-caption.is-page::after {
-    position: absolute;
+  .profile-post-caption-scroll::after {
     bottom: 0;
-    display: block;
-    height: 24px;
     background: linear-gradient(
       to top,
       var(--mos-page, #f5f5f7) 0%,
       color-mix(in srgb, var(--mos-page, #f5f5f7) 55%, transparent) 42%,
       transparent 100%
     );
+  }
+
+  .profile-post-slide.is-watch .profile-post-caption.is-page {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    max-width: none;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    padding: 0 16px 16px;
+    gap: 6px;
+    color: var(--color-cursor-text-bright, var(--mos-text));
+    text-shadow: none;
+    pointer-events: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .profile-post-caption.is-page .profile-post-caption-head {
@@ -1401,7 +1405,7 @@
 
 @media (min-width: 900px) {
   .profile-post-watch-player {
-    padding: 16px 20px 2px;
+    padding: 16px 20px 12px;
     max-height: min(70%, calc(100dvh - 11rem));
   }
 
@@ -1410,7 +1414,7 @@
   }
 
   .profile-post-slide.is-watch .profile-post-caption.is-page {
-    padding: 0 20px 24px;
+    padding: 0 20px 16px;
   }
 
   .is-watch-layout .profile-post-book-bar {
