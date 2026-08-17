@@ -232,6 +232,8 @@ export function StudioCnBookSheet({
 
   const onHandlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button != null && event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
     const metrics = refreshMetrics();
     const peek =
       fitContent && contentPeekRef.current != null
@@ -262,6 +264,8 @@ export function StudioCnBookSheet({
   const onHandlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag) return;
+    event.preventDefault();
+    event.stopPropagation();
     const { full, min } = metricsRef.current;
     const now = performance.now();
     const dt = now - drag.lastT;
@@ -351,12 +355,6 @@ export function StudioCnBookSheet({
 
   return (
     <div className={rootClass} role="dialog" aria-modal="true" aria-label={ariaLabel}>
-      <button
-        type="button"
-        className="studio-cn-book-sheet-backdrop"
-        aria-label="Close"
-        onClick={onClose}
-      />
       <div ref={panelRef} className="studio-cn-book-sheet-panel">
         <div
           ref={handleRef}

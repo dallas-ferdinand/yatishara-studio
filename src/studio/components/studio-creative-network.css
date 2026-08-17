@@ -1820,23 +1820,17 @@ button.studio-cn-card-btn.public-offers-card {
   stroke-width: 2;
 }
 
-/* Bottom sheet — Settings / menu language (grab + L2 plate). */
+/* Bottom sheet — grab handle, no dim overlay (page above stays live). */
 .studio-cn-book-sheet {
   position: fixed;
   inset: 0;
   z-index: 120;
-  pointer-events: auto;
+  pointer-events: none;
+  overscroll-behavior: none;
 }
 
 .studio-cn-book-sheet-backdrop {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: color-mix(in srgb, #000 42%, transparent);
-  cursor: pointer;
-  transition: opacity 180ms ease;
+  display: none;
 }
 
 .studio-cn-book-sheet-panel {
@@ -1858,6 +1852,8 @@ button.studio-cn-card-btn.public-offers-card {
     calc(100dvh - 12px - env(safe-area-inset-top, 0px))
   );
   overflow: hidden;
+  pointer-events: auto;
+  overscroll-behavior: none;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
   border-bottom: 0;
   border-radius: 18px 18px 0 0;

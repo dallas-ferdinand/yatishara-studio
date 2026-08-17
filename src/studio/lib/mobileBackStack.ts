@@ -81,16 +81,27 @@ function createMobileBackStack() {
   /**
    * Drop a layer when UI/Escape closes it. If it is buried, also drop layers
    * above it and rewind history by that many entries (without re-running close).
+   * Skip rewind when the browser already popped this overlay (swipe-back / gesture)
+   * so we do not walk off the Studio page.
    */
   function release(id: string) {
     if (typeof window === "undefined") return;
     const idx = stack.findIndex((entry) => entry.id === id);
     if (idx < 0) return;
+    const top = stack[stack.length - 1];
     const removeCount = stack.length - idx;
+    const raw = window.history.state;
+    const stateId =
+      raw && typeof raw === "object"
+        ? (raw as Record<string, unknown>)[YS_OVERLAY_STATE_KEY]
+        : null;
+    const shouldRewind =
+      typeof stateId === "string" &&
+      (stateId === id || stateId === top?.id || stack.some((entry) => entry.id === stateId));
     stack.splice(idx);
     // One ensureListener per successful push — release one per removed entry.
     for (let i = 0; i < removeCount; i += 1) releaseListener();
-    if (removeCount <= 0) return;
+    if (removeCount <= 0 || !shouldRewind) return;
     suppressCount += removeCount;
     window.history.go(-removeCount);
   }
