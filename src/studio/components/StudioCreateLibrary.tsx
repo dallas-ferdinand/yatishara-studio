@@ -14,6 +14,7 @@ import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { orbSeedForVoice } from "./StudioOrbPlayButton";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
 import { downloadMediaUrl, fullQualityUrl, thumbnailDisplayUrl } from "@/studio/lib/mediaUrls";
+import { useMasonryColumnCount } from "@/studio/hooks/useMasonryColumnCount";
 import "./studio-create-library.css";
 
 const ImageZoomViewer = dynamic(
@@ -22,32 +23,6 @@ const ImageZoomViewer = dynamic(
 );
 
 const PAGE_SIZE = 24;
-
-/** Desktop Create library is always 3 columns; mobile stays 2 (or 1 when very narrow). */
-function columnCountForWidth(width: number, isMobile?: boolean): number {
-  if (isMobile) {
-    if (width >= 420) return 2;
-    return 1;
-  }
-  return 3;
-}
-
-function useMasonryColumnCount(isMobile?: boolean) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [cols, setCols] = useState(isMobile ? 2 : 3);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const apply = () => setCols(columnCountForWidth(el.clientWidth, isMobile));
-    apply();
-    const ro = new ResizeObserver(apply);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [isMobile]);
-
-  return { ref, cols };
-}
 
 type LightboxState = {
   jobId: string;
