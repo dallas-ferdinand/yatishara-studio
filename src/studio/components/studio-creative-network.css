@@ -1151,6 +1151,17 @@
   );
 }
 
+/* Title starts below the fade; title/body sit 2px further in from the edge. */
+.studio-polish.is-studio-mobile .studio-cn-catalog.is-academy-watch .studio-academy-detail {
+  padding-top: 28px;
+}
+
+.studio-polish.is-studio-mobile .studio-cn-catalog.is-academy-watch .studio-academy-detail-top,
+.studio-polish.is-studio-mobile .studio-cn-catalog.is-academy-watch .studio-academy-body {
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
 /* Academy mobile catalog (list): book bar sibling — size main to remaining flex space. */
 .studio-academy-pane .studio-cn-body.is-catalog > .studio-cn-catalog.public-offers-main:not(.is-academy-watch) {
   flex: 1 1 0;
