@@ -32,6 +32,7 @@ import {
   topUpMinAmountCents,
 } from "@/studio/lib/money";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { attachBunnyStreamPlayer } from "@/studio/lib/bunnyPlayerJs";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { useStudioAcademy } from "./StudioAcademyContext";
 import { AcademyLessonRail } from "./StudioAcademySidebar";
@@ -452,6 +453,8 @@ function BannerStage({
   onPlay,
   playLabel,
   locked,
+  onTimeUpdate,
+  onSeekReady,
 }: {
   bannerUrl?: string;
   embedUrl: string | null;
@@ -460,18 +463,36 @@ function BannerStage({
   playLabel: string;
   /** When true, show cover only (no Studio play chrome — buy to unlock). */
   locked?: boolean;
+  onTimeUpdate?: (seconds: number) => void;
+  onSeekReady?: (seekTo: ((seconds: number) => void) | null) => void;
 }) {
   const [posterReady, setPosterReady] = useState(!bannerUrl);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     setPosterReady(!bannerUrl);
   }, [bannerUrl]);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!embedUrl || !iframe || !onTimeUpdate) {
+      onSeekReady?.(null);
+      return;
+    }
+    const { dispose, seekTo } = attachBunnyStreamPlayer(iframe, onTimeUpdate);
+    onSeekReady?.(seekTo);
+    return () => {
+      dispose();
+      onSeekReady?.(null);
+    };
+  }, [embedUrl, onSeekReady, onTimeUpdate]);
 
   return (
     <div className="studio-academy-player-shell">
       <div className="studio-academy-player">
         {embedUrl ? (
           <iframe
+            ref={iframeRef}
             src={embedUrl}
             title={playLabel}
             allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
@@ -582,9 +603,25 @@ export function StudioAcademyPane({
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
   const clientRequestIdRef = useRef<string | null>(null);
+  const videoTimeSecRef = useRef(0);
+  const videoTimeHeardRef = useRef(false);
+  const seekVideoRef = useRef<((seconds: number) => void) | null>(null);
   const headTabsScrollRef = useRef<HTMLElement | null>(null);
   useHorizontalWheelScroll(headTabsScrollRef);
   useHorizontalScrollFade(headTabsScrollRef);
+
+  const handleVideoTimeUpdate = (seconds: number) => {
+    videoTimeHeardRef.current = true;
+    videoTimeSecRef.current = seconds;
+  };
+  const handleSeekReady = (seekTo: ((seconds: number) => void) | null) => {
+    seekVideoRef.current = seekTo;
+  };
+  const getVideoTimeSec = (): number | undefined =>
+    videoTimeHeardRef.current ? videoTimeSecRef.current : undefined;
+  const seekVideoTo = (seconds: number) => {
+    seekVideoRef.current?.(seconds);
+  };
 
   const detail = useQuery(
     api.academy.getCourse,
@@ -609,6 +646,8 @@ export function StudioAcademyPane({
 
   useEffect(() => {
     setLessonEmbed(null);
+    videoTimeSecRef.current = 0;
+    videoTimeHeardRef.current = false;
     if (academy.lessonId) {
       setIntroEmbed(null);
     }
@@ -1109,6 +1148,8 @@ export function StudioAcademyPane({
               void playLesson();
             }}
             playLabel={`Play ${selectedLesson.title}`}
+            onTimeUpdate={handleVideoTimeUpdate}
+            onSeekReady={handleSeekReady}
           />
         </div>
       ) : null}
@@ -1135,6 +1176,8 @@ export function StudioAcademyPane({
                   void playLesson();
                 }}
                 playLabel={`Play ${selectedLesson.title}`}
+                onTimeUpdate={handleVideoTimeUpdate}
+                onSeekReady={handleSeekReady}
               />
             ) : null}
             <div className="studio-academy-detail-top">
@@ -1188,6 +1231,8 @@ export function StudioAcademyPane({
             loading={loadingPlay}
             onPlay={() => void playIntro()}
             playLabel="Play course intro"
+            onTimeUpdate={handleVideoTimeUpdate}
+            onSeekReady={handleSeekReady}
           />
         </div>
       ) : null}
@@ -1204,6 +1249,8 @@ export function StudioAcademyPane({
                 loading={loadingPlay}
                 onPlay={() => void playIntro()}
                 playLabel="Play course intro"
+                onTimeUpdate={handleVideoTimeUpdate}
+                onSeekReady={handleSeekReady}
               />
             ) : null}
             <div className="studio-academy-detail-top">
@@ -1260,6 +1307,8 @@ export function StudioAcademyPane({
         sidebarTitle={commentsSidebarTitle}
         sidebarAvatarUrl={commentsSidebarAvatar}
         locked={!owned}
+        getVideoTimeSec={commentsLessonId ? getVideoTimeSec : undefined}
+        onSeekVideo={commentsLessonId ? seekVideoTo : undefined}
       />
     ) : null;
 

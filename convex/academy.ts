@@ -1627,6 +1627,7 @@ const academyCommentReturn = v.object({
   replyCount: v.number(),
   likedByMe: v.boolean(),
   imageUrl: v.optional(v.string()),
+  videoTimeSec: v.optional(v.number()),
 });
 
 async function signCommentAvatarUrl(
@@ -1670,6 +1671,7 @@ async function hydrateAcademyComments(
     likedByMe: boolean;
     avatarAssetId?: Id<"assets">;
     imageAssetId?: Id<"assets">;
+    videoTimeSec?: number;
   }> = [];
 
   for (const row of rows) {
@@ -1695,6 +1697,12 @@ async function hydrateAcademyComments(
         q.eq("userId", viewerId).eq("commentId", row._id),
       )
       .unique();
+    const videoTimeSec =
+      typeof row.videoTimeSec === "number" &&
+      Number.isFinite(row.videoTimeSec) &&
+      row.videoTimeSec >= 0
+        ? row.videoTimeSec
+        : undefined;
     prepared.push({
       _id: row._id,
       body: row.body,
@@ -1710,6 +1718,7 @@ async function hydrateAcademyComments(
       likedByMe: Boolean(like),
       avatarAssetId: profile?.avatarAssetId,
       imageAssetId: row.imageAssetId,
+      ...(videoTimeSec != null ? { videoTimeSec } : {}),
     });
   }
 
@@ -1750,6 +1759,9 @@ async function hydrateAcademyComments(
     replyCount: comment.replyCount,
     likedByMe: comment.likedByMe,
     imageUrl: imageUrls[index],
+    ...(comment.videoTimeSec != null
+      ? { videoTimeSec: comment.videoTimeSec }
+      : {}),
   }));
 }
 
@@ -2034,6 +2046,7 @@ export const addComment = authedMutation({
     body: v.string(),
     parentId: v.optional(v.id("academyComments")),
     imageAssetId: v.optional(v.id("assets")),
+    videoTimeSec: v.optional(v.number()),
   },
   returns: v.object({
     commentId: v.id("academyComments"),
@@ -2084,6 +2097,13 @@ export const addComment = authedMutation({
         throw new Error("Comment not found");
       }
     }
+    const videoTimeSec =
+      lesson &&
+      typeof args.videoTimeSec === "number" &&
+      Number.isFinite(args.videoTimeSec) &&
+      args.videoTimeSec >= 0
+        ? Math.min(Math.floor(args.videoTimeSec), 24 * 60 * 60)
+        : undefined;
     const commentId = await ctx.db.insert("academyComments", {
       courseId: args.courseId,
       lessonId: lesson?._id,
@@ -2094,6 +2114,7 @@ export const addComment = authedMutation({
       likeCount: 0,
       replyCount: 0,
       imageAssetId,
+      ...(videoTimeSec != null ? { videoTimeSec } : {}),
     });
     if (parent) {
       await ctx.db.patch(parent._id, {

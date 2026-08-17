@@ -70,6 +70,8 @@ export function buildStreamEmbedUrl(args: {
   params.set("preload", "true");
   // Keep iframe inside our 16:9 shell — responsive=true breaks out and feels stuck on mobile.
   params.set("responsive", "false");
+  // Enable Player.js bridge for currentTime (comment timestamps / seek).
+  params.set("playerjs", "true");
   if (args.token && args.expiresUnix) {
     params.set("token", args.token);
     params.set("expires", String(args.expiresUnix));

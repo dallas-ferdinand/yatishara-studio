@@ -23,6 +23,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { ExplorerTypeFilter } from "@/desk/components/ExplorerTypeFilter";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { formatVideoTimecode } from "@/studio/lib/bunnyPlayerJs";
 import { playUiSound } from "@/mos-app/sounds.js";
 import { formatPostWhen } from "@/studio/lib/formatPostWhen";
 import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
@@ -60,6 +61,7 @@ type CommentRow = {
   replyCount: number;
   likedByMe: boolean;
   imageUrl?: string;
+  videoTimeSec?: number;
 };
 
 type ThreadFrame = {
@@ -156,6 +158,8 @@ function CommentsBody({
   postActions,
   onEditDescription,
   locked = false,
+  getVideoTimeSec,
+  onSeekVideo,
 }: {
   postId?: Id<"profilePosts">;
   courseId?: Id<"academyCourses">;
@@ -171,6 +175,8 @@ function CommentsBody({
   onEditDescription?: () => void;
   /** Unpaid Academy: top engaged comments only, no compose/reply. */
   locked?: boolean;
+  getVideoTimeSec?: () => number | undefined;
+  onSeekVideo?: (seconds: number) => void;
 }) {
   const auth = useConvexAuth();
   const isCourse = Boolean(courseId);
@@ -461,6 +467,14 @@ function CommentsBody({
             body,
             parentId: (parentId as Id<"academyComments"> | null) ?? undefined,
             imageAssetId,
+            ...(lessonId && getVideoTimeSec
+              ? (() => {
+                  const t = getVideoTimeSec();
+                  return typeof t === "number" && Number.isFinite(t)
+                    ? { videoTimeSec: t }
+                    : {};
+                })()
+              : {}),
           })
         : await addPostComment({
             postId: postId!,
@@ -684,9 +698,23 @@ function CommentsBody({
                   <span className="profile-comment-creator-tag">Reply</span>
                 ) : null}
               </div>
-              <time dateTime={new Date(comment.createdAt).toISOString()}>
-                {formatWhen(comment.createdAt)}
-              </time>
+              <div className="profile-comment-meta-sub">
+                <time dateTime={new Date(comment.createdAt).toISOString()}>
+                  {formatWhen(comment.createdAt)}
+                </time>
+                {typeof comment.videoTimeSec === "number" &&
+                Number.isFinite(comment.videoTimeSec) ? (
+                  <button
+                    type="button"
+                    className="profile-comment-video-time"
+                    aria-label={`Jump to ${formatVideoTimecode(comment.videoTimeSec)} in video`}
+                    onClick={() => onSeekVideo?.(comment.videoTimeSec!)}
+                    disabled={!onSeekVideo}
+                  >
+                    {formatVideoTimecode(comment.videoTimeSec)}
+                  </button>
+                ) : null}
+              </div>
             </div>
             {comment.isMine && !locked ? (
               <button
@@ -1551,6 +1579,8 @@ export function ProfileCommentsPanel({
   sidebarTitle,
   sidebarAvatarUrl,
   locked = false,
+  getVideoTimeSec,
+  onSeekVideo,
 }: {
   postId?: Id<"profilePosts">;
   courseId?: Id<"academyCourses">;
@@ -1571,6 +1601,8 @@ export function ProfileCommentsPanel({
   sidebarAvatarUrl?: string;
   /** Unpaid Academy: preview comments + lock overlay. */
   locked?: boolean;
+  getVideoTimeSec?: () => number | undefined;
+  onSeekVideo?: (seconds: number) => void;
 }) {
   const { isMobile } = useMobileLayout();
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
@@ -1651,6 +1683,8 @@ export function ProfileCommentsPanel({
           : undefined
       }
       locked={locked}
+      getVideoTimeSec={getVideoTimeSec}
+      onSeekVideo={onSeekVideo}
     />
   );
 

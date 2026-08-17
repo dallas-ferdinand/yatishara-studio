@@ -1246,9 +1246,18 @@
 
 .studio-polish .profile-comments-search .cursor-panel-search,
 .profile-comments-panel .profile-comments-search .cursor-panel-search,
-.profile-comments-dock .profile-comments-search .cursor-panel-search {
+.profile-comments-dock .profile-comments-search .cursor-panel-search,
+.studio-cn-book-sidebar-body .profile-comments-search .cursor-panel-search {
   border-top: none;
   width: 100%;
+  background: var(--mos-page, var(--mos-panel, #f5f5f7));
+}
+
+[data-appearance="light"] .studio-polish .profile-comments-search .cursor-panel-search,
+[data-appearance="light"] .profile-comments-panel .profile-comments-search .cursor-panel-search,
+[data-appearance="light"] .profile-comments-dock .profile-comments-search .cursor-panel-search,
+[data-appearance="light"] .studio-cn-book-sidebar-body .profile-comments-search .cursor-panel-search {
+  background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
 }
 
 .profile-comments-search .desk-explorer-type-filter {
@@ -1947,6 +1956,14 @@ button.post-compose-inline-chip.profile-description-chip {
   min-width: 0;
 }
 
+.profile-comment-meta-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .profile-comment-meta strong {
   font-size: 13px;
   font-weight: 700;
@@ -1958,6 +1975,32 @@ button.post-compose-inline-chip.profile-description-chip {
   font-size: 12px;
   font-weight: 500;
   line-height: 1.2;
+}
+
+.profile-comment-video-time {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  background: color-mix(in srgb, var(--mos-panel, #fff) 88%, currentColor);
+  color: var(--color-cursor-muted, color-mix(in srgb, currentColor 62%, transparent));
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.profile-comment-video-time:hover:not(:disabled) {
+  color: inherit;
+  border-color: color-mix(in srgb, currentColor 28%, transparent);
+}
+
+.profile-comment-video-time:disabled {
+  cursor: default;
+  opacity: 0.85;
 }
 
 .profile-comment-creator-tag {
