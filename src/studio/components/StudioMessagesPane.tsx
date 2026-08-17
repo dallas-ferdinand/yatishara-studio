@@ -2601,7 +2601,7 @@ export function StudioMessagesPane({
       el.classList.remove("is-single-line");
       return;
     }
-    const minPx = 22;
+    const minPx = 26;
     el.style.height = "0px";
     const scroll = el.scrollHeight;
     const lineCount = el.value.split("\n").length;

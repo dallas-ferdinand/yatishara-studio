@@ -525,7 +525,7 @@
 
 @media (max-width: 899px) {
   .studio-agent-pane .studio-dm-composer.is-split .cursor-composer-mention-editor {
-    min-height: 22px;
+    min-height: 26px;
   }
 }
 

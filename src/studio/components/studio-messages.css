@@ -1636,14 +1636,14 @@
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-dm-composer-row.is-message {
   width: calc(100% - 16px);
-  min-height: calc(22px + 6px + 4px);
+  min-height: calc(26px + 8px + 6px);
   margin: 8px 8px 4px;
-  padding: 6px 10px 4px;
+  padding: 8px 10px 6px;
 }
 
 .studio-dm-composer.is-split.is-mobile-icons textarea {
-  height: 22px;
-  min-height: 22px;
+  height: 26px;
+  min-height: 26px;
   padding: 0;
   line-height: 22px;
   font-size: 13px;
@@ -1651,8 +1651,8 @@
 }
 
 .studio-dm-composer.is-split.is-mobile-icons textarea.is-single-line {
-  height: 22px !important;
-  min-height: 22px;
+  height: 26px !important;
+  min-height: 26px;
   padding: 0;
   line-height: 22px;
 }

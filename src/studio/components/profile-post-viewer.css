@@ -2157,7 +2157,7 @@ button.post-compose-inline-chip.profile-description-chip {
 .profile-comments-inputline input {
   display: block;
   width: 100%;
-  min-height: 22px;
+  min-height: 26px;
   max-height: 96px;
   margin: 0;
   padding: 0;
@@ -2181,7 +2181,11 @@ button.post-compose-inline-chip.profile-description-chip {
 
 @media (max-width: 899px) {
   .profile-comments-inputline {
-    padding: 6px 10px 4px;
+    padding: 8px 10px 6px;
+  }
+  .profile-comments-inputline textarea,
+  .profile-comments-inputline input {
+    min-height: 26px;
   }
   .profile-comments-circle-btn {
     width: var(--studio-mobile-chrome-control, 34px);
@@ -2332,8 +2336,8 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comments-input-row input {
   min-width: 0;
-  height: 22px;
-  min-height: 22px;
+  height: 26px;
+  min-height: 26px;
   border-radius: 0;
   border: 0;
   background: transparent;

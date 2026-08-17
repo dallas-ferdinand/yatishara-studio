@@ -9923,10 +9923,18 @@ export function StudioShell({
             gap: 4px;
             align-items: center;
           }
-          .studio-polish.is-studio-mobile .cursor-panel-search-input {
-            height: auto;
-            min-height: 0;
-            line-height: 1.2;
+          .studio-polish.is-studio-mobile .studio-file-selection-bar {
+            display: none !important;
+          }
+          .studio-polish.is-studio-mobile .studio-files-source-toggle button {
+            min-height: var(--studio-mobile-chrome-control, 34px);
+            height: var(--studio-mobile-chrome-control, 34px);
+            padding: 0 12px;
+            font-size: 13px;
+          }
+          .studio-polish.is-studio-mobile .studio-files-source-toggle button > svg {
+            width: 15px;
+            height: 15px;
           }
           .studio-polish.is-studio-mobile .cursor-panel-search {
             min-height: var(--studio-mobile-chrome-control, 34px);
@@ -10207,10 +10215,14 @@ export function StudioShell({
             flex: 0 1 auto !important;
             width: calc(100% - 16px);
             max-width: 100%;
-            min-height: calc(22px + 6px + 4px);
+            min-height: calc(26px + 8px + 6px);
             margin: 6px 8px 4px;
-            padding: 6px 10px 4px;
+            padding: 8px 10px 6px;
             overflow: auto;
+          }
+          .studio-polish .studio-composer .cursor-composer-textarea,
+          .studio-polish .studio-composer .cursor-composer-mention-editor {
+            min-height: 26px !important;
           }
           .studio-polish .studio-composer .cursor-composer-box::before {
             width: 220px;
@@ -36470,7 +36482,7 @@ function StudioFilesExplorerBody({
         </div>
       ) : null}
       {!isNetworkMode ? tree : null}
-      {!isNetworkMode && selectionMode ? (
+      {!isNetworkMode && selectionMode && !isMobile ? (
         <div className="studio-file-selection-bar shrink-0" aria-live="polite">
           <span>{selectedCount ? `${selectedCount} selected` : "Select files or folders"}</span>
           <div>
