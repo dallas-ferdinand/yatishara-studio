@@ -1985,21 +1985,6 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comment-row.is-mine .profile-comment-body {
   align-items: flex-end;
-  max-width: calc(100% - 44px);
-  width: 100%;
-  flex: 1 1 auto;
-}
-
-.profile-comment-row:not(.is-mine) .profile-comment-body {
-  max-width: calc(100% - 44px);
-  width: 100%;
-  flex: 1 1 auto;
-}
-
-.studio-polish.is-studio-mobile .profile-comment-row:not(.is-mine) .profile-comment-body,
-.studio-polish.is-studio-mobile .profile-comment-row.is-mine .profile-comment-body {
-  max-width: calc(100% - 44px);
-  width: 100%;
 }
 
 .profile-comment-row:active {
@@ -2021,9 +2006,10 @@ button.post-compose-inline-chip.profile-description-chip {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  min-width: 0;
-  width: 100%;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  width: fit-content;
+  min-width: min(76%, calc(100% - 52px));
+  max-width: min(86%, calc(100% - 44px));
 }
 
 .profile-comment-bubble {
