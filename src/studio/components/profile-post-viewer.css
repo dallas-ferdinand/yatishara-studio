@@ -1238,13 +1238,15 @@
 }
 
 .profile-comments-search .cursor-panel-search {
-  width: auto;
+  width: 100%;
+  border-top: none;
 }
 
 .studio-polish .profile-comments-search .cursor-panel-search,
 .profile-comments-panel .profile-comments-search .cursor-panel-search,
 .profile-comments-dock .profile-comments-search .cursor-panel-search {
-  width: auto;
+  border-top: none;
+  width: 100%;
 }
 
 .profile-comments-search .desk-explorer-type-filter {

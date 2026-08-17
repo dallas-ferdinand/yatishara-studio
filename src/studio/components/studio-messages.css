@@ -3019,10 +3019,10 @@
   height: var(--studio-dm-chrome-glyph, 14px) !important;
 }
 
-/* Brand head already divides the rail — search is a boxed field, not a strip. */
+/* Head already divides the rail — no extra top hairline on the search strip. */
 .studio-polish .studio-dm-sidebar .cursor-panel-search,
 .studio-dm-sidebar .cursor-panel-search {
-  width: auto;
+  border-top: none;
 }
 
 .studio-dm-sidebar-body {

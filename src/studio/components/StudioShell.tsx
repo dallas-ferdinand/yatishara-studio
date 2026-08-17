@@ -9900,7 +9900,8 @@ export function StudioShell({
           .studio-polish.is-studio-mobile :where(
             .cursor-workspace-head,
             .cursor-panel-head,
-            .cursor-sidebar-head
+            .cursor-sidebar-head,
+            .cursor-panel-search
           ) {
             min-height: var(--studio-mobile-nav-height, 44px) !important;
             height: var(--studio-mobile-nav-height, 44px) !important;
@@ -9936,9 +9937,8 @@ export function StudioShell({
             height: 15px;
           }
           .studio-polish.is-studio-mobile .cursor-panel-search {
-            min-height: var(--studio-mobile-chrome-control, 34px);
-            height: var(--studio-mobile-chrome-control, 34px);
-            margin: 4px 8px;
+            min-height: var(--studio-mobile-nav-height, 44px);
+            height: var(--studio-mobile-nav-height, 44px);
           }
           .studio-polish.is-studio-mobile .desk-explorer-type-filter-trigger {
             font-size: 13px;
@@ -12099,15 +12099,13 @@ export function StudioShell({
         .studio-files-dock .cursor-panel-search,
         .studio-files-mobile-sheet .cursor-panel-search {
           flex: 0 0 auto;
-          width: auto;
+          width: 100%;
         }
         .studio-files-dock .studio-files-search-row .cursor-panel-search,
         .studio-files-mobile-sheet .studio-files-search-row .cursor-panel-search {
           width: auto;
           flex: 1 1 auto;
           min-width: 0;
-          align-self: center;
-          background: transparent !important;
         }
         .studio-files-mobile-sheet .cursor-explorer-body,
         .studio-files-mobile-sheet .cursor-explorer-panel {
@@ -12120,12 +12118,10 @@ export function StudioShell({
         */
         .studio-polish .studio-files-mobile-sheet .studio-folder-pathbar,
         .studio-polish .studio-files-mobile-sheet .studio-files-search-row,
-        .studio-polish .studio-files-mobile-sheet .cursor-panel-search,
         .studio-polish .studio-files-mobile-sheet .cursor-explorer-body,
         .studio-polish .studio-files-mobile-sheet .cursor-explorer-panel,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .studio-folder-pathbar,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .studio-files-search-row,
-        [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-panel-search,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-explorer-body,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-explorer-panel {
           background: transparent !important;
@@ -12720,15 +12716,16 @@ export function StudioShell({
           border-left-color: var(--mos-plate, #ececf0) !important;
         }
         [data-appearance="light"] .studio-polish .studio-folder-pathbar,
-        [data-appearance="light"] .studio-polish .cursor-panel-search,
         [data-appearance="light"] .studio-polish .studio-files-search-row,
         [data-appearance="light"] .studio-polish .studio-files-source-toggle,
         [data-appearance="light"] .studio-polish .studio-files-chrome {
           background: var(--mos-panel, #f5f5f7) !important;
         }
+        [data-appearance="light"] .studio-polish .cursor-panel-search {
+          background: var(--mos-plate, #ececf0) !important;
+        }
         [data-appearance="light"] .studio-polish .cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-source-toggle,
-        [data-appearance="light"] .studio-polish .cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-search-row,
-        [data-appearance="light"] .studio-polish .studio-files-search-row > .cursor-panel-search {
+        [data-appearance="light"] .studio-polish .cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-search-row {
           background: transparent !important;
         }
         [data-appearance="light"] .studio-polish aside .cursor-panel-head,
@@ -17428,36 +17425,23 @@ export function StudioShell({
           background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
         }
         .studio-polish .cursor-panel-search {
-          box-sizing: border-box;
-          min-height: calc(var(--cursor-head-h, 32px) - 6px);
-          height: calc(var(--cursor-head-h, 32px) - 6px);
-          margin: 3px 8px;
+          min-height: 32px;
+          height: 32px;
+          margin: 0;
           padding: 0 8px 0 10px;
-          border: 1px solid color-mix(
-            in srgb,
-            var(--color-cursor-text) 18%,
-            var(--studio-chrome-divider, var(--color-cursor-border-soft))
-          );
-          border-radius: 8px;
-          background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
-        }
-        .studio-polish .cursor-panel-search:focus-within {
-          border-color: color-mix(
-            in srgb,
-            var(--color-cursor-text) 28%,
-            var(--studio-chrome-divider, var(--color-cursor-border-soft))
-          );
+          border: 0;
+          border-radius: 0;
+          background: var(--mos-plate, var(--mos-panel, #ececf0));
         }
         .studio-polish .studio-files-search-row .cursor-panel-search,
         .studio-polish .studio-files-chrome .cursor-panel-search {
-          align-self: center;
           width: auto;
           min-width: 0;
-          height: calc(100% - 6px);
+          height: 100%;
           min-height: 0;
           max-height: none;
-          margin: 3px 8px;
-          background: transparent;
+          margin: 0;
+          background: var(--mos-plate, var(--mos-panel, #ececf0));
         }
         .studio-polish .studio-files-search-row,
         .studio-polish .studio-files-source-toggle,
@@ -17543,9 +17527,8 @@ export function StudioShell({
         }
         @media (max-width: 899px) {
           .studio-polish.is-studio-mobile .cursor-panel-search {
-            min-height: var(--studio-mobile-chrome-control, 34px) !important;
-            height: var(--studio-mobile-chrome-control, 34px) !important;
-            margin: 4px 8px;
+            min-height: var(--studio-mobile-nav-height, 44px) !important;
+            height: var(--studio-mobile-nav-height, 44px) !important;
           }
           .studio-polish.is-studio-mobile .desk-file-breadcrumbs,
           .studio-polish.is-studio-mobile .studio-folder-pathbar {
@@ -23452,14 +23435,19 @@ export function StudioShell({
         }
         .studio-polish.is-studio-mobile .studio-academy-player-shell {
           margin: 0;
-          padding: 8px;
-          border-radius: 14px;
+          padding: 0;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          box-shadow: none;
           position: relative;
           top: auto;
           z-index: 0;
         }
         .studio-polish.is-studio-mobile .studio-academy-player {
-          border-radius: 10px;
+          border: 0;
+          border-radius: 0;
+          box-shadow: none;
           overflow: hidden;
           position: relative;
           top: auto;
@@ -23473,12 +23461,17 @@ export function StudioShell({
         }
         .studio-polish.is-studio-mobile .studio-academy-detail {
           gap: 12px;
-          padding: 0 12px 24px;
+          padding: 0 0 24px;
+        }
+        .studio-polish.is-studio-mobile .studio-academy-detail-top,
+        .studio-polish.is-studio-mobile .studio-academy-body {
+          padding-left: 12px;
+          padding-right: 12px;
         }
         .studio-polish.is-studio-mobile .studio-academy-pane .public-offers-body {
           padding-left: 0;
           padding-right: 0;
-          padding-top: 10px;
+          padding-top: 0;
         }
         .studio-academy-player {
           position: relative;
@@ -24117,7 +24110,9 @@ export function StudioShell({
           border: 0;
         }
         .studio-history-chrome .cursor-panel-search {
-          background: transparent;
+          margin: 0;
+          border: 0;
+          border-radius: 0;
         }
         .studio-history-chrome .desk-explorer-type-filter {
           flex-shrink: 0;
