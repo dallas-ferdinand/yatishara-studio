@@ -33,6 +33,8 @@ type StudioCnBookSheetProps = {
    * Used for Academy PayWise so the receipt/CTA is not clipped.
    */
   fitContent?: boolean;
+  /** Fires after the close slide finishes (parent can unmount). */
+  onExited?: () => void;
 };
 
 /**
@@ -47,14 +49,19 @@ export function StudioCnBookSheet({
   children,
   backLayerId = "cn-book-sheet",
   fitContent = false,
+  onExited,
 }: StudioCnBookSheetProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<HTMLDivElement | null>(null);
+  const onExitedRef = useRef(onExited);
+  onExitedRef.current = onExited;
   const [dragging, setDragging] = useState(false);
   const [settling, setSettling] = useState(false);
   const [isFull, setIsFull] = useState(false);
   const [entered, setEntered] = useState(false);
+  const [shown, setShown] = useState(open);
+  const [leaving, setLeaving] = useState(false);
   const heightRef = useRef<number | null>(null);
   /** For fitContent sheets, peek snaps back to content height (not the menu token). */
   const contentPeekRef = useRef<number | null>(null);
@@ -146,22 +153,30 @@ export function StudioCnBookSheet({
   };
 
   useEffect(() => {
-    if (!open) {
-      heightRef.current = null;
-      contentPeekRef.current = null;
+    if (open) {
+      setShown(true);
+      setLeaving(false);
+      return undefined;
+    }
+    if (!shown) return undefined;
+    setLeaving(true);
+    const t = window.setTimeout(() => {
+      setShown(false);
+      setLeaving(false);
       setDragging(false);
       setSettling(false);
       setIsFull(false);
       setEntered(false);
+      heightRef.current = null;
+      contentPeekRef.current = null;
       dragRef.current = null;
-      const el = panelRef.current;
-      if (el) {
-        el.style.height = "";
-        el.style.maxHeight = "";
-        el.style.transition = "";
-      }
-      return undefined;
-    }
+      onExitedRef.current?.();
+    }, 240);
+    return () => window.clearTimeout(t);
+  }, [open, shown]);
+
+  useEffect(() => {
+    if (!open) return undefined;
 
     let cancelled = false;
     const applyOpenHeight = () => {
@@ -201,7 +216,7 @@ export function StudioCnBookSheet({
     };
   }, [open, fitContent]);
 
-  if (!open) return null;
+  if (!shown) return null;
 
   const settleTo = (fromH: number, target: number) => {
     const { peek, full } = metricsRef.current;
@@ -326,6 +341,7 @@ export function StudioCnBookSheet({
     "studio-cn-book-sheet",
     className.trim(),
     entered ? "is-entered" : "is-entering",
+    leaving ? "is-leaving" : "",
     isFull ? "is-full" : "",
     dragging ? "is-dragging" : "",
     settling ? "is-settling" : "",

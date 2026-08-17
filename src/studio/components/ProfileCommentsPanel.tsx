@@ -422,12 +422,6 @@ function ProfileCommentBubble({
                 <div className="profile-comment-meta-text">
                   <div className="profile-comment-meta-top">
                     <strong>{label}</strong>
-                    {comment.isOwner ? (
-                      <span className="profile-comment-creator-tag">Creator</span>
-                    ) : null}
-                    {searching && comment.parentId ? (
-                      <span className="profile-comment-creator-tag">Reply</span>
-                    ) : null}
                   </div>
                   <div className="profile-comment-meta-sub">
                     <time dateTime={new Date(comment.createdAt).toISOString()}>
@@ -447,65 +441,6 @@ function ProfileCommentBubble({
                     ) : null}
                   </div>
                 </div>
-                <div className="profile-comment-bubble-actions">
-                  {locked ? (
-                    <span
-                      className={`profile-comment-like is-static${likeState.likeCount > 0 ? "" : " is-empty"}`}
-                      aria-label={`${likeState.likeCount} likes`}
-                    >
-                      <Heart
-                        aria-hidden="true"
-                        fill={likeState.likeCount > 0 ? "currentColor" : "none"}
-                        strokeWidth={likeState.likeCount > 0 ? 0 : 2}
-                      />
-                      {likeState.likeCount > 0 ? (
-                        <span>{likeState.likeCount}</span>
-                      ) : null}
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className={`profile-comment-like${likeState.liked ? " is-liked" : ""}`}
-                      aria-pressed={likeState.liked}
-                      aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
-                      onClick={() => onToggleLike(comment)}
-                    >
-                      <Heart
-                        aria-hidden="true"
-                        fill={likeState.liked ? "currentColor" : "none"}
-                        strokeWidth={likeState.liked ? 0 : 2}
-                      />
-                      {likeState.likeCount > 0 ? (
-                        <span>{likeState.likeCount}</span>
-                      ) : null}
-                    </button>
-                  )}
-                  {!locked ? (
-                    <button
-                      type="button"
-                      className="profile-comment-reply"
-                      aria-label={
-                        replyCount
-                          ? `Reply, ${replyCount}`
-                          : searching && comment.parentId
-                            ? "Open thread"
-                            : "Reply"
-                      }
-                      onClick={goReply}
-                    >
-                      <MessageCircle aria-hidden="true" strokeWidth={2} />
-                      {replyCount > 0 ? <span>{replyCount}</span> : null}
-                    </button>
-                  ) : replyCount > 0 ? (
-                    <span
-                      className="profile-comment-reply is-static"
-                      aria-label={`${replyCount} replies`}
-                    >
-                      <MessageCircle aria-hidden="true" strokeWidth={2} />
-                      <span>{replyCount}</span>
-                    </span>
-                  ) : null}
-                </div>
               </div>
               {comment.body ? <p>{comment.body}</p> : null}
               {comment.imageUrl ? (
@@ -519,6 +454,65 @@ function ProfileCommentBubble({
                   <img className="profile-comment-image" src={comment.imageUrl} alt="" />
                 </button>
               ) : null}
+              <div className="profile-comment-bubble-actions">
+                {locked ? (
+                  <span
+                    className={`profile-comment-like is-static${likeState.likeCount > 0 ? "" : " is-empty"}`}
+                    aria-label={`${likeState.likeCount} likes`}
+                  >
+                    <Heart
+                      aria-hidden="true"
+                      fill={likeState.likeCount > 0 ? "currentColor" : "none"}
+                      strokeWidth={likeState.likeCount > 0 ? 0 : 2}
+                    />
+                    {likeState.likeCount > 0 ? (
+                      <span>{likeState.likeCount}</span>
+                    ) : null}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className={`profile-comment-like${likeState.liked ? " is-liked" : ""}`}
+                    aria-pressed={likeState.liked}
+                    aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
+                    onClick={() => onToggleLike(comment)}
+                  >
+                    <Heart
+                      aria-hidden="true"
+                      fill={likeState.liked ? "currentColor" : "none"}
+                      strokeWidth={likeState.liked ? 0 : 2}
+                    />
+                    {likeState.likeCount > 0 ? (
+                      <span>{likeState.likeCount}</span>
+                    ) : null}
+                  </button>
+                )}
+                {!locked ? (
+                  <button
+                    type="button"
+                    className="profile-comment-reply"
+                    aria-label={
+                      replyCount
+                        ? `Reply, ${replyCount}`
+                        : searching && comment.parentId
+                          ? "Open thread"
+                          : "Reply"
+                    }
+                    onClick={goReply}
+                  >
+                    <MessageCircle aria-hidden="true" strokeWidth={2} />
+                    {replyCount > 0 ? <span>{replyCount}</span> : null}
+                  </button>
+                ) : replyCount > 0 ? (
+                  <span
+                    className="profile-comment-reply is-static"
+                    aria-label={`${replyCount} replies`}
+                  >
+                    <MessageCircle aria-hidden="true" strokeWidth={2} />
+                    <span>{replyCount}</span>
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
         </article>
@@ -1009,21 +1003,21 @@ function CommentsBody({
                 <img className="profile-comment-image" src={comment.imageUrl} alt="" />
               </button>
             ) : null}
+            <button
+              type="button"
+              className={`profile-comment-like${likeState.liked ? " is-liked" : ""}`}
+              aria-pressed={likeState.liked}
+              aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
+              onClick={() => void toggleLike(comment)}
+            >
+              <Heart
+                aria-hidden="true"
+                fill={likeState.liked ? "currentColor" : "none"}
+                strokeWidth={likeState.liked ? 0 : 2}
+              />
+              {likeState.likeCount > 0 ? <span>{likeState.likeCount}</span> : null}
+            </button>
           </div>
-          <button
-            type="button"
-            className={`profile-comment-like${likeState.liked ? " is-liked" : ""}`}
-            aria-pressed={likeState.liked}
-            aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
-            onClick={() => void toggleLike(comment)}
-          >
-            <Heart
-              aria-hidden="true"
-              fill={likeState.liked ? "currentColor" : "none"}
-              strokeWidth={likeState.liked ? 0 : 2}
-            />
-            {likeState.likeCount > 0 ? <span>{likeState.likeCount}</span> : null}
-          </button>
         </section>
       );
     }
@@ -1838,9 +1832,14 @@ export function ProfileCommentsPanel({
 }) {
   const { isMobile } = useMobileLayout();
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const [sheetAlive, setSheetAlive] = useState(open);
   const [startEditingDescription, setStartEditingDescription] = useState(false);
   const showingDescription = Boolean(postId) && mode === "description";
   const useSidebarChrome = chrome === "sidebar" && !isMobile;
+
+  useEffect(() => {
+    if (open) setSheetAlive(true);
+  }, [open]);
 
   useEffect(() => {
     // Mount under the studio shell so the bottom nav (z-index 60) stays above the sheet.
@@ -1984,12 +1983,13 @@ export function ProfileCommentsPanel({
     );
   }
 
-  if (!open || !portalRoot) return null;
+  if ((!open && !sheetAlive) || !portalRoot) return null;
 
   return createPortal(
     <StudioCnBookSheet
       open={open}
       onClose={dismissSheet}
+      onExited={() => setSheetAlive(false)}
       ariaLabel={showingDescription ? "Description" : "Comments"}
       className={courseId ? "is-academy-comments" : "is-profile-comments"}
       backLayerId={courseId ? "academy-comments-sheet" : "profile-comments-sheet"}

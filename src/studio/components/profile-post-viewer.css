@@ -1205,6 +1205,7 @@
   min-height: var(--cursor-head-h, 32px);
   padding: 0 8px 0 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex: 0 0 auto;
 }
 
 .profile-comments-head > div:not(.profile-comments-thread-head):not(.profile-comments-post-actions) {
@@ -1427,6 +1428,8 @@
 
 .profile-comment-avatar {
   flex-shrink: 0;
+  width: 26px;
+  height: 26px;
 }
 
 .profile-comments-thread-preview {
@@ -1747,10 +1750,10 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comment-parent-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: end;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
   padding: 8px 10px 10px;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   border-radius: 8px 18px 18px 18px;
@@ -1761,6 +1764,10 @@ button.post-compose-inline-chip.profile-description-chip {
   display: grid;
   gap: 8px;
   min-width: 0;
+}
+
+.profile-comment-parent-content .profile-comment-like {
+  justify-self: start;
 }
 
 .profile-comment-parent-body p,
@@ -1916,7 +1923,7 @@ button.post-compose-inline-chip.profile-description-chip {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   box-sizing: border-box;
 }
 
@@ -1953,10 +1960,11 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comment-row {
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
+  display: flex;
+  align-items: flex-start;
   gap: 8px;
-  align-items: start;
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
   border-bottom: 0;
   cursor: grab;
@@ -1964,13 +1972,11 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comment-row.is-reply {
   padding-left: 16px;
-  grid-template-columns: 22px minmax(0, 1fr);
 }
 
 .profile-comment-row.is-mine {
-  display: flex;
-  justify-content: flex-end;
-  grid-template-columns: none;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
 }
 
 .profile-comment-row.is-mine.is-reply {
@@ -1978,22 +1984,19 @@ button.post-compose-inline-chip.profile-description-chip {
   padding-right: 16px;
 }
 
-.profile-comment-row.is-mine .profile-comment-avatar {
-  display: none;
-}
-
 .profile-comment-row.is-mine .profile-comment-body {
   align-items: flex-end;
   justify-items: end;
-  max-width: var(--studio-chat-bubble-max, 88%);
+  max-width: min(88%, calc(100% - 34px));
 }
 
 .profile-comment-row:not(.is-mine) .profile-comment-body {
-  max-width: var(--studio-chat-bubble-max, 88%);
+  max-width: min(88%, calc(100% - 34px));
 }
 
-.studio-polish.is-studio-mobile .profile-comment-row:not(.is-mine) .profile-comment-body {
-  max-width: 70%;
+.studio-polish.is-studio-mobile .profile-comment-row:not(.is-mine) .profile-comment-body,
+.studio-polish.is-studio-mobile .profile-comment-row.is-mine .profile-comment-body {
+  max-width: min(88%, calc(100% - 34px));
 }
 
 .profile-comment-row:active {
@@ -2055,7 +2058,11 @@ button.post-compose-inline-chip.profile-description-chip {
   align-items: center;
   gap: 0;
   flex-shrink: 0;
-  margin-left: auto;
+  margin: 2px 0 0;
+}
+
+.profile-comment-row.is-mine .profile-comment-bubble-actions {
+  align-self: flex-end;
 }
 
 .profile-comment-bubble-actions .profile-comment-like,
@@ -2191,6 +2198,7 @@ button.post-compose-inline-chip.profile-description-chip {
   font-size: 13px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .profile-comment-actions {
@@ -2305,10 +2313,83 @@ button.post-compose-inline-chip.profile-description-chip {
   border: 0;
   border-radius: 16px;
   overflow: hidden;
+  background: var(
+    --studio-composer-glass,
+    color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent)
+  );
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(170%) blur(18px));
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(170%) blur(18px));
+  box-shadow: var(
+    --studio-composer-glass-shadow,
+    0 20px 48px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08)
+  );
+  transition: box-shadow 280ms cubic-bezier(0.45, 0, 0.2, 1);
+}
+
+.profile-comments-composer-box::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: 320px;
+  height: 170px;
+  border-radius: 16px 0 0 0;
+  border-top: 2px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 96%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 96%, transparent);
   background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: none;
+  mask-image: radial-gradient(
+    ellipse at 0 0,
+    #000 0%,
+    rgba(0, 0, 0, 0.45) 10%,
+    rgba(0, 0, 0, 0.12) 18%,
+    transparent 26%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse at 0 0,
+    #000 0%,
+    rgba(0, 0, 0, 0.45) 10%,
+    rgba(0, 0, 0, 0.12) 18%,
+    transparent 26%
+  );
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.profile-comments-composer-box::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 290px;
+  height: 150px;
+  border-radius: 0 0 16px 0;
+  border-right: 2px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 86%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 86%, transparent);
+  background: transparent;
+  mask-image: radial-gradient(
+    ellipse at 100% 100%,
+    #000 0%,
+    rgba(0, 0, 0, 0.45) 10%,
+    rgba(0, 0, 0, 0.12) 18%,
+    transparent 26%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse at 100% 100%,
+    #000 0%,
+    rgba(0, 0, 0, 0.45) 10%,
+    rgba(0, 0, 0, 0.12) 18%,
+    transparent 26%
+  );
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.profile-comments-composer-box > * {
+  position: relative;
+  z-index: 1;
 }
 
 @media (min-width: 900px) {
@@ -2355,8 +2436,11 @@ button.post-compose-inline-chip.profile-description-chip {
   overflow: hidden;
   border-radius: 12px;
   box-sizing: border-box;
-  background: transparent;
-  box-shadow: none;
+  background: var(
+    --studio-composer-glass-strong,
+    color-mix(in srgb, var(--mos-bg, #05080f) 28%, transparent)
+  );
+  box-shadow: var(--studio-composer-input-shadow);
 }
 
 .profile-comments-inputline textarea,
@@ -2595,8 +2679,13 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 [data-appearance="light"] .profile-comments-composer-box {
-  background: transparent;
-  box-shadow: none;
+  background: var(
+    --studio-composer-glass,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 92%, transparent)
+  );
+  box-shadow:
+    0 12px 28px color-mix(in srgb, #000 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent);
 }
 
 [data-appearance="light"] .profile-comments-dock .profile-comments-head,
@@ -2615,6 +2704,11 @@ button.post-compose-inline-chip.profile-description-chip {
 
 [data-appearance="light"] .profile-comments-head span {
   color: var(--color-cursor-muted, color-mix(in srgb, #0f172a 55%, transparent));
+}
+
+[data-appearance="light"] .profile-comments-inputline {
+  background: color-mix(in srgb, var(--mos-panel, #fff) 78%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent);
 }
 
 [data-appearance="light"] .profile-comments-input-row input {
