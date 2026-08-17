@@ -1007,6 +1007,16 @@ function FeedActions({
     return (
       <nav className="profile-post-book-bar" aria-label="Post actions">
         <div className="profile-post-book-actions">
+          {post.isOwner ? (
+            <span
+              className={`profile-post-book-btn is-labeled${liked ? " is-liked" : ""}`}
+              aria-label={`${formatCount(post.likeCount)} boosts`}
+            >
+              {likeIcon}
+              <span className="profile-post-book-label">Boost</span>
+              <span className="profile-post-book-count">{formatCount(post.likeCount)}</span>
+            </span>
+          ) : (
           <button
             type="button"
             className={`profile-post-book-btn is-labeled${liked || undoing ? " is-liked" : ""}`}
@@ -1015,7 +1025,9 @@ function FeedActions({
             aria-label={
               undoing
                 ? `Undo boost, ${boostUndoLeft} seconds left`
-                : "Boost"
+                : liked
+                  ? "Boosted"
+                  : "Boost"
             }
             onClick={onBoost}
           >
@@ -1025,6 +1037,7 @@ function FeedActions({
               {undoing ? boostUndoLeft : formatCount(post.likeCount)}
             </span>
           </button>
+          )}
           <button
             type="button"
             className="profile-post-book-btn is-labeled"
@@ -1108,6 +1121,7 @@ function FeedActions({
           </button>
         ) : null}
       </div>
+      {post.isOwner ? null : (
       <button
         type="button"
         className={`profile-post-rail-btn${liked || undoing ? " is-liked" : ""}`}
@@ -1118,7 +1132,11 @@ function FeedActions({
         }}
         onPointerDown={(event) => event.stopPropagation()}
         aria-label={
-          undoing ? `Undo boost, ${boostUndoLeft} seconds left` : "Boost"
+          undoing
+            ? `Undo boost, ${boostUndoLeft} seconds left`
+            : liked
+              ? "Boosted"
+              : "Boost"
         }
       >
         <Crown
@@ -1128,6 +1146,7 @@ function FeedActions({
         />
         <span>{undoing ? boostUndoLeft : formatCount(post.likeCount)}</span>
       </button>
+      )}
       <button
         type="button"
         className="profile-post-rail-btn"
@@ -1826,12 +1845,17 @@ export function ProfilePostViewer({
       toast.error("You can't boost your own post.");
       return;
     }
-    if (boostBusyRef.current) return;
-    boostBusyRef.current = true;
+    const alreadyBoosted =
+      localLikes[post._id]?.liked ?? Boolean(post.likedByViewer);
     const undoable =
       pendingUndo &&
       pendingUndo.postId === post._id &&
       Date.now() < pendingUndo.undoUntil;
+    if (!undoable && alreadyBoosted) {
+      return;
+    }
+    if (boostBusyRef.current) return;
+    boostBusyRef.current = true;
     if (undoable && pendingUndo) {
       const snapshot = {
         liked: localLikes[post._id]?.liked ?? Boolean(post.likedByViewer),

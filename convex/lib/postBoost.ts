@@ -79,6 +79,9 @@ export async function transferPostBoost(
   if (args.senderUserId === args.receiverUserId) {
     throw new Error("You can't boost your own post.");
   }
+  if (await viewerHasActiveBoost(ctx, args.senderUserId, args.postId)) {
+    throw new Error("You already boosted this post.");
+  }
   const creditPriceCents = await getCreditPriceCents(ctx);
   const amountCredits = boostCreditsForPrice(creditPriceCents);
   const sender = await ctx.db
