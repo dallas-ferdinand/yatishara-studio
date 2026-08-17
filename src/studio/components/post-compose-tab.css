@@ -138,7 +138,7 @@
 
 .post-compose-mock-slide.is-empty {
   background: transparent;
-  border: 1.5px dotted var(--color-cursor-border, var(--pc-line-strong));
+  border: 2px dashed var(--color-cursor-border, var(--pc-line-strong));
   box-shadow: none;
 }
 
