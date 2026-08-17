@@ -144,6 +144,13 @@ function formatWhen(ts: number): string {
   return formatPostWhen(ts);
 }
 
+function commentClock(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function formatPostStamp(publishedAt: number, editedAt?: number): string {
   const when = formatPostWhen(publishedAt);
   return editedAt ? `${when} · edited` : when;
@@ -419,29 +426,9 @@ function ProfileCommentBubble({
           <div className="profile-comment-body">
             <div className="profile-comment-bubble">
               <div className="profile-comment-meta">
-                <div className="profile-comment-meta-text">
-                  <div className="profile-comment-meta-top">
-                    <strong>{label}</strong>
-                  </div>
-                  <div className="profile-comment-meta-sub">
-                    <time dateTime={new Date(comment.createdAt).toISOString()}>
-                      {formatWhen(comment.createdAt)}
-                    </time>
-                    {typeof comment.videoTimeSec === "number" &&
-                    Number.isFinite(comment.videoTimeSec) ? (
-                      <button
-                        type="button"
-                        className="profile-comment-video-time"
-                        aria-label={`Jump to ${formatVideoTimecode(comment.videoTimeSec)} in video`}
-                        onClick={() => onSeekVideo?.(comment.videoTimeSec!)}
-                        disabled={!onSeekVideo}
-                      >
-                        {formatVideoTimecode(comment.videoTimeSec)}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
+                <strong>{label}</strong>
               </div>
+              <div className="profile-comment-bubble-copy">
               {comment.body ? <p>{comment.body}</p> : null}
               {comment.imageUrl ? (
                 <button
@@ -454,7 +441,6 @@ function ProfileCommentBubble({
                   <img className="profile-comment-image" src={comment.imageUrl} alt="" />
                 </button>
               ) : null}
-            </div>
             <div className="profile-comment-bubble-actions">
                 {locked ? (
                   <span
@@ -488,6 +474,25 @@ function ProfileCommentBubble({
                     ) : null}
                   </button>
                 )}
+                {typeof comment.videoTimeSec === "number" &&
+                Number.isFinite(comment.videoTimeSec) ? (
+                  <button
+                    type="button"
+                    className="profile-comment-video-time"
+                    aria-label={`Jump to ${formatVideoTimecode(comment.videoTimeSec)} in video`}
+                    onClick={() => onSeekVideo?.(comment.videoTimeSec!)}
+                    disabled={!onSeekVideo}
+                  >
+                    {formatVideoTimecode(comment.videoTimeSec)}
+                  </button>
+                ) : (
+                  <time
+                    className="profile-comment-stamp"
+                    dateTime={new Date(comment.createdAt).toISOString()}
+                  >
+                    {commentClock(comment.createdAt)}
+                  </time>
+                )}
                 {!locked ? (
                   <button
                     type="button"
@@ -514,6 +519,8 @@ function ProfileCommentBubble({
                   </span>
                 ) : null}
               </div>
+              </div>
+            </div>
           </div>
         </article>
       </div>

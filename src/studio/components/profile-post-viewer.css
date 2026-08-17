@@ -2021,7 +2021,9 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comment-bubble {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 4px;
   min-width: 0;
   width: fit-content;
@@ -2054,27 +2056,47 @@ button.post-compose-inline-chip.profile-description-chip {
   min-width: 0;
 }
 
+.profile-comment-bubble-copy {
+  min-width: 0;
+}
+
+.profile-comment-bubble-copy > p {
+  display: inline;
+  margin: 0;
+}
+
+.profile-comment-bubble-copy::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
 .profile-comment-bubble-actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
-  align-self: flex-end;
-  margin: 1px -2px 0 0;
-  transform: translateX(4px);
+  gap: 4px;
+  float: right;
+  margin: 2px 0 0 8px;
+  transform: none;
+}
+
+.profile-comment-bubble-copy:has(.profile-comment-image-btn) .profile-comment-bubble-actions {
+  float: none;
+  display: flex;
+  margin: 4px 0 0 auto;
 }
 
 .profile-comment-row.is-mine .profile-comment-bubble-actions {
   align-self: flex-end;
-  margin: 1px 0 0 -2px;
-  transform: translateX(-4px);
+  margin: 2px 0 0 8px;
+  transform: none;
 }
 
 .profile-comment-bubble-actions .profile-comment-like,
 .profile-comment-bubble-actions .profile-comment-reply {
   min-width: 0;
   min-height: 0;
-  padding: 0 3px;
+  padding: 0;
   gap: 3px;
   color: var(--color-cursor-muted, var(--mos-muted));
   font-size: 11px;
@@ -2090,6 +2112,33 @@ button.post-compose-inline-chip.profile-description-chip {
 .profile-comment-bubble-actions .profile-comment-like:hover,
 .profile-comment-bubble-actions .profile-comment-reply:hover {
   color: var(--color-cursor-text, var(--mos-text));
+}
+
+.profile-comment-bubble-actions .profile-comment-stamp,
+.profile-comment-bubble-actions .profile-comment-video-time {
+  display: inline-flex;
+  align-items: center;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 9.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.profile-comment-bubble-actions .profile-comment-video-time:hover:not(:disabled) {
+  color: var(--color-cursor-text, var(--mos-text));
+  background: transparent;
+}
+
+.profile-comment-bubble-actions .profile-comment-video-time:disabled {
+  cursor: default;
+  opacity: 1;
 }
 
 .profile-comment-reply {
