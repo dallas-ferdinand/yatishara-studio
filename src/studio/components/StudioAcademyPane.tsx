@@ -10,6 +10,7 @@ import {
   Loader2,
   Lock,
   MessageCircle,
+  SmilePlus,
   Tag,
   Zap,
 } from "lucide-react";
@@ -25,6 +26,7 @@ import {
 } from "react";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
+import { REACTION_EMOJIS } from "@/studio/lib/itemReactions";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -671,7 +673,7 @@ const LESSON_SWIPE_MIN_PX = 56;
 const LESSON_SLIDE_MS = 180;
 const LESSON_SLIDE_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 const LESSON_SWIPE_IGNORE =
-  "a[href], input, textarea, select, [role='dialog'], .studio-cn-head, .studio-cn-book-bar, .studio-cn-book-sheet";
+  "a[href], input, textarea, select, [role='dialog'], .studio-cn-head, .studio-cn-book-bar, .studio-cn-book-stack, .studio-cn-reaction-bar, .studio-cn-book-sheet";
 
 function useAcademyLessonSwipe(
   enabled: boolean,
@@ -1099,6 +1101,7 @@ export function StudioAcademyPane({
   const catalog = useQuery(api.academy.listPublishedCourses, {});
   const mine = useQuery(api.academy.listMyCourses, {});
   const purchase = useMutation(api.academy.purchaseCourse);
+  const setVideoReaction = useMutation(api.academy.setVideoReaction);
   const startWamCheckout = useAction(api.wamActions.startCheckout);
   const getIntroPlayback = useAction(api.academyActions.getIntroPlayback);
   const getLessonPlayback = useAction(api.academyActions.getLessonPlayback);
@@ -1111,6 +1114,7 @@ export function StudioAcademyPane({
   const [checkoutSheetOpen, setCheckoutSheetOpen] = useState(false);
   const [lessonsSheetOpen, setLessonsSheetOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [reactionBarOpen, setReactionBarOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
   const [previewSeed, setPreviewSeed] = useState(() => Math.random());
   const [videoTick, setVideoTick] = useState(0);
@@ -1161,6 +1165,7 @@ export function StudioAcademyPane({
     setLessonsSheetOpen(false);
     setPurchaseConfirmOpen(false);
     setCommentsOpen(false);
+    setReactionBarOpen(false);
     clientRequestIdRef.current = null;
     videoTimeSecRef.current = 0;
     videoTimeHeardRef.current = false;
@@ -1184,6 +1189,7 @@ export function StudioAcademyPane({
     setVideoHeard(false);
     setVideoTick(0);
     setPreviewSeed(Math.random());
+    setReactionBarOpen(false);
     if (academy.lessonId) {
       setIntroEmbed(null);
     }
@@ -1318,6 +1324,17 @@ export function StudioAcademyPane({
 
   const commentsLessonId =
     owned && academy.lessonId ? academy.lessonId : undefined;
+  const videoReactions = useQuery(
+    api.academy.listVideoReactions,
+    isMobile && owned && detail?._id
+      ? {
+          courseId: detail._id,
+          ...(commentsLessonId ? { lessonId: commentsLessonId } : {}),
+        }
+      : "skip",
+  );
+  const reactionCount = videoReactions?.count ?? 0;
+  const myReaction = videoReactions?.mine ?? null;
   const discussionPreviewRows = useQuery(
     api.academy.listComments,
     isMobile && owned && detail?._id
@@ -1368,6 +1385,22 @@ export function StudioAcademyPane({
     }
     return { kind: "label" };
   }, [discussionEmpty, discussionPreview, myProfile]);
+  const pickVideoReaction = useCallback(
+    async (emoji: string) => {
+      if (!detail?._id) return;
+      try {
+        await setVideoReaction({
+          courseId: detail._id,
+          ...(commentsLessonId ? { lessonId: commentsLessonId } : {}),
+          emoji: myReaction === emoji ? null : emoji,
+        });
+        setReactionBarOpen(false);
+      } catch (error) {
+        toast.error(friendlyConvexError(error, "Could not react"));
+      }
+    },
+    [commentsLessonId, detail?._id, myReaction, setVideoReaction],
+  );
   const commentsSidebarTitle =
     commentsLessonId && selectedLesson
       ? selectedLesson.title
@@ -2098,7 +2131,32 @@ export function StudioAcademyPane({
             onPick={() => setLessonsSheetOpen(false)}
           />
         </StudioCnBookSheet>
-        <nav
+        <div className="studio-cn-book-stack">
+          {owned && reactionBarOpen ? (
+            <div
+              className="studio-cn-reaction-bar"
+              role="toolbar"
+              aria-label="React to this video"
+            >
+              <div className="studio-cn-reaction-scroller">
+                {REACTION_EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    className={`studio-cn-reaction-emoji${
+                      myReaction === emoji ? " is-on" : ""
+                    }`}
+                    aria-label={`React with ${emoji}`}
+                    aria-pressed={myReaction === emoji}
+                    onClick={() => void pickVideoReaction(emoji)}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <nav
           className="public-offers-mobile-book-nav studio-cn-book-bar"
           aria-label={
             owned
@@ -2142,7 +2200,10 @@ export function StudioAcademyPane({
                     ? "Be the first to comment"
                     : "Open comments"
               }
-              onClick={() => setCommentsOpen(true)}
+              onClick={() => {
+                setReactionBarOpen(false);
+                setCommentsOpen(true);
+              }}
             >
               <DiscussionBarPreview face={discussionBarFace} />
             </button>
@@ -2153,10 +2214,37 @@ export function StudioAcademyPane({
                 type="button"
                 className="studio-cn-book-bar-msg is-with-count"
                 aria-label={`Comments, ${commentCount}`}
-                onClick={() => setCommentsOpen(true)}
+                onClick={() => {
+                  setReactionBarOpen(false);
+                  setCommentsOpen(true);
+                }}
               >
                 <MessageCircle aria-hidden="true" strokeWidth={2} />
                 <span>{commentCount}</span>
+              </button>
+            ) : null}
+            {owned ? (
+              <button
+                type="button"
+                className={`studio-cn-book-bar-msg is-with-count is-reaction${
+                  reactionBarOpen ? " is-open" : ""
+                }`}
+                aria-label={
+                  reactionCount
+                    ? `Reactions, ${reactionCount}`
+                    : "Open reactions"
+                }
+                aria-pressed={reactionBarOpen}
+                onClick={() => setReactionBarOpen((open) => !open)}
+              >
+                {myReaction ? (
+                  <span className="studio-cn-book-bar-react-emoji" aria-hidden="true">
+                    {myReaction}
+                  </span>
+                ) : (
+                  <SmilePlus aria-hidden="true" strokeWidth={2} />
+                )}
+                <span>{reactionCount}</span>
               </button>
             ) : null}
             {!owned ? (
@@ -2191,6 +2279,7 @@ export function StudioAcademyPane({
             ) : null}
           </div>
         </nav>
+        </div>
         {!owned ? (
           <StudioCnBookSheet
             open={checkoutSheetOpen}

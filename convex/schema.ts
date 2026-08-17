@@ -1901,6 +1901,17 @@ export default defineSchema({
     .index("by_user_and_comment", ["userId", "commentId"])
     .index("by_comment", ["commentId"]),
 
+  /** One emoji reaction per user per intro or lesson video. */
+  academyVideoReactions: defineTable({
+    courseId: v.id("academyCourses"),
+    targetKey: v.string(),
+    userId: v.id("users"),
+    emoji: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_target_and_user", ["targetKey", "userId"])
+    .index("by_target", ["targetKey"]),
+
   /** Studio Sophie CS — email OTP codes (agent never reads these; verify returns ok only). */
   studioCsOtps: defineTable({
     email: v.string(),

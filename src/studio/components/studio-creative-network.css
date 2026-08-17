@@ -1695,6 +1695,80 @@ button.studio-cn-card-btn.public-offers-card {
   box-sizing: border-box;
 }
 
+.studio-academy-pane .studio-cn-book-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  z-index: 40;
+  min-width: 0;
+  background: var(--mos-page, var(--mos-panel, var(--color-cursor-bg)));
+}
+
+.studio-cn-reaction-bar {
+  flex: 0 0 auto;
+  height: var(--studio-mobile-nav-height, 38px);
+  min-height: var(--studio-mobile-nav-height, 38px);
+  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  overflow: hidden;
+  animation: studio-cn-reaction-open 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.studio-cn-reaction-scroller {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 0 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+
+.studio-cn-reaction-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.studio-cn-reaction-emoji {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.studio-cn-reaction-emoji.is-on {
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 18%, transparent);
+}
+
+@keyframes studio-cn-reaction-open {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 40px;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-cn-reaction-bar {
+    animation: none;
+  }
+}
+
 .studio-cn-book-bar-price {
   min-width: 0;
   flex: 1 1 auto;
@@ -1913,6 +1987,20 @@ button.studio-cn-book-bar-price.is-discussion.has-preview {
   height: 14px;
   stroke-width: 2;
   fill: none !important;
+}
+
+.studio-cn-book-bar-react-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.studio-cn-book-bar-msg.is-reaction.is-open {
+  color: var(--color-cursor-text, var(--mos-text)) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 42%,
+    var(--color-cursor-border-soft, var(--mos-border-soft))
+  ) !important;
 }
 
 .studio-cn-offer-detail.is-mobile .studio-cn-book-bar .public-offers-btn,

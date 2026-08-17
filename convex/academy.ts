@@ -32,6 +32,7 @@ import {
   amountDueCents,
   planIsExpired,
 } from "./lib/academyPaymentPlan";
+import { normalizeReactionEmoji } from "./lib/itemReactions";
 import {
   commentSortFetchCap,
   normalizeCommentSort,
@@ -2258,5 +2259,78 @@ export const deleteComment = authedMutation({
     const commentCount = Math.max(0, (course.commentCount ?? 1) - 1);
     await ctx.db.patch(course._id, { commentCount });
     return { commentCount };
+  },
+});
+
+function videoReactionTargetKey(
+  courseId: Id<"academyCourses">,
+  lessonId?: Id<"academyLessons">,
+): string {
+  return lessonId ? `lesson:${lessonId}` : `intro:${courseId}`;
+}
+
+export const listVideoReactions = authedQuery({
+  args: {
+    courseId: v.id("academyCourses"),
+    lessonId: v.optional(v.id("academyLessons")),
+  },
+  returns: v.object({
+    count: v.number(),
+    mine: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    await requireCourseAccessForComments(ctx, args.courseId, ctx.user);
+    const targetKey = videoReactionTargetKey(args.courseId, args.lessonId);
+    const rows = await ctx.db
+      .query("academyVideoReactions")
+      .withIndex("by_target", (q) => q.eq("targetKey", targetKey))
+      .collect();
+    const mine = rows.find((row) => row.userId === ctx.user._id)?.emoji ?? null;
+    return { count: rows.length, mine };
+  },
+});
+
+export const setVideoReaction = authedMutation({
+  args: {
+    courseId: v.id("academyCourses"),
+    lessonId: v.optional(v.id("academyLessons")),
+    emoji: v.union(v.string(), v.null()),
+  },
+  returns: v.object({
+    count: v.number(),
+    mine: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    await requireCourseAccessForComments(ctx, args.courseId, ctx.user);
+    const targetKey = videoReactionTargetKey(args.courseId, args.lessonId);
+    const existing = await ctx.db
+      .query("academyVideoReactions")
+      .withIndex("by_target_and_user", (q) =>
+        q.eq("targetKey", targetKey).eq("userId", ctx.user._id),
+      )
+      .unique();
+    const nextEmoji =
+      args.emoji == null
+        ? undefined
+        : normalizeReactionEmoji(args.emoji);
+    if (existing && (nextEmoji == null || existing.emoji === nextEmoji)) {
+      await ctx.db.delete(existing._id);
+    } else if (existing && nextEmoji) {
+      await ctx.db.patch(existing._id, { emoji: nextEmoji });
+    } else if (nextEmoji) {
+      await ctx.db.insert("academyVideoReactions", {
+        courseId: args.courseId,
+        targetKey,
+        userId: ctx.user._id,
+        emoji: nextEmoji,
+        createdAt: Date.now(),
+      });
+    }
+    const rows = await ctx.db
+      .query("academyVideoReactions")
+      .withIndex("by_target", (q) => q.eq("targetKey", targetKey))
+      .collect();
+    const mine = rows.find((row) => row.userId === ctx.user._id)?.emoji ?? null;
+    return { count: rows.length, mine };
   },
 });
