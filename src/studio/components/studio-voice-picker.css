@@ -34,11 +34,12 @@
 
 .studio-voice-picker-chrome-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: stretch;
+  gap: 0;
   flex: 0 0 auto;
   min-width: 0;
-  padding: 0 8px;
+  min-height: 32px;
+  padding: 0 8px 0 8px;
   box-sizing: border-box;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border-soft)));
   background: transparent;
@@ -49,12 +50,14 @@
   align-items: center;
   gap: 6px;
   flex: 1 1 auto;
+  align-self: stretch;
   min-width: 0;
-  min-height: 28px;
-  height: 28px;
-  padding: 0 8px;
+  min-height: 32px;
+  height: auto;
+  padding: 0 0 0 8px;
   box-sizing: border-box;
   border: 0;
+  border-left: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border-soft)));
   background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
 }
@@ -130,8 +133,8 @@
   flex: 0 0 auto;
   min-width: 0;
   min-height: 32px;
-  height: 32px;
-  padding: 0;
+  height: auto;
+  padding: 0 8px 0 0;
   box-sizing: border-box;
   overflow: visible;
   border: 0;
