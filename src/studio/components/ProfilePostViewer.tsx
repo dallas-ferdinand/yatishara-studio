@@ -10,7 +10,9 @@ import {
   CircleCheck,
   Crown,
   Feather,
+  Image as ImageIcon,
   Loader2,
+  Music2,
   Pause,
   Pencil,
   Play,
@@ -204,14 +206,6 @@ function formatPostStamp(publishedAt?: number, editedAt?: number): string {
   return editedAt ? `${when} · edited` : when;
 }
 
-function postAspectVars(post: { width?: number; height?: number }): CSSProperties | undefined {
-  if (!(post.width && post.width > 0 && post.height && post.height > 0)) return undefined;
-  return {
-    ["--post-aw" as string]: String(post.width),
-    ["--post-ah" as string]: String(post.height),
-  };
-}
-
 function viewedKey(postId: string) {
   return `pp-viewed:${postId}`;
 }
@@ -302,6 +296,7 @@ function FeedMedia({
   });
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaRootRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const chromeVisibleRef = useRef(false);
   const postIdRef = useRef(post._id);
@@ -691,24 +686,37 @@ function FeedMedia({
   const aspectW =
     mediaSize?.w && mediaSize.w > 0
       ? mediaSize.w
-      : media?.width && media.width > 0
-        ? media.width
-        : post.width && post.width > 0
-          ? post.width
-          : 0;
+      : item.width && item.width > 0
+        ? item.width
+        : items.length === 1 && media?.width && media.width > 0
+          ? media.width
+          : items.length === 1 && post.width && post.width > 0
+            ? post.width
+            : 0;
   const aspectH =
     mediaSize?.h && mediaSize.h > 0
       ? mediaSize.h
-      : media?.height && media.height > 0
-        ? media.height
-        : post.height && post.height > 0
-          ? post.height
-          : 0;
+      : item.height && item.height > 0
+        ? item.height
+        : items.length === 1 && media?.height && media.height > 0
+          ? media.height
+          : items.length === 1 && post.height && post.height > 0
+            ? post.height
+            : 0;
+
+  useEffect(() => {
+    setMediaSize(null);
+  }, [item.assetId]);
 
   useLayoutEffect(() => {
-    if (!(aspectW > 0 && aspectH > 0)) return;
-    const frame = mediaRootRef.current?.closest(".profile-post-watch-frame");
+    const frame = frameRef.current;
     if (!(frame instanceof HTMLElement)) return;
+    if (isAudio || !(aspectW > 0 && aspectH > 0)) {
+      frame.style.removeProperty("--post-aw");
+      frame.style.removeProperty("--post-ah");
+      frame.classList.toggle("is-portrait", false);
+      return;
+    }
     const aw = String(aspectW);
     const ah = String(aspectH);
     if (frame.style.getPropertyValue("--post-aw") !== aw) {
@@ -718,9 +726,24 @@ function FeedMedia({
       frame.style.setProperty("--post-ah", ah);
     }
     frame.classList.toggle("is-portrait", aspectH > aspectW);
-  }, [aspectW, aspectH]);
+  }, [aspectW, aspectH, isAudio]);
 
   return (
+    <>
+    <div
+      ref={frameRef}
+      className={`profile-post-watch-frame${isAudio ? " is-audio" : ""}${
+        !isAudio && aspectH > aspectW ? " is-portrait" : ""
+      }`}
+      style={
+        !isAudio && aspectW > 0 && aspectH > 0
+          ? ({
+              ["--post-aw" as string]: String(aspectW),
+              ["--post-ah" as string]: String(aspectH),
+            } as CSSProperties)
+          : undefined
+      }
+    >
     <div
       ref={mediaRootRef}
       className={`profile-post-slide-media${isVideo ? " is-video" : ""}${isAudio ? " is-audio" : ""}`}
@@ -730,13 +753,14 @@ function FeedMedia({
           <StudioChatAudioPlayer
             src={playSrc}
             title={item.name || post.name}
+            compact
           />
         </div>
       ) : isVideo && playSrc ? (
         <MediaLoadFrame
           kind="video"
           src={playSrc}
-          cacheKey={post._id}
+          cacheKey={`${post._id}:${item.assetId}`}
           ratio="fill"
           className="profile-post-slide-frame"
         >
@@ -769,7 +793,7 @@ function FeedMedia({
         <MediaLoadFrame
           kind="image"
           src={displaySrc}
-          cacheKey={post._id}
+          cacheKey={`${post._id}:${item.assetId}`}
           ratio="fill"
           className="profile-post-slide-frame"
         >
@@ -860,43 +884,67 @@ function FeedMedia({
           </div>
         </div>
       ) : null}
-      {items.length > 1 ? (
-        <>
-          <button
-            type="button"
-            className="profile-post-items-nav is-prev"
-            aria-label="Previous in this post"
-            onPointerDown={stopFeedGesture}
-            onClick={(event) => {
-              stopFeedGesture(event);
-              setItemIndex((i) => (i - 1 + items.length) % items.length);
-            }}
-          >
-            <ChevronLeft aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="profile-post-items-nav is-next"
-            aria-label="Next in this post"
-            onPointerDown={stopFeedGesture}
-            onClick={(event) => {
-              stopFeedGesture(event);
-              setItemIndex((i) => (i + 1) % items.length);
-            }}
-          >
-            <ChevronRight aria-hidden="true" />
-          </button>
-          <div className="profile-post-items-dots" aria-hidden="true">
-            {items.map((entry, index) => (
-              <span
-                key={String(entry.assetId)}
-                className={index === safeIndex ? "is-current" : undefined}
-              />
-            ))}
-          </div>
-        </>
-      ) : null}
     </div>
+    </div>
+    {items.length > 1 ? (
+      <div className="profile-post-media-strip" aria-label="Post media">
+        <button
+          type="button"
+          className="profile-post-media-nav is-prev"
+          aria-label="Previous in this post"
+          onPointerDown={stopFeedGesture}
+          onClick={(event) => {
+            stopFeedGesture(event);
+            setItemIndex((i) => (i - 1 + items.length) % items.length);
+          }}
+        >
+          <ChevronLeft aria-hidden="true" />
+        </button>
+        <div className="profile-post-media-chips">
+          {items.map((entry, index) => (
+            <button
+              key={String(entry.assetId)}
+              type="button"
+              className={`profile-post-media-thumb${index === safeIndex ? " is-current" : ""}`}
+              aria-label={entry.name || `Item ${index + 1}`}
+              aria-current={index === safeIndex ? "true" : undefined}
+              onPointerDown={stopFeedGesture}
+              onClick={(event) => {
+                stopFeedGesture(event);
+                setItemIndex(index);
+              }}
+            >
+              {entry.kind === "audio" ? (
+                <Music2 aria-hidden="true" />
+              ) : entry.kind === "video" && entry.thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={entry.thumbnailUrl} alt="" />
+              ) : entry.kind === "video" && entry.mediaUrl ? (
+                <video src={entry.mediaUrl} muted playsInline />
+              ) : entry.thumbnailUrl || entry.mediaUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={entry.thumbnailUrl || entry.mediaUrl} alt="" />
+              ) : (
+                <ImageIcon aria-hidden="true" />
+              )}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="profile-post-media-nav is-next"
+          aria-label="Next in this post"
+          onPointerDown={stopFeedGesture}
+          onClick={(event) => {
+            stopFeedGesture(event);
+            setItemIndex((i) => (i + 1) % items.length);
+          }}
+        >
+          <ChevronRight aria-hidden="true" />
+        </button>
+      </div>
+    ) : null}
+    </>
   );
 }
 
@@ -2429,22 +2477,11 @@ export function ProfilePostViewer({
                 inert={!isInteractiveSlide}
               >
                 <div className="profile-post-watch-player">
-                    <div
-                      className={`profile-post-watch-frame${
-                        post.width &&
-                        post.height &&
-                        post.height > post.width
-                          ? " is-portrait"
-                          : ""
-                      }`}
-                      style={postAspectVars(post)}
-                    >
                       <FeedMedia
                         post={post}
                         active={tabActive && role === "current"}
                         preload={tabActive}
                       />
-                    </div>
                   </div>
                 <FeedCaption
                   postId={post._id}
