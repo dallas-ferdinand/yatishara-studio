@@ -1700,6 +1700,58 @@ button.studio-cn-card-btn.public-offers-card {
   text-overflow: ellipsis;
 }
 
+button.studio-cn-book-bar-price.is-discussion {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+
+button.studio-cn-book-bar-price.is-discussion.has-preview {
+  align-items: center;
+}
+
+.studio-cn-book-bar-preview-avatar.studio-profile-avatar {
+  --spa-size: 20px;
+  --spa-font: 8px;
+  flex: 0 0 auto;
+}
+
+.studio-cn-book-bar-preview-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0;
+  line-height: 1.15;
+}
+
+.studio-cn-book-bar-preview-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-cn-book-bar-preview-copy span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
 /* Same 2-color sale stack as Academy cards/checkout: accent strike + bright now. */
 .studio-cn-book-bar-price .studio-academy-card-compare,
 .studio-cn-book-bar-compare {

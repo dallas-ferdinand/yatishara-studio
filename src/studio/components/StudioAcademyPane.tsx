@@ -14,6 +14,8 @@ import {
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, Fragment } from "react";
+import { StudioProfileAvatar } from "./StudioProfileAvatar";
+import { profileNameInitials } from "@/studio/lib/profileAvatar";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -82,6 +84,94 @@ function studioCsDepositWhatsAppUrl(courseTitle?: string) {
 
 function formatPlanDueLabel(cents: number) {
   return formatTtdCents(Math.max(0, Math.round(Number(cents) || 0)));
+}
+
+const DISCUSSION_PREVIEW_HOLD = 5.5;
+const DISCUSSION_UNTIMED_EVERY = 13;
+const DISCUSSION_UNTIMED_HOLD = 4.5;
+
+type DiscussionPreviewRow = {
+  _id: string;
+  body: string;
+  displayName: string;
+  username?: string;
+  avatarUrl?: string;
+  likeCount: number;
+  replyCount: number;
+  videoTimeSec?: number;
+};
+
+function hashSeed(parts: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < parts.length; i++) {
+    h ^= parts.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function discussionPreviewText(body: string): string {
+  return body.replace(/\s+/g, " ").trim();
+}
+
+function pickWeightedRow<T>(
+  rows: T[],
+  weight: (row: T) => number,
+  rng: () => number,
+): T {
+  const total = rows.reduce((sum, row) => sum + Math.max(0.01, weight(row)), 0);
+  let cursor = rng() * total;
+  for (const row of rows) {
+    cursor -= Math.max(0.01, weight(row));
+    if (cursor <= 0) return row;
+  }
+  return rows[rows.length - 1]!;
+}
+
+function pickDiscussionPreview(
+  rows: DiscussionPreviewRow[] | undefined,
+  timeSec: number,
+  heard: boolean,
+  playSeed: number,
+): DiscussionPreviewRow | null {
+  if (!heard || !rows?.length) return null;
+  const withText = rows.filter((row) => discussionPreviewText(row.body).length > 0);
+  if (!withText.length) return null;
+
+  const timed = withText.filter(
+    (row) => typeof row.videoTimeSec === "number" && Number.isFinite(row.videoTimeSec),
+  );
+  const near = timed.filter(
+    (row) =>
+      timeSec >= row.videoTimeSec! &&
+      timeSec < row.videoTimeSec! + DISCUSSION_PREVIEW_HOLD,
+  );
+  const rngFor = (salt: string) => mulberry32(hashSeed(`${playSeed}:${salt}`));
+  const weight = (row: DiscussionPreviewRow) =>
+    1 + row.likeCount + Math.min(row.replyCount, 6);
+
+  if (near.length) {
+    const cluster = Math.min(...near.map((row) => row.videoTimeSec!));
+    return pickWeightedRow(near, weight, rngFor(`t:${Math.floor(cluster)}`));
+  }
+
+  const untimed = withText.filter((row) => typeof row.videoTimeSec !== "number");
+  if (!untimed.length) return null;
+  const slot = Math.floor(timeSec / DISCUSSION_UNTIMED_EVERY);
+  if (timeSec - slot * DISCUSSION_UNTIMED_EVERY >= DISCUSSION_UNTIMED_HOLD) {
+    return null;
+  }
+  return pickWeightedRow(untimed, weight, rngFor(`u:${slot}`));
 }
 
 function usePreloadAcademyHero() {
@@ -894,17 +984,33 @@ export function StudioAcademyPane({
   const [lessonsSheetOpen, setLessonsSheetOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
+  const [previewSeed, setPreviewSeed] = useState(() => Math.random());
+  const [videoTick, setVideoTick] = useState(0);
+  const [videoHeard, setVideoHeard] = useState(false);
+  const [previewExpiresUnix] = useState(
+    () => Math.floor(Date.now() / 1000) + 60 * 60,
+  );
   const clientRequestIdRef = useRef<string | null>(null);
   const videoTimeSecRef = useRef(0);
   const videoTimeHeardRef = useRef(false);
+  const videoTickBucketRef = useRef(-1);
   const seekVideoRef = useRef<((seconds: number) => void) | null>(null);
   const headTabsScrollRef = useRef<HTMLElement | null>(null);
   useHorizontalWheelScroll(headTabsScrollRef);
   useHorizontalScrollFade(headTabsScrollRef);
 
   const handleVideoTimeUpdate = (seconds: number) => {
+    if (videoTimeHeardRef.current && seconds + 2.5 < videoTimeSecRef.current) {
+      setPreviewSeed(Math.random());
+    }
     videoTimeHeardRef.current = true;
     videoTimeSecRef.current = seconds;
+    if (!videoHeard) setVideoHeard(true);
+    const bucket = Math.floor(seconds * 2) / 2;
+    if (bucket !== videoTickBucketRef.current) {
+      videoTickBucketRef.current = bucket;
+      setVideoTick(seconds);
+    }
   };
   const handleSeekReady = (seekTo: ((seconds: number) => void) | null) => {
     seekVideoRef.current = seekTo;
@@ -930,6 +1036,10 @@ export function StudioAcademyPane({
     clientRequestIdRef.current = null;
     videoTimeSecRef.current = 0;
     videoTimeHeardRef.current = false;
+    videoTickBucketRef.current = -1;
+    setVideoHeard(false);
+    setVideoTick(0);
+    setPreviewSeed(Math.random());
   }, [academy.courseId]);
 
   // Coming soon / draft courses return null — bounce to catalog.
@@ -942,6 +1052,10 @@ export function StudioAcademyPane({
     setLessonEmbed(null);
     videoTimeSecRef.current = 0;
     videoTimeHeardRef.current = false;
+    videoTickBucketRef.current = -1;
+    setVideoHeard(false);
+    setVideoTick(0);
+    setPreviewSeed(Math.random());
     if (academy.lessonId) {
       setIntroEmbed(null);
     }
@@ -1076,6 +1190,28 @@ export function StudioAcademyPane({
 
   const commentsLessonId =
     owned && academy.lessonId ? academy.lessonId : undefined;
+  const discussionPreviewRows = useQuery(
+    api.academy.listComments,
+    isMobile && owned && detail?._id
+      ? {
+          courseId: detail._id,
+          ...(commentsLessonId ? { lessonId: commentsLessonId } : {}),
+          expiresUnix: previewExpiresUnix,
+          limit: 80,
+          sort: "newest",
+        }
+      : "skip",
+  );
+  const discussionPreview = useMemo(
+    () =>
+      pickDiscussionPreview(
+        discussionPreviewRows as DiscussionPreviewRow[] | undefined,
+        videoTick,
+        videoHeard,
+        previewSeed,
+      ),
+    [discussionPreviewRows, videoTick, videoHeard, previewSeed],
+  );
   const commentsSidebarTitle =
     commentsLessonId && selectedLesson
       ? selectedLesson.title
@@ -1838,7 +1974,43 @@ export function StudioAcademyPane({
               )}
             </span>
           ) : (
-            <span className="studio-cn-book-bar-price">Discussion</span>
+            <button
+              type="button"
+              className={`studio-cn-book-bar-price is-discussion${discussionPreview ? " has-preview" : ""}`}
+              aria-label={
+                discussionPreview
+                  ? `${discussionPreview.displayName}: ${discussionPreviewText(discussionPreview.body)}`
+                  : "Open comments"
+              }
+              onClick={() => setCommentsOpen(true)}
+            >
+              {discussionPreview ? (
+                <>
+                  <StudioProfileAvatar
+                    className="studio-cn-book-bar-preview-avatar"
+                    size="sm"
+                    src={discussionPreview.avatarUrl}
+                    initials={profileNameInitials({
+                      displayName: discussionPreview.displayName,
+                      name: discussionPreview.username,
+                    })}
+                    displayName={discussionPreview.displayName}
+                    name={discussionPreview.username}
+                  />
+                  <span className="studio-cn-book-bar-preview-copy">
+                    <strong>
+                      {discussionPreview.displayName ||
+                        (discussionPreview.username
+                          ? `@${discussionPreview.username}`
+                          : "Comment")}
+                    </strong>
+                    <span>{discussionPreviewText(discussionPreview.body)}</span>
+                  </span>
+                </>
+              ) : (
+                <span>Discussion</span>
+              )}
+            </button>
           )}
           <div className="studio-cn-book-bar-actions">
             <button
