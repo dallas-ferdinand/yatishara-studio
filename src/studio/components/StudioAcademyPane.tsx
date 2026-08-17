@@ -2209,11 +2209,13 @@ export function StudioAcademyPane({
             </button>
           )}
           <div className="studio-cn-book-bar-actions">
-            {commentCount > 0 ? (
+            {owned ? (
               <button
                 type="button"
                 className="studio-cn-book-bar-msg is-with-count"
-                aria-label={`Comments, ${commentCount}`}
+                aria-label={
+                  commentCount ? `Comments, ${commentCount}` : "Open comments"
+                }
                 onClick={() => {
                   setReactionBarOpen(false);
                   setCommentsOpen(true);
