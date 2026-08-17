@@ -23466,7 +23466,10 @@ export function StudioShell({
           padding-left: 14px;
           padding-right: 14px;
         }
-        .studio-polish.is-studio-mobile .studio-academy-pane .public-offers-body {
+        .studio-polish.is-studio-mobile .studio-academy-pane .studio-cn-catalog:not(.is-academy-watch) .public-offers-body {
+          padding: 16px 16px 24px;
+        }
+        .studio-polish.is-studio-mobile .studio-academy-pane .studio-cn-catalog.is-academy-watch .public-offers-body {
           padding-left: 0;
           padding-right: 0;
           padding-top: 0;
@@ -23952,6 +23955,7 @@ export function StudioShell({
         .studio-academy-comments-meta svg {
           width: 13px;
           height: 13px;
+          flex-shrink: 0;
         }
         .studio-academy-comments-panel {
           background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
