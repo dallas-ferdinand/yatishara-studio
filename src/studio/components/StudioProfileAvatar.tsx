@@ -15,6 +15,13 @@ import "./studio-profile-avatar.css";
 
 export type StudioProfileAvatarSize = "sm" | "md" | "lg" | "xl";
 
+const SIZE_PX: Record<StudioProfileAvatarSize, number> = {
+  sm: 26,
+  md: 32,
+  lg: 68,
+  xl: 72,
+};
+
 type NameFields = {
   firstName?: string | null;
   lastName?: string | null;
@@ -87,8 +94,7 @@ export function StudioProfileAvatar(props: StudioProfileAvatarProps) {
     setBroken(false);
   }, [trimmedSrc]);
   const hasImage = Boolean(trimmedSrc) && !broken;
-  const fallbackStyle =
-    hasImage || placeholder ? undefined : profileAvatarStyle(initials);
+  const px = SIZE_PX[size] ?? SIZE_PX.md;
   const classes = [
     "studio-profile-avatar",
     `is-${size}`,
@@ -100,29 +106,32 @@ export function StudioProfileAvatar(props: StudioProfileAvatarProps) {
 
   const content = (
     <>
-      {hasImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-          <img
-          src={trimmedSrc}
-          alt={alt}
-          className="studio-profile-avatar-media"
-          draggable={false}
-          loading="lazy"
-          decoding="async"
-          onError={() => setBroken(true)}
-        />
-      ) : placeholder ? (
+      {placeholder && !hasImage ? (
         <span className="studio-profile-avatar-fallback is-placeholder">
           {placeholder}
         </span>
       ) : (
         <span
           className="studio-profile-avatar-fallback"
-          style={fallbackStyle ?? profileAvatarStyle(initials)}
+          style={profileAvatarStyle(initials)}
+          aria-hidden={hasImage}
         >
           {initials}
         </span>
       )}
+      {hasImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={trimmedSrc}
+          alt={alt}
+          className="studio-profile-avatar-media"
+          draggable={false}
+          decoding="async"
+          width={px}
+          height={px}
+          onError={() => setBroken(true)}
+        />
+      ) : null}
       {overlay ? <span className="studio-profile-avatar-overlay">{overlay}</span> : null}
     </>
   );
