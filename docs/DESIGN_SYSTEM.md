@@ -257,7 +257,7 @@ Do **not** invent one-off heights. Match siblings on the same surface.
 
 Rules:
 - On a public profile hero, Follow must match Hire Me / website chips (28×12), never a taller accent pill.
-- Feed watch caption Follow is a 28px idle bordered pill on the **right** of the name/time stack — not accent/`is-primary`, not a plus on the avatar. Boost lives in the book bar (desktop top header, mobile bottom). Desktop book bar: labeled Save and Share on the left; labeled Boost on the right. Contribute is not in the desktop bar — it stays in the comments sidebar head as a labeled pill (Feather + Contribute + count). Desktop 32px heads nest those pills at **24px**, same as `.cursor-icon-btn`. Mobile keeps Boost, Contribute, then icon Save/Share at 28px. Book bar pad matches other 32px heads (`0 8px 0 10px`), not the player’s 20px. Time under the name uses the same `ago · date` stamp as comments. Owner Pencil edits the caption inline on the page (desktop and mobile; not in the comments sidebar). Overflowing watch descriptions click-to-scroll internally (same as prompt Copy fences); hover/idle wheel still drives the feed. Description fills to the bottom edge with Academy-style 36px fades under the video, at the top of the scrollable copy, and at the bottom. The top fade occupies space so the first lines start below it; they only dissolve when scrolled. Watch caption avatar shadow is 1px/2px, not the shared 8px/18px glass spread.
+- Feed watch caption Follow is a 28px idle bordered pill on the **right** of the name/time stack — not accent/`is-primary`, not a plus on the avatar. Boost lives in the book bar (desktop top header, mobile bottom). Desktop book bar: labeled Save and Share on the left; centered prev/next chevrons; labeled Boost on the right. Contribute is not in the desktop bar — it stays in the comments sidebar head as a labeled pill (Feather + Contribute + count). Desktop 32px heads nest those pills at **24px**, same as `.cursor-icon-btn`. Mobile keeps Boost, Contribute, then icon Save/Share at 28px. Book bar pad matches other 32px heads (`0 8px 0 10px`), not the player’s 20px. Time under the name uses the same `ago · date` stamp as comments. Owner Pencil edits the caption inline on the page (desktop and mobile; not in the comments sidebar). Overflowing watch descriptions scroll in the bottom pane; wheel over the video goes to the next/prev post. Description fills to the bottom edge with Academy-style 36px fades under the video and at the bottom of the copy. Watch caption avatar shadow is 1px/2px, not the shared 8px/18px glass spread.
 - Prefer shared classes (`.public-profile-links a`, `.public-profile-follow`) over inline sizes.
 - Header bars stay exactly `--cursor-head-h` (32px); nest 24–28px chips inside, don’t grow the bar.
 - **In-rail / inline panel heads** (DM New/Edit label, assign sheets, secondary pane titles) use the
@@ -621,11 +621,12 @@ Memory: **727**.
 watch layout as mobile — native-ratio player, avatar in the title — except the
 Boost book bar sits at the **top** of the feed column as a 32px
 secondary header (`--cursor-head-h`, `padding: 0 8px 0 10px`, bottom hairline).
-Desktop left: labeled Save + Share; right: labeled Boost. Contribute is the
+Desktop left: labeled Save + Share; **centered** prev/next chevrons; right: labeled Boost. Contribute is the
 comments sidebar head pill, not a bar button. Mobile keeps that bar at the bottom with the same inset.
 Pinned media (does not scroll). Name + description sit in the bottom pane and
-scroll natively, close under the player like Academy watch. Left/right (swipe,
-wheel, arrows) = next/prev **feed** post. No up/down post swipe and no
+scroll natively, close under the player like Academy watch. Left/right swipe
+and header arrows = next/prev **feed** post. Wheel over the **video** also
+goes next/prev; wheel over the caption scrolls the copy. No up/down post swipe and no
 left/right through an author’s profile posts. Overflowing copy uses the
 caption scroller, not click-to-scroll. Academy under-video + bottom fades.
 Desktop comments head: 20px avatar, name, and a 24px Contribute pill

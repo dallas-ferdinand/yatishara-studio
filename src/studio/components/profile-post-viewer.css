@@ -1298,6 +1298,11 @@
     min-width: 0;
   }
 
+  .profile-post-book-nav,
+  .profile-post-book-end {
+    display: none;
+  }
+
   .profile-post-book-btn {
     width: 28px;
     min-width: 28px;
@@ -1325,6 +1330,11 @@
   span.profile-post-book-btn {
     cursor: default;
     pointer-events: none;
+  }
+
+  .profile-post-book-btn:disabled {
+    opacity: 0.38;
+    cursor: default;
   }
 
   .profile-post-book-btn.is-end {
@@ -1404,11 +1414,9 @@
     padding: 8px 20px 36px;
   }
 
-  .profile-post-viewer.is-watch-layout .profile-post-nav-rail.is-horizontal {
-    bottom: 8px;
-  }
-
   .is-watch-layout .profile-post-book-bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     order: -1;
     height: var(--cursor-head-h, 32px);
     min-height: var(--cursor-head-h, 32px);
@@ -1416,6 +1424,27 @@
     padding: 0 8px 0 10px;
     border-top: 0;
     border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  }
+
+  .is-watch-layout .profile-post-book-actions {
+    flex: 0 1 auto;
+    justify-self: start;
+  }
+
+  .is-watch-layout .profile-post-book-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    justify-self: center;
+  }
+
+  .is-watch-layout .profile-post-book-end {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+    justify-self: end;
   }
 
   .is-watch-layout .profile-post-book-btn,

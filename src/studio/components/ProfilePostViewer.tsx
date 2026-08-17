@@ -1114,6 +1114,7 @@ function FeedActions({
   onOpenComments,
   onOpenProfile,
   onToggleFollow,
+  feedNav,
 }: {
   post: SlidePost;
   username: string;
@@ -1135,6 +1136,11 @@ function FeedActions({
   onOpenComments: () => void;
   onOpenProfile?: (username: string) => void;
   onToggleFollow: () => void;
+  feedNav?: {
+    disabled: boolean;
+    onPrev: () => void;
+    onNext: () => void;
+  };
 }) {
   const { isMobile } = useMobileLayout();
   const saved = Boolean(post.savedByViewer);
@@ -1152,7 +1158,7 @@ function FeedActions({
   );
 
   if (variant === "bar") {
-    const boostClass = `profile-post-book-btn is-labeled${liked || undoing ? " is-liked" : ""}${isMobile ? "" : " is-end"}`;
+    const boostClass = `profile-post-book-btn is-labeled${liked || undoing ? " is-liked" : ""}`;
     const boostBtn = post.isOwner ? (
       <span
         className={boostClass}
@@ -1237,22 +1243,48 @@ function FeedActions({
     );
     return (
       <nav className="profile-post-book-bar" aria-label="Post actions">
-        <div className="profile-post-book-actions">
-          {isMobile ? (
-            <>
-              {boostBtn}
-              {contributeBtn}
+        {isMobile ? (
+          <div className="profile-post-book-actions">
+            {boostBtn}
+            {contributeBtn}
+            {saveBtn}
+            {shareBtn}
+          </div>
+        ) : (
+          <>
+            <div className="profile-post-book-actions">
               {saveBtn}
               {shareBtn}
-            </>
-          ) : (
-            <>
-              {saveBtn}
-              {shareBtn}
-              {boostBtn}
-            </>
-          )}
-        </div>
+            </div>
+            {feedNav ? (
+              <div className="profile-post-book-nav" aria-label="Feed navigation">
+                <button
+                  type="button"
+                  className="profile-post-book-btn"
+                  aria-label="Previous post"
+                  disabled={feedNav.disabled}
+                  onClick={feedNav.onPrev}
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  <ChevronLeft aria-hidden="true" strokeWidth={2.25} />
+                </button>
+                <button
+                  type="button"
+                  className="profile-post-book-btn"
+                  aria-label="Next post"
+                  disabled={feedNav.disabled}
+                  onClick={feedNav.onNext}
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  <ChevronRight aria-hidden="true" strokeWidth={2.25} />
+                </button>
+              </div>
+            ) : (
+              <span className="profile-post-book-nav" aria-hidden="true" />
+            )}
+            <div className="profile-post-book-end">{boostBtn}</div>
+          </>
+        )}
       </nav>
     );
   }
@@ -1821,12 +1853,15 @@ export function ProfilePostViewer({
       ) {
         return;
       }
+      const overPlayer = Boolean(target.closest(".profile-post-watch-player"));
+      const overCaption = Boolean(target.closest(".profile-post-caption.is-page"));
       const deltaX = normalizedWheelDelta(event.deltaX, event.deltaMode);
       const deltaY = normalizedWheelDelta(event.deltaY, event.deltaMode);
       const shiftHorizontal = event.shiftKey && Math.abs(deltaY) >= Math.abs(deltaX);
       const horizontal = shiftHorizontal || Math.abs(deltaY) < Math.abs(deltaX);
-      if (!horizontal) return;
-      const delta = shiftHorizontal ? deltaY : deltaX;
+      if (overCaption && !horizontal) return;
+      if (!overPlayer && !horizontal) return;
+      const delta = horizontal ? (shiftHorizontal ? deltaY : deltaX) : deltaY;
       if (Math.abs(delta) < 8) return;
       event.preventDefault();
       event.stopPropagation();
@@ -2341,31 +2376,6 @@ export function ProfilePostViewer({
             );
           })}
         </div>
-
-        {!isMobile && tabActive ? (
-          <div className="profile-post-nav-rail is-horizontal" aria-label="Feed navigation">
-            <button
-              type="button"
-              className="profile-post-nav-btn"
-              aria-label="Previous post"
-              disabled={resolvedFeed.length <= 1 || animating}
-              onClick={() => commitSlide(-1)}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <ChevronLeft aria-hidden="true" strokeWidth={2.25} />
-            </button>
-            <button
-              type="button"
-              className="profile-post-nav-btn"
-              aria-label="Next post"
-              disabled={resolvedFeed.length <= 1 || animating}
-              onClick={() => commitSlide(1)}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <ChevronRight aria-hidden="true" strokeWidth={2.25} />
-            </button>
-          </div>
-        ) : null}
       </div>
 
       {tabActive ? (
@@ -2409,6 +2419,11 @@ export function ProfilePostViewer({
           }}
           onOpenProfile={onOpenProfile}
           onToggleFollow={() => void handleFollowToggle(activeSlidePost)}
+          feedNav={{
+            disabled: resolvedFeed.length <= 1 || animating,
+            onPrev: () => commitSlide(-1),
+            onNext: () => commitSlide(1),
+          }}
         />
       ) : null}
       </div>
