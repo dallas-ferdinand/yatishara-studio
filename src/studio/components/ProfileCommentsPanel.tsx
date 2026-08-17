@@ -425,37 +425,6 @@ function ProfileCommentBubble({
                     {formatWhen(comment.createdAt)}
                   </time>
                 </div>
-              </div>
-              <div className="profile-comment-bubble-copy">
-              {typeof comment.videoTimeSec === "number" &&
-              Number.isFinite(comment.videoTimeSec) ? (
-                <button
-                  type="button"
-                  className="profile-comment-video-time"
-                  aria-label={`Jump to ${formatVideoTimecode(comment.videoTimeSec)} in video`}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSeekVideo?.(comment.videoTimeSec!);
-                  }}
-                  disabled={!onSeekVideo}
-                >
-                  {formatVideoTimecode(comment.videoTimeSec)}
-                </button>
-              ) : null}
-              {comment.body ? <p>{comment.body}</p> : null}
-              {comment.imageUrl ? (
-                <button
-                  type="button"
-                  className="profile-comment-image-btn"
-                  aria-label="View image"
-                  onClick={() => onOpenImage(comment.imageUrl!)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img className="profile-comment-image" src={comment.imageUrl} alt="" />
-                </button>
-              ) : null}
-              </div>
             <div className="profile-comment-bubble-actions">
                 {locked ? (
                   <span
@@ -514,6 +483,37 @@ function ProfileCommentBubble({
                     <span>{replyCount}</span>
                   </span>
                 ) : null}
+              </div>
+              </div>
+              <div className="profile-comment-bubble-copy">
+              {typeof comment.videoTimeSec === "number" &&
+              Number.isFinite(comment.videoTimeSec) ? (
+                <button
+                  type="button"
+                  className="profile-comment-video-time"
+                  aria-label={`Jump to ${formatVideoTimecode(comment.videoTimeSec)} in video`}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSeekVideo?.(comment.videoTimeSec!);
+                  }}
+                  disabled={!onSeekVideo}
+                >
+                  {formatVideoTimecode(comment.videoTimeSec)}
+                </button>
+              ) : null}
+              {comment.body ? <p>{comment.body}</p> : null}
+              {comment.imageUrl ? (
+                <button
+                  type="button"
+                  className="profile-comment-image-btn"
+                  aria-label="View image"
+                  onClick={() => onOpenImage(comment.imageUrl!)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img className="profile-comment-image" src={comment.imageUrl} alt="" />
+                </button>
+              ) : null}
               </div>
             </div>
           </div>
