@@ -3721,8 +3721,34 @@
 .studio-dm-dialog-head .studio-dm-dialog-primary,
 .studio-dm-dialog-head .studio-dm-dialog-danger {
   width: auto;
-  height: calc(var(--cursor-head-h, 32px) - 8px);
-  min-height: calc(var(--cursor-head-h, 32px) - 8px);
+  height: var(--studio-dm-chrome-circle, 28px);
+  min-height: var(--studio-dm-chrome-circle, 28px);
+  max-height: var(--studio-dm-chrome-circle, 28px);
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.studio-dm-dialog-head .studio-dm-dialog-primary {
+  border: 0;
+  box-shadow: none;
+}
+
+.studio-dm-dialog-head .studio-dm-dialog-primary svg,
+.studio-dm-dialog-head .studio-dm-dialog-danger svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.studio-dm-dialog-head .studio-dm-dialog-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.studio-dm-dialog-head .studio-dm-dialog-danger {
   padding: 0 10px;
 }
 

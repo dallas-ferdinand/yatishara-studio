@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { Loader2, Trash2, X } from "lucide-react";
+import { Check, Loader2, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -123,8 +123,12 @@ export function StudioDmLabelEditorDialog({
             disabled={busy || !name.trim()}
           >
             {busy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            ) : null}
+              <Loader2 className="animate-spin" aria-hidden="true" />
+            ) : labelId ? (
+              <Check aria-hidden="true" />
+            ) : (
+              <Plus aria-hidden="true" />
+            )}
             {labelId ? "Save" : "Create"}
           </button>
           <button
