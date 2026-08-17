@@ -2078,24 +2078,12 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comment-bubble-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  float: right;
-  margin: 2px 0 0 8px;
-  transform: none;
-}
-
-.profile-comment-bubble-copy:has(.profile-comment-image-btn) .profile-comment-bubble-actions {
-  float: none;
   display: flex;
-  margin: 4px 0 0 auto;
-}
-
-.profile-comment-row.is-mine .profile-comment-bubble-actions {
-  align-self: flex-end;
-  margin: 2px 0 0 8px;
-  transform: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 100%;
+  margin: 6px 0 0;
 }
 
 .profile-comment-bubble-actions .profile-comment-like,

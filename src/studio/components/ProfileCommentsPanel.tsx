@@ -455,6 +455,7 @@ function ProfileCommentBubble({
                   <img className="profile-comment-image" src={comment.imageUrl} alt="" />
                 </button>
               ) : null}
+              </div>
             <div className="profile-comment-bubble-actions">
                 {locked ? (
                   <span
@@ -513,7 +514,6 @@ function ProfileCommentBubble({
                     <span>{replyCount}</span>
                   </span>
                 ) : null}
-              </div>
               </div>
             </div>
           </div>
