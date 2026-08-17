@@ -3500,6 +3500,30 @@
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
+@media (max-width: 899px) {
+  .studio-polish.is-studio-mobile .studio-dm-label-chip {
+    height: var(--studio-mobile-chrome-control, 34px);
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .studio-polish.is-studio-mobile .studio-dm-label-chip > svg {
+    width: 13px;
+    height: 13px;
+  }
+  .studio-polish.is-studio-mobile .studio-dm-label-chip.is-add {
+    padding: 0 9px;
+  }
+  .studio-polish.is-studio-mobile .studio-dm-provider-tag {
+    height: 20px;
+    padding: 0 7px !important;
+    font-size: 10px;
+  }
+  .studio-polish.is-studio-mobile .studio-dm-provider-tag > svg {
+    width: 10px;
+    height: 10px;
+  }
+}
+
 /* New/Edit label — replaces chat-list body; search + label rail stay put. */
 .studio-dm-label-editor-panel {
   display: flex;
