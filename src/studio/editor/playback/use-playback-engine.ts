@@ -29,7 +29,7 @@ import {
 } from "../previewLoadQuality";
 import { previewTransitionWhilePlaying } from "./preview-transition-play";
 import { setEditorPlaybackBusy } from "../filmstripGate";
-import { PlayBus } from "./play-bus";
+import { PlayBus, playBusLayersByClipId } from "./play-bus";
 
 /**
  * Spinner only after a lasting cold-buffer on PlayBus (element waiting before
@@ -260,9 +260,7 @@ class EngineConsumer implements FrameConsumer {
 
     bus.syncSlice(slice, this.mediaRef.current);
     const captured = bus.captureFrames();
-    const byIndex = new Map(
-      (captured.layers ?? captured.stack ?? []).map((layer) => [layer.sampleIndex, layer]),
-    );
+    const byClipId = playBusLayersByClipId(captured);
     const roles = pictureStackPlan(slice);
     const opacityFor = (sample: RenderSlice["video"][number] | undefined) => {
       if (!sample) return 1;
@@ -303,7 +301,10 @@ class EngineConsumer implements FrameConsumer {
           height: still.frame?.displayHeight,
         };
       }
-      const fromBus = byIndex.get(index);
+      // Slot rebinding is asynchronous. A lane start/end changes every later
+      // sample index immediately, so indexes can point at the wrong movie for
+      // several paints. Clip identity remains stable across that boundary.
+      const fromBus = byClipId.get(sample.clip.clipId);
       if (fromBus?.frame) usedBusFrames.add(fromBus.frame);
       if (!fromBus) return { sample, frame: undefined, textureKey: undefined };
       return {

@@ -23,7 +23,9 @@ export type PlayBusStackFrame = {
   textureKey?: string;
   width?: number;
   height?: number;
-  /** Index into slice.video (top→bottom) for opacity/transform. */
+  /** Stable identity across lane starts/ends and async slot rebinding. */
+  clipId: string;
+  /** Diagnostic only; consumers must resolve by clipId, not this moving index. */
   sampleIndex: number;
 };
 
@@ -42,6 +44,15 @@ export type PlayBusFrames = {
   /** Every video lane keyed by slice.video index (stills are omitted). */
   layers?: PlayBusStackFrame[];
 };
+
+/** Stable lookup used while async slot assignments catch up with lane changes. */
+export function playBusLayersByClipId(
+  frames: PlayBusFrames,
+): ReadonlyMap<string, PlayBusStackFrame> {
+  return new Map(
+    (frames.layers ?? frames.stack ?? []).map((layer) => [layer.clipId, layer]),
+  );
+}
 
 type SlotId = "a" | "b";
 
@@ -334,9 +345,10 @@ export class PlayBus {
       if (!frame) return;
       layers.push({
         frame,
-        textureKey: `play:${state.sampleIndex}`,
+        textureKey: `play:${state.assignment.clipId}`,
         width: frame.displayWidth,
         height: frame.displayHeight,
+        clipId: state.assignment.clipId,
         sampleIndex: state.sampleIndex,
       });
     };

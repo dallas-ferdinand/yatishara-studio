@@ -126,6 +126,35 @@ describe("timeline compiler", () => {
     expect(after.video[0]?.sourceTime).toBeCloseTo(0.251);
   });
 
+  it("hard-cuts a transitioning lane while another picture lane overlaps", () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.tracks = [
+      { id: "track-v1", kind: "video", label: "Overlay" },
+      { id: "track-v2", kind: "video", label: "Main" },
+      { id: "track-audio", kind: "audio", label: "Audio" },
+    ];
+    project.clips = [
+      { ...clip("overlay", 0, 4), trackId: "track-v1" },
+      { ...clip("a", 0, 2, true), trackId: "track-v2" },
+      { ...clip("b", 2, 2), trackId: "track-v2" },
+    ];
+    const plan = compileTimeline(project);
+
+    const beforeCut = sliceAt(plan, 1.9);
+    expect(beforeCut.transition).toBeNull();
+    expect(beforeCut.video.map((sample) => sample.clip.clipId)).toEqual([
+      "overlay",
+      "a",
+    ]);
+
+    const afterCut = sliceAt(plan, 2.1);
+    expect(afterCut.transition).toBeNull();
+    expect(afterCut.video.map((sample) => sample.clip.clipId)).toEqual([
+      "overlay",
+      "b",
+    ]);
+  });
+
   it("pre-rolls adjacent transition partners and never moves a clip backward", () => {
     const project = createEmptyProject({ name: "test", folderId: "folder" });
     project.clips = [
@@ -318,6 +347,36 @@ describe("timeline compiler", () => {
       bottomIndex: 3,
       middleIndexes: [1, 2],
     });
+  });
+
+  it("preserves every video when a shorter top image ends and indexes shift", () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.tracks = [
+      { id: "track-v1", kind: "video", label: "V1" },
+      { id: "track-v2", kind: "video", label: "V2" },
+      { id: "track-v3", kind: "video", label: "V3" },
+      { id: "track-v4", kind: "video", label: "V4" },
+      { id: "track-audio", kind: "audio", label: "Audio" },
+    ];
+    project.clips = [
+      { ...clip("img", 0, 2), trackId: "track-v1", kind: "image" },
+      { ...clip("mid-a", 0, 4), trackId: "track-v2" },
+      { ...clip("mid-b", 0, 4), trackId: "track-v3" },
+      { ...clip("main", 0, 4), trackId: "track-v4" },
+    ];
+    const plan = compileTimeline(project);
+
+    expect(sliceAt(plan, 1).video.map((sample) => sample.clip.clipId)).toEqual([
+      "img",
+      "mid-a",
+      "mid-b",
+      "main",
+    ]);
+    expect(sliceAt(plan, 2.1).video.map((sample) => sample.clip.clipId)).toEqual([
+      "mid-a",
+      "mid-b",
+      "main",
+    ]);
   });
 
   it("mutes only the muted video row so lower-row audio still mixes", () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../editorState";
 import type { EditorClip, EditorMediaItem } from "../types";
-import { PlayBus } from "./play-bus";
+import { PlayBus, playBusLayersByClipId } from "./play-bus";
 import { compileTimeline, sliceAt } from "./timeline-compiler";
 
 function clip(
@@ -97,6 +97,29 @@ function mediaItem(assetId: string, file: string, kind: EditorMediaItem["kind"] 
 }
 
 describe("PlayBus", () => {
+  it("resolves captured lanes by clip identity after picture indexes shift", () => {
+    const oldFrames = {
+      layers: [
+        { clipId: "middle-a", sampleIndex: 1 },
+        { clipId: "middle-b", sampleIndex: 2 },
+        { clipId: "main", sampleIndex: 3 },
+      ],
+    };
+    const byClipId = playBusLayersByClipId(oldFrames);
+    // Removing a top image shifts these to indexes 0/1/2, but the old capture
+    // still maps to the correct movies while async slot rebinding completes.
+    expect(
+      ["middle-a", "middle-b", "main"].map((clipId) => ({
+        clipId,
+        capturedClipId: byClipId.get(clipId)?.clipId,
+      })),
+    ).toEqual([
+      { clipId: "middle-a", capturedClipId: "middle-a" },
+      { clipId: "middle-b", capturedClipId: "middle-b" },
+      { clipId: "main", capturedClipId: "main" },
+    ]);
+  });
+
   it("maps program currentTime to timelineTime", async () => {
     const videos: HTMLVideoElement[] = [];
     const bus = new PlayBus(

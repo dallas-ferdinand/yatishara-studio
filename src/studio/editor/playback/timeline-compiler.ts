@@ -262,9 +262,23 @@ function sourceAt(clip: CompiledClip, timelineTime: number): number {
  */
 export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
   const time = Math.max(0, Math.min(plan.duration, timelineTime));
-  const transition =
+  const candidateTransition =
     plan.transitions.find((item) => contains(item.timelineStart, item.timelineEnd, time)) ??
     null;
+  // The compositor can transition one picture lane faithfully. When another
+  // picture lane overlaps, preview and export both hard-cut the transitioning
+  // lane so lower/upper lanes keep their real z-order instead of being moved
+  // above an opaque A/B transition result.
+  const transition = candidateTransition
+    ? plan.video.some(
+        (clip) =>
+          clip.clipId !== candidateTransition.outgoingClipId &&
+          clip.clipId !== candidateTransition.incomingClipId &&
+          contains(clip.timelineStart, clip.timelineEnd, time),
+      )
+      ? null
+      : candidateTransition
+    : null;
   const video: VideoSample[] = [];
 
   if (transition) {
