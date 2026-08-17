@@ -1455,9 +1455,10 @@
 .profile-comments-list {
   min-height: 0;
   overflow: auto;
-  padding: 0;
+  padding: 10px 10px 12px;
   display: flex;
   flex-direction: column;
+  gap: 8px;
   align-content: start;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -1747,9 +1748,10 @@ button.post-compose-inline-chip.profile-description-chip {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: end;
-  padding: 14px 14px 12px;
-  border-bottom: 1px solid var(--color-cursor-border, var(--mos-border));
-  background: color-mix(in srgb, var(--color-cursor-text) 4%, transparent);
+  padding: 8px 10px 10px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: 8px 18px 18px 18px;
+  background: var(--mos-plate, var(--mos-panel));
 }
 
 .profile-comment-parent-content {
@@ -1907,11 +1909,16 @@ button.post-compose-inline-chip.profile-description-chip {
 .profile-comment-row {
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr);
-  gap: 10px;
+  gap: 8px;
   align-items: start;
-  padding: 14px 14px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0;
+  border-bottom: 0;
   cursor: grab;
+}
+
+.profile-comment-row.is-reply {
+  padding-left: 16px;
+  grid-template-columns: 22px minmax(0, 1fr);
 }
 
 .profile-comment-row:active {
@@ -1932,6 +1939,33 @@ button.post-compose-inline-chip.profile-description-chip {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.profile-comment-bubble {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+  padding: 7px 10px 8px;
+  box-sizing: border-box;
+  border-radius: 8px 18px 18px 18px;
+  background: var(--mos-plate, var(--mos-panel));
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+.profile-comment-row.is-mine .profile-comment-bubble {
+  border-radius: 18px 8px 18px 18px;
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 16%,
+    var(--mos-plate, var(--mos-panel))
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 26%,
+    var(--color-cursor-border-soft, var(--mos-border-soft))
+  );
 }
 
 .profile-comment-meta {
@@ -2084,38 +2118,29 @@ button.post-compose-inline-chip.profile-description-chip {
   padding: 0;
   margin: 0;
   background: transparent;
-  color: #fff;
+  color: var(--color-cursor-muted, color-mix(in srgb, currentColor 55%, transparent));
   font: inherit;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  text-shadow:
-    0 1px 1px rgba(0, 0, 0, 0.45),
-    0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 .profile-comment-like svg {
   width: 16px;
   height: 16px;
-  filter:
-    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55))
-    drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35));
 }
 
 .profile-comment-like.is-liked {
-  color: #fff;
+  color: var(--color-cursor-muted, color-mix(in srgb, currentColor 55%, transparent));
 }
 
 .profile-comment-like.is-liked svg,
 .profile-comment-like.is-liked:hover svg {
   color: #ff3b5c !important;
-  filter:
-    drop-shadow(0 1px 0 #a01028)
-    drop-shadow(0 2px 5px rgba(0, 0, 0, 0.45));
 }
 
 .profile-comment-like span {
-  color: #fff;
+  color: inherit;
 }
 
 .profile-comment-delete {
@@ -2124,7 +2149,7 @@ button.post-compose-inline-chip.profile-description-chip {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: color-mix(in srgb, #fff 55%, transparent);
+  color: var(--color-cursor-muted, color-mix(in srgb, currentColor 48%, transparent));
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -2524,12 +2549,12 @@ button.post-compose-inline-chip.profile-description-chip {
 
 
 [data-appearance="light"] .profile-comment-row {
-  border-bottom-color: var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-bottom: 0;
 }
 
 [data-appearance="light"] .profile-comment-parent-body {
-  background: color-mix(in srgb, var(--color-cursor-text) 3%, transparent);
-  border-bottom-color: var(--color-cursor-border, var(--mos-border));
+  background: var(--mos-plate, var(--mos-panel, #ececf0));
+  border-color: var(--color-cursor-border-soft, var(--mos-border-soft));
 }
 
 [data-appearance="light"] .profile-comment-creator-tag {

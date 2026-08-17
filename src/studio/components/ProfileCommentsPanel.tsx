@@ -649,7 +649,7 @@ function CommentsBody({
     return (
       <article
         key={comment._id}
-        className="profile-comment-row"
+        className={`profile-comment-row${comment.isMine ? " is-mine" : ""}${comment.parentId ? " is-reply" : ""}`}
         draggable={!isCourse && Boolean(postId)}
         title={
           !isCourse && postId
@@ -690,7 +690,8 @@ function CommentsBody({
           name={comment.username}
         />
         <div className="profile-comment-body">
-          <div className="profile-comment-meta">
+          <div className="profile-comment-bubble">
+            <div className="profile-comment-meta">
             <div className="profile-comment-meta-text">
               <div className="profile-comment-meta-top">
                 <strong>{label}</strong>
@@ -741,6 +742,7 @@ function CommentsBody({
               <img className="profile-comment-image" src={comment.imageUrl} alt="" />
             </button>
           ) : null}
+          </div>
           <div className="profile-comment-actions">
             <div className="profile-comment-actions-left">
               {searching && comment.parentId ? (
