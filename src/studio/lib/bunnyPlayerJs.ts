@@ -11,6 +11,9 @@ type PlayerJsPlayer = {
   play?: () => void;
   pause?: () => void;
   getPaused?: (cb: (paused: boolean) => void) => void;
+  unmute?: () => void;
+  mute?: () => void;
+  setVolume?: (volume: number) => void;
 };
 
 type PlayerJsGlobal = {
@@ -64,10 +67,34 @@ function readSeconds(data: unknown): number | null {
   return null;
 }
 
+/** Force Bunny Stream embed to start playing with sound (client-side, even if mint still has autoplay=false). */
+export function withStreamAutoplay(url: string): string {
+  try {
+    const next = new URL(url);
+    next.searchParams.set("autoplay", "true");
+    next.searchParams.set("muted", "false");
+    next.searchParams.set("playsinline", "true");
+    return next.toString();
+  } catch {
+    return url;
+  }
+}
+
+function kickAudiblePlayback(player: PlayerJsPlayer) {
+  try {
+    player.unmute?.();
+    player.setVolume?.(100);
+    player.play?.();
+  } catch {
+    /* browser may still block unmuted iframe autoplay */
+  }
+}
+
 /** Attach Player.js to a Bunny Stream iframe; returns dispose + seek helpers. */
 export function attachBunnyStreamPlayer(
   iframe: HTMLIFrameElement,
   onTime: (seconds: number) => void,
+  opts?: { autoplay?: boolean },
 ): {
   dispose: () => void;
   seekTo: (seconds: number) => void;
@@ -91,12 +118,12 @@ export function attachBunnyStreamPlayer(
       if (typeof player.getPaused === "function") {
         player.getPaused((paused) => {
           if (disposed || !player) return;
-          if (paused) player.play?.();
+          if (paused) kickAudiblePlayback(player);
           else player.pause?.();
         });
         return;
       }
-      player.play?.();
+      kickAudiblePlayback(player);
     } catch {
       /* ignore */
     }
@@ -116,6 +143,7 @@ export function attachBunnyStreamPlayer(
           const sec = readSeconds(value);
           if (sec != null) onTime(sec);
         });
+        if (opts?.autoplay !== false) kickAudiblePlayback(player);
       });
     } catch {
       player = null;

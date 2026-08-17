@@ -66,8 +66,10 @@ export function buildStreamEmbedUrl(args: {
 }): string {
   const base = `https://iframe.mediadelivery.net/embed/${args.libraryId}/${args.videoId}`;
   const params = new URLSearchParams();
-  params.set("autoplay", "false");
+  params.set("autoplay", "true");
+  params.set("muted", "false");
   params.set("preload", "true");
+  params.set("playsinline", "true");
   // Keep iframe inside our 16:9 shell — responsive=true breaks out and feels stuck on mobile.
   params.set("responsive", "false");
   // Enable Player.js bridge for currentTime (comment timestamps / seek).

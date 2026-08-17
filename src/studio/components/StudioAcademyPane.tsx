@@ -32,7 +32,10 @@ import {
   topUpMinAmountCents,
 } from "@/studio/lib/money";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
-import { attachBunnyStreamPlayer } from "@/studio/lib/bunnyPlayerJs";
+import {
+  attachBunnyStreamPlayer,
+  withStreamAutoplay,
+} from "@/studio/lib/bunnyPlayerJs";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { useStudioAcademy } from "./StudioAcademyContext";
 import { AcademyLessonRail } from "./StudioAcademySidebar";
@@ -613,14 +616,15 @@ function BannerStage({
 
   useEffect(() => {
     const iframe = iframeRef.current;
-    if (!embedUrl || !iframe || !onTimeUpdate) {
+    if (!embedUrl || !iframe) {
       togglePlayRef.current = null;
       onSeekReady?.(null);
       return;
     }
     const { dispose, seekTo, togglePlay } = attachBunnyStreamPlayer(
       iframe,
-      onTimeUpdate,
+      onTimeUpdate ?? (() => {}),
+      { autoplay: true },
     );
     togglePlayRef.current = togglePlay;
     onSeekReady?.(seekTo);
@@ -638,7 +642,7 @@ function BannerStage({
           <>
             <iframe
               ref={iframeRef}
-              src={embedUrl}
+              src={withStreamAutoplay(embedUrl)}
               title={playLabel}
               allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
               allowFullScreen
@@ -1092,7 +1096,6 @@ export function StudioAcademyPane({
     setLoadingPlay(true);
     try {
       const playback = await getIntroPlayback({ courseId: academy.courseId });
-      // No autoplay — Bunny Stream thumbnail + native play control.
       setIntroEmbed(playback.embedUrl);
     } catch (error) {
       toast.error(friendlyConvexError(error, "Could not load intro"));

@@ -303,7 +303,9 @@ function FeedMedia({
   const [duration, setDuration] = useState(0);
   const [seeking, setSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [policyMuted, setPolicyMuted] = useState(false);
+  const policyMutedRef = useRef(false);
 
   if (postIdRef.current !== post._id) {
     postIdRef.current = post._id;
@@ -379,7 +381,8 @@ function FeedMedia({
   useEffect(() => {
     hideChrome();
     setSeeking(false);
-    setSoundEnabled(false);
+    policyMutedRef.current = false;
+    setPolicyMuted(false);
     setCurrent(0);
     setSeekValue(0);
     setDuration(0);
@@ -417,7 +420,7 @@ function FeedMedia({
     }
   }, [shouldWarm, playSrc, post.kind]);
 
-  // Pause when leaving the slide/tab; always autoplay (muted) when scrolled to.
+  // Pause when leaving the slide/tab; autoplay with volume when scrolled to.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || post.kind !== "video" || !playSrc) return undefined;
@@ -445,16 +448,28 @@ function FeedMedia({
       setSeekValue(resumeAt);
     }
 
-    // Autoplay must stay muted until the user enables sound (browser policy).
-    video.muted = !soundEnabled;
+    video.volume = 1;
     wasPlayingRef.current = true;
 
     let cancelled = false;
     const tryPlay = () => {
       if (cancelled) return;
-      video.muted = !soundEnabled;
-      void video.play().catch(() => {
-        /* NotAllowed / not ready — canplay/loadeddata will retry */
+      video.volume = 1;
+      const wantSound = soundEnabled && !policyMutedRef.current;
+      video.muted = !wantSound;
+      void video.play().catch((error: unknown) => {
+        if (cancelled) return;
+        if (!wantSound) return;
+        const name =
+          error && typeof error === "object" && "name" in error
+            ? String((error as { name: string }).name)
+            : "";
+        if (name === "AbortError") return;
+        // Browser blocked unmuted autoplay — keep playing, retry sound after a gesture.
+        policyMutedRef.current = true;
+        setPolicyMuted(true);
+        video.muted = true;
+        void video.play().catch(() => {});
       });
     };
 
@@ -517,12 +532,36 @@ function FeedMedia({
     function onFeedTap(event: Event) {
       const detail = (event as CustomEvent<{ postId?: string }>).detail;
       if (!detail?.postId || detail.postId !== post._id) return;
+      const video = videoRef.current;
+      if (video && (video.muted || policyMutedRef.current)) {
+        policyMutedRef.current = false;
+        setPolicyMuted(false);
+        setSoundEnabled(true);
+        video.volume = 1;
+        video.muted = false;
+        if (video.paused) void video.play().catch(() => {});
+      }
       if (chromeVisibleRef.current) hideChrome();
       else showChrome();
     }
     window.addEventListener("ys-feed-media-tap", onFeedTap);
     return () => window.removeEventListener("ys-feed-media-tap", onFeedTap);
   }, [active, hideChrome, post._id, post.kind, showChrome]);
+
+  useEffect(() => {
+    function onUnlock() {
+      const video = videoRef.current;
+      if (!video || post.kind !== "video" || !active) return;
+      policyMutedRef.current = false;
+      setPolicyMuted(false);
+      setSoundEnabled(true);
+      video.volume = 1;
+      video.muted = false;
+      void video.play().catch(() => {});
+    }
+    window.addEventListener("ys-feed-sound-unlock", onUnlock);
+    return () => window.removeEventListener("ys-feed-sound-unlock", onUnlock);
+  }, [active, post.kind]);
 
   function stopFeedGesture(event: ReactPointerEvent | ReactMouseEvent) {
     event.stopPropagation();
@@ -532,12 +571,18 @@ function FeedMedia({
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
-      // User gesture: allow audible playback after the first explicit play.
-      if (!soundEnabled) {
-        setSoundEnabled(true);
-        video.muted = false;
-      }
+      policyMutedRef.current = false;
+      setPolicyMuted(false);
+      setSoundEnabled(true);
+      video.volume = 1;
+      video.muted = false;
       void video.play().catch(() => {});
+    } else if (video.muted || policyMuted) {
+      policyMutedRef.current = false;
+      setPolicyMuted(false);
+      setSoundEnabled(true);
+      video.volume = 1;
+      video.muted = false;
     } else {
       video.pause();
     }
@@ -601,7 +646,7 @@ function FeedMedia({
               playsInline
               loop
               autoPlay={active}
-              muted={!soundEnabled}
+              muted={!soundEnabled || policyMuted}
               controls={false}
               preload={shouldWarm ? "auto" : "none"}
               onLoadedData={onLoad}
@@ -1468,6 +1513,7 @@ export function ProfilePostViewer({
       moved: false,
       captured: false,
     };
+    window.dispatchEvent(new Event("ys-feed-sound-unlock"));
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
