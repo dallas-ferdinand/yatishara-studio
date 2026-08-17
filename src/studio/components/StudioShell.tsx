@@ -9928,6 +9928,23 @@ export function StudioShell({
             min-height: 0;
             line-height: 1.2;
           }
+          .studio-polish.is-studio-mobile .cursor-panel-search {
+            min-height: var(--studio-mobile-chrome-control, 34px);
+            height: var(--studio-mobile-chrome-control, 34px);
+          }
+          .studio-polish.is-studio-mobile .desk-explorer-type-filter-trigger {
+            font-size: 13px;
+          }
+          .studio-polish.is-studio-mobile .desk-explorer-type-filter-trigger .icon-inline,
+          .studio-polish.is-studio-mobile .desk-explorer-type-filter-trigger > svg:first-child {
+            width: 15px;
+            height: 15px;
+          }
+          .studio-polish.is-studio-mobile .cursor-select-menu .cursor-select-trigger {
+            height: var(--studio-mobile-chrome-control, 34px);
+            padding: 0 8px 0 12px;
+            font-size: 13px;
+          }
           .studio-polish.is-mobile-files aside {
             border-right: 0 !important;
           }
@@ -10280,6 +10297,22 @@ export function StudioShell({
           }
           .studio-polish .studio-element-detail.is-mobile-fill {
             padding-inline: 0;
+          }
+        }
+        @media (max-width: 899px) {
+          .cursor-dropdown-item,
+          .cursor-tab-context-item {
+            min-height: var(--studio-mobile-chrome-control, 34px);
+            padding: 8px 10px;
+            font-size: 13px;
+            gap: 8px;
+          }
+          .cursor-dropdown-item-icon svg,
+          .cursor-dropdown-item > svg,
+          .cursor-dropdown-item .icon-inline svg,
+          .cursor-tab-context-item svg {
+            width: 15px;
+            height: 15px;
           }
         }
         [data-studio-bg-family="animated"] .studio-polish,
