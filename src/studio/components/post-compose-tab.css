@@ -338,7 +338,7 @@
   box-shadow: none;
 }
 
-/* Inline chips for #hashtags and @mentions — bordered, no fill (composer + description). */
+/* Inline chips for #hashtags and @mentions — grey fill, no stroke. */
 .post-compose-inline-chip {
   display: inline-flex;
   align-items: center;
@@ -350,8 +350,8 @@
   padding: 0 5px;
   vertical-align: middle;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-  background: transparent;
+  border: 0;
+  background: var(--mos-plate, var(--color-cursor-sidebar));
   color: inherit;
   font-size: 0.82em;
   font-weight: 600;
@@ -392,8 +392,8 @@
   padding: 0 0.22em;
   vertical-align: middle;
   text-shadow: none;
-  background: transparent;
-  border-color: color-mix(in srgb, currentColor 45%, transparent);
+  background: var(--mos-plate, var(--color-cursor-sidebar));
+  border: 0;
   color: inherit;
 }
 
