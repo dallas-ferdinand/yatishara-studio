@@ -223,6 +223,82 @@ function uniquePostAssetIds(post: Doc<"profilePosts">): Id<"assets">[] {
   return ids;
 }
 
+type HydratedPostVoice = { url: string; durationSec?: number };
+
+async function hydratePostVoices(
+  ctx: QueryCtx,
+  posts: Array<Pick<Doc<"profilePosts">, "_id" | "voiceAssetId" | "voiceDurationSec">>,
+  expiresUnix: number,
+): Promise<Map<string, HydratedPostVoice>> {
+  const out = new Map<string, HydratedPostVoice>();
+  if (posts.length === 0) return out;
+  const assets = await Promise.all(
+    posts.map((post) =>
+      post.voiceAssetId ? ctx.db.get("assets", post.voiceAssetId) : null,
+    ),
+  );
+  const urls = await Promise.all(
+    assets.map(async (asset) => {
+      if (!asset || asset.deletedAt || asset.kind !== "audio" || !asset.bunnyPath) {
+        return undefined;
+      }
+      return signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind);
+    }),
+  );
+  for (let i = 0; i < posts.length; i++) {
+    const url = urls[i];
+    if (!url) continue;
+    const post = posts[i]!;
+    const duration =
+      typeof post.voiceDurationSec === "number" &&
+      Number.isFinite(post.voiceDurationSec) &&
+      post.voiceDurationSec > 0
+        ? post.voiceDurationSec
+        : undefined;
+    out.set(post._id, duration != null ? { url, durationSec: duration } : { url });
+  }
+  return out;
+}
+
+function voiceReturnFields(voice: HydratedPostVoice | undefined) {
+  if (!voice) return {};
+  return {
+    voiceUrl: voice.url,
+    ...(voice.durationSec != null ? { voiceDurationSec: voice.durationSec } : {}),
+  };
+}
+
+async function resolvePostVoice(
+  ctx: MutationCtx,
+  ownerId: Id<"users">,
+  voiceAssetId: Id<"assets"> | undefined,
+  voiceDurationSec: number | undefined,
+): Promise<{ voiceAssetId?: Id<"assets">; voiceDurationSec?: number }> {
+  if (!voiceAssetId) return {};
+  const asset = await ctx.db.get("assets", voiceAssetId);
+  if (
+    !asset ||
+    asset.ownerId !== ownerId ||
+    asset.deletedAt ||
+    asset.kind !== "audio" ||
+    !asset.bunnyPath
+  ) {
+    throw new Error("Voice note not found");
+  }
+  let duration: number | undefined;
+  if (
+    typeof voiceDurationSec === "number" &&
+    Number.isFinite(voiceDurationSec) &&
+    voiceDurationSec >= 1
+  ) {
+    duration = Math.min(Math.round(voiceDurationSec), 300);
+  }
+  return {
+    voiceAssetId: asset._id,
+    ...(duration != null ? { voiceDurationSec: duration } : {}),
+  };
+}
+
 const publicPostReturn = v.object({
   _id: v.id("profilePosts"),
   assetId: v.id("assets"),
@@ -244,6 +320,8 @@ const publicPostReturn = v.object({
   width: v.optional(v.number()),
   height: v.optional(v.number()),
   items: v.optional(v.array(postMediaItemReturn)),
+  voiceUrl: v.optional(v.string()),
+  voiceDurationSec: v.optional(v.number()),
   likedByViewer: v.boolean(),
   savedByViewer: v.boolean(),
   username: v.string(),
@@ -271,6 +349,8 @@ const feedPostReturn = v.object({
   width: v.optional(v.number()),
   height: v.optional(v.number()),
   items: v.optional(v.array(postMediaItemReturn)),
+  voiceUrl: v.optional(v.string()),
+  voiceDurationSec: v.optional(v.number()),
   likedByViewer: v.boolean(),
   savedByViewer: v.boolean(),
   username: v.string(),
@@ -320,6 +400,8 @@ type HydratedPublicPost = {
   width?: number;
   height?: number;
   items?: HydratedPostMediaItem[];
+  voiceUrl?: string;
+  voiceDurationSec?: number;
   likedByViewer: boolean;
   savedByViewer: boolean;
   username: string;
@@ -400,6 +482,7 @@ async function hydratePublicPosts(
   if (posts.length === 0) return [];
   const profiles = await Promise.all(posts.map((post) => ctx.db.get("profiles", post.profileId)));
   const itemLists = await hydratePostItemLists(ctx, posts, expiresUnix);
+  const voices = await hydratePostVoices(ctx, posts, expiresUnix);
   const likedFlags = viewerId
     ? await Promise.all(
         posts.map((post) => viewerBoostedOrLiked(ctx, viewerId, post._id)),
@@ -457,6 +540,7 @@ async function hydratePublicPosts(
       width: primary.width,
       height: primary.height,
       items,
+      ...voiceReturnFields(voices.get(post._id)),
       likedByViewer: likedFlags[i] ?? false,
       savedByViewer: savedFlags[i] ?? false,
       username: author.username,
@@ -1039,6 +1123,8 @@ export const shareAsset = authedMutation({
     caption: v.optional(v.string()),
     hashtags: v.optional(v.array(v.string())),
     keywords: v.optional(v.array(v.string())),
+    voiceAssetId: v.optional(v.id("assets")),
+    voiceDurationSec: v.optional(v.number()),
   },
   returns: v.object({
     postId: v.id("profilePosts"),
@@ -1066,6 +1152,12 @@ export const shareAsset = authedMutation({
     for (const id of mediaIds) {
       await requireOwnedAsset(ctx, ctx.user._id, id);
     }
+    const voice = await resolvePostVoice(
+      ctx,
+      ctx.user._id,
+      args.voiceAssetId,
+      args.voiceDurationSec,
+    );
     const primaryId = mediaIds[0]!;
     for (const extraId of mediaIds.slice(1)) {
       const extraPost = await ctx.db
@@ -1118,6 +1210,7 @@ export const shareAsset = authedMutation({
           assetIds: mediaIds,
           publishedAt: now,
           unpublishedAt: undefined,
+          ...voice,
         });
         await attachMeta(existing._id);
         return {
@@ -1135,6 +1228,7 @@ export const shareAsset = authedMutation({
         assetIds: mediaIds,
         publishedAt: now,
         unpublishedAt: undefined,
+        ...voice,
       });
       await attachMeta(existing._id);
       await adjustProfileCounts(ctx, profile._id, {
@@ -1163,6 +1257,7 @@ export const shareAsset = authedMutation({
       saveCount: 0,
       shareCount: 0,
       publishedAt: now,
+      ...voice,
     });
     await attachMeta(postId);
     await adjustProfileCounts(ctx, profile._id, {
@@ -1756,6 +1851,8 @@ async function listFeedImpl(
       width?: number;
       height?: number;
       items?: HydratedPostMediaItem[];
+      voiceUrl?: string;
+      voiceDurationSec?: number;
       likedByViewer: boolean;
       savedByViewer: boolean;
       username: string;
@@ -1774,6 +1871,11 @@ async function listFeedImpl(
     );
     const mentionsByPost = await Promise.all(
       mentionRefsByPost.map((refs) => hydrateMentionChips(ctx, refs, expiresUnix)),
+    );
+    const voices = await hydratePostVoices(
+      ctx,
+      ordered.map((item) => item.post),
+      expiresUnix,
     );
 
     for (let i = 0; i < ordered.length; i++) {
@@ -1820,6 +1922,7 @@ async function listFeedImpl(
         width: primary.width,
         height: primary.height,
         items: mediaItems,
+        ...voiceReturnFields(voices.get(item.post._id)),
         likedByViewer: likedFlags[i] ?? false,
         savedByViewer: savedFlags[i] ?? false,
         username: item.profile.username,

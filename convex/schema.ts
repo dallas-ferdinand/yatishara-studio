@@ -1206,6 +1206,9 @@ export default defineSchema({
     /** Extra media after `assetId`. Max 6 including primary. Mixed image/video/audio. */
     assetIds: v.optional(v.array(v.id("assets"))),
     caption: v.optional(v.string()),
+    /** Voice note under the caption (not one of the gallery items). */
+    voiceAssetId: v.optional(v.id("assets")),
+    voiceDurationSec: v.optional(v.number()),
     /** Normalized discovery keywords (not shown as #hashtags). */
     keywords: v.optional(v.array(v.string())),
     likeCount: v.number(),

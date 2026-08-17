@@ -794,6 +794,21 @@
   display: inline;
 }
 
+.profile-post-caption-voice {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  margin: 8px 0 0;
+  pointer-events: auto;
+}
+
+.profile-post-caption-voice .studio-chat-audio-player,
+.profile-post-caption-voice .studio-chat-audio-player.is-compact {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .profile-post-caption-text .post-compose-inline-chip {
   pointer-events: none;
 }

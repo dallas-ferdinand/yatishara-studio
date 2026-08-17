@@ -130,6 +130,8 @@ type FeedPost = {
   width?: number;
   height?: number;
   items?: PostMediaItem[];
+  voiceUrl?: string;
+  voiceDurationSec?: number;
   likedByViewer: boolean;
   savedByViewer?: boolean;
   username: string;
@@ -164,6 +166,8 @@ type AuthorPost = {
   width?: number;
   height?: number;
   items?: PostMediaItem[];
+  voiceUrl?: string;
+  voiceDurationSec?: number;
   likedByViewer: boolean;
   savedByViewer?: boolean;
 };
@@ -902,6 +906,8 @@ function FeedCaption({
   caption,
   hashtags,
   mentions,
+  voiceUrl,
+  voiceDurationSec,
   authorAvatarUrl,
   authorDisplayName,
   authorFirstName,
@@ -929,6 +935,8 @@ function FeedCaption({
     displayName?: string;
     avatarUrl?: string;
   }>;
+  voiceUrl?: string;
+  voiceDurationSec?: number;
   authorAvatarUrl?: string;
   authorDisplayName?: string;
   authorFirstName?: string;
@@ -1159,23 +1167,41 @@ function FeedCaption({
           </div>
           {editError ? <p className="profile-description-edit-error">{editError}</p> : null}
         </div>
-      ) : trimmed ? (
-        <p className="profile-post-caption-text">
-          <CaptionChipText
-            caption={trimmed}
-            mentions={mentions}
-            author={
-              username
-                ? {
-                    username,
-                    displayName: authorDisplayName,
-                    avatarUrl: authorAvatarUrl,
-                  }
-                : undefined
-            }
-          />
-        </p>
-      ) : null}
+      ) : (
+        <>
+          {trimmed ? (
+            <p className="profile-post-caption-text">
+              <CaptionChipText
+                caption={trimmed}
+                mentions={mentions}
+                author={
+                  username
+                    ? {
+                        username,
+                        displayName: authorDisplayName,
+                        avatarUrl: authorAvatarUrl,
+                      }
+                    : undefined
+                }
+              />
+            </p>
+          ) : null}
+          {voiceUrl ? (
+            <div
+              className="profile-post-caption-voice"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <StudioChatAudioPlayer
+                src={voiceUrl}
+                title="Voice note"
+                durationHint={voiceDurationSec}
+                compact
+              />
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   );
 
@@ -2426,6 +2452,8 @@ export function ProfilePostViewer({
                   caption={slideCaption}
                   hashtags={post.hashtags}
                   mentions={post.mentions}
+                  voiceUrl={post.voiceUrl}
+                  voiceDurationSec={post.voiceDurationSec}
                   authorAvatarUrl={post.avatarUrl}
                   authorDisplayName={post.displayName}
                   authorFirstName={post.firstName}

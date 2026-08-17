@@ -2,13 +2,18 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   Folder,
   Image as ImageIcon,
   Loader2,
+  Mic,
   Music2,
+  Pause,
+  Play,
   Plus,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -19,6 +24,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useCallback,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { toast } from "sonner";
@@ -36,6 +42,7 @@ import { MediaLoadFrame } from "./media-load-frame";
 import { mentionFallbackAvatarStyle } from "@/studio/lib/profileAvatar";
 import { StudioAssetPickerSheet } from "./StudioAssetPickerSheet";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
+import { MicrophoneWaveform } from "@/components/ui/waveform";
 
 type PostComposeTabProps = {
   assetId?: string;
@@ -417,6 +424,21 @@ function fileMediaKind(file: File): PostMediaKind | null {
   return null;
 }
 
+const VOICE_NOTE_MAX_SECONDS = 300;
+
+function pickRecorderMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined;
+  return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((type) =>
+    MediaRecorder.isTypeSupported(type),
+  );
+}
+
+function recordingTimeLabel(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 export function PostComposeTab({
   assetId,
   onCancel,
@@ -455,6 +477,26 @@ export function PostComposeTab({
   const [caption, setCaption] = useState("");
   const [caret, setCaret] = useState(0);
   const [publishing, setPublishing] = useState(false);
+  const [pendingVoice, setPendingVoice] = useState<{
+    file: File;
+    previewUrl: string;
+    durationSec: number;
+  } | null>(null);
+  const [recState, setRecState] = useState<"idle" | "recording" | "paused" | "sending">(
+    "idle",
+  );
+  const [recSeconds, setRecSeconds] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recChunksRef = useRef<Blob[]>([]);
+  const recStreamRef = useRef<MediaStream | null>(null);
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recElapsedMsRef = useRef(0);
+  const recTickStartRef = useRef(0);
+  const recFinalDurationRef = useRef(0);
+  const recIntentRef = useRef<"send" | "cancel">("cancel");
+  const finishRecordingRef = useRef<((intent: "send" | "cancel") => void) | null>(
+    null,
+  );
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -463,6 +505,146 @@ export function PostComposeTab({
   const suggestWrapRef = useRef<HTMLDivElement>(null);
 
   slotsRef.current = slots;
+
+  const clearRecTimer = useCallback(() => {
+    if (recTimerRef.current) {
+      clearInterval(recTimerRef.current);
+      recTimerRef.current = null;
+    }
+  }, []);
+
+  const teardownRecorder = useCallback(() => {
+    clearRecTimer();
+    recStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recStreamRef.current = null;
+    recorderRef.current = null;
+  }, [clearRecTimer]);
+
+  const startRecTimer = useCallback(() => {
+    clearRecTimer();
+    recTickStartRef.current = Date.now();
+    recTimerRef.current = setInterval(() => {
+      const elapsed =
+        (recElapsedMsRef.current + (Date.now() - recTickStartRef.current)) / 1000;
+      setRecSeconds(elapsed);
+      if (elapsed >= VOICE_NOTE_MAX_SECONDS) finishRecordingRef.current?.("send");
+    }, 250);
+  }, [clearRecTimer]);
+
+  const finishRecording = useCallback(
+    (intent: "send" | "cancel") => {
+      const recorder = recorderRef.current;
+      if (!recorder || recorder.state === "inactive") return;
+      if (recorder.state === "recording") {
+        recElapsedMsRef.current += Date.now() - recTickStartRef.current;
+      }
+      clearRecTimer();
+      recFinalDurationRef.current = Math.min(
+        VOICE_NOTE_MAX_SECONDS,
+        recElapsedMsRef.current / 1000,
+      );
+      recIntentRef.current = intent;
+      setRecState(intent === "send" ? "sending" : "idle");
+      recorder.stop();
+    },
+    [clearRecTimer],
+  );
+  finishRecordingRef.current = finishRecording;
+
+  const pauseRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    try {
+      recorder.pause();
+    } catch {
+      toast.error("Pause is not supported on this device");
+      return;
+    }
+    recElapsedMsRef.current += Date.now() - recTickStartRef.current;
+    clearRecTimer();
+    setRecSeconds(recElapsedMsRef.current / 1000);
+    setRecState("paused");
+  }, [clearRecTimer]);
+
+  const resumeRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== "paused") return;
+    try {
+      recorder.resume();
+    } catch {
+      toast.error("Could not resume recording");
+      return;
+    }
+    setRecState("recording");
+    startRecTimer();
+  }, [startRecTimer]);
+
+  const startRecording = useCallback(async () => {
+    if (recState !== "idle" || publishing) return;
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      toast.error("Microphone access was blocked");
+      return;
+    }
+    const mimeType = pickRecorderMimeType();
+    const recorder = new MediaRecorder(
+      stream,
+      mimeType ? { mimeType } : undefined,
+    );
+    recStreamRef.current = stream;
+    recorderRef.current = recorder;
+    recChunksRef.current = [];
+    recIntentRef.current = "cancel";
+    recElapsedMsRef.current = 0;
+    recFinalDurationRef.current = 0;
+    setRecSeconds(0);
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) recChunksRef.current.push(event.data);
+    };
+    recorder.onstop = () => {
+      const durationSec = Math.min(
+        VOICE_NOTE_MAX_SECONDS,
+        recFinalDurationRef.current || recElapsedMsRef.current / 1000,
+      );
+      const blob = new Blob(recChunksRef.current, {
+        type: recorder.mimeType || "audio/webm",
+      });
+      const intent = recIntentRef.current;
+      recChunksRef.current = [];
+      teardownRecorder();
+
+      if (intent !== "send" || durationSec < 1 || blob.size === 0) {
+        setRecState("idle");
+        if (intent === "send" && durationSec < 1) {
+          toast.error("Voice note too short — hold on a bit longer");
+        }
+        return;
+      }
+
+      const file = new File([blob], "Voice note.webm", {
+        type: blob.type || "audio/webm",
+      });
+      const previewUrl = URL.createObjectURL(blob);
+      setPendingVoice((prev) => {
+        if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+        return { file, previewUrl, durationSec };
+      });
+      setRecState("idle");
+    };
+    recorder.start(250);
+    setRecState("recording");
+    startRecTimer();
+  }, [publishing, recState, startRecTimer, teardownRecorder]);
+
+  function clearPendingVoice() {
+    setPendingVoice((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  }
 
   useEffect(() => {
     if (seededRef.current || !signedSeed) return;
@@ -486,8 +668,9 @@ export function PostComposeTab({
       for (const slot of slotsRef.current) {
         if (slot.file && slot.previewUrl) URL.revokeObjectURL(slot.previewUrl);
       }
+      teardownRecorder();
     };
-  }, []);
+  }, [teardownRecorder]);
 
   const trigger = useMemo(() => getInlineTrigger(caption, caret), [caption, caret]);
 
@@ -506,7 +689,7 @@ export function PostComposeTab({
   const previewUrl = current?.previewUrl;
   const isVideo = current?.kind === "video";
   const isAudio = current?.kind === "audio";
-  const canPublish = slots.length > 0 && !publishing;
+  const canPublish = slots.length > 0 && !publishing && recState === "idle";
   const remaining = MAX_POST_MEDIA - slots.length;
   const seeding = Boolean(assetId) && seededAssets === undefined;
 
@@ -796,9 +979,25 @@ export function PostComposeTab({
         toast.error("Add a photo, video, or audio first");
         return;
       }
+      let voiceAssetId: Id<"assets"> | undefined;
+      let voiceDurationSec: number | undefined;
+      if (pendingVoice) {
+        voiceAssetId = await uploadStudioAsset({
+          file: pendingVoice.file,
+          folderId: defaults.rootFolderId,
+          kind: "audio",
+          name: pendingVoice.file.name || "Voice note",
+          reserveUpload,
+          commitStagingUpload,
+        });
+        voiceDurationSec = pendingVoice.durationSec;
+      }
       const result = await shareAsset({
         assetIds,
         caption: caption.trim() || undefined,
+        ...(voiceAssetId
+          ? { voiceAssetId, ...(voiceDurationSec != null ? { voiceDurationSec } : {}) }
+          : {}),
       });
       const handle = result.publicUrlPath.replace(/^\/u\//, "");
       toast.success("Post created");
@@ -1233,6 +1432,106 @@ export function PostComposeTab({
                 ))}
               </ul>
             ) : null}
+          </div>
+          <div className="post-compose-voice">
+            {recState !== "idle" ? (
+              <div
+                className="post-compose-voice-rec"
+                role="status"
+                aria-label="Recording voice note"
+              >
+                <span className="post-compose-voice-rec-meta">
+                  <span
+                    className={`post-compose-voice-rec-dot${recState === "recording" ? " is-live" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <span>
+                    {recordingTimeLabel(recSeconds)}
+                    {recState === "paused" ? " · paused" : ""}
+                  </span>
+                </span>
+                <MicrophoneWaveform
+                  className="post-compose-voice-rec-wave"
+                  active={recState === "recording"}
+                  processing={recState === "sending"}
+                  height={28}
+                  barWidth={3}
+                  barGap={2}
+                  barRadius={1}
+                  barColor="gray"
+                  sensitivity={1.6}
+                  fadeEdges
+                  fadeWidth={20}
+                />
+                <button
+                  type="button"
+                  className="studio-composer-circle-btn"
+                  onClick={() =>
+                    recState === "paused" ? resumeRecording() : pauseRecording()
+                  }
+                  disabled={recState === "sending"}
+                  aria-label={
+                    recState === "paused" ? "Resume recording" : "Pause recording"
+                  }
+                >
+                  {recState === "paused" ? (
+                    <Play aria-hidden="true" />
+                  ) : (
+                    <Pause aria-hidden="true" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="studio-composer-circle-btn is-discard"
+                  onClick={() => finishRecording("cancel")}
+                  disabled={recState === "sending"}
+                  aria-label="Discard recording"
+                >
+                  <Trash2 aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="studio-composer-circle-btn"
+                  onClick={() => finishRecording("send")}
+                  disabled={recState === "sending"}
+                  aria-label="Attach voice note"
+                >
+                  {recState === "sending" ? (
+                    <Loader2 className="post-compose-spin" aria-hidden="true" />
+                  ) : (
+                    <Check aria-hidden="true" />
+                  )}
+                </button>
+              </div>
+            ) : pendingVoice ? (
+              <div className="post-compose-voice-preview">
+                <StudioChatAudioPlayer
+                  src={pendingVoice.previewUrl}
+                  title="Voice note"
+                  durationHint={pendingVoice.durationSec}
+                  compact
+                />
+                <button
+                  type="button"
+                  className="post-compose-voice-remove"
+                  aria-label="Remove voice note"
+                  onClick={clearPendingVoice}
+                >
+                  <X aria-hidden="true" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="studio-composer-circle-btn"
+                onClick={() => void startRecording()}
+                disabled={publishing}
+                aria-label="Record a voice note"
+                title="Voice note"
+              >
+                <Mic aria-hidden="true" />
+              </button>
+            )}
           </div>
         </div>
       </div>
