@@ -1,16 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import {
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Clapperboard,
-  FileText,
-  Folder,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { Check, ChevronLeft, X } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -23,9 +14,94 @@ import {
 import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { FileEntryThumb } from "@/desk/components/FileEntryThumb";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import "./studio-asset-picker.css";
+
+function folderToEntry(folder: {
+  _id: string;
+  name: string;
+  systemKind?: string | null;
+  peekItems?: unknown[];
+}) {
+  return {
+    type: "dir" as const,
+    name: folder.name,
+    studioKind: "folder",
+    studioId: folder._id,
+    systemKind: folder.systemKind ?? undefined,
+    peekItems: folder.peekItems ?? [],
+  };
+}
+
+function assetToEntry(asset: {
+  _id: string;
+  name: string;
+  kind: string;
+  mimeType?: string;
+  signedThumbnailUrl?: string;
+}) {
+  return {
+    type: "file" as const,
+    name: asset.name,
+    studioKind: "asset",
+    studioId: asset._id,
+    kind: asset.kind,
+    mimeType: asset.mimeType,
+    thumbnailUrl: asset.signedThumbnailUrl,
+  };
+}
+
+function PickerGridItem({
+  entry,
+  selected = false,
+  disabled = false,
+  onOpen,
+  check,
+}: {
+  entry: Record<string, unknown>;
+  selected?: boolean;
+  disabled?: boolean;
+  onOpen: () => void;
+  check?: {
+    selected: boolean;
+    disabled?: boolean;
+    label: string;
+    onClick: () => void;
+  };
+}) {
+  return (
+    <div
+      className={`studio-asset-picker-tile${selected ? " is-picked" : ""}`}
+    >
+      <button
+        type="button"
+        className="desk-file-grid-item"
+        aria-pressed={selected}
+        disabled={disabled}
+        title={String(entry.name ?? "")}
+        onClick={onOpen}
+      >
+        <FileEntryThumb entry={entry} size="grid" />
+      </button>
+      {check ? (
+        <button
+          type="button"
+          className={`studio-asset-picker-tile-check${
+            check.selected ? " is-selected" : ""
+          }`}
+          aria-label={check.label}
+          aria-pressed={check.selected}
+          disabled={check.disabled}
+          onClick={check.onClick}
+        >
+          <Check aria-hidden="true" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 export type StudioShareItemKind =
   | "asset"
@@ -336,6 +412,7 @@ export function StudioAssetPickerSheet({
 
   const folders = useQuery(api.folders.listWithPeeks, {
     parentId: current.id,
+    expiresUnix,
   });
   const shareableFolders = useMemo(
     () => (folders ?? []).filter((folder) => !folder.systemKind),
@@ -426,48 +503,30 @@ export function StudioAssetPickerSheet({
             : "Nothing usable in this folder."}
         </p>
       ) : (
-        <>
-          {shareableFolders.length > 0 ? (
-            <div className="studio-asset-picker-folders">
-              {shareableFolders.map((folder) => {
-                const selected = selectedIds.includes(folder._id);
-                const capped = atCap(folder._id);
-                return (
-                  <div
-                    key={folder._id}
-                    className={`studio-asset-picker-folder-row${
-                      selected ? " is-selected" : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className="studio-asset-picker-folder"
-                      onClick={() =>
-                        setStack((s) => [
-                          ...s,
-                          { id: folder._id, name: folder.name },
-                        ])
-                      }
-                    >
-                      <Folder aria-hidden="true" />
-                      <span>{folder.name}</span>
-                      <ChevronRight
-                        className="studio-asset-picker-folder-chevron"
-                        aria-hidden="true"
-                      />
-                    </button>
-                    {allowFolderPick ? (
-                      <button
-                        type="button"
-                        className="studio-asset-picker-folder-select"
-                        aria-label={
-                          selected
-                            ? `Deselect ${folder.name}`
-                            : `Share ${folder.name}`
-                        }
-                        aria-pressed={selected}
-                        disabled={capped}
-                        onClick={() =>
+        <div className="cursor-file-grid studio-asset-picker-files" role="group">
+          {shareableFolders.map((folder) => {
+            const selected = selectedIds.includes(folder._id);
+            const capped = atCap(folder._id);
+            return (
+              <PickerGridItem
+                key={folder._id}
+                entry={folderToEntry(folder)}
+                selected={selected}
+                onOpen={() =>
+                  setStack((s) => [
+                    ...s,
+                    { id: folder._id, name: folder.name },
+                  ])
+                }
+                check={
+                  allowFolderPick
+                    ? {
+                        selected,
+                        disabled: capped,
+                        label: selected
+                          ? `Deselect ${folder.name}`
+                          : `Share ${folder.name}`,
+                        onClick: () =>
                           pickItem({
                             _id: folder._id,
                             name: folder.name,
@@ -476,38 +535,32 @@ export function StudioAssetPickerSheet({
                             itemKind: "folder",
                             itemId: folder._id,
                             studioKind: "folder",
-                          })
-                        }
-                      >
-                        <Check aria-hidden="true" />
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-          {pickAnyStudio && (documents?.length ?? 0) > 0 ? (
-            <div
-              className="studio-asset-picker-list"
-              role="group"
-              aria-label="Scripts in this folder"
-            >
-              {(documents ?? []).map((doc) => {
+                          }),
+                      }
+                    : undefined
+                }
+              />
+            );
+          })}
+          {pickAnyStudio
+            ? (documents ?? []).map((doc) => {
                 const selected = selectedIds.includes(doc._id);
+                const name = doc.title || "Script";
                 return (
-                  <button
+                  <PickerGridItem
                     key={doc._id}
-                    type="button"
-                    className={`studio-asset-picker-list-item${
-                      selected ? " is-selected" : ""
-                    }`}
-                    aria-pressed={selected}
+                    entry={{
+                      type: "file",
+                      name,
+                      studioKind: "document",
+                      studioId: doc._id,
+                    }}
+                    selected={selected}
                     disabled={atCap(doc._id)}
-                    onClick={() =>
+                    onOpen={() =>
                       pickItem({
                         _id: doc._id,
-                        name: doc.title || "Script",
+                        name,
                         kind: "document",
                         mimeType: "text/markdown",
                         itemKind: "document",
@@ -515,140 +568,71 @@ export function StudioAssetPickerSheet({
                         studioKind: "document",
                       })
                     }
-                  >
-                    <FileText aria-hidden="true" />
-                    <span>{doc.title || "Script"}</span>
-                  </button>
+                  />
                 );
-              })}
-            </div>
-          ) : null}
-          {false && pickAnyStudio && (elements?.length ?? 0) > 0 ? (
-            <div
-              className="studio-asset-picker-list"
-              role="group"
-              aria-label="Elements in this folder"
-            >
-              {(elements ?? []).map((element) => {
-                const selected = selectedIds.includes(element._id);
-                const name = element.name?.startsWith("@")
-                  ? element.name
-                  : `@${element.name || "element"}`;
-                return (
-                  <button
-                    key={element._id}
-                    type="button"
-                    className={`studio-asset-picker-list-item${
-                      selected ? " is-selected" : ""
-                    }`}
-                    aria-pressed={selected}
-                    disabled={atCap(element._id)}
-                    onClick={() =>
-                      pickItem({
-                        _id: element._id,
-                        name,
-                        kind: "element",
-                        mimeType: "",
-                        itemKind: "element",
-                        itemId: element._id,
-                        studioKind: "element",
-                      })
-                    }
-                  >
-                    <Sparkles aria-hidden="true" />
-                    <span>{name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-          {pickAnyStudio && (videoEdits?.length ?? 0) > 0 ? (
-            <div
-              className="studio-asset-picker-list"
-              role="group"
-              aria-label="Edits in this folder"
-            >
-              {(videoEdits ?? []).map((edit) => {
+              })
+            : null}
+          {pickAnyStudio
+            ? (videoEdits ?? []).map((edit) => {
                 const selected = selectedIds.includes(edit._id);
                 const name = edit.name || "Edit";
+                const thumb =
+                  "signedThumbnailUrl" in edit &&
+                  typeof edit.signedThumbnailUrl === "string"
+                    ? edit.signedThumbnailUrl
+                    : undefined;
                 return (
-                  <button
+                  <PickerGridItem
                     key={edit._id}
-                    type="button"
-                    className={`studio-asset-picker-list-item${
-                      selected ? " is-selected" : ""
-                    }`}
-                    aria-pressed={selected}
+                    entry={{
+                      type: "file",
+                      name,
+                      studioKind: "videoEdit",
+                      studioId: edit._id,
+                      thumbnailUrl: thumb,
+                    }}
+                    selected={selected}
                     disabled={atCap(edit._id)}
-                    onClick={() =>
+                    onOpen={() =>
                       pickItem({
                         _id: edit._id,
                         name,
                         kind: "videoEdit",
                         mimeType: "",
-                        signedThumbnailUrl:
-                          "signedThumbnailUrl" in edit &&
-                          typeof edit.signedThumbnailUrl === "string"
-                            ? edit.signedThumbnailUrl
-                            : undefined,
+                        signedThumbnailUrl: thumb,
                         itemKind: "videoEdit",
                         itemId: edit._id,
                         studioKind: "videoEdit",
                       })
                     }
-                  >
-                    <Clapperboard aria-hidden="true" />
-                    <span>{name}</span>
-                  </button>
+                  />
                 );
-              })}
-            </div>
-          ) : null}
-          {assets.length > 0 ? (
-            <div
-              className="studio-asset-picker-grid"
-              role="group"
-              aria-label="Media in this folder"
-            >
-              {assets.map((asset) => {
-                const selected = selectedIds.includes(asset._id);
-                return (
-                  <button
-                    key={asset._id}
-                    type="button"
-                    className={selected ? "is-selected" : undefined}
-                    aria-pressed={selected}
-                    disabled={atCap(asset._id)}
-                    onClick={() => {
-                      pickItem({
-                        _id: asset._id,
-                        name: asset.name,
-                        kind: asset.kind,
-                        mimeType: asset.mimeType,
-                        signedThumbnailUrl: asset.signedThumbnailUrl,
-                        itemKind: "asset",
-                        itemId: asset._id,
-                        studioKind: "asset",
-                      });
-                    }}
-                    title={asset.name}
-                  >
-                    {asset.signedThumbnailUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={asset.signedThumbnailUrl} alt="" />
-                    ) : (
-                      <span
-                        className="studio-asset-picker-thumb"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <span>{asset.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-        </>
+              })
+            : null}
+          {assets.map((asset) => {
+            const selected = selectedIds.includes(asset._id);
+            return (
+              <PickerGridItem
+                key={asset._id}
+                entry={assetToEntry(asset)}
+                selected={selected}
+                disabled={atCap(asset._id)}
+                onOpen={() =>
+                  pickItem({
+                    _id: asset._id,
+                    name: asset.name,
+                    kind: asset.kind,
+                    mimeType: asset.mimeType,
+                    signedThumbnailUrl: asset.signedThumbnailUrl,
+                    itemKind: "asset",
+                    itemId: asset._id,
+                    studioKind: "asset",
+                  })
+                }
+              />
+            );
+          })}
+        </div>
       )}
     </>
   );
@@ -746,14 +730,22 @@ export function StudioAssetPickerSheet({
   }
 
   return createPortal(
-    <div
-      className="studio-mobile-app-menu-sheet studio-asset-picker-sheet is-desktop-dialog"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      {inner}
-    </div>,
+    <>
+      <button
+        type="button"
+        className="studio-asset-picker-desk-backdrop"
+        aria-label="Close"
+        onClick={onClose}
+      />
+      <div
+        className="studio-mobile-app-menu-sheet studio-asset-picker-sheet is-desktop-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        {inner}
+      </div>
+    </>,
     portalRoot,
   );
 }

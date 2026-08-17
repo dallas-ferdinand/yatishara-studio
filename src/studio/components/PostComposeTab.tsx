@@ -41,6 +41,21 @@ type PostComposeTabProps = {
   assetId?: string;
   onCancel: () => void;
   onPublished: (args: { handle: string; postId: string }) => void;
+  /** Files rail / dock pick — same chooser as DMs, not the list-folder sheet. */
+  onRequestPickAsset?: (request: {
+    kinds?: ReadonlyArray<"image" | "video" | "audio" | "document">;
+    pickMode?: "choose" | "share";
+    title?: string;
+    maxSelected?: number;
+    onConfirm?: (
+      assets: Array<{
+        _id: string;
+        name: string;
+        kind: string;
+        signedThumbnailUrl?: string;
+      }>,
+    ) => void;
+  }) => void;
 };
 
 const MAX_CAPTION = 2200;
@@ -402,7 +417,12 @@ function fileMediaKind(file: File): PostMediaKind | null {
   return null;
 }
 
-export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTabProps) {
+export function PostComposeTab({
+  assetId,
+  onCancel,
+  onPublished,
+  onRequestPickAsset,
+}: PostComposeTabProps) {
   const captionId = useId();
   const shareAsset = useMutation(api.profiles.shareAsset);
   const ensureStudioDefaults = useMutation(api.users.ensureStudioDefaults);
@@ -814,6 +834,28 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
     setChoiceOpen(false);
   }
 
+  function openChooseMedia() {
+    setChoiceOpen(false);
+    const remaining = MAX_POST_MEDIA - slotsRef.current.length;
+    if (remaining <= 0) {
+      toast.message(`You can pick up to ${MAX_POST_MEDIA} files`);
+      return;
+    }
+    if (onRequestPickAsset) {
+      onRequestPickAsset({
+        pickMode: "choose",
+        kinds: ["image", "video", "audio"],
+        title: "Choose media",
+        maxSelected: remaining,
+        onConfirm: (picked) => {
+          for (const item of picked ?? []) addPickedAsset(item);
+        },
+      });
+      return;
+    }
+    setPickerOpen(true);
+  }
+
   function addPickedAsset(pick: {
     _id: string;
     name: string;
@@ -991,10 +1033,7 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setChoiceOpen(false);
-                      setPickerOpen(true);
-                    }}
+                    onClick={openChooseMedia}
                   >
                     <Folder aria-hidden="true" />
                     Choose media

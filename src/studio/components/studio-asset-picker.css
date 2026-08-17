@@ -10,7 +10,7 @@
   top: 0;
   z-index: 1;
   padding-top: 2px;
-  background: var(--mos-plate, var(--mos-panel, #ececf0));
+  background: var(--mos-page, var(--mos-panel, #f5f5f7));
 }
 
 .studio-asset-picker-back {
@@ -292,6 +292,23 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
+  color: var(--color-cursor-text);
+}
+
+.studio-asset-picker-sheet .studio-mobile-app-menu-sheet-handle {
+  background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
+}
+
+.studio-asset-picker-desk-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 129;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: color-mix(in srgb, var(--mos-page, #f5f5f7) 42%, transparent);
+  cursor: pointer;
 }
 
 .studio-asset-picker-body.studio-mobile-app-menu-body {
@@ -300,10 +317,71 @@
   flex: 1 1 auto;
   min-height: 0;
   gap: 0;
-  padding: 0 12px 12px;
+  padding: 0 8px 12px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  background: var(--mos-page, var(--mos-panel, #f5f5f7));
+}
+
+.studio-asset-picker-files.cursor-file-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 4px 12px;
+  background: transparent;
+}
+
+.studio-asset-picker-tile {
+  position: relative;
+  min-width: 0;
+}
+
+.studio-asset-picker-tile .desk-file-grid-item {
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-asset-picker-tile.is-picked .desk-file-grid-item,
+.studio-asset-picker-tile .desk-file-grid-item[aria-pressed="true"] {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent) 48%,
+    var(--color-cursor-border-soft)
+  );
+  background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--cursor-accent) 28%, transparent);
+}
+
+.studio-asset-picker-tile-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: 999px;
+  background: var(--mos-page, #f5f5f7);
+  color: var(--color-cursor-muted);
+  cursor: pointer;
+}
+
+.studio-asset-picker-tile-check.is-selected,
+.studio-asset-picker-tile-check[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--color-cursor-accent, #6c8cff) 55%, transparent);
+  background: color-mix(in srgb, var(--color-cursor-accent, #6c8cff) 18%, var(--mos-page, #f5f5f7));
+  color: var(--color-cursor-text-bright);
+}
+
+.studio-asset-picker-tile-check > svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.25;
 }
 
 .studio-asset-picker-action-bar.studio-asset-pick-footer {
@@ -336,18 +414,20 @@
   color: var(--color-cursor-text-bright);
 }
 
-/* Desktop: center as a dialog instead of the mobile bottom sheet. */
+/* Desktop: center as a file-manager window, not a black sheet. */
 .studio-asset-picker-sheet.is-desktop-dialog {
   top: 50%;
   left: 50%;
   right: auto;
   bottom: auto;
   transform: translate(-50%, -50%);
-  width: min(480px, 92vw);
-  height: min(70vh, 640px);
-  max-height: min(70vh, 640px);
+  width: min(720px, 92vw);
+  height: min(78vh, 720px);
+  max-height: min(78vh, 720px);
+  border: 1px solid var(--color-cursor-border-soft);
   border-radius: var(--cursor-radius-xl, 12px);
-  box-shadow: var(--cursor-shadow-pop, 0 18px 48px rgba(0, 0, 0, 0.28));
+  background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
+  box-shadow: var(--cursor-shadow-pop, 0 18px 48px rgba(0, 0, 0, 0.18));
   animation: none;
 }
 

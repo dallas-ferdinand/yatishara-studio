@@ -34588,6 +34588,7 @@ function ActivePane({
     return wrapPane(
       <PostComposeTab
         assetId={composeAssetId}
+        onRequestPickAsset={onRequestPickAsset}
         onCancel={() => onCloseTab(activeTab)}
         onPublished={({ handle, postId }) => {
           onCloseTab(activeTab);
