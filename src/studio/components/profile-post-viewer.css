@@ -1004,6 +1004,7 @@
   display: flex;
   justify-content: center;
   max-height: min(72dvh, calc(100dvh - 12.5rem));
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border-soft)));
 }
 
 .profile-post-watch-frame {
