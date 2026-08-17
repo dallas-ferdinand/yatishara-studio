@@ -2183,6 +2183,10 @@ button.post-compose-inline-chip.profile-description-chip {
   .profile-comments-inputline {
     padding: 6px 10px 4px;
   }
+  .profile-comments-circle-btn {
+    width: var(--studio-mobile-chrome-control, 34px);
+    height: var(--studio-mobile-chrome-control, 34px);
+  }
 }
 
 .profile-comments-composer-toolbar {

@@ -30,8 +30,8 @@
 
 .studio-polish.is-studio-mobile .studio-dm-pane,
 .studio-polish.is-studio-mobile .studio-dm-sidebar {
-  --studio-dm-chrome-circle: var(--studio-mobile-chrome-control, 30px);
-  --studio-dm-chrome-glyph: 14px;
+  --studio-dm-chrome-circle: var(--studio-mobile-chrome-control, 34px);
+  --studio-dm-chrome-glyph: 15px;
 }
 
 /* Mobile Messages tab inbox — sidebar chrome fills the main pane. */
@@ -1604,10 +1604,10 @@
 }
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-settings-pill.studio-dm-extra-pill {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  min-height: 32px;
+  width: var(--studio-mobile-chrome-control, 34px);
+  min-width: var(--studio-mobile-chrome-control, 34px);
+  height: var(--studio-mobile-chrome-control, 34px);
+  min-height: var(--studio-mobile-chrome-control, 34px);
   padding: 0;
   gap: 0;
   justify-content: center;
@@ -1621,15 +1621,15 @@
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-composer-circle-btn.studio-dm-composer-circle,
 .studio-dm-composer.is-split.is-mobile-icons .studio-composer-circle-btn.studio-composer-send-btn {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  min-height: 32px;
+  width: var(--studio-mobile-chrome-control, 34px);
+  min-width: var(--studio-mobile-chrome-control, 34px);
+  height: var(--studio-mobile-chrome-control, 34px);
+  min-height: var(--studio-mobile-chrome-control, 34px);
 }
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-dm-composer-row.is-extras {
   /* Match Create mobile toolbar: 2px 6px 6px. */
-  min-height: calc(32px + 2px + 6px);
+  min-height: calc(var(--studio-mobile-chrome-control, 34px) + 2px + 6px);
   padding: 2px 6px 6px;
   gap: 6px;
 }

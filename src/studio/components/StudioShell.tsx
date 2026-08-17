@@ -9499,11 +9499,11 @@ export function StudioShell({
           --studio-chat-empty-clearance: calc(104px + env(safe-area-inset-bottom, 0px));
           /* Extra stream end pad under last content above composer */
           --studio-chat-stream-end-pad: 16px;
-          --studio-mobile-nav-height: 38px;
+          --studio-mobile-nav-height: 42px;
           /* Gap between composer dock and mobile bottom nav */
           --studio-mobile-composer-gap: 8px;
           /* Fixed control size so chrome bars can grow without scaling buttons/tabs/pills */
-          --studio-mobile-chrome-control: 30px;
+          --studio-mobile-chrome-control: 34px;
           /* Opaque frosted overlays — never fully transparent */
           --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-bg, #05080f) 86%, transparent);
           --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-bg, #05080f) 86%, transparent);
@@ -9791,14 +9791,14 @@ export function StudioShell({
           white-space: nowrap;
         }
         .studio-mobile-nav-btn svg {
-          width: 14px;
-          height: 14px;
+          width: 15px;
+          height: 15px;
           flex: 0 0 auto;
           color: inherit;
         }
         .studio-mobile-nav-btn.is-icon-only svg {
-          width: 15px;
-          height: 15px;
+          width: 16px;
+          height: 16px;
         }
         .studio-mobile-nav-btn.is-active svg {
           color: var(--cursor-accent-hover);
@@ -10241,8 +10241,8 @@ export function StudioShell({
             flex: 0 0 auto;
           }
           .studio-polish .studio-composer-circle-btn.studio-assist-circle-btn {
-            width: 30px;
-            min-width: 30px;
+            width: var(--studio-mobile-chrome-control, 34px);
+            min-width: var(--studio-mobile-chrome-control, 34px);
             padding: 0;
           }
           .studio-polish .studio-composer-circle-btn.studio-assist-circle-btn.is-on,
@@ -19163,14 +19163,14 @@ export function StudioShell({
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-composer-circle-btn,
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-pill-btn.studio-preset-trigger,
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-upload-trigger {
-          width: 32px;
-          min-width: 32px;
-          height: 32px;
-          min-height: 32px;
+          width: var(--studio-mobile-chrome-control, 34px);
+          min-width: var(--studio-mobile-chrome-control, 34px);
+          height: var(--studio-mobile-chrome-control, 34px);
+          min-height: var(--studio-mobile-chrome-control, 34px);
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-composer-circle-btn.studio-composer-send-btn {
           width: auto;
-          min-width: 32px;
+          min-width: var(--studio-mobile-chrome-control, 34px);
           padding: 0 8px 0 7px;
           gap: 4px;
         }
