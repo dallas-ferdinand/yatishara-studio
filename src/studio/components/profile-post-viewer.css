@@ -395,8 +395,8 @@
 .profile-post-audio-stage {
   display: grid;
   place-items: center;
-  width: 100%;
-  padding: 8px 4px;
+  width: min(100%, 22rem);
+  padding: 24px 4px;
   pointer-events: auto;
 }
 
@@ -1115,11 +1115,12 @@
 }
 
 .profile-post-watch-player {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   width: 100%;
+  min-height: 0;
   box-sizing: border-box;
   padding: 8px 10px 8px;
-  overflow: visible;
+  overflow: hidden;
   background: var(--mos-page, #f5f5f7);
   z-index: 1;
   touch-action: pan-x;
@@ -1128,13 +1129,17 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
+  container-type: size;
 }
 
 .profile-post-watch-frame {
   --post-aw: 16;
   --post-ah: 9;
   position: relative;
-  width: min(100%, calc(var(--post-max-h, min(72dvh, calc(100dvh - 12.5rem))) * var(--post-aw) / var(--post-ah)));
+  flex: 0 1 auto;
+  min-height: 0;
+  width: min(100cqi, calc(100cqh * var(--post-aw) / var(--post-ah)));
+  max-height: 100cqh;
   aspect-ratio: var(--post-aw) / var(--post-ah);
   margin-inline: auto;
   border-radius: 12px;
@@ -1143,11 +1148,23 @@
   filter: drop-shadow(0 1px 2px rgba(15, 18, 24, 0.18));
 }
 
+.profile-post-watch-player:has(.profile-post-media-strip) .profile-post-watch-frame {
+  width: min(100cqi, calc((100cqh - 56px) * var(--post-aw) / var(--post-ah)));
+  max-height: calc(100cqh - 56px);
+}
+
 @media (max-width: 899px) {
   .profile-post-watch-frame.is-portrait {
-    --post-max-h: min(48dvh, calc(100dvh - 18rem));
-    width: min(100%, calc(var(--post-max-h) * var(--post-aw) / var(--post-ah)));
+    max-height: min(100cqh, 52dvh);
   }
+}
+
+.profile-post-watch-player:has(.profile-post-media-strip) .profile-post-watch-frame.is-audio,
+.profile-post-watch-frame.is-audio {
+  width: min(100%, 22rem);
+  max-height: none;
+  aspect-ratio: auto;
+  height: auto;
 }
 
   .profile-post-slide.is-watch .profile-post-slide-media {
@@ -1157,8 +1174,9 @@
 
   .profile-post-caption-scroll {
     position: relative;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
+    max-height: min(28dvh, 42%);
     width: 100%;
     overflow: hidden;
     border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
@@ -1530,7 +1548,11 @@
   }
 
   .profile-post-watch-frame {
-    width: min(100%, calc(var(--post-max-h, min(70%, calc(100dvh - 11rem))) * var(--post-aw) / var(--post-ah)));
+    width: min(100cqi, calc(100cqh * var(--post-aw) / var(--post-ah)));
+  }
+
+  .profile-post-watch-player:has(.profile-post-media-strip) .profile-post-watch-frame {
+    width: min(100cqi, calc((100cqh - 56px) * var(--post-aw) / var(--post-ah)));
   }
 
   .profile-post-slide.is-watch .profile-post-caption.is-page {

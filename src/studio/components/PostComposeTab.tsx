@@ -25,6 +25,7 @@ import {
   useRef,
   useState,
   useCallback,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { toast } from "sonner";
@@ -689,9 +690,14 @@ export function PostComposeTab({
   const previewUrl = current?.previewUrl;
   const isVideo = current?.kind === "video";
   const isAudio = current?.kind === "audio";
+  const [previewSize, setPreviewSize] = useState<{ w: number; h: number } | null>(null);
   const canPublish = slots.length > 0 && !publishing && recState === "idle";
   const remaining = MAX_POST_MEDIA - slots.length;
   const seeding = Boolean(assetId) && seededAssets === undefined;
+
+  useEffect(() => {
+    setPreviewSize(null);
+  }, [current?.key]);
 
   const showHashSuggest = trigger?.kind === "hash" && (hashSuggestions?.length ?? 0) > 0;
   const showPeopleSuggest =
@@ -1148,7 +1154,17 @@ export function PostComposeTab({
 
       <div className="post-compose-body">
         <div className="post-compose-mock" aria-label="Post preview">
-          <div className={`post-compose-mock-slide${!current ? " is-empty" : ""}`}>
+          <div
+            className={`post-compose-mock-slide${!current ? " is-empty" : ""}${isAudio ? " is-audio" : ""}`}
+            style={
+              !isAudio && previewSize
+                ? ({
+                    ["--pc-aw" as string]: String(previewSize.w),
+                    ["--pc-ah" as string]: String(previewSize.h),
+                  } as CSSProperties)
+                : undefined
+            }
+          >
             <div className="post-compose-mock-media">
               <input
                 ref={fileInputRef}
@@ -1197,7 +1213,17 @@ export function PostComposeTab({
                       playsInline
                       loop
                       autoPlay
-                      onLoadedData={onLoad}
+                      onLoadedData={(event) => {
+                        const video = event.currentTarget;
+                        if (video.videoWidth > 0 && video.videoHeight > 0) {
+                          const w = video.videoWidth;
+                          const h = video.videoHeight;
+                          setPreviewSize((prev) =>
+                            prev && prev.w === w && prev.h === h ? prev : { w, h },
+                          );
+                        }
+                        onLoad();
+                      }}
                       onError={onError}
                     />
                   )}
@@ -1212,7 +1238,22 @@ export function PostComposeTab({
                 >
                   {({ onLoad, onError }) => (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={previewUrl} alt={current.name} onLoad={onLoad} onError={onError} />
+                    <img
+                      src={previewUrl}
+                      alt={current.name}
+                      onLoad={(event) => {
+                        const img = event.currentTarget;
+                        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                          const w = img.naturalWidth;
+                          const h = img.naturalHeight;
+                          setPreviewSize((prev) =>
+                            prev && prev.w === w && prev.h === h ? prev : { w, h },
+                          );
+                        }
+                        onLoad(event);
+                      }}
+                      onError={onError}
+                    />
                   )}
                 </MediaLoadFrame>
               ) : (

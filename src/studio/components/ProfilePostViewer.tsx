@@ -753,7 +753,6 @@ function FeedMedia({
           <StudioChatAudioPlayer
             src={playSrc}
             title={item.name || post.name}
-            compact
           />
         </div>
       ) : isVideo && playSrc ? (
@@ -778,7 +777,17 @@ function FeedMedia({
               muted={!soundEnabled || policyMuted}
               controls={false}
               preload={shouldWarm ? "auto" : "none"}
-              onLoadedData={onLoad}
+              onLoadedData={(event) => {
+                const video = event.currentTarget;
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                  const w = video.videoWidth;
+                  const h = video.videoHeight;
+                  setMediaSize((prev) =>
+                    prev && prev.w === w && prev.h === h ? prev : { w, h },
+                  );
+                }
+                onLoad();
+              }}
               onCanPlay={onLoad}
               onError={() => {
                 lockedSrcRef.current = null;
