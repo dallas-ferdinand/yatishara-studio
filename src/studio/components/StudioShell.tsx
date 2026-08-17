@@ -9414,10 +9414,16 @@ export function StudioShell({
       className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? " is-studio-mobile" : ""}${isMobile && browserFullscreen ? " is-browser-fullscreen" : ""}${isMobile && mobileSection === "files" ? " is-mobile-files" : ""}${isMobile && mobileSection === "files" && filesDockExpanded ? " is-mobile-files-composer" : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
       onPointerDownCapture={(event) => {
         if (event.button !== 0) return;
-        const target = event.target;
-        if (!(target instanceof Element)) return;
+        markStudioTapPointerStart(event);
         // Priming on first press unlocks AudioContext for later semantic sounds.
         void primeUiSounds();
+      }}
+      onPointerMoveCapture={markStudioTapPointerMove}
+      onClickCapture={(event) => {
+        if (event.button !== 0) return;
+        if (studioTapPointerMoved()) return;
+        const target = event.target;
+        if (!(target instanceof Element)) return;
         // Semantic handlers (like/send/…) play their own tone.
         if (target.closest("[data-studio-sfx]")) return;
         // Tab / section / nav chrome → warmer nav tone.
@@ -32748,6 +32754,26 @@ function readComposerEditorText(editor) {
 }
 
 let studioTapLast = 0;
+let studioTapStartX = 0;
+let studioTapStartY = 0;
+let studioTapMoved = false;
+
+function markStudioTapPointerStart(event) {
+  studioTapStartX = event.clientX;
+  studioTapStartY = event.clientY;
+  studioTapMoved = false;
+}
+
+function markStudioTapPointerMove(event) {
+  if (studioTapMoved || event.buttons === 0) return;
+  const dx = event.clientX - studioTapStartX;
+  const dy = event.clientY - studioTapStartY;
+  if (dx * dx + dy * dy > 100) studioTapMoved = true;
+}
+
+function studioTapPointerMoved() {
+  return studioTapMoved;
+}
 
 const STUDIO_NAV_SFX_SELECTOR = [
   "[role='tab']",
