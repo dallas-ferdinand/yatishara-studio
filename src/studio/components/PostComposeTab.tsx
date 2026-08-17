@@ -2,17 +2,13 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
-  Bookmark,
   ChevronLeft,
   ChevronRight,
-  Crown,
   Folder,
   Image as ImageIcon,
   Loader2,
   Music2,
-  Feather,
   Plus,
-  Send,
   Upload,
   X,
 } from "lucide-react";
@@ -37,8 +33,6 @@ import {
 } from "@/studio/lib/composerPasteIntelligence";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { MediaLoadFrame } from "./media-load-frame";
-import { StudioProfileAvatar } from "./StudioProfileAvatar";
-import { CaptionChipText } from "./CaptionChipText";
 import { mentionFallbackAvatarStyle } from "@/studio/lib/profileAvatar";
 import { StudioAssetPickerSheet } from "./StudioAssetPickerSheet";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
@@ -408,50 +402,6 @@ function fileMediaKind(file: File): PostMediaKind | null {
   return null;
 }
 
-function PreviewCaption({
-  caption,
-  username,
-  mentions,
-  authorAvatarUrl,
-  authorDisplayName,
-}: {
-  caption: string;
-  username?: string;
-  mentions?: Array<{ username: string; displayName?: string; avatarUrl?: string }>;
-  authorAvatarUrl?: string;
-  authorDisplayName?: string;
-}) {
-  const trimmed = caption.trim();
-  if (!trimmed && !username) return null;
-
-  return (
-    <div className="profile-post-caption post-compose-mock-caption">
-      {username ? <span className="profile-post-caption-user">{username}</span> : null}
-      {trimmed ? (
-        <p className="profile-post-caption-text">
-          <CaptionChipText
-            caption={trimmed}
-            mentions={mentions}
-            author={
-              username
-                ? {
-                    username,
-                    displayName: authorDisplayName,
-                    avatarUrl: authorAvatarUrl,
-                  }
-                : undefined
-            }
-          />
-        </p>
-      ) : (
-        <p className="profile-post-caption-text post-compose-mock-caption-empty">
-          Your description will show here
-        </p>
-      )}
-    </div>
-  );
-}
-
 export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTabProps) {
   const captionId = useId();
   const shareAsset = useMutation(api.profiles.shareAsset);
@@ -537,9 +487,6 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
   const isVideo = current?.kind === "video";
   const isAudio = current?.kind === "audio";
   const canPublish = slots.length > 0 && !publishing;
-  const username = myProfile?.username;
-  const avatarUrl = myProfile?.avatarUrl;
-  const displayName = myProfile?.displayName;
   const remaining = MAX_POST_MEDIA - slots.length;
   const seeding = Boolean(assetId) && seededAssets === undefined;
 
@@ -1076,50 +1023,6 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                   </button>
                 </>
               ) : null}
-            </div>
-
-            <PreviewCaption
-              caption={caption}
-              username={username}
-              authorAvatarUrl={avatarUrl}
-              authorDisplayName={displayName}
-              mentions={[
-                ...Object.values(mentionMeta),
-                ...(username && avatarUrl
-                  ? [{ username, displayName, avatarUrl }]
-                  : []),
-              ]}
-            />
-
-            <div className="profile-post-rail post-compose-mock-rail" aria-hidden="true">
-              <div className="profile-post-rail-avatar-wrap">
-                <StudioProfileAvatar
-                  className="profile-post-rail-avatar"
-                  size="sm"
-                  src={avatarUrl}
-                  displayName={displayName}
-                />
-              </div>
-              <div className="profile-post-rail-btn is-liked">
-                <Crown
-                  aria-hidden="true"
-                  fill="currentColor"
-                  strokeWidth={1.75}
-                />
-                <span>0</span>
-              </div>
-              <div className="profile-post-rail-btn">
-                <Feather aria-hidden="true" fill="none" strokeWidth={2} />
-                <span>0</span>
-              </div>
-              <div className="profile-post-rail-btn">
-                <Bookmark aria-hidden="true" fill="currentColor" strokeWidth={0} />
-                <span>0</span>
-              </div>
-              <div className="profile-post-rail-btn">
-                <Send className="profile-post-rail-share" aria-hidden="true" strokeWidth={2} />
-                <span>0</span>
-              </div>
             </div>
           </div>
           <div className="post-compose-media-strip" aria-label="Post media">

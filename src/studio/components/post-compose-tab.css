@@ -17,8 +17,8 @@
   --pc-radius: var(--cursor-radius-xl, 12px);
   --pc-radius-sm: var(--cursor-radius-sm, 6px);
   --pc-shadow:
-    0 16px 36px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    0 1px 2px rgba(0, 0, 0, 0.22),
+    0 3px 8px rgba(0, 0, 0, 0.14);
 
   display: flex;
   flex-direction: column;
@@ -45,8 +45,8 @@
   --pc-bg: var(--mos-bg, #ececf0);
   --pc-surface: var(--mos-panel, #f5f5f7);
   --pc-shadow:
-    0 12px 28px rgba(16, 22, 30, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    0 1px 2px color-mix(in srgb, #000 8%, transparent),
+    0 3px 8px color-mix(in srgb, #000 5%, transparent);
   background: var(--pc-bg);
 }
 
@@ -129,13 +129,11 @@
   aspect-ratio: auto;
   border-radius: 16px;
   overflow: hidden;
-  border: 0;
+  border: 1px solid color-mix(in srgb, #fff 10%, transparent);
   background: #050608;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--pc-shadow);
 }
 
 @supports not (aspect-ratio: 9 / 16) {
@@ -179,64 +177,6 @@
   object-position: center;
   display: block;
   background: transparent;
-}
-
-.post-compose-mock-slide::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0;
-  height: min(48%, 300px);
-  z-index: 1;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    color-mix(in srgb, #050608 42%, transparent) 36%,
-    color-mix(in srgb, #050608 78%, transparent) 70%,
-    color-mix(in srgb, #050608 92%, transparent) 100%
-  );
-}
-
-.post-compose-mock-caption {
-  z-index: 3;
-  color: var(--color-cursor-text-bright, var(--mos-text));
-  text-shadow: none;
-}
-
-.post-compose-mock-caption .profile-post-caption-user,
-.post-compose-mock-caption .profile-post-caption-text,
-.post-compose-mock-caption .profile-post-caption-tag,
-.post-compose-mock-caption .profile-post-caption-mention,
-.post-compose-mock-caption .profile-post-caption-mention.is-plain {
-  color: inherit;
-  text-shadow: inherit;
-}
-
-.post-compose-mock-caption .profile-post-caption-text {
-  display: block;
-  -webkit-line-clamp: unset;
-  overflow: visible;
-}
-
-.post-compose-mock-caption-empty {
-  opacity: 0.55;
-  font-style: italic;
-}
-
-.post-compose-mock-rail {
-  pointer-events: none;
-  z-index: 3;
-  right: 10px;
-}
-
-.post-compose-mock-rail .profile-post-rail-avatar-wrap {
-  /* No follow chip in compose preview */
-  padding-bottom: 0;
-}
-
-.post-compose-mock-rail .profile-post-rail-btn,
-.post-compose-mock-rail .profile-post-rail-avatar {
-  pointer-events: none;
 }
 
 .post-compose-preview-empty {
@@ -511,15 +451,6 @@
   font-weight: 500;
 }
 
-.post-compose-mock-caption .post-compose-inline-chip.is-hash .post-compose-inline-chip-label,
-.post-compose-mock-caption .post-compose-inline-chip.is-mention .post-compose-inline-chip-label {
-  color: inherit;
-}
-
-.post-compose-mock-caption .post-compose-chip-ghost {
-  color: color-mix(in srgb, currentColor 45%, transparent);
-}
-
 .post-compose-suggest-hint {
   color: color-mix(in srgb, var(--pc-muted) 85%, var(--pc-accent));
 }
@@ -537,8 +468,8 @@
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.28),
-    0 0 0 1px color-mix(in srgb, #000 12%, transparent);
+    0 1px 2px rgba(0, 0, 0, 0.22),
+    0 4px 10px rgba(0, 0, 0, 0.16);
   max-height: 240px;
   overflow: auto;
   color: var(--pc-ink);
@@ -547,8 +478,8 @@
 [data-appearance="light"] .post-compose-suggest {
   background: var(--pc-surface);
   box-shadow:
-    0 12px 28px rgba(16, 22, 30, 0.14),
-    0 0 0 1px color-mix(in srgb, #000 6%, transparent);
+    0 1px 2px color-mix(in srgb, #000 8%, transparent),
+    0 3px 8px color-mix(in srgb, #000 6%, transparent);
 }
 
 .post-compose-suggest button {
