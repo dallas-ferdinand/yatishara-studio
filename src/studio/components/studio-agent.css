@@ -433,8 +433,6 @@
 }
 
 .studio-agent-pane .studio-dm-composer.is-split .studio-dm-composer-row.is-message {
-  min-height: calc(36px + 6px + 4px);
-  padding: 6px 10px 4px;
   align-items: stretch;
 }
 

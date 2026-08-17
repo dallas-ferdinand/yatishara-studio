@@ -1535,12 +1535,19 @@
 }
 
 .studio-dm-composer.is-split .studio-dm-composer-row.is-message {
-  /* Match Create .studio-composer-inputline inset from the 16px glass radius. */
-  min-height: calc(36px + 6px + 4px);
-  padding: 6px 10px 4px;
+  /* Same contained well as Create .studio-composer-inputline. */
+  min-height: calc(36px + 8px + 6px);
+  margin: 8px 8px 4px;
+  padding: 8px 14px 6px 10px;
   border-bottom: none;
+  border-radius: 12px;
   align-items: flex-start;
   box-sizing: border-box;
+  background: var(
+    --studio-composer-glass-strong,
+    color-mix(in srgb, var(--mos-bg, #05080f) 28%, transparent)
+  );
+  box-shadow: var(--studio-composer-input-shadow);
 }
 
 .studio-dm-composer.is-split .studio-dm-composer-row.is-extras {
@@ -1604,8 +1611,9 @@
 }
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-dm-composer-row.is-message {
-  min-height: calc(40px + 6px + 4px);
-  padding: 6px 10px 4px;
+  min-height: calc(40px + 8px + 6px);
+  margin: 8px 8px 4px;
+  padding: 8px 14px 6px 10px;
 }
 
 .studio-dm-composer.is-split.is-mobile-icons textarea {
@@ -1684,8 +1692,6 @@
 
 .studio-dm-composer.is-split .studio-dm-composer-row.is-recording {
   gap: 8px;
-  padding: 6px 10px;
-  min-height: calc(36px + 6px + 4px);
   align-items: center;
   box-sizing: border-box;
 }

@@ -1081,13 +1081,15 @@ function CommentsBody({
             >
               <ImageIcon className="h-4 w-4" aria-hidden="true" />
             </button>
-            <input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={composerPlaceholder}
-              maxLength={500}
-              disabled={busy}
-            />
+            <div className="profile-comments-inputline">
+              <input
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={composerPlaceholder}
+                maxLength={500}
+                disabled={busy}
+              />
+            </div>
             <button
               type="submit"
               disabled={busy || (!draft.trim() && !pendingImage)}
