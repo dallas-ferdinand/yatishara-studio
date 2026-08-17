@@ -418,11 +418,10 @@
   flex-shrink: 0;
 }
 
-.profile-post-caption .post-compose-inline-chip .post-compose-inline-chip-avatar {
-  background: color-mix(in srgb, currentColor 18%, transparent);
+.profile-post-caption .post-compose-inline-chip .post-compose-inline-chip-initial {
+  color: #fff;
 }
 
-.profile-post-caption .post-compose-inline-chip .post-compose-inline-chip-initial,
 .profile-post-caption .post-compose-inline-chip .post-compose-inline-chip-label {
   color: inherit;
 }
@@ -459,7 +458,7 @@
   align-self: center;
   /* Keep img/initial from defining the chip's outer baseline. */
   vertical-align: middle;
-  background: color-mix(in srgb, var(--pc-panel, #111) 55%, #111);
+  background: transparent;
   box-shadow: none;
 }
 
@@ -491,7 +490,7 @@
 .post-compose-inline-chip-initial {
   font-size: 10px;
   font-weight: 700;
-  color: color-mix(in srgb, currentColor 90%, transparent);
+  color: #fff;
   line-height: 1;
 }
 

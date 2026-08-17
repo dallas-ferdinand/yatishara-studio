@@ -30,6 +30,7 @@ import {
 import { MediaLoadFrame } from "./media-load-frame";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { CaptionChipText } from "./CaptionChipText";
+import { mentionFallbackInitials, profileAvatarStyle } from "@/studio/lib/profileAvatar";
 
 type PostComposeTabProps = {
   assetId: string;
@@ -178,9 +179,11 @@ function createMentionChip(doc: Document, meta: MentionMeta): HTMLSpanElement {
     img.draggable = false;
     media.appendChild(img);
   } else {
+    const initials = mentionFallbackInitials(meta.displayName, meta.username);
+    Object.assign(media.style, profileAvatarStyle(initials));
     const initial = doc.createElement("span");
     initial.className = "post-compose-inline-chip-initial";
-    initial.textContent = (meta.displayName || meta.username).slice(0, 1).toUpperCase();
+    initial.textContent = initials.slice(0, 1);
     media.appendChild(initial);
   }
 
@@ -519,6 +522,8 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
         continue;
       }
       media.replaceChildren();
+      (media as HTMLElement).style.background = "";
+      (media as HTMLElement).style.color = "";
       const img = document.createElement("img");
       img.src = url;
       img.alt = "";
@@ -975,13 +980,28 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                       }
                     >
                       <span className={`${CHIP_CLASS} is-mention is-menu`}>
-                        <span className="post-compose-inline-chip-avatar">
+                        <span
+                          className="post-compose-inline-chip-avatar"
+                          style={
+                            person.avatarUrl
+                              ? undefined
+                              : profileAvatarStyle(
+                                  mentionFallbackInitials(
+                                    person.displayName,
+                                    person.username,
+                                  ),
+                                )
+                          }
+                        >
                           {person.avatarUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={person.avatarUrl} alt="" />
                           ) : (
                             <span className="post-compose-inline-chip-initial">
-                              {(person.displayName || person.username).slice(0, 1).toUpperCase()}
+                              {mentionFallbackInitials(
+                                person.displayName,
+                                person.username,
+                              ).slice(0, 1)}
                             </span>
                           )}
                         </span>

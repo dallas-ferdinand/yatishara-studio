@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Tag } from "lucide-react";
+import { mentionFallbackInitials, profileAvatarStyle } from "@/studio/lib/profileAvatar";
 
 export type CaptionPart = {
   type: "text" | "hash" | "mention";
@@ -81,12 +82,15 @@ function OverlayMentionChip({
   displayName?: string;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const initial = (displayName || username).slice(0, 1).toUpperCase();
+  const initials = mentionFallbackInitials(displayName, username);
   const showImg = Boolean(avatarUrl) && !imgFailed;
 
   return (
     <span className="post-compose-inline-chip is-mention">
-      <span className="post-compose-inline-chip-avatar">
+      <span
+        className="post-compose-inline-chip-avatar"
+        style={showImg ? undefined : profileAvatarStyle(initials)}
+      >
         {showImg ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -96,7 +100,7 @@ function OverlayMentionChip({
             onError={() => setImgFailed(true)}
           />
         ) : (
-          <span className="post-compose-inline-chip-initial">{initial}</span>
+          <span className="post-compose-inline-chip-initial">{initials.slice(0, 1)}</span>
         )}
       </span>
       <span className="post-compose-inline-chip-label">{username}</span>

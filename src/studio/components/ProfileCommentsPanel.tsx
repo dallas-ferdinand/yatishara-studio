@@ -43,7 +43,7 @@ import { formatVideoTimecode } from "@/studio/lib/bunnyPlayerJs";
 import { playUiSound } from "@/mos-app/sounds.js";
 import { formatPostWhen } from "@/studio/lib/formatPostWhen";
 import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
-import { profileNameInitials } from "@/studio/lib/profileAvatar";
+import { profileNameInitials, mentionFallbackInitials, profileAvatarStyle } from "@/studio/lib/profileAvatar";
 import { StudioCnBookSheet } from "@/studio/components/StudioCnBookSheet";
 import {
   StudioDmContextMenu,
@@ -1861,15 +1861,18 @@ function DescriptionMentionChip({
   displayName?: string;
   onOpen?: (username: string) => void;
 }) {
-  const initial = (displayName || username).slice(0, 1).toUpperCase();
+  const initials = mentionFallbackInitials(displayName, username);
   const inner = (
     <>
-      <span className="post-compose-inline-chip-avatar">
+      <span
+        className="post-compose-inline-chip-avatar"
+        style={avatarUrl ? undefined : profileAvatarStyle(initials)}
+      >
         {avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={avatarUrl} alt="" />
         ) : (
-          <span className="post-compose-inline-chip-initial">{initial}</span>
+          <span className="post-compose-inline-chip-initial">{initials.slice(0, 1)}</span>
         )}
       </span>
       <span className="post-compose-inline-chip-label">{username}</span>

@@ -83,6 +83,18 @@ export function profileAvatarGradient(initials: string): string {
   return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`;
 }
 
+export function mentionFallbackInitials(
+  displayName?: string | null,
+  username?: string | null,
+): string {
+  return profileNameInitials({
+    displayName,
+    name: String(username ?? "")
+      .replace(/^@/, "")
+      .trim() || undefined,
+  });
+}
+
 export function profileAvatarStyle(initials: string): {
   background: string;
   color: string;
