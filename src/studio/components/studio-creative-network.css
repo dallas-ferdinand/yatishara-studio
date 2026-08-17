@@ -1061,6 +1061,17 @@
   background: var(--color-cursor-hover);
 }
 
+.studio-polish.is-studio-mobile .studio-cn-head-tab.is-chrome-pill {
+  min-height: var(--studio-mobile-chrome-control, 34px);
+  height: var(--studio-mobile-chrome-control, 34px);
+  padding: 0 12px;
+}
+
+.studio-polish.is-studio-mobile .studio-cn-head-tab.is-chrome-pill > svg {
+  width: 15px;
+  height: 15px;
+}
+
 .studio-cn-head-tab.is-active {
   border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
   background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-plate));
