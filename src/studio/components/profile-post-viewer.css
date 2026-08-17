@@ -2248,7 +2248,7 @@ button.post-compose-inline-chip.profile-description-chip {
   padding: 0 5px 0 4px;
   border-radius: 999px;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+  background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
   font: inherit;
   font-size: 11px;
@@ -2276,7 +2276,7 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comment-video-time:hover:not(:disabled) {
-  background: var(--mos-hover, var(--color-cursor-hover));
+  background: color-mix(in srgb, currentColor 8%, transparent);
   color: var(--color-cursor-text, var(--mos-text));
 }
 
@@ -2953,6 +2953,7 @@ button.post-compose-inline-chip.profile-description-chip {
 [data-appearance="light"] .profile-comment-bubble-actions .profile-comment-reply span,
 [data-appearance="light"] .profile-comment-video-time {
   color: var(--color-cursor-muted, color-mix(in srgb, #0f172a 52%, transparent));
+  background: transparent;
 }
 
 
