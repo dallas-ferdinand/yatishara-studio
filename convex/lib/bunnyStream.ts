@@ -103,6 +103,39 @@ export async function createStreamVideo(args: {
   return { videoId: body.guid, libraryId: cfg.libraryId };
 }
 
+export async function setStreamThumbnail(args: {
+  videoId: string;
+  /** Public HTTPS image URL for Bunny to fetch, OR omit and pass `bytes`. */
+  thumbnailUrl?: string;
+  bytes?: Uint8Array | ArrayBuffer;
+}): Promise<void> {
+  const cfg = getBunnyStreamConfig();
+  const params = new URLSearchParams();
+  if (args.thumbnailUrl?.trim()) {
+    params.set("thumbnailUrl", args.thumbnailUrl.trim());
+  }
+  const qs = params.toString();
+  const url = `https://video.bunnycdn.com/library/${cfg.libraryId}/videos/${args.videoId}/thumbnail${
+    qs ? `?${qs}` : ""
+  }`;
+  const headers: Record<string, string> = {
+    AccessKey: cfg.accessKey,
+    Accept: "application/json",
+  };
+  let body: BodyInit | undefined;
+  if (args.bytes) {
+    headers["Content-Type"] = "application/octet-stream";
+    body = args.bytes instanceof Uint8Array ? args.bytes : new Uint8Array(args.bytes);
+  }
+  const res = await fetch(url, { method: "POST", headers, body });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Bunny Stream set thumbnail failed (${res.status}): ${text.slice(0, 200)}`,
+    );
+  }
+}
+
 export async function mintStreamPlayback(args: {
   videoId: string;
   ttlSec?: number;

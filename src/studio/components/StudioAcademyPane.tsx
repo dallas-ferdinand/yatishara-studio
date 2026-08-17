@@ -632,6 +632,62 @@ export function StudioAcademyPane({
     ? (detail?.lessons.find((l) => l._id === academy.lessonId) ?? null)
     : null;
 
+  // Unlocked playback: mount Bunny Stream embed so the player shows Stream's
+  // native thumbnail (not our Storage cover overlay). Locked stays on cover.
+  useEffect(() => {
+    if (!detail || !academy.courseId) return;
+    let cancelled = false;
+    const courseId = academy.courseId;
+    const lessonId = selectedLesson?._id;
+    const lessonHasVideo = Boolean(selectedLesson?.hasVideo);
+    const hasIntro = Boolean(detail.hasIntroVideo);
+
+    async function mountBunnyEmbed() {
+      if (lessonId) {
+        if (!owned || !lessonHasVideo) return;
+        setLoadingPlay(true);
+        try {
+          const playback = await getLessonPlayback({ lessonId });
+          if (!cancelled) setLessonEmbed(playback.embedUrl);
+        } catch (error) {
+          if (!cancelled) {
+            toast.error(friendlyConvexError(error, "Could not load lesson"));
+          }
+        } finally {
+          if (!cancelled) setLoadingPlay(false);
+        }
+        return;
+      }
+
+      if (!hasIntro) return;
+      setLoadingPlay(true);
+      try {
+        const playback = await getIntroPlayback({ courseId });
+        if (!cancelled) setIntroEmbed(playback.embedUrl);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(friendlyConvexError(error, "Could not load intro"));
+        }
+      } finally {
+        if (!cancelled) setLoadingPlay(false);
+      }
+    }
+
+    void mountBunnyEmbed();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    academy.courseId,
+    detail?._id,
+    detail?.hasIntroVideo,
+    getIntroPlayback,
+    getLessonPlayback,
+    owned,
+    selectedLesson?._id,
+    selectedLesson?.hasVideo,
+  ]);
+
   const commentsLessonId =
     owned && academy.lessonId ? academy.lessonId : undefined;
   const commentsSidebarTitle =

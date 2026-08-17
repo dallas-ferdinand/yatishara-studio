@@ -23439,6 +23439,17 @@ export function StudioShell({
               transparent
             );
         }
+        .studio-polish.is-studio-mobile .studio-academy-player-shell {
+          padding: 3px;
+          border-radius: calc(var(--cursor-radius-lg, 12px) + 2px);
+        }
+        .studio-polish.is-studio-mobile .studio-academy-player {
+          border-radius: 10px;
+        }
+        .studio-polish.is-studio-mobile .studio-academy-detail {
+          gap: 12px;
+          padding: 0 0 16px;
+        }
         .studio-academy-player {
           position: relative;
           width: 100%;
