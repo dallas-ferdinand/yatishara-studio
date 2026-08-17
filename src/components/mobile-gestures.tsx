@@ -26,13 +26,38 @@ function verticalPanBlocked(target: EventTarget | null): boolean {
   return false;
 }
 
-function anyAncestorScrolled(target: EventTarget | null): boolean {
+function nearestVerticalScroller(target: EventTarget | null): HTMLElement | null {
   let el = target instanceof Element ? target : null;
   while (el && el !== document.documentElement) {
-    if (el.scrollTop > 0 && el.scrollHeight > el.clientHeight + 1) return true;
+    const overflowY = getComputedStyle(el).overflowY;
+    if (
+      (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+      el.scrollHeight > el.clientHeight + 1
+    ) {
+      return el;
+    }
     el = el.parentElement;
   }
-  return (document.scrollingElement?.scrollTop ?? 0) > 0;
+  return null;
+}
+
+function leftoverVerticalOverscroll(target: EventTarget | null, dy: number): boolean {
+  if (Math.abs(dy) < 1) return false;
+  let el = target instanceof Element ? target : null;
+  while (el && el !== document.documentElement) {
+    const overflowY = getComputedStyle(el).overflowY;
+    if (
+      (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+      el.scrollHeight > el.clientHeight + 1
+    ) {
+      const atTop = el.scrollTop <= 0;
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+      if (dy > 0 && !atTop) return false;
+      if (dy < 0 && !atBottom) return false;
+    }
+    el = el.parentElement;
+  }
+  return true;
 }
 
 function easeOutCubic(t: number): number {
@@ -44,6 +69,8 @@ function easeOutCubic(t: number): number {
  * - Zoom guard via CSS touch-action + iOS gesture* (no always-on non-passive pan).
  * - Pull-to-reload: white circle + mark. Rotation is scrubbed to pull distance
  *   (down one way, back up reverses). Free-spins only after reload triggers.
+ * - Swallow leftover vertical overscroll (up at bottom / no more scroll) so the
+ *   browser cannot steal it for close-tab / chrome gestures.
  */
 export function MobileGestures() {
   const [pull, setPull] = useState(0);
@@ -87,9 +114,10 @@ export function MobileGestures() {
 
     let startX = 0;
     let startY = 0;
+    let lastY = 0;
     let armed = false;
     let dragging = false;
-    let dragMoveAttached = false;
+    let edgeMoveAttached = false;
 
     const cancelUnwind = () => {
       if (unwindRafRef.current) {
@@ -103,38 +131,56 @@ export function MobileGestures() {
       setPull(px);
     };
 
-    const onTouchMoveDrag = (event: TouchEvent) => {
-      if (!dragging || refreshingRef.current) return;
+    const onTouchMoveEdge = (event: TouchEvent) => {
+      if (refreshingRef.current) return;
       if (event.touches.length !== 1) {
-        detachDragMove();
+        detachEdgeMove();
         dragging = false;
         armed = false;
         setPulling(false);
         if (!refreshingRef.current) unwindPull();
         return;
       }
-      if (event.cancelable) event.preventDefault();
       const touch = event.touches[0];
+      const dyInc = touch.clientY - lastY;
+      lastY = touch.clientY;
       const dy = touch.clientY - startY;
+      const dx = touch.clientX - startX;
+      const leftover = leftoverVerticalOverscroll(event.target, dyInc);
+      if (leftover && event.cancelable) event.preventDefault();
+
+      if (dragging) {
+        const eased = Math.min(PULL_MAX, Math.max(0, (dy - PULL_START_SLOP) * 0.55));
+        setPullBoth(eased);
+        return;
+      }
+      if (!armed) return;
+      if (dy < -4 || Math.abs(dx) > Math.abs(dy)) {
+        armed = false;
+        return;
+      }
+      if (dy < PULL_START_SLOP) return;
+      dragging = true;
+      setPulling(true);
       const eased = Math.min(PULL_MAX, Math.max(0, (dy - PULL_START_SLOP) * 0.55));
       setPullBoth(eased);
     };
 
-    const attachDragMove = () => {
-      if (dragMoveAttached) return;
-      window.addEventListener("touchmove", onTouchMoveDrag, { passive: false });
-      dragMoveAttached = true;
+    const attachEdgeMove = () => {
+      if (edgeMoveAttached) return;
+      window.addEventListener("touchmove", onTouchMoveEdge, { passive: false });
+      edgeMoveAttached = true;
     };
 
-    const detachDragMove = () => {
-      if (!dragMoveAttached) return;
-      window.removeEventListener("touchmove", onTouchMoveDrag);
-      dragMoveAttached = false;
+    const detachEdgeMove = () => {
+      if (!edgeMoveAttached) return;
+      window.removeEventListener("touchmove", onTouchMoveEdge);
+      edgeMoveAttached = false;
     };
 
     const unwindPull = () => {
       cancelUnwind();
-      detachDragMove();
+      detachEdgeMove();
       const from = pullRef.current;
       if (from <= 0.5) {
         setPullBoth(0);
@@ -162,7 +208,7 @@ export function MobileGestures() {
       dragging = false;
       armed = false;
       setPulling(false);
-      detachDragMove();
+      detachEdgeMove();
       if (!refreshingRef.current) unwindPull();
     };
 
@@ -173,54 +219,49 @@ export function MobileGestures() {
         return;
       }
       cancelUnwind();
-      detachDragMove();
+      detachEdgeMove();
       const touch = event.touches[0];
       startX = touch.clientX;
       startY = touch.clientY;
+      lastY = touch.clientY;
       dragging = false;
-      armed =
-        !insideZoomRegion(event.target) &&
-        !verticalPanBlocked(event.target) &&
-        !anyAncestorScrolled(event.target);
+      const blocked =
+        insideZoomRegion(event.target) || verticalPanBlocked(event.target);
+      armed = !blocked && leftoverVerticalOverscroll(event.target, 1);
+      const scroller = nearestVerticalScroller(event.target);
+      const atEdge =
+        !scroller ||
+        scroller.scrollTop <= 0 ||
+        scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+      if (!blocked && atEdge) attachEdgeMove();
     };
 
     const onTouchMovePassive = (event: TouchEvent) => {
-      if (dragging) return;
-      if (!armed || refreshingRef.current) return;
-      if (event.touches.length !== 1) {
-        reset();
-        return;
-      }
+      if (dragging || edgeMoveAttached || refreshingRef.current) return;
+      if (event.touches.length !== 1) return;
       const touch = event.touches[0];
-      const dy = touch.clientY - startY;
-      const dx = touch.clientX - startX;
-      if (dy < -4 || Math.abs(dx) > Math.abs(dy)) {
-        armed = false;
-        return;
+      const dyInc = touch.clientY - lastY;
+      lastY = touch.clientY;
+      if (
+        leftoverVerticalOverscroll(event.target, dyInc) &&
+        !insideZoomRegion(event.target) &&
+        !verticalPanBlocked(event.target)
+      ) {
+        attachEdgeMove();
       }
-      if (dy < PULL_START_SLOP) return;
-      if (event.defaultPrevented) {
-        armed = false;
-        return;
-      }
-      dragging = true;
-      setPulling(true);
-      attachDragMove();
-      const eased = Math.min(PULL_MAX, Math.max(0, (dy - PULL_START_SLOP) * 0.55));
-      setPullBoth(eased);
     };
 
     const onTouchEnd = () => {
       if (!dragging) {
         armed = false;
-        detachDragMove();
+        detachEdgeMove();
         return;
       }
       const distance = pullRef.current;
       dragging = false;
       armed = false;
       setPulling(false);
-      detachDragMove();
+      detachEdgeMove();
       if (distance >= PULL_THRESHOLD) {
         cancelUnwind();
         refreshingRef.current = true;
@@ -247,7 +288,7 @@ export function MobileGestures() {
     window.addEventListener("touchcancel", onTouchEnd, { passive: true });
     return () => {
       cancelUnwind();
-      detachDragMove();
+      detachEdgeMove();
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchmove", onTouchMovePassive);
       window.removeEventListener("touchend", onTouchEnd);

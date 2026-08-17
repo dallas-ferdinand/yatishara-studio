@@ -189,6 +189,19 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Mobile: kill leftover rubber-band so the browser cannot steal overscroll
+   (close-tab / chrome). Inner panes still scroll; bounce at the edge is swallowed. */
+@media (pointer: coarse) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+  .studio-polish.is-studio-mobile,
+  .studio-polish.is-studio-mobile * {
+    overscroll-behavior-y: none;
+  }
+}
+
 body {
   font-family: var(--font-onest), system-ui, sans-serif;
 }
