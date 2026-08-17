@@ -744,6 +744,12 @@
   cursor: pointer;
 }
 
+.studio-voice-picker-icon-btn.is-save {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
 .studio-voice-picker-icon-btn:hover,
 .studio-voice-picker-icon-btn.is-saved {
   background: color-mix(in srgb, #fff 8%, transparent);

@@ -5,8 +5,6 @@ import {
   ArrowDownWideNarrow,
   Bookmark,
   BookmarkCheck,
-  Pause,
-  Play,
   Plus,
   Search,
   SlidersHorizontal,
@@ -22,7 +20,7 @@ import {
 import { MediaLoadWave } from "@/studio/components/media-load-frame";
 import {
   orbSeedForVoice,
-  StudioOrbAvatar,
+  StudioOrbPlayButton,
 } from "@/studio/components/StudioOrbPlayButton";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { voiceMatchesExploreFilters } from "../../../convex/lib/voiceExploreFilters";
@@ -720,6 +718,19 @@ function StudioVoicePickerInner({
               role="option"
               aria-selected={active}
             >
+              <StudioOrbPlayButton
+                className="studio-voice-picker-avatar"
+                playing={playing}
+                showGlyph
+                size="md"
+                seed={orbSeedForVoice(voice.voiceId, voice.name)}
+                aria-label={playing ? "Pause preview" : "Play preview"}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  togglePreview(voice);
+                }}
+              />
               <button
                 type="button"
                 className="studio-voice-picker-row-main"
@@ -729,20 +740,6 @@ function StudioVoicePickerInner({
                   onClose?.();
                 }}
               >
-                <span
-                  className="studio-voice-picker-avatar"
-                  aria-hidden="true"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    togglePreview(voice);
-                  }}
-                >
-                  <StudioOrbAvatar
-                    playing={playing}
-                    seed={orbSeedForVoice(voice.voiceId, voice.name)}
-                  />
-                </span>
                 <span className="studio-voice-picker-meta">
                   <strong>{voice.name}</strong>
                   <span>
@@ -755,25 +752,12 @@ function StudioVoicePickerInner({
               <div className="studio-voice-picker-row-actions">
                 <button
                   type="button"
-                  className="studio-voice-picker-icon-btn"
-                  title={playing ? "Pause preview" : "Play preview"}
-                  aria-label={playing ? "Pause preview" : "Play preview"}
-                  onClick={() => togglePreview(voice)}
-                >
-                  {playing ? (
-                    <Pause size={14} fill="currentColor" strokeWidth={0} />
-                  ) : (
-                    <Play size={14} fill="currentColor" strokeWidth={0} />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className={`studio-voice-picker-icon-btn${saved ? " is-saved" : ""}`}
+                  className={`studio-voice-picker-icon-btn is-save${saved ? " is-saved" : ""}`}
                   title={saved ? "Remove from My Voices" : "Save to My Voices"}
                   aria-label={saved ? "Remove from My Voices" : "Save to My Voices"}
                   onClick={() => void toggleSave(voice)}
                 >
-                  {saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+                  {saved ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
                 </button>
               </div>
             </div>
