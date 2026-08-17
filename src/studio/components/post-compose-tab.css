@@ -643,29 +643,22 @@
 }
 
 .post-compose-media-nav {
-  position: absolute;
-  top: 50%;
-  z-index: 3;
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
   margin: 0;
   padding: 0;
-  border: 0;
+  border: 1px solid var(--pc-line);
   border-radius: 999px;
-  background: color-mix(in srgb, #000 46%, transparent);
-  color: #fff;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
   cursor: pointer;
-  transform: translateY(-50%);
 }
 
-.post-compose-media-nav.is-prev {
-  left: 10px;
-}
-
-.post-compose-media-nav.is-next {
-  right: 10px;
+.post-compose-media-nav:hover {
+  background: var(--pc-hover);
 }
 
 .post-compose-media-nav svg {
@@ -682,11 +675,22 @@
 
 .post-compose-media-strip {
   display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  gap: 8px;
+  gap: 10px;
   min-height: 56px;
-  overflow-x: auto;
   padding: 0 2px 2px;
+}
+
+.post-compose-media-chips {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 8px;
+  overflow-x: auto;
 }
 
 .post-compose-media-thumb {

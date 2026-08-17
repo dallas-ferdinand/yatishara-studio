@@ -1040,72 +1040,74 @@ export function PostComposeTab({
                   </button>
                 </div>
               ) : null}
-              {slots.length > 1 ? (
-                <>
-                  <button
-                    type="button"
-                    className="post-compose-media-nav is-prev"
-                    aria-label="Previous item"
-                    onClick={() =>
-                      setSlotIndex((i) => (i - 1 + slots.length) % slots.length)
-                    }
-                  >
-                    <ChevronLeft aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="post-compose-media-nav is-next"
-                    aria-label="Next item"
-                    onClick={() => setSlotIndex((i) => (i + 1) % slots.length)}
-                  >
-                    <ChevronRight aria-hidden="true" />
-                  </button>
-                </>
-              ) : null}
             </div>
           </div>
           <div className="post-compose-media-strip" aria-label="Post media">
-            {slots.map((slot, index) => (
+            {slots.length > 1 ? (
               <button
-                key={slot.key}
                 type="button"
-                className={`post-compose-media-thumb${index === slotIndex ? " is-current" : ""}`}
-                aria-label={slot.name}
-                onClick={() => setSlotIndex(index)}
+                className="post-compose-media-nav is-prev"
+                aria-label="Previous item"
+                onClick={() =>
+                  setSlotIndex((i) => (i - 1 + slots.length) % slots.length)
+                }
               >
-                {slot.kind === "audio" ? (
-                  <Music2 aria-hidden="true" />
-                ) : slot.kind === "video" && slot.previewUrl ? (
-                  <video src={slot.previewUrl} muted playsInline />
-                ) : slot.previewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={slot.previewUrl} alt="" />
-                ) : slot.kind === "video" ? (
-                  <ImageIcon aria-hidden="true" />
-                ) : (
-                  <ImageIcon aria-hidden="true" />
-                )}
-                <span
-                  className="post-compose-media-thumb-remove"
-                  role="button"
-                  aria-label={`Remove ${slot.name}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    removeSlot(slot.key);
-                  }}
-                >
-                  <X aria-hidden="true" />
-                </span>
+                <ChevronLeft aria-hidden="true" />
               </button>
-            ))}
-            {remaining > 0 ? (
+            ) : null}
+            <div className="post-compose-media-chips">
+              {slots.map((slot, index) => (
+                <button
+                  key={slot.key}
+                  type="button"
+                  className={`post-compose-media-thumb${index === slotIndex ? " is-current" : ""}`}
+                  aria-label={slot.name}
+                  onClick={() => setSlotIndex(index)}
+                >
+                  {slot.kind === "audio" ? (
+                    <Music2 aria-hidden="true" />
+                  ) : slot.kind === "video" && slot.previewUrl ? (
+                    <video src={slot.previewUrl} muted playsInline />
+                  ) : slot.previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={slot.previewUrl} alt="" />
+                  ) : slot.kind === "video" ? (
+                    <ImageIcon aria-hidden="true" />
+                  ) : (
+                    <ImageIcon aria-hidden="true" />
+                  )}
+                  <span
+                    className="post-compose-media-thumb-remove"
+                    role="button"
+                    aria-label={`Remove ${slot.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      removeSlot(slot.key);
+                    }}
+                  >
+                    <X aria-hidden="true" />
+                  </span>
+                </button>
+              ))}
+              {remaining > 0 ? (
+                <button
+                  type="button"
+                  className="post-compose-media-thumb is-add"
+                  aria-label="Add media"
+                  onClick={() => setChoiceOpen(true)}
+                >
+                  <Plus aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+            {slots.length > 1 ? (
               <button
                 type="button"
-                className="post-compose-media-thumb is-add"
-                aria-label="Add media"
-                onClick={() => setChoiceOpen(true)}
+                className="post-compose-media-nav is-next"
+                aria-label="Next item"
+                onClick={() => setSlotIndex((i) => (i + 1) % slots.length)}
               >
-                <Plus aria-hidden="true" />
+                <ChevronRight aria-hidden="true" />
               </button>
             ) : null}
           </div>
