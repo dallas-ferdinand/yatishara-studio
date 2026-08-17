@@ -73,7 +73,7 @@ function formatCount(value: number): string {
 const OWNER_TABS: Array<{ id: ProfileTab; label: string; icon: typeof LayoutGrid }> = [
   { id: "posts", label: "Posts", icon: LayoutGrid },
   { id: "saved", label: "Saved", icon: Bookmark },
-  { id: "liked", label: "Liked", icon: Crown },
+  { id: "liked", label: "Boosted", icon: Crown },
   { id: "shared", label: "Shared", icon: Forward },
 ];
 
@@ -175,7 +175,7 @@ export function PublicProfileView({
     activeTab === "saved"
       ? "No saved posts yet"
       : activeTab === "liked"
-        ? "No liked posts yet"
+        ? "No boosted posts yet"
         : activeTab === "shared"
           ? "No shared posts yet"
           : "No posts yet";
@@ -353,7 +353,7 @@ export function PublicProfileView({
               : activeTab === "saved"
                 ? "Saved posts"
                 : activeTab === "liked"
-                  ? "Liked posts"
+                  ? "Boosted posts"
                   : "Shared posts"
           }
         >

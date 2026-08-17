@@ -32,7 +32,9 @@ import {
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { formatTtdCents, POST_BOOST_AMOUNT_CENTS } from "@/studio/lib/money";
 import { playUiSound } from "@/mos-app/sounds.js";
+import { toast } from "sonner";
 import {
   ProfileCommentsPanel,
   type CommentsPanelMode,
@@ -52,6 +54,33 @@ import {
 import { markStudioPaint } from "@/studio/lib/studioPaintMarks";
 import "./profile-post-viewer.css";
 import "./post-compose-tab.css";
+
+const BOOST_COLORS = ["#f5c400", "#fb7185", "#38bdf8", "#a78bfa", "#34d399", "#fb923c"];
+
+function burstBoostConfetti(origin: HTMLElement) {
+  const rect = origin.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const root = document.createElement("div");
+  root.className = "profile-boost-confetti";
+  root.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 28; i++) {
+    const bit = document.createElement("span");
+    bit.className = "profile-boost-confetti-bit";
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.55;
+    const dist = 52 + Math.random() * 96;
+    bit.style.left = `${cx}px`;
+    bit.style.top = `${cy}px`;
+    bit.style.setProperty("--dx", `${Math.cos(angle) * dist}px`);
+    bit.style.setProperty("--dy", `${Math.sin(angle) * dist}px`);
+    bit.style.setProperty("--rot", `${Math.round(Math.random() * 420 - 60)}deg`);
+    bit.style.background = BOOST_COLORS[i % BOOST_COLORS.length]!;
+    bit.style.animationDelay = `${Math.random() * 50}ms`;
+    root.appendChild(bit);
+  }
+  document.body.appendChild(root);
+  window.setTimeout(() => root.remove(), 1100);
+}
 
 type FeedMode = "forYou" | "following";
 
@@ -931,7 +960,8 @@ function FeedActions({
   localSaves,
   localShares,
   variant = "rail",
-  onLike,
+  boostUndoLeft = 0,
+  onBoost,
   onSave,
   onShare,
   onOpenComments,
@@ -951,7 +981,8 @@ function FeedActions({
   localShares: number;
   active?: boolean;
   variant?: "rail" | "bar";
-  onLike: () => void;
+  boostUndoLeft?: number;
+  onBoost: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onSave: () => void;
   onShare: () => void;
   onOpenComments: () => void;
@@ -960,11 +991,12 @@ function FeedActions({
 }) {
   const saved = Boolean(post.savedByViewer);
   const liked = Boolean(post.likedByViewer);
+  const undoing = boostUndoLeft > 0;
   const likeIcon = (
     <Crown
       aria-hidden="true"
-      fill={liked ? "currentColor" : "none"}
-      strokeWidth={liked ? 1.75 : 2}
+      fill={liked || undoing ? "currentColor" : "none"}
+      strokeWidth={liked || undoing ? 1.75 : 2}
     />
   );
   const commentIcon = (
@@ -977,15 +1009,21 @@ function FeedActions({
         <div className="profile-post-book-actions">
           <button
             type="button"
-            className={`profile-post-book-btn is-labeled${liked ? " is-liked" : ""}`}
+            className={`profile-post-book-btn is-labeled${liked || undoing ? " is-liked" : ""}`}
             data-studio-sfx="like"
-            aria-pressed={liked}
-            aria-label={liked ? "Remove reward" : "Reward"}
-            onClick={onLike}
+            aria-pressed={liked || undoing}
+            aria-label={
+              undoing
+                ? `Undo boost, ${boostUndoLeft} seconds left`
+                : "Boost"
+            }
+            onClick={onBoost}
           >
             {likeIcon}
-            <span className="profile-post-book-label">Reward</span>
-            <span className="profile-post-book-count">{formatCount(post.likeCount)}</span>
+            <span className="profile-post-book-label">{undoing ? "Undo" : "Boost"}</span>
+            <span className="profile-post-book-count">
+              {undoing ? boostUndoLeft : formatCount(post.likeCount)}
+            </span>
           </button>
           <button
             type="button"
@@ -1072,21 +1110,23 @@ function FeedActions({
       </div>
       <button
         type="button"
-        className={`profile-post-rail-btn${post.likedByViewer ? " is-liked" : ""}`}
+        className={`profile-post-rail-btn${liked || undoing ? " is-liked" : ""}`}
         data-studio-sfx="like"
         onClick={(event) => {
           event.stopPropagation();
-          onLike();
+          onBoost(event);
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        aria-label={post.likedByViewer ? "Unlike" : "Like"}
+        aria-label={
+          undoing ? `Undo boost, ${boostUndoLeft} seconds left` : "Boost"
+        }
       >
         <Crown
           aria-hidden="true"
-          fill={liked ? "currentColor" : "none"}
-          strokeWidth={liked ? 1.75 : 2}
+          fill={liked || undoing ? "currentColor" : "none"}
+          strokeWidth={liked || undoing ? 1.75 : 2}
         />
-        <span>{formatCount(post.likeCount)}</span>
+        <span>{undoing ? boostUndoLeft : formatCount(post.likeCount)}</span>
       </button>
       <button
         type="button"
@@ -1186,7 +1226,8 @@ export function ProfilePostViewer({
   useEffect(() => {
     if (feed != null && tabActive) markStudioPaint("feed");
   }, [feed, tabActive]);
-  const toggleLike = useMutation(api.profiles.toggleLike);
+  const boostPost = useMutation(api.profiles.boostPost);
+  const undoBoost = useMutation(api.profiles.undoBoost);
   const toggleSave = useMutation(api.profiles.toggleSave);
   const recordShare = useMutation(api.profiles.recordShare);
   const recordPostView = useMutation(api.profiles.recordPostView);
@@ -1213,7 +1254,12 @@ export function ProfilePostViewer({
   const [localFollows, setLocalFollows] = useState<Record<string, boolean>>({});
   const [axis, setAxis] = useState<"x" | "y">("y");
   const [animating, setAnimating] = useState(false);
-  const [likeBurst, setLikeBurst] = useState(false);
+  const [pendingUndo, setPendingUndo] = useState<{
+    postId: Id<"profilePosts">;
+    boostId: Id<"profileBoosts">;
+    undoUntil: number;
+  } | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const pointerRef = useRef<{
     id: number;
     x: number;
@@ -1239,10 +1285,7 @@ export function ProfilePostViewer({
   const pendingCommitRef = useRef<{ axis: "x" | "y"; delta: -1 | 1 } | null>(null);
   const pendingSnapRef = useRef(false);
   const commitTokenRef = useRef(0);
-  const lastTapRef = useRef(0);
-  const likeBurstTimerRef = useRef<number | null>(null);
-  const handleLikeRef = useRef<() => void>(() => {});
-  const activeLikedRef = useRef(false);
+  const boostBusyRef = useRef(false);
 
   const resolvedFeed = useMemo(() => {
     return (feed ?? []).map((post) => {
@@ -1550,10 +1593,14 @@ export function ProfilePostViewer({
   }, [measureSize]);
 
   useEffect(() => {
-    return () => {
-      if (likeBurstTimerRef.current) window.clearTimeout(likeBurstTimerRef.current);
-    };
-  }, []);
+    if (!pendingUndo) return undefined;
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      setNowTick(t);
+      if (t >= pendingUndo.undoUntil) setPendingUndo(null);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [pendingUndo]);
 
   useEffect(() => {
     if (!tabActive) return undefined;
@@ -1729,26 +1776,17 @@ export function ProfilePostViewer({
     }
     if (animatingRef.current) return;
 
-    // Single tap: toggle video chrome. Double-tap: like.
+    // Single tap: toggle video chrome. Boost is paid — no double-tap spend.
     if (!moved || (Math.abs(dx) < 10 && Math.abs(dy) < 10)) {
       setTrackTransform(0, 0, false);
       const target = event.target as HTMLElement | null;
       if (target?.closest?.("[data-video-control]")) return;
       if (target?.closest?.(".profile-post-rail")) return;
-      // Tap timing must use wall clock; not render-time state.
-      // eslint-disable-next-line react-hooks/purity -- pointer-up gesture clock
-      const now = Date.now();
-      if (now - lastTapRef.current < 320) {
-        lastTapRef.current = 0;
-        void handleDoubleTapLike();
-      } else {
-        lastTapRef.current = now;
-        const postId = activePostIdRef.current;
-        if (postId) {
-          window.dispatchEvent(
-            new CustomEvent("ys-feed-media-tap", { detail: { postId } }),
-          );
-        }
+      const postId = activePostIdRef.current;
+      if (postId) {
+        window.dispatchEvent(
+          new CustomEvent("ys-feed-media-tap", { detail: { postId } }),
+        );
       }
       return;
     }
@@ -1776,52 +1814,73 @@ export function ProfilePostViewer({
     window.setTimeout(() => resetTrack(), SLIDE_FALLBACK_MS);
   }
 
-  async function handleDoubleTapLike() {
-    setLikeBurst(true);
-    if (likeBurstTimerRef.current) window.clearTimeout(likeBurstTimerRef.current);
-    likeBurstTimerRef.current = window.setTimeout(() => setLikeBurst(false), 700);
-    if (activeLikedRef.current) return;
-    handleLikeRef.current();
-  }
-
-  async function handleLike(post: SlidePost) {
+  async function handleBoostClick(
+    post: SlidePost,
+    origin: HTMLElement | null,
+  ) {
     if (!auth.isAuthenticated) {
       window.location.href = `/?next=${encodeURIComponent("/")}`;
       return;
     }
-    const prevLiked =
-      localLikes[post._id]?.liked ?? Boolean(post.likedByViewer);
-    const prevCount =
-      localLikes[post._id]?.likeCount ?? post.likeCount ?? 0;
-    const nextLiked = !prevLiked;
-    const snapshot = { liked: prevLiked, likeCount: prevCount };
-    playUiSound(nextLiked ? "like" : "unlike");
-    setLocalLikes((prev) => ({
-      ...prev,
-      [post._id]: {
-        liked: nextLiked,
-        likeCount: Math.max(0, prevCount + (nextLiked ? 1 : -1)),
-      },
-    }));
+    if (post.isOwner) {
+      toast.error("You can't boost your own post.");
+      return;
+    }
+    if (boostBusyRef.current) return;
+    boostBusyRef.current = true;
+    const undoable =
+      pendingUndo &&
+      pendingUndo.postId === post._id &&
+      Date.now() < pendingUndo.undoUntil;
+    if (undoable && pendingUndo) {
+      const snapshot = {
+        liked: localLikes[post._id]?.liked ?? Boolean(post.likedByViewer),
+        likeCount: localLikes[post._id]?.likeCount ?? post.likeCount ?? 0,
+      };
+      try {
+        const result = await undoBoost({ boostId: pendingUndo.boostId });
+        setPendingUndo(null);
+        playUiSound("unlike");
+        setLocalLikes((prev) => ({
+          ...prev,
+          [post._id]: { liked: result.boosted, likeCount: result.likeCount },
+        }));
+      } catch (error) {
+        setLocalLikes((prev) => ({ ...prev, [post._id]: snapshot }));
+        playUiSound("error");
+        toast.error(friendlyConvexError(error, "Could not undo boost"));
+      } finally {
+        boostBusyRef.current = false;
+      }
+      return;
+    }
+
+    const snapshot = {
+      liked: localLikes[post._id]?.liked ?? Boolean(post.likedByViewer),
+      likeCount: localLikes[post._id]?.likeCount ?? post.likeCount ?? 0,
+    };
     try {
-      const result = await toggleLike({ postId: post._id });
+      const result = await boostPost({ postId: post._id });
+      playUiSound("like");
       setLocalLikes((prev) => ({
         ...prev,
-        [post._id]: { liked: result.liked, likeCount: result.likeCount },
+        [post._id]: { liked: true, likeCount: result.likeCount },
       }));
+      setPendingUndo({
+        postId: post._id,
+        boostId: result.boostId,
+        undoUntil: result.undoUntil,
+      });
+      if (origin) burstBoostConfetti(origin);
+      toast.success(`Boosted ${formatTtdCents(POST_BOOST_AMOUNT_CENTS)} · 60s to undo`);
     } catch (error) {
       setLocalLikes((prev) => ({ ...prev, [post._id]: snapshot }));
       playUiSound("error");
-      console.error(friendlyConvexError(error, "Could not update like"));
+      toast.error(friendlyConvexError(error, "Could not boost"));
+    } finally {
+      boostBusyRef.current = false;
     }
   }
-
-  handleLikeRef.current = () => {
-    if (activePost) void handleLike(activePost);
-  };
-  activeLikedRef.current = Boolean(
-    localLikes[activePost?._id ?? ""]?.liked ?? activePost?.likedByViewer,
-  );
 
   async function handleSave(post: SlidePost) {
     if (!auth.isAuthenticated) {
@@ -2094,11 +2153,6 @@ export function ProfilePostViewer({
                         active={tabActive && role === "current"}
                         preload={tabActive}
                       />
-                      {role === "current" && likeBurst ? (
-                        <div className="profile-post-like-burst" aria-hidden="true">
-                          <Crown fill="currentColor" strokeWidth={0} />
-                        </div>
-                      ) : null}
                     </div>
                   </div>
                 <FeedCaption
@@ -2218,7 +2272,16 @@ export function ProfilePostViewer({
             localSaves[activePost._id]?.saveCount ?? activePost.saveCount ?? 0
           }
           localShares={localShares[activePost._id] ?? activePost.shareCount ?? 0}
-          onLike={() => void handleLike(activeSlidePost)}
+          boostUndoLeft={
+            pendingUndo &&
+            pendingUndo.postId === activePost._id &&
+            nowTick < pendingUndo.undoUntil
+              ? Math.max(1, Math.ceil((pendingUndo.undoUntil - nowTick) / 1000))
+              : 0
+          }
+          onBoost={(event) =>
+            void handleBoostClick(activeSlidePost, event.currentTarget)
+          }
           onSave={() => void handleSave(activeSlidePost)}
           onShare={() => void handleShare(activeSlidePost)}
           onOpenComments={() => {
@@ -2289,7 +2352,13 @@ export function ProfilePostViewer({
             localSaves[activePost._id]?.saveCount ?? activeSlidePost.saveCount ?? 0,
           shareCount:
             localShares[activePost._id] ?? activeSlidePost.shareCount ?? 0,
-          onLike: () => void handleLike(activeSlidePost),
+          undoLeft:
+            pendingUndo &&
+            pendingUndo.postId === activePost._id &&
+            nowTick < pendingUndo.undoUntil
+              ? Math.max(1, Math.ceil((pendingUndo.undoUntil - nowTick) / 1000))
+              : 0,
+          onLike: () => void handleBoostClick(activeSlidePost, null),
           onSave: () => void handleSave(activeSlidePost),
           onShare: () => void handleShare(activeSlidePost),
         }}

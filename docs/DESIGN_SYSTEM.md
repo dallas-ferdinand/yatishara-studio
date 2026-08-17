@@ -617,7 +617,7 @@ global People directory search. Mobile Social sheet matches (Messages, not Peopl
 Memory: **727**.
 
 **Desktop post + comments** (`ProfilePostViewer` / `profile-post-viewer.css`): same
-watch layout as mobile — native-ratio player, avatar in the title, Reward /
+watch layout as mobile — native-ratio player, avatar in the title, Boost /
 Contribute book bar. Comments rail is a flat `--mos-panel` column with a left
 hairline (like other Studio sidebars). Light mode: post stage L1 `--mos-page`
 (never hardcoded black); comments rail solid `--mos-panel` (excluded from

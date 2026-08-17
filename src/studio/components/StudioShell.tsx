@@ -38188,6 +38188,8 @@ const LEDGER_KIND_LABELS = {
   asset_purchase: "Creative Network audio",
   course_purchase: "Academy course",
   storage_charge: "Storage",
+  boost_sent: "Boost sent",
+  boost_received: "Boost received",
 };
 
 function formatStorageBytes(bytes) {

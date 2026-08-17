@@ -159,6 +159,9 @@ export const creditTransactionKind = v.union(
   v.literal("asset_purchase"),
   /** Studio Academy course one-time purchase (lifetime access). */
   v.literal("course_purchase"),
+  /** Feed Boost: 5 TTD cents from viewer wallet to post author. */
+  v.literal("boost_sent"),
+  v.literal("boost_received"),
 );
 
 /** Protected system folders in the explorer. */
@@ -1307,6 +1310,22 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_user_and_post", ["userId", "postId"])
+    .index("by_post", ["postId"])
+    .index("by_user_and_created", ["userId", "createdAt"]),
+
+  /** Paid Boost (5 TTD cents). Replaces post likes. Undoable for 60s. */
+  profileBoosts: defineTable({
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+    createdAt: v.number(),
+    amountCredits: v.number(),
+    senderTransactionId: v.id("creditTransactions"),
+    receiverTransactionId: v.id("creditTransactions"),
+    status: v.union(v.literal("active"), v.literal("undone")),
+    undoneAt: v.optional(v.number()),
+  })
+    .index("by_user_and_post", ["userId", "postId"])
+    .index("by_user_post_status", ["userId", "postId", "status"])
     .index("by_post", ["postId"])
     .index("by_user_and_created", ["userId", "createdAt"]),
 

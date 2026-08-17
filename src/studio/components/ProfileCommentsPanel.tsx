@@ -133,6 +133,7 @@ type PostActionsInfo = {
   likeCount: number;
   saveCount: number;
   shareCount: number;
+  undoLeft?: number;
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
@@ -1437,14 +1438,22 @@ function CommentsBody({
             <div className="profile-comments-post-actions">
               <button
                 type="button"
-                className={`profile-comments-post-action${postActions.liked ? " is-liked" : ""}`}
+                className={`profile-comments-post-action${postActions.liked || (postActions.undoLeft ?? 0) > 0 ? " is-liked" : ""}`}
                 data-studio-sfx="like"
-                aria-pressed={postActions.liked}
-                aria-label={postActions.liked ? "Unlike" : "Like"}
+                aria-pressed={postActions.liked || (postActions.undoLeft ?? 0) > 0}
+                aria-label={
+                  (postActions.undoLeft ?? 0) > 0
+                    ? `Undo boost, ${postActions.undoLeft} seconds left`
+                    : "Boost"
+                }
                 onClick={postActions.onLike}
               >
                 <Crown aria-hidden="true" fill="currentColor" strokeWidth={0} />
-                <span>{formatCount(postActions.likeCount)}</span>
+                <span>
+                  {(postActions.undoLeft ?? 0) > 0
+                    ? postActions.undoLeft
+                    : formatCount(postActions.likeCount)}
+                </span>
               </button>
               <button
                 type="button"

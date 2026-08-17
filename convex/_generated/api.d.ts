@@ -112,6 +112,7 @@ import type * as lib_naturalAudioSpeed from "../lib/naturalAudioSpeed.js";
 import type * as lib_notify from "../lib/notify.js";
 import type * as lib_passwordCrypto from "../lib/passwordCrypto.js";
 import type * as lib_paywise from "../lib/paywise.js";
+import type * as lib_postBoost from "../lib/postBoost.js";
 import type * as lib_presetThumbnails from "../lib/presetThumbnails.js";
 import type * as lib_profileEnsure from "../lib/profileEnsure.js";
 import type * as lib_profileIdentity from "../lib/profileIdentity.js";
@@ -302,6 +303,7 @@ declare const fullApi: ApiFromModules<{
   "lib/notify": typeof lib_notify;
   "lib/passwordCrypto": typeof lib_passwordCrypto;
   "lib/paywise": typeof lib_paywise;
+  "lib/postBoost": typeof lib_postBoost;
   "lib/presetThumbnails": typeof lib_presetThumbnails;
   "lib/profileEnsure": typeof lib_profileEnsure;
   "lib/profileIdentity": typeof lib_profileIdentity;

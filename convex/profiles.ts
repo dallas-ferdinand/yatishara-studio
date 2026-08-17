@@ -62,6 +62,11 @@ import {
   validateUsername,
   type ContactLinkInput,
 } from "./lib/profileIdentity";
+import {
+  reversePostBoost,
+  transferPostBoost,
+  viewerHasActiveBoost,
+} from "./lib/postBoost";
 
 const hashtagChipValidator = v.object({
   tag: v.string(),
@@ -273,6 +278,21 @@ type HydratedPublicPost = {
   username: string;
 };
 
+async function viewerBoostedOrLiked(
+  ctx: QueryCtx | MutationCtx,
+  viewerId: Id<"users">,
+  postId: Id<"profilePosts">,
+): Promise<boolean> {
+  if (await viewerHasActiveBoost(ctx, viewerId, postId)) return true;
+  const like = await ctx.db
+    .query("profileLikes")
+    .withIndex("by_user_and_post", (q) =>
+      q.eq("userId", viewerId).eq("postId", postId),
+    )
+    .unique();
+  return Boolean(like);
+}
+
 async function hydratePublicPosts(
   ctx: QueryCtx,
   posts: Doc<"profilePosts">[],
@@ -293,15 +313,7 @@ async function hydratePublicPosts(
   });
   const likedFlags = viewerId
     ? await Promise.all(
-        posts.map(async (post) => {
-          const like = await ctx.db
-            .query("profileLikes")
-            .withIndex("by_user_and_post", (q) =>
-              q.eq("userId", viewerId).eq("postId", post._id),
-            )
-            .unique();
-          return Boolean(like);
-        }),
+        posts.map((post) => viewerBoostedOrLiked(ctx, viewerId, post._id)),
       )
     : posts.map(() => false);
   const savedFlags = viewerId
@@ -1268,12 +1280,25 @@ export const listMyCollection = authedQuery({
 
     let postIds: Id<"profilePosts">[] = [];
     if (args.kind === "liked") {
-      const rows = await ctx.db
-        .query("profileLikes")
-        .withIndex("by_user_and_created", (q) => q.eq("userId", ctx.user._id))
-        .order("desc")
-        .take(scan);
-      postIds = rows.map((row) => row.postId);
+      const [boosts, likes] = await Promise.all([
+        ctx.db
+          .query("profileBoosts")
+          .withIndex("by_user_and_created", (q) => q.eq("userId", ctx.user._id))
+          .order("desc")
+          .take(scan),
+        ctx.db
+          .query("profileLikes")
+          .withIndex("by_user_and_created", (q) => q.eq("userId", ctx.user._id))
+          .order("desc")
+          .take(scan),
+      ]);
+      const merged = [
+        ...boosts
+          .filter((row) => row.status === "active")
+          .map((row) => ({ postId: row.postId, createdAt: row.createdAt })),
+        ...likes.map((row) => ({ postId: row.postId, createdAt: row.createdAt })),
+      ].sort((a, b) => b.createdAt - a.createdAt);
+      postIds = merged.map((row) => row.postId);
     } else if (args.kind === "saved") {
       const rows = await ctx.db
         .query("profileSaves")
@@ -1549,15 +1574,9 @@ async function listFeedImpl(
     );
     const likedFlags = viewerId
       ? await Promise.all(
-          ordered.map(async (item) => {
-            const like = await ctx.db
-              .query("profileLikes")
-              .withIndex("by_user_and_post", (q) =>
-                q.eq("userId", viewerId).eq("postId", item.post._id),
-              )
-              .unique();
-            return Boolean(like);
-          }),
+          ordered.map((item) =>
+            viewerBoostedOrLiked(ctx, viewerId, item.post._id),
+          ),
         )
       : ordered.map(() => false);
     const savedFlags = viewerId
@@ -2082,6 +2101,78 @@ export const toggleLike = authedMutation({
       direction: 1,
     });
     return { liked: true, likeCount };
+  },
+});
+
+/** Spend 5 TTD cents to the post author. Undoable for 60 seconds. */
+export const boostPost = authedMutation({
+  args: { postId: v.id("profilePosts") },
+  returns: v.object({
+    boosted: v.boolean(),
+    likeCount: v.number(),
+    boostId: v.id("profileBoosts"),
+    undoUntil: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const post = await requirePublicPost(ctx, args.postId);
+    const profile = await ctx.db.get("profiles", post.profileId);
+    if (!profile || !profile.isPublic) {
+      throw new Error("Post not found");
+    }
+    const transfer = await transferPostBoost(ctx, {
+      senderUserId: ctx.user._id,
+      receiverUserId: profile.userId,
+      postId: post._id,
+    });
+    const likeCount = post.likeCount + 1;
+    await ctx.db.patch(post._id, { likeCount });
+    await applyPostAffinity(ctx, {
+      userId: ctx.user._id,
+      post,
+      event: "like",
+      direction: 1,
+    });
+    return {
+      boosted: true,
+      likeCount,
+      boostId: transfer.boostId,
+      undoUntil: transfer.undoUntil,
+    };
+  },
+});
+
+export const undoBoost = authedMutation({
+  args: { boostId: v.id("profileBoosts") },
+  returns: v.object({
+    boosted: v.boolean(),
+    likeCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const boost = await ctx.db.get("profileBoosts", args.boostId);
+    if (!boost || boost.userId !== ctx.user._id) {
+      throw new Error("Nothing to undo.");
+    }
+    const post = await ctx.db.get("profilePosts", boost.postId);
+    await reversePostBoost(ctx, {
+      boostId: args.boostId,
+      requesterUserId: ctx.user._id,
+    });
+    const likeCount = post
+      ? Math.max(0, post.likeCount - 1)
+      : 0;
+    if (post) {
+      await ctx.db.patch(post._id, { likeCount });
+      await applyPostAffinity(ctx, {
+        userId: ctx.user._id,
+        post,
+        event: "like",
+        direction: -1,
+      });
+    }
+    const stillBoosted = post
+      ? await viewerHasActiveBoost(ctx, ctx.user._id, post._id)
+      : false;
+    return { boosted: stillBoosted, likeCount };
   },
 });
 
@@ -3038,12 +3129,25 @@ export const listMyCollectionForApi = internalQuery({
     const scan = Math.min(limit + 24, 72);
     let postIds: Id<"profilePosts">[] = [];
     if (args.kind === "liked") {
-      const rows = await ctx.db
-        .query("profileLikes")
-        .withIndex("by_user_and_created", (q) => q.eq("userId", user._id))
-        .order("desc")
-        .take(scan);
-      postIds = rows.map((row) => row.postId);
+      const [boosts, likes] = await Promise.all([
+        ctx.db
+          .query("profileBoosts")
+          .withIndex("by_user_and_created", (q) => q.eq("userId", user._id))
+          .order("desc")
+          .take(scan),
+        ctx.db
+          .query("profileLikes")
+          .withIndex("by_user_and_created", (q) => q.eq("userId", user._id))
+          .order("desc")
+          .take(scan),
+      ]);
+      const merged = [
+        ...boosts
+          .filter((row) => row.status === "active")
+          .map((row) => ({ postId: row.postId, createdAt: row.createdAt })),
+        ...likes.map((row) => ({ postId: row.postId, createdAt: row.createdAt })),
+      ].sort((a, b) => b.createdAt - a.createdAt);
+      postIds = merged.map((row) => row.postId);
     } else if (args.kind === "saved") {
       const rows = await ctx.db
         .query("profileSaves")

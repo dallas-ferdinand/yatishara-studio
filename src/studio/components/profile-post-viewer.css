@@ -1883,11 +1883,8 @@ button.post-compose-inline-chip.profile-description-chip {
   font-weight: 600;
 }
 
-.profile-description-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
+.profile-description-tags .post-compose-inline-chip.is-hash {
+  padding-left: 2px;
 }
 
 .profile-description-sheet-spacer {
@@ -3183,4 +3180,32 @@ button.post-compose-inline-chip.profile-description-chip {
 [data-appearance="light"] .profile-comments-back,
 [data-appearance="light"] .profile-comments-close {
   background: color-mix(in srgb, #0f172a 6%, transparent);
+}
+
+.profile-boost-confetti {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.profile-boost-confetti-bit {
+  position: absolute;
+  width: 7px;
+  height: 10px;
+  margin: -5px 0 0 -3px;
+  border-radius: 1px;
+  animation: profile-boost-confetti-fly 900ms ease-out forwards;
+}
+
+@keyframes profile-boost-confetti-fly {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(0.55);
+    opacity: 0;
+  }
 }

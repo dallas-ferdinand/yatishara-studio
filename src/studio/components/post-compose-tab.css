@@ -365,10 +365,14 @@
 }
 
 .post-compose-inline-chip.is-hash {
-  padding: 0 5px 0 2px;
+  padding: 0 5px 0 4px;
   gap: 3px;
   vertical-align: middle;
   align-items: center;
+}
+
+.post-compose-inline-chip.is-hash .post-compose-inline-chip-tag {
+  margin-left: 2px;
 }
 
 .post-compose-inline-chip.is-mention {
@@ -399,6 +403,11 @@
   gap: 2px;
   vertical-align: middle;
   align-items: center;
+}
+
+.profile-post-caption .post-compose-inline-chip.is-hash {
+  padding: 0 0.22em 0 2px;
+  margin-left: 2px;
 }
 
 .profile-post-caption .post-compose-inline-chip .post-compose-inline-chip-avatar,
