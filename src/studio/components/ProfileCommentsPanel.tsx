@@ -533,7 +533,7 @@ function ProfileCommentBubble({
                   disabled={!onSeekVideo}
                 >
                   <Clock aria-hidden="true" strokeWidth={2} />
-                  {formatVideoTimecode(comment.videoTimeSec)}
+                  <span>{formatVideoTimecode(comment.videoTimeSec)}</span>
                 </button>
               ) : null}
               {comment.body ? <p>{comment.body}</p> : null}
