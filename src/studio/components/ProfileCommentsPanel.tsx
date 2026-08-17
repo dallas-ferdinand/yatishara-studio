@@ -2313,11 +2313,6 @@ export function ProfileCommentsPanel({
     onClose();
   }
 
-  function openDescriptionEditor() {
-    setStartEditingDescription(true);
-    onModeChange?.("description");
-  }
-
   const descriptionPanel =
     showingDescription && description && postId ? (
       <DescriptionBody
