@@ -1536,6 +1536,9 @@
 
 .studio-dm-composer.is-split .studio-dm-composer-row.is-message {
   /* Same contained well as Create .studio-composer-inputline. */
+  width: calc(100% - 16px);
+  max-width: 100%;
+  min-width: 0;
   min-height: calc(36px + 8px + 6px);
   margin: 8px 8px 4px;
   padding: 8px 14px 6px 10px;
@@ -1611,31 +1614,31 @@
 }
 
 .studio-dm-composer.is-split.is-mobile-icons .studio-dm-composer-row.is-message {
-  min-height: calc(40px + 8px + 6px);
+  width: calc(100% - 16px);
+  min-height: calc(22px + 6px + 4px);
   margin: 8px 8px 4px;
-  padding: 8px 14px 6px 10px;
+  padding: 6px 10px 4px;
 }
 
 .studio-dm-composer.is-split.is-mobile-icons textarea {
-  height: 40px;
-  min-height: 40px;
+  height: 22px;
+  min-height: 22px;
   padding: 0;
-  line-height: 20px;
-  /* Match bubble text (+nudge); 16px was oversized vs sent messages. */
+  line-height: 22px;
   font-size: 14px;
   font-weight: 550;
 }
 
 .studio-dm-composer.is-split.is-mobile-icons textarea.is-single-line {
-  height: 40px !important;
-  min-height: 40px;
+  height: 22px !important;
+  min-height: 22px;
   padding: 0;
-  line-height: 20px;
+  line-height: 22px;
 }
 
 .studio-dm-composer.is-split.is-mobile-icons textarea:not(.is-single-line) {
   padding: 0;
-  line-height: 20px;
+  line-height: 22px;
 }
 
 .studio-dm-composer.is-split .studio-settings-pill.studio-dm-extra-pill svg {

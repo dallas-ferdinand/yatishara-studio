@@ -2591,8 +2591,8 @@ export function StudioMessagesPane({
 
   function autosizeComposerInput(el: HTMLTextAreaElement | null) {
     if (!el) return;
-    // Two-line content height; Create inputline/toolbar padding lives on the rows.
-    const minPx = isMobile ? 40 : 36;
+    // Mobile stays one line until the text wraps; desktop keeps the 36px well.
+    const minPx = isMobile ? 22 : 36;
     el.style.height = "0px";
     const scroll = el.scrollHeight;
     const lineCount = el.value.split("\n").length;

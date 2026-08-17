@@ -10174,7 +10174,7 @@ export function StudioShell({
             flex: 0 1 auto !important;
             align-self: stretch;
             height: auto;
-            min-height: 88px;
+            min-height: 0;
             max-height: calc(
               min(38vh, 240px)
               + var(--studio-composer-rail-reserve, 0px)
@@ -10182,8 +10182,12 @@ export function StudioShell({
             overflow: hidden;
           }
           .studio-polish .studio-composer-inputline {
-            flex: 1 1 auto !important;
-            min-height: 0;
+            flex: 0 1 auto !important;
+            width: calc(100% - 16px);
+            max-width: 100%;
+            min-height: calc(22px + 6px + 4px);
+            margin: 6px 8px 4px;
+            padding: 6px 10px 4px;
             overflow: auto;
           }
           .studio-polish .studio-composer .cursor-composer-box::before {

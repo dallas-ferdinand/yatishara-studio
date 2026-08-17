@@ -523,6 +523,12 @@
   pointer-events: none;
 }
 
+@media (max-width: 899px) {
+  .studio-agent-pane .studio-dm-composer.is-split .cursor-composer-mention-editor {
+    min-height: 22px;
+  }
+}
+
 .studio-agent-pane .studio-dm-composer.is-split .studio-dm-composer-row.is-extras {
   padding: 4px 8px 6px;
   align-items: flex-end;
