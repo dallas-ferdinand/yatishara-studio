@@ -1458,6 +1458,63 @@ async function blobToBase64(blob) {
   return btoa(binary);
 }
 
+function filePickThumbFields(entry) {
+  const raw = thumbnailDisplayUrl(entry?.thumbnailUrl, entry?.thumbnailLqipUrl);
+  return {
+    signedThumbnailUrl: raw && !isVideoFileUrl(raw) ? raw : undefined,
+    mediaUrl: playableMediaUrl(entry?.mediaUrl, entry?.thumbnailUrl),
+  };
+}
+
+function AssetPickSelectedThumb({ item, onRemove }) {
+  const poster =
+    item.signedThumbnailUrl && !isVideoFileUrl(item.signedThumbnailUrl)
+      ? item.signedThumbnailUrl
+      : undefined;
+  const videoSrc =
+    item.kind === "video"
+      ? playableMediaUrl(item.mediaUrl, item.signedThumbnailUrl)
+      : undefined;
+  const [imgFailed, setImgFailed] = useState(false);
+  const showVideo = Boolean(videoSrc) && (item.kind === "video") && (!poster || imgFailed);
+
+  return (
+    <div className="studio-asset-pick-selected-thumb" title={item.name}>
+      {item.kind === "audio" ? (
+        <StudioOrbAvatar
+          seed={orbSeedForVoice(String(item._id), item.name)}
+          className="studio-asset-pick-audio-orb"
+        />
+      ) : showVideo ? (
+        <video src={videoSrc} muted playsInline preload="metadata" />
+      ) : poster ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={poster}
+          alt=""
+          onError={() => {
+            if (videoSrc) setImgFailed(true);
+          }}
+        />
+      ) : item.kind === "video" ? (
+        <Video aria-hidden="true" />
+      ) : item.kind === "folder" || item.itemKind === "folder" ? (
+        <Folder aria-hidden="true" />
+      ) : (
+        <ImageIcon aria-hidden="true" />
+      )}
+      <button
+        type="button"
+        className="studio-asset-pick-selected-remove"
+        aria-label={`Remove ${item.name}`}
+        onClick={onRemove}
+      >
+        <X aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 export function StudioShell({
   initialProfileUsername,
 }: {
@@ -6539,8 +6596,7 @@ export function StudioShell({
             name: entry.name,
             kind: kind || entry.studioKind || "file",
             mimeType: entry.mimeType || "",
-            signedThumbnailUrl:
-              entry.thumbnailUrl || entry.thumbnailLqipUrl || undefined,
+            ...filePickThumbFields(entry),
             path: entry.path,
             itemKind: shareItem.itemKind,
             itemId: shareItem.itemId,
@@ -6565,8 +6621,7 @@ export function StudioShell({
           name: entry.name,
           kind,
           mimeType: entry.mimeType || "",
-          signedThumbnailUrl:
-            entry.thumbnailUrl || entry.thumbnailLqipUrl || undefined,
+          ...filePickThumbFields(entry),
           path: entry.path,
           itemKind: "asset",
           itemId: String(entry.studioId),
@@ -26489,44 +26544,17 @@ export function StudioShell({
                 aria-label={`${assetPickSelected.length} selected`}
               >
                 <div className="studio-asset-pick-selected-scroller">
-                  {assetPickSelected.map((item) => {
-                    const thumb = item.signedThumbnailUrl;
-                    return (
-                      <div
-                        key={item._id}
-                        className="studio-asset-pick-selected-thumb"
-                        title={item.name}
-                      >
-                        {thumb && item.kind !== "audio" ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={thumb} alt="" />
-                        ) : item.kind === "audio" ? (
-                          <StudioOrbAvatar
-                            seed={orbSeedForVoice(String(item._id), item.name)}
-                            className="studio-asset-pick-audio-orb"
-                          />
-                        ) : item.kind === "video" ? (
-                          <Video aria-hidden="true" />
-                        ) : item.kind === "folder" || item.itemKind === "folder" ? (
-                          <Folder aria-hidden="true" />
-                        ) : (
-                          <ImageIcon aria-hidden="true" />
-                        )}
-                        <button
-                          type="button"
-                          className="studio-asset-pick-selected-remove"
-                          aria-label={`Remove ${item.name}`}
-                          onClick={() =>
-                            setAssetPickSelected((prev) =>
-                              prev.filter((picked) => picked._id !== item._id),
-                            )
-                          }
-                        >
-                          <X aria-hidden="true" />
-                        </button>
-                      </div>
-                    );
-                  })}
+                  {assetPickSelected.map((item) => (
+                    <AssetPickSelectedThumb
+                      key={item._id}
+                      item={item}
+                      onRemove={() =>
+                        setAssetPickSelected((prev) =>
+                          prev.filter((picked) => picked._id !== item._id),
+                        )
+                      }
+                    />
+                  ))}
                 </div>
               </div>
             ) : null}
@@ -27572,45 +27600,17 @@ export function StudioShell({
                     aria-label={`${assetPickSelected.length} selected`}
                   >
                     <div className="studio-asset-pick-selected-scroller">
-                      {assetPickSelected.map((item) => {
-                        const thumb = item.signedThumbnailUrl;
-                        return (
-                          <div
-                            key={item._id}
-                            className="studio-asset-pick-selected-thumb"
-                            title={item.name}
-                          >
-                            {thumb && item.kind !== "audio" ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={thumb} alt="" />
-                            ) : item.kind === "audio" ? (
-                              <StudioOrbAvatar
-                                seed={orbSeedForVoice(String(item._id), item.name)}
-                                className="studio-asset-pick-audio-orb"
-                              />
-                            ) : item.kind === "video" ? (
-                              <Video aria-hidden="true" />
-                            ) : item.kind === "folder" ||
-                              item.itemKind === "folder" ? (
-                              <Folder aria-hidden="true" />
-                            ) : (
-                              <ImageIcon aria-hidden="true" />
-                            )}
-                            <button
-                              type="button"
-                              className="studio-asset-pick-selected-remove"
-                              aria-label={`Remove ${item.name}`}
-                              onClick={() =>
-                                setAssetPickSelected((prev) =>
-                                  prev.filter((picked) => picked._id !== item._id),
-                                )
-                              }
-                            >
-                              <X aria-hidden="true" />
-                            </button>
-                          </div>
-                        );
-                      })}
+                      {assetPickSelected.map((item) => (
+                        <AssetPickSelectedThumb
+                          key={item._id}
+                          item={item}
+                          onRemove={() =>
+                            setAssetPickSelected((prev) =>
+                              prev.filter((picked) => picked._id !== item._id),
+                            )
+                          }
+                        />
+                      ))}
                     </div>
                   </div>
                 ) : null}
