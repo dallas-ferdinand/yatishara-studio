@@ -283,11 +283,11 @@ summary {
 }
 
 [data-sonner-toaster][data-y-position="bottom"] {
-  bottom: 0 !important;
+  bottom: var(--offset-bottom, var(--mobile-offset-bottom, 0px)) !important;
 }
 
 [data-sonner-toaster][data-y-position="top"] {
-  top: 0 !important;
+  top: var(--offset-top, var(--mobile-offset-top, 0px)) !important;
 }
 
 [data-sonner-toaster] [data-sonner-toast] {
@@ -404,7 +404,11 @@ summary {
 
 @media (max-width: 899px) {
   [data-sonner-toaster] {
-    --studio-toast-top: 48px;
+    --studio-toast-top: var(--studio-mobile-top-chrome, 48px);
+  }
+
+  [data-sonner-toaster][data-y-position="top"] {
+    top: var(--mobile-offset-top, var(--offset-top, 0px)) !important;
   }
 
   [data-sonner-toaster][data-x-position="center"] {
