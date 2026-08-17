@@ -11,6 +11,7 @@ import {
   Heart,
   Image as ImageIcon,
   Loader2,
+  Clock,
   Lock,
   MessageCircle,
   Pencil,
@@ -531,6 +532,7 @@ function ProfileCommentBubble({
                   }}
                   disabled={!onSeekVideo}
                 >
+                  <Clock aria-hidden="true" strokeWidth={2} />
                   {formatVideoTimecode(comment.videoTimeSec)}
                 </button>
               ) : null}
