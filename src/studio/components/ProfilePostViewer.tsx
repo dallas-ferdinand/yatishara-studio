@@ -15,7 +15,6 @@ import {
   Play,
   Plus,
   Send,
-  UserMinus,
   UserPlus,
 } from "lucide-react";
 import {
@@ -928,7 +927,7 @@ function FeedCaption({
               }}
             >
               {isFollowing ? (
-                <UserMinus className="profile-post-follow-icon" aria-hidden="true" />
+                <Check className="profile-post-follow-icon" aria-hidden="true" strokeWidth={2.5} />
               ) : (
                 <UserPlus className="profile-post-follow-icon" aria-hidden="true" />
               )}
