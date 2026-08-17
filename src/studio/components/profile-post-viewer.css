@@ -895,7 +895,8 @@
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
-  padding: 0;
+  padding: 2px 0;
+  overflow: visible;
   text-shadow:
     0 1px 1px rgba(0, 0, 0, 0.65),
     0 2px 8px rgba(0, 0, 0, 0.45);
@@ -905,6 +906,7 @@
 .profile-post-rail-spin {
   width: 22px;
   height: 22px;
+  overflow: visible;
   filter:
     drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
     drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
@@ -1037,6 +1039,247 @@
 @media (min-width: 900px) {
   .profile-post-rail {
     right: 14px;
+  }
+}
+
+@media (max-width: 899px) {
+  .profile-post-viewer-layout.is-mobile-watch {
+    flex-direction: column;
+  }
+
+  .profile-post-viewer.is-mobile-watch {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    touch-action: auto;
+    overflow: hidden;
+  }
+
+  .profile-post-slide.is-watch {
+    display: flex;
+    flex-direction: column;
+    place-items: stretch;
+    background: var(--mos-page, #f5f5f7);
+    overflow: hidden;
+  }
+
+  .profile-post-slide.is-watch::after {
+    content: none;
+  }
+
+  .profile-post-watch-player {
+    flex: 0 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px 6px;
+    overflow: visible;
+    background: var(--mos-page, #f5f5f7);
+    z-index: 2;
+    touch-action: none;
+  }
+
+  .profile-post-watch-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #0b0d12;
+    filter: drop-shadow(0 1px 2px rgba(15, 18, 24, 0.18));
+  }
+
+  .profile-post-slide.is-watch .profile-post-slide-media {
+    position: absolute;
+    inset: 0;
+  }
+
+  .profile-post-slide.is-watch .profile-post-caption.is-page {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-width: none;
+    width: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    padding: 28px 16px 16px;
+    gap: 6px;
+    color: var(--color-cursor-text-bright, var(--mos-text));
+    text-shadow: none;
+    pointer-events: auto;
+  }
+
+  .profile-post-caption.is-page .profile-post-caption-user,
+  .profile-post-caption.is-page .profile-post-caption-text,
+  .profile-post-caption.is-page .profile-post-caption-tag,
+  .profile-post-caption.is-page .profile-post-caption-mention,
+  .profile-post-caption.is-page .profile-post-caption-mention.is-plain {
+    color: inherit;
+    text-shadow: none;
+  }
+
+  .profile-post-caption.is-page .profile-post-caption-user {
+    font-size: 18px;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+    pointer-events: auto;
+  }
+
+  .profile-post-caption.is-page .profile-post-caption-text {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .profile-post-watch-frame .profile-post-like-burst {
+    border-radius: 12px;
+  }
+
+  .profile-post-book-bar {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    z-index: 40;
+    height: var(--studio-mobile-nav-height, 38px);
+    min-height: var(--studio-mobile-nav-height, 38px);
+    max-height: var(--studio-mobile-nav-height, 38px);
+    padding: 0 10px;
+    border: 0;
+    border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+    background: var(--mos-page, var(--mos-panel, var(--color-cursor-bg)));
+    box-sizing: border-box;
+    overflow: visible;
+  }
+
+  .profile-post-book-author {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .profile-post-book-avatar-wrap {
+    position: relative;
+    flex: 0 0 auto;
+    display: grid;
+    justify-items: center;
+    padding-bottom: 6px;
+  }
+
+  .profile-post-book-avatar.studio-profile-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .profile-post-book-avatar-wrap .profile-post-rail-follow {
+    width: 14px;
+    height: 14px;
+  }
+
+  .profile-post-book-avatar-wrap .profile-post-rail-follow svg {
+    width: 9px;
+    height: 9px;
+  }
+
+  .profile-post-book-author-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .profile-post-book-author-copy strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 750;
+    line-height: 1.15;
+    color: var(--color-cursor-text-bright, var(--mos-text));
+  }
+
+  .profile-post-book-author-copy span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-cursor-muted, var(--mos-muted));
+  }
+
+  .profile-post-book-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+
+  .profile-post-book-btn {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+    background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+    color: var(--color-cursor-muted, var(--mos-muted));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    cursor: pointer;
+    overflow: visible;
+  }
+
+  .profile-post-book-btn svg {
+    width: 14px;
+    height: 14px;
+    overflow: visible;
+    fill: none;
+    stroke-width: 2;
+  }
+
+  .profile-post-book-btn.is-with-count {
+    width: auto;
+    padding: 0 10px;
+  }
+
+  .profile-post-book-btn.is-with-count span {
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1;
+  }
+
+  .profile-post-book-btn.is-liked {
+    color: #d97706;
+    border-color: color-mix(in srgb, #d97706 42%, var(--color-cursor-border-soft));
+  }
+
+  .profile-post-book-btn.is-liked svg {
+    fill: currentColor;
+    color: #d97706;
+  }
+
+  .profile-post-book-btn.is-saved {
+    color: #ca8a04;
+  }
+
+  .profile-post-book-btn.is-saved svg {
+    fill: currentColor;
+    color: #ca8a04;
   }
 }
 

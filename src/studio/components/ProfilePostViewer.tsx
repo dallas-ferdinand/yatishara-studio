@@ -762,6 +762,7 @@ function FeedCaption({
   authorAvatarUrl,
   authorDisplayName,
   active = false,
+  placement = "overlay",
   onOpenDescription,
   feedShare,
 }: {
@@ -778,6 +779,7 @@ function FeedCaption({
   authorDisplayName?: string;
   /** Sample backdrop when this slide is the interactive current post. */
   active?: boolean;
+  placement?: "overlay" | "page";
   onOpenProfile?: (username: string) => void;
   onOpenDescription?: () => void;
   /** Drag this caption into a Messages chat row to share the post. */
@@ -790,14 +792,18 @@ function FeedCaption({
   };
 }) {
   const trimmed = caption?.trim();
-  const { overlayRef, backdrop } = useSlideOverlayBackdrop(active);
+  const { overlayRef, backdrop } = useSlideOverlayBackdrop(
+    placement === "overlay" && active,
+  );
 
   if (!trimmed && !(hashtags?.length) && !username) return null;
 
   return (
     <div
       ref={overlayRef}
-      className={`profile-post-caption is-on-${backdrop}${onOpenDescription ? " is-tappable" : ""}${feedShare ? " is-draggable" : ""}`}
+      className={`profile-post-caption${
+        placement === "page" ? " is-page" : ` is-on-${backdrop}`
+      }${onOpenDescription ? " is-tappable" : ""}${feedShare ? " is-draggable" : ""}`}
       role={onOpenDescription ? "button" : undefined}
       tabIndex={onOpenDescription ? 0 : undefined}
       title={feedShare ? "Drag into a chat to share this post" : undefined}
@@ -836,7 +842,13 @@ function FeedCaption({
           : undefined
       }
     >
-      {username ? <span className="profile-post-caption-user">{username}</span> : null}
+      {username ? (
+        <span className="profile-post-caption-user">
+          {placement === "page" && authorDisplayName
+            ? authorDisplayName
+            : username}
+        </span>
+      ) : null}
       {trimmed ? (
         <p className="profile-post-caption-text">
           <CaptionChipText
@@ -870,6 +882,7 @@ function FeedActions({
   localComments,
   localSaves,
   localShares,
+  variant = "rail",
   onLike,
   onSave,
   onShare,
@@ -889,6 +902,7 @@ function FeedActions({
   localSaves: number;
   localShares: number;
   active?: boolean;
+  variant?: "rail" | "bar";
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
@@ -897,6 +911,123 @@ function FeedActions({
   onToggleFollow: () => void;
 }) {
   const saved = Boolean(post.savedByViewer);
+  const liked = Boolean(post.likedByViewer);
+  const authorLabel = displayName || username;
+  const likeIcon = (
+    <Crown
+      aria-hidden="true"
+      fill={liked ? "currentColor" : "none"}
+      strokeWidth={liked ? 1.75 : 2}
+    />
+  );
+  const commentIcon = (
+    <Feather aria-hidden="true" fill="none" strokeWidth={2} />
+  );
+
+  if (variant === "bar") {
+    return (
+      <nav className="profile-post-book-bar" aria-label="Post actions">
+        <button
+          type="button"
+          className="profile-post-book-author"
+          onClick={() => {
+            if (username) onOpenProfile?.(username);
+          }}
+          aria-label={username ? `Open @${username}` : "Open profile"}
+        >
+          <span className="profile-post-book-avatar-wrap">
+            <StudioProfileAvatar
+              className="profile-post-book-avatar"
+              size="sm"
+              src={avatarUrl}
+              displayName={displayName}
+              firstName={firstName}
+              lastName={lastName}
+            />
+            {showFollow ? (
+              <span
+                className={`profile-post-rail-follow${isFollowing ? " is-following" : ""}`}
+                role="button"
+                tabIndex={0}
+                data-studio-sfx="follow"
+                aria-label={
+                  isFollowing ? `Unfollow @${username}` : `Follow @${username}`
+                }
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleFollow();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onToggleFollow();
+                }}
+              >
+                {isFollowing ? (
+                  <Check aria-hidden="true" strokeWidth={3} />
+                ) : (
+                  <Plus aria-hidden="true" strokeWidth={3} />
+                )}
+              </span>
+            ) : null}
+          </span>
+          <span className="profile-post-book-author-copy">
+            <strong>{authorLabel}</strong>
+            {username && authorLabel !== username ? (
+              <span>@{username}</span>
+            ) : null}
+          </span>
+        </button>
+        <div className="profile-post-book-actions">
+          <button
+            type="button"
+            className={`profile-post-book-btn is-with-count${liked ? " is-liked" : ""}`}
+            data-studio-sfx="like"
+            aria-pressed={liked}
+            aria-label={liked ? "Unlike" : "Like"}
+            onClick={onLike}
+          >
+            {likeIcon}
+            <span>{formatCount(post.likeCount)}</span>
+          </button>
+          <button
+            type="button"
+            className="profile-post-book-btn is-with-count"
+            data-studio-sfx="sheet"
+            aria-label="Comments"
+            onClick={() => {
+              playUiSound("sheet");
+              onOpenComments();
+            }}
+          >
+            {commentIcon}
+            <span>{formatCount(localComments)}</span>
+          </button>
+          <button
+            type="button"
+            className={`profile-post-book-btn${saved ? " is-saved" : ""}`}
+            data-studio-sfx="save"
+            aria-pressed={saved}
+            aria-label={saved ? "Unsave" : "Save"}
+            onClick={onSave}
+          >
+            <Bookmark aria-hidden="true" fill={saved ? "currentColor" : "none"} strokeWidth={saved ? 0 : 2} />
+          </button>
+          <button
+            type="button"
+            className="profile-post-book-btn"
+            data-studio-sfx="share"
+            aria-label="Share"
+            onClick={onShare}
+          >
+            <Forward aria-hidden="true" strokeWidth={2.35} />
+          </button>
+        </div>
+      </nav>
+    );
+  }
+
   // Overlay rail always uses white ink + shadow (TikTok/IG). Backdrop sampling
   // kept flipping to black icons on candlelit / neon posts; caption stays adaptive.
 
@@ -953,7 +1084,11 @@ function FeedActions({
         onPointerDown={(event) => event.stopPropagation()}
         aria-label={post.likedByViewer ? "Unlike" : "Like"}
       >
-        <Crown aria-hidden="true" fill="currentColor" strokeWidth={0} />
+        <Crown
+          aria-hidden="true"
+          fill={liked ? "currentColor" : "none"}
+          strokeWidth={liked ? 1.75 : 2}
+        />
         <span>{formatCount(post.likeCount)}</span>
       </button>
       <button
@@ -968,7 +1103,7 @@ function FeedActions({
         onPointerDown={(event) => event.stopPropagation()}
         aria-label="Comments"
       >
-        <Feather aria-hidden="true" fill="currentColor" strokeWidth={0} />
+        <Feather aria-hidden="true" fill="none" strokeWidth={2} />
         <span>{formatCount(localComments)}</span>
       </button>
       <button
@@ -1510,6 +1645,12 @@ export function ProfilePostViewer({
     if ((event.target as HTMLElement | null)?.closest?.("[data-video-control]")) {
       return;
     }
+    if (
+      isMobile &&
+      !(event.target as HTMLElement | null)?.closest?.(".profile-post-watch-player")
+    ) {
+      return;
+    }
     pointerRef.current = {
       id: event.pointerId,
       x: event.clientX,
@@ -1917,10 +2058,13 @@ export function ProfilePostViewer({
   })();
 
   return (
-    <div className="profile-post-viewer-layout" ref={layoutRef}>
+    <div
+      className={`profile-post-viewer-layout${isMobile ? " is-mobile-watch" : ""}`}
+      ref={layoutRef}
+    >
       <div
         ref={rootRef}
-        className="profile-post-viewer is-feed"
+        className={`profile-post-viewer is-feed${isMobile ? " is-mobile-watch" : ""}`}
         aria-label="Studio feed"
         onPointerDown={tabActive ? onPointerDown : undefined}
         onPointerMove={tabActive ? onPointerMove : undefined}
@@ -1943,16 +2087,35 @@ export function ProfilePostViewer({
             return (
               <article
                 key={key}
-                className={`profile-post-slide is-${role} is-${axis}`}
+                className={`profile-post-slide is-${role} is-${axis}${isMobile ? " is-watch" : ""}`}
                 aria-hidden={!isInteractiveSlide}
                 inert={!isInteractiveSlide}
               >
-                <div className="profile-post-slide-glass" aria-hidden="true" />
-                <FeedMedia
-                  post={post}
-                  active={tabActive && role === "current"}
-                  preload={tabActive}
-                />
+                {isMobile ? null : (
+                  <div className="profile-post-slide-glass" aria-hidden="true" />
+                )}
+                {isMobile ? (
+                  <div className="profile-post-watch-player">
+                    <div className="profile-post-watch-frame">
+                      <FeedMedia
+                        post={post}
+                        active={tabActive && role === "current"}
+                        preload={tabActive}
+                      />
+                      {role === "current" && likeBurst ? (
+                        <div className="profile-post-like-burst" aria-hidden="true">
+                          <Crown fill="currentColor" strokeWidth={0} />
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <FeedMedia
+                    post={post}
+                    active={tabActive && role === "current"}
+                    preload={tabActive}
+                  />
+                )}
                 <FeedCaption
                   username={postUsername}
                   caption={slideCaption}
@@ -1961,6 +2124,7 @@ export function ProfilePostViewer({
                   authorAvatarUrl={post.avatarUrl}
                   authorDisplayName={post.displayName}
                   active={isInteractiveSlide}
+                  placement={isMobile ? "page" : "overlay"}
                   feedShare={
                     isInteractiveSlide
                       ? {
@@ -1981,35 +2145,37 @@ export function ProfilePostViewer({
                       : undefined
                   }
                 />
-                <FeedActions
-                  post={post}
-                  username={postUsername}
-                  avatarUrl={post.avatarUrl}
-                  displayName={post.displayName}
-                  firstName={post.firstName}
-                  lastName={post.lastName}
-                  showFollow={Boolean(post.profileId) && !post.isOwner}
-                  isFollowing={Boolean(
-                    post.profileId
-                      ? (localFollows[post.profileId] ?? post.isFollowing)
-                      : post.isFollowing,
-                  )}
-                  localComments={postComments}
-                  localSaves={postSaves}
-                  localShares={postShares}
-                  active={isInteractiveSlide}
-                  onLike={() => void handleLike(post)}
-                  onSave={() => void handleSave(post)}
-                  onShare={() => void handleShare(post)}
-                  onOpenComments={() => {
-                    if (role !== "current") return;
-                    setSidePanelMode("comments");
-                    setCommentsOpen(true);
-                  }}
-                  onOpenProfile={onOpenProfile}
-                  onToggleFollow={() => void handleFollowToggle(post)}
-                />
-                {role === "current" && likeBurst ? (
+                {isMobile ? null : (
+                  <FeedActions
+                    post={post}
+                    username={postUsername}
+                    avatarUrl={post.avatarUrl}
+                    displayName={post.displayName}
+                    firstName={post.firstName}
+                    lastName={post.lastName}
+                    showFollow={Boolean(post.profileId) && !post.isOwner}
+                    isFollowing={Boolean(
+                      post.profileId
+                        ? (localFollows[post.profileId] ?? post.isFollowing)
+                        : post.isFollowing,
+                    )}
+                    localComments={postComments}
+                    localSaves={postSaves}
+                    localShares={postShares}
+                    active={isInteractiveSlide}
+                    onLike={() => void handleLike(post)}
+                    onSave={() => void handleSave(post)}
+                    onShare={() => void handleShare(post)}
+                    onOpenComments={() => {
+                      if (role !== "current") return;
+                      setSidePanelMode("comments");
+                      setCommentsOpen(true);
+                    }}
+                    onOpenProfile={onOpenProfile}
+                    onToggleFollow={() => void handleFollowToggle(post)}
+                  />
+                )}
+                {!isMobile && role === "current" && likeBurst ? (
                   <div className="profile-post-like-burst" aria-hidden="true">
                     <Crown fill="currentColor" strokeWidth={0} />
                   </div>
@@ -2068,6 +2234,41 @@ export function ProfilePostViewer({
           </>
         ) : null}
       </div>
+
+      {isMobile && tabActive ? (
+        <FeedActions
+          variant="bar"
+          post={activeSlidePost}
+          username={activeSlidePost.username || authorUsername}
+          avatarUrl={activeSlidePost.avatarUrl}
+          displayName={activeSlidePost.displayName}
+          firstName={activeSlidePost.firstName}
+          lastName={activeSlidePost.lastName}
+          showFollow={Boolean(activeSlidePost.profileId) && !activeSlidePost.isOwner}
+          isFollowing={Boolean(
+            activeSlidePost.profileId
+              ? (localFollows[activeSlidePost.profileId] ??
+                activeSlidePost.isFollowing)
+              : activeSlidePost.isFollowing,
+          )}
+          localComments={
+            localComments[activePost._id] ?? activePost.commentCount ?? 0
+          }
+          localSaves={
+            localSaves[activePost._id]?.saveCount ?? activePost.saveCount ?? 0
+          }
+          localShares={localShares[activePost._id] ?? activePost.shareCount ?? 0}
+          onLike={() => void handleLike(activeSlidePost)}
+          onSave={() => void handleSave(activeSlidePost)}
+          onShare={() => void handleShare(activeSlidePost)}
+          onOpenComments={() => {
+            setSidePanelMode("comments");
+            setCommentsOpen(true);
+          }}
+          onOpenProfile={onOpenProfile}
+          onToggleFollow={() => void handleFollowToggle(activeSlidePost)}
+        />
+      ) : null}
 
       <ProfileCommentsPanel
         postId={activePost._id}

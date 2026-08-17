@@ -867,11 +867,15 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                 />
               </div>
               <div className="profile-post-rail-btn is-liked">
-                <Crown aria-hidden="true" fill="currentColor" strokeWidth={0} />
+                <Crown
+                  aria-hidden="true"
+                  fill="currentColor"
+                  strokeWidth={1.75}
+                />
                 <span>0</span>
               </div>
               <div className="profile-post-rail-btn">
-                <Feather aria-hidden="true" fill="currentColor" strokeWidth={0} />
+                <Feather aria-hidden="true" fill="none" strokeWidth={2} />
                 <span>0</span>
               </div>
               <div className="profile-post-rail-btn">
