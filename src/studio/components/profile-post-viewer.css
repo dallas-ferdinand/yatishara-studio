@@ -1193,8 +1193,30 @@
     pointer-events: auto;
   }
 
-  .profile-post-caption.is-page .profile-post-caption-text .post-compose-inline-chip {
-    pointer-events: auto;
+  .profile-post-slide.is-watch .profile-post-caption.is-page.is-editing {
+    touch-action: auto;
+  }
+
+  .profile-post-caption.is-page .profile-description-edit {
+    gap: 8px;
+  }
+
+  .profile-post-caption.is-page .profile-description-edit-input {
+    min-height: 5.5em;
+    padding: 8px 10px;
+    border-color: var(--color-cursor-border-soft, var(--mos-border-soft));
+    background: var(--mos-plate, color-mix(in srgb, var(--color-cursor-text) 5%, transparent));
+    color: inherit;
+  }
+
+  .profile-post-caption.is-page .profile-description-edit-count {
+    color: var(--color-cursor-muted, var(--mos-muted));
+  }
+
+  .profile-post-caption.is-page .profile-description-edit-btn {
+    border-color: var(--color-cursor-border-soft, var(--mos-border-soft));
+    background: transparent;
+    color: inherit;
   }
 
   .profile-post-watch-frame .profile-post-like-burst {

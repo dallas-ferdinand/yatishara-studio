@@ -1230,8 +1230,7 @@ function CommentsBody({
   }
 
   const inThread = parentId !== null;
-  const showHeader =
-    showRootHeader || inThread || (Boolean(postAuthor) && variant !== "sheet");
+  const showHeader = showRootHeader || inThread || Boolean(postAuthor);
   const parent = frame.parentPreview;
   const parentName = parent ? commentLabel(parent) : "";
   const parentInitials = parent
@@ -1437,7 +1436,8 @@ function CommentsBody({
           )}
           {!inThread && postActions ? (
             <div className="profile-comments-post-actions">
-              {postAuthor?.isOwner ? (
+              {variant !== "sheet" ? (
+                postAuthor?.isOwner ? (
                 <span
                   className="profile-comments-post-action is-static"
                   aria-label={`${formatCount(postActions.likeCount)} boosts`}
@@ -1467,7 +1467,8 @@ function CommentsBody({
                       : formatCount(postActions.likeCount)}
                   </span>
                 </button>
-              )}
+              )
+              ) : null}
               <button
                 type="button"
                 className={`profile-comments-post-action${postActions.saved ? " is-saved" : ""}`}
@@ -2346,9 +2347,9 @@ export function ProfileCommentsPanel({
       variant={isMobile ? "sheet" : "dock"}
       open={open}
       postAuthor={useSidebarChrome ? undefined : postAuthor}
-      postActions={!isMobile && postId ? postActions : undefined}
+      postActions={postId ? postActions : undefined}
       onEditDescription={
-        postId && postAuthor?.isOwner && description
+        !isMobile && postId && postAuthor?.isOwner && description
           ? openDescriptionEditor
           : undefined
       }

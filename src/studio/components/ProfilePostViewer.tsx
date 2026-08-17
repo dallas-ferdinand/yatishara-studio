@@ -12,6 +12,7 @@ import {
   CircleCheck,
   Crown,
   Feather,
+  Loader2,
   Pause,
   Pencil,
   Play,
@@ -60,6 +61,7 @@ import "./profile-post-viewer.css";
 import "./post-compose-tab.css";
 
 const BOOST_COLORS = ["#f5c400", "#fb7185", "#38bdf8", "#a78bfa", "#34d399", "#fb923c"];
+const MAX_POST_CAPTION = 2200;
 
 function burstBoostConfetti(origin: HTMLElement) {
   const rect = origin.getBoundingClientRect();
@@ -811,6 +813,7 @@ function FeedMedia({
 }
 
 function FeedCaption({
+  postId,
   username,
   caption,
   hashtags,
@@ -824,21 +827,15 @@ function FeedCaption({
   showFollow = false,
   isFollowing = false,
   showEdit = false,
-  isOwner = false,
-  liked = false,
-  likeCount = 0,
-  commentCount = 0,
-  boostUndoLeft = 0,
   active = false,
   placement = "overlay",
   onOpenProfile,
   onOpenDescription,
   onToggleFollow,
-  onEdit,
-  onBoost,
-  onOpenComments,
+  onCaptionSaved,
   feedShare,
 }: {
+  postId?: Id<"profilePosts">;
   username?: string;
   caption?: string;
   hashtags?: Array<{ tag: string; displayTag: string }>;
@@ -857,19 +854,12 @@ function FeedCaption({
   showFollow?: boolean;
   isFollowing?: boolean;
   showEdit?: boolean;
-  isOwner?: boolean;
-  liked?: boolean;
-  likeCount?: number;
-  commentCount?: number;
-  boostUndoLeft?: number;
   /** Interactive current post — kept for callers. */
   active?: boolean;
   placement?: "overlay" | "page";
   onOpenProfile?: (username: string) => void;
   onToggleFollow?: () => void;
-  onEdit?: () => void;
-  onBoost?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  onOpenComments?: () => void;
+  onCaptionSaved?: (caption: string | undefined, editedAt: number) => void;
   onOpenDescription?: () => void;
   /** Drag this caption into a Messages chat row to share the post. */
   feedShare?: {
@@ -880,19 +870,53 @@ function FeedCaption({
     thumbnailUrl?: string;
   };
 }) {
+  const updateCaption = useMutation(api.profiles.updatePostCaption);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(caption ?? "");
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
   const trimmed = caption?.trim();
 
-  if (!trimmed && !(hashtags?.length) && !username) return null;
+  useEffect(() => {
+    if (!editing) setDraft(caption ?? "");
+  }, [caption, editing]);
+
+  useEffect(() => {
+    if (!active) {
+      setEditing(false);
+      setEditError("");
+    }
+  }, [active]);
+
+  async function saveEdit() {
+    if (!postId || saving) return;
+    setSaving(true);
+    setEditError("");
+    try {
+      const result = await updateCaption({
+        postId,
+        caption: draft.slice(0, MAX_POST_CAPTION),
+      });
+      setEditing(false);
+      onCaptionSaved?.(result.caption, result.editedAt);
+    } catch (error) {
+      setEditError(friendlyConvexError(error, "Could not save description."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!trimmed && !(hashtags?.length) && !username && !editing) return null;
 
   return (
     <div
       className={`profile-post-caption${
         placement === "page" ? " is-page" : ""
-      }${onOpenDescription ? " is-tappable" : ""}${feedShare ? " is-draggable" : ""}`}
+      }${editing ? " is-editing" : ""}${onOpenDescription ? " is-tappable" : ""}${feedShare && !editing ? " is-draggable" : ""}`}
       role={onOpenDescription && placement !== "page" ? "button" : undefined}
       tabIndex={onOpenDescription && placement !== "page" ? 0 : undefined}
-      title={feedShare ? "Drag into a chat to share this post" : undefined}
-      draggable={Boolean(feedShare)}
+      title={feedShare && !editing ? "Drag into a chat to share this post" : undefined}
+      draggable={Boolean(feedShare) && !editing}
       onDragStart={
         feedShare
           ? (event) => {
@@ -979,81 +1003,20 @@ function FeedCaption({
               )}
               <span>{isFollowing ? "Unfollow" : "Follow"}</span>
             </button>
-          ) : showEdit ? (
+          ) : showEdit && !editing ? (
             <button
               type="button"
               className="profile-post-edit-btn"
               aria-label="Edit description"
               onClick={(event) => {
                 event.stopPropagation();
-                onEdit?.();
+                setDraft(caption ?? "");
+                setEditError("");
+                setEditing(true);
               }}
             >
               <Pencil aria-hidden="true" strokeWidth={2.25} />
             </button>
-          ) : null}
-          {placement === "page" && onOpenComments ? (
-            <>
-              {isOwner ? (
-                <span
-                  className={`profile-post-book-btn is-labeled${liked ? " is-liked" : ""}`}
-                  aria-label={`${formatCount(likeCount)} boosts`}
-                >
-                  <Crown
-                    aria-hidden="true"
-                    fill={liked ? "currentColor" : "none"}
-                    strokeWidth={liked ? 1.75 : 2}
-                  />
-                  <span className="profile-post-book-label">Boost</span>
-                  <span className="profile-post-book-count">{formatCount(likeCount)}</span>
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className={`profile-post-book-btn is-labeled${liked || boostUndoLeft > 0 ? " is-liked" : ""}`}
-                  data-studio-sfx="like"
-                  aria-pressed={liked || boostUndoLeft > 0}
-                  aria-label={
-                    boostUndoLeft > 0
-                      ? `Undo boost, ${boostUndoLeft} seconds left`
-                      : liked
-                        ? "Boosted"
-                        : "Boost"
-                  }
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onBoost?.(event);
-                  }}
-                >
-                  <Crown
-                    aria-hidden="true"
-                    fill={liked || boostUndoLeft > 0 ? "currentColor" : "none"}
-                    strokeWidth={liked || boostUndoLeft > 0 ? 1.75 : 2}
-                  />
-                  <span className="profile-post-book-label">
-                    {boostUndoLeft > 0 ? "Undo" : "Boost"}
-                  </span>
-                  <span className="profile-post-book-count">
-                    {boostUndoLeft > 0 ? boostUndoLeft : formatCount(likeCount)}
-                  </span>
-                </button>
-              )}
-              <button
-                type="button"
-                className="profile-post-book-btn is-labeled"
-                data-studio-sfx="sheet"
-                aria-label="Contribute"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  playUiSound("sheet");
-                  onOpenComments();
-                }}
-              >
-                <Feather aria-hidden="true" fill="none" strokeWidth={2} />
-                <span className="profile-post-book-label">Contribute</span>
-                <span className="profile-post-book-count">{formatCount(commentCount)}</span>
-              </button>
-            </>
           ) : null}
           </div>
         </div>
@@ -1062,7 +1025,57 @@ function FeedCaption({
           {username}
         </span>
       ) : null}
-      {trimmed ? (
+      {editing ? (
+        <div
+          className="profile-description-edit"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <textarea
+            className="profile-description-edit-input"
+            value={draft}
+            maxLength={MAX_POST_CAPTION}
+            rows={5}
+            placeholder="Write a description…"
+            disabled={saving}
+            autoFocus
+            onChange={(event) => setDraft(event.target.value.slice(0, MAX_POST_CAPTION))}
+          />
+          <div className="profile-description-edit-bar">
+            <span className="profile-description-edit-count">
+              {draft.length}/{MAX_POST_CAPTION}
+            </span>
+            <div className="profile-description-edit-actions">
+              <button
+                type="button"
+                className="profile-description-edit-btn"
+                disabled={saving}
+                onClick={() => {
+                  setEditing(false);
+                  setEditError("");
+                  setDraft(caption ?? "");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="profile-description-edit-btn is-primary"
+                disabled={saving}
+                onClick={() => void saveEdit()}
+              >
+                {saving ? (
+                  <Loader2 className="profile-post-rail-spin" aria-hidden="true" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                Save
+              </button>
+            </div>
+          </div>
+          {editError ? <p className="profile-description-edit-error">{editError}</p> : null}
+        </div>
+      ) : trimmed ? (
         <p className="profile-post-caption-text">
           <CaptionChipText
             caption={trimmed}
@@ -1143,6 +1156,51 @@ function FeedActions({
     return (
       <nav className="profile-post-book-bar" aria-label="Post actions">
         <div className="profile-post-book-actions">
+          {post.isOwner ? (
+            <span
+              className={`profile-post-book-btn is-labeled${liked ? " is-liked" : ""}`}
+              aria-label={`${formatCount(post.likeCount)} boosts`}
+            >
+              {likeIcon}
+              <span className="profile-post-book-label">Boost</span>
+              <span className="profile-post-book-count">{formatCount(post.likeCount)}</span>
+            </span>
+          ) : (
+          <button
+            type="button"
+            className={`profile-post-book-btn is-labeled${liked || undoing ? " is-liked" : ""}`}
+            data-studio-sfx="like"
+            aria-pressed={liked || undoing}
+            aria-label={
+              undoing
+                ? `Undo boost, ${boostUndoLeft} seconds left`
+                : liked
+                  ? "Boosted"
+                  : "Boost"
+            }
+            onClick={onBoost}
+          >
+            {likeIcon}
+            <span className="profile-post-book-label">{undoing ? "Undo" : "Boost"}</span>
+            <span className="profile-post-book-count">
+              {undoing ? boostUndoLeft : formatCount(post.likeCount)}
+            </span>
+          </button>
+          )}
+          <button
+            type="button"
+            className="profile-post-book-btn is-labeled"
+            data-studio-sfx="sheet"
+            aria-label="Contribute"
+            onClick={() => {
+              playUiSound("sheet");
+              onOpenComments();
+            }}
+          >
+            {commentIcon}
+            <span className="profile-post-book-label">Contribute</span>
+            <span className="profile-post-book-count">{formatCount(localComments)}</span>
+          </button>
           <button
             type="button"
             className={`profile-post-book-btn is-end${saved ? " is-saved" : ""}`}
@@ -1347,7 +1405,6 @@ export function ProfilePostViewer({
   const [activePostId, setActivePostId] = useState<Id<"profilePosts"> | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [sidePanelMode, setSidePanelMode] = useState<CommentsPanelMode>("comments");
-  const [startCaptionEdit, setStartCaptionEdit] = useState(false);
   const [localLikes, setLocalLikes] = useState<
     Record<string, { liked: boolean; likeCount: number }>
   >({});
@@ -1554,7 +1611,6 @@ export function ProfilePostViewer({
 
   useEffect(() => {
     setSidePanelMode("comments");
-    setStartCaptionEdit(false);
     if (isMobile) setCommentsOpen(false);
   }, [activePost?._id, isMobile]);
 
@@ -2286,6 +2342,7 @@ export function ProfilePostViewer({
                     </div>
                   </div>
                 <FeedCaption
+                  postId={post._id}
                   username={postUsername}
                   caption={slideCaption}
                   hashtags={post.hashtags}
@@ -2303,39 +2360,15 @@ export function ProfilePostViewer({
                       : post.isFollowing,
                   )}
                   showEdit={isMobile && Boolean(post.isOwner)}
-                  isOwner={Boolean(post.isOwner)}
-                  liked={Boolean(
-                    localLikes[post._id]?.liked ?? post.likedByViewer,
-                  )}
-                  likeCount={
-                    localLikes[post._id]?.likeCount ?? post.likeCount ?? 0
-                  }
-                  commentCount={
-                    localComments[post._id] ?? post.commentCount ?? 0
-                  }
-                  boostUndoLeft={
-                    pendingUndo &&
-                    pendingUndo.postId === post._id &&
-                    nowTick < pendingUndo.undoUntil
-                      ? Math.max(1, Math.ceil((pendingUndo.undoUntil - nowTick) / 1000))
-                      : 0
-                  }
                   active={isInteractiveSlide}
                   placement="page"
                   onOpenProfile={onOpenProfile}
                   onToggleFollow={() => void handleFollowToggle(post)}
-                  onEdit={() => {
-                    setStartCaptionEdit(true);
-                    setSidePanelMode("description");
-                    setCommentsOpen(true);
-                  }}
-                  onBoost={(event) =>
-                    void handleBoostClick(post, event.currentTarget)
-                  }
-                  onOpenComments={() => {
-                    setStartCaptionEdit(false);
-                    setSidePanelMode("comments");
-                    setCommentsOpen(true);
+                  onCaptionSaved={(nextCaption, nextEditedAt) => {
+                    setLocalCaptions((prev) => ({
+                      ...prev,
+                      [post._id]: { caption: nextCaption, editedAt: nextEditedAt },
+                    }));
                   }}
                   feedShare={
                     isInteractiveSlide
@@ -2440,7 +2473,6 @@ export function ProfilePostViewer({
           onSave={() => void handleSave(activeSlidePost)}
           onShare={() => void handleShare(activeSlidePost)}
           onOpenComments={() => {
-            setStartCaptionEdit(false);
             setSidePanelMode("comments");
             setCommentsOpen(true);
           }}
@@ -2456,12 +2488,9 @@ export function ProfilePostViewer({
         onClose={() => {
           setCommentsOpen(false);
           setSidePanelMode("comments");
-          setStartCaptionEdit(false);
         }}
         mode={sidePanelMode}
         onModeChange={setSidePanelMode}
-        startEditing={startCaptionEdit}
-        onStartEditingConsumed={() => setStartCaptionEdit(false)}
         description={{
           caption: localCaptions[activePost._id]
             ? localCaptions[activePost._id]!.caption
