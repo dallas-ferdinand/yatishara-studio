@@ -1901,13 +1901,14 @@ export default defineSchema({
     .index("by_user_and_comment", ["userId", "commentId"])
     .index("by_comment", ["commentId"]),
 
-  /** One emoji reaction per user per intro or lesson video. */
+  /** Timed emoji bursts on an intro or lesson video (many per user). */
   academyVideoReactions: defineTable({
     courseId: v.id("academyCourses"),
     targetKey: v.string(),
     userId: v.id("users"),
     emoji: v.string(),
     createdAt: v.number(),
+    videoTimeSec: v.optional(v.number()),
   })
     .index("by_target_and_user", ["targetKey", "userId"])
     .index("by_target", ["targetKey"]),

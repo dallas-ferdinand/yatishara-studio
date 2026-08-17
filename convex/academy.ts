@@ -2269,6 +2269,56 @@ function videoReactionTargetKey(
   return lessonId ? `lesson:${lessonId}` : `intro:${courseId}`;
 }
 
+const MAX_VIDEO_REACTIONS_PER_USER = 80;
+const MAX_VIDEO_REACTIONS_TIMED = 400;
+
+const videoReactionTimedValidator = v.object({
+  _id: v.id("academyVideoReactions"),
+  emoji: v.string(),
+  videoTimeSec: v.number(),
+});
+
+function videoReactionMine(
+  rows: Array<{ userId: Id<"users">; emoji: string; createdAt: number }>,
+  userId: Id<"users">,
+): string | null {
+  let latest: { emoji: string; createdAt: number } | null = null;
+  for (const row of rows) {
+    if (row.userId !== userId) continue;
+    if (!latest || row.createdAt > latest.createdAt) {
+      latest = { emoji: row.emoji, createdAt: row.createdAt };
+    }
+  }
+  return latest?.emoji ?? null;
+}
+
+function videoReactionTimed(
+  rows: Array<{
+    _id: Id<"academyVideoReactions">;
+    emoji: string;
+    videoTimeSec?: number;
+    createdAt: number;
+  }>,
+) {
+  return rows
+    .filter(
+      (row) =>
+        typeof row.videoTimeSec === "number" &&
+        Number.isFinite(row.videoTimeSec) &&
+        row.videoTimeSec >= 0,
+    )
+    .sort(
+      (a, b) =>
+        a.videoTimeSec! - b.videoTimeSec! || a.createdAt - b.createdAt,
+    )
+    .slice(0, MAX_VIDEO_REACTIONS_TIMED)
+    .map((row) => ({
+      _id: row._id,
+      emoji: row.emoji,
+      videoTimeSec: row.videoTimeSec!,
+    }));
+}
+
 export const listVideoReactions = authedQuery({
   args: {
     courseId: v.id("academyCourses"),
@@ -2277,6 +2327,7 @@ export const listVideoReactions = authedQuery({
   returns: v.object({
     count: v.number(),
     mine: v.union(v.string(), v.null()),
+    timed: v.array(videoReactionTimedValidator),
   }),
   handler: async (ctx, args) => {
     await requireCourseAccessForComments(ctx, args.courseId, ctx.user);
@@ -2285,8 +2336,11 @@ export const listVideoReactions = authedQuery({
       .query("academyVideoReactions")
       .withIndex("by_target", (q) => q.eq("targetKey", targetKey))
       .collect();
-    const mine = rows.find((row) => row.userId === ctx.user._id)?.emoji ?? null;
-    return { count: rows.length, mine };
+    return {
+      count: rows.length,
+      mine: videoReactionMine(rows, ctx.user._id),
+      timed: videoReactionTimed(rows),
+    };
   },
 });
 
@@ -2294,43 +2348,57 @@ export const setVideoReaction = authedMutation({
   args: {
     courseId: v.id("academyCourses"),
     lessonId: v.optional(v.id("academyLessons")),
-    emoji: v.union(v.string(), v.null()),
+    emoji: v.string(),
+    videoTimeSec: v.optional(v.number()),
   },
   returns: v.object({
     count: v.number(),
     mine: v.union(v.string(), v.null()),
+    addedId: v.id("academyVideoReactions"),
+    timed: v.array(videoReactionTimedValidator),
   }),
   handler: async (ctx, args) => {
     await requireCourseAccessForComments(ctx, args.courseId, ctx.user);
     const targetKey = videoReactionTargetKey(args.courseId, args.lessonId);
-    const existing = await ctx.db
+    const nextEmoji = normalizeReactionEmoji(args.emoji);
+    if (!nextEmoji) {
+      throw new Error("That reaction is not available");
+    }
+    const mineRows = await ctx.db
       .query("academyVideoReactions")
       .withIndex("by_target_and_user", (q) =>
         q.eq("targetKey", targetKey).eq("userId", ctx.user._id),
       )
-      .unique();
-    const nextEmoji =
-      args.emoji == null
-        ? undefined
-        : normalizeReactionEmoji(args.emoji);
-    if (existing && (nextEmoji == null || existing.emoji === nextEmoji)) {
-      await ctx.db.delete(existing._id);
-    } else if (existing && nextEmoji) {
-      await ctx.db.patch(existing._id, { emoji: nextEmoji });
-    } else if (nextEmoji) {
-      await ctx.db.insert("academyVideoReactions", {
-        courseId: args.courseId,
-        targetKey,
-        userId: ctx.user._id,
-        emoji: nextEmoji,
-        createdAt: Date.now(),
-      });
+      .collect();
+    mineRows.sort((a, b) => a.createdAt - b.createdAt);
+    while (mineRows.length >= MAX_VIDEO_REACTIONS_PER_USER) {
+      const oldest = mineRows.shift();
+      if (!oldest) break;
+      await ctx.db.delete(oldest._id);
     }
+    const videoTimeSec =
+      typeof args.videoTimeSec === "number" &&
+      Number.isFinite(args.videoTimeSec) &&
+      args.videoTimeSec >= 0
+        ? Math.min(Math.floor(args.videoTimeSec), 24 * 60 * 60)
+        : undefined;
+    const addedId = await ctx.db.insert("academyVideoReactions", {
+      courseId: args.courseId,
+      targetKey,
+      userId: ctx.user._id,
+      emoji: nextEmoji,
+      createdAt: Date.now(),
+      ...(videoTimeSec != null ? { videoTimeSec } : {}),
+    });
     const rows = await ctx.db
       .query("academyVideoReactions")
       .withIndex("by_target", (q) => q.eq("targetKey", targetKey))
       .collect();
-    const mine = rows.find((row) => row.userId === ctx.user._id)?.emoji ?? null;
-    return { count: rows.length, mine };
+    return {
+      count: rows.length,
+      mine: videoReactionMine(rows, ctx.user._id),
+      addedId,
+      timed: videoReactionTimed(rows),
+    };
   },
 });

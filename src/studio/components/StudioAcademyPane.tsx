@@ -23,6 +23,8 @@ import {
   useState,
   Fragment,
   type AnimationEvent,
+  type CSSProperties,
+  type ReactNode,
 } from "react";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
@@ -222,6 +224,54 @@ type DiscussionBarFace =
 function discussionBarFaceKey(face: DiscussionBarFace): string {
   if (face.kind === "comment") return `c:${face.id}`;
   return face.kind;
+}
+
+type ReactionBalloon = {
+  key: string;
+  emoji: string;
+  x: number;
+  drift: number;
+};
+
+function spawnReactionBalloon(emoji: string): ReactionBalloon {
+  return {
+    key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    emoji,
+    x: 14 + Math.random() * 72,
+    drift: (Math.random() - 0.5) * 52,
+  };
+}
+
+function ReactionBalloonLayer({
+  balloons,
+  onDone,
+}: {
+  balloons: ReactionBalloon[];
+  onDone: (key: string) => void;
+}) {
+  if (!balloons.length) return null;
+  return (
+    <div className="studio-academy-reaction-balloons" aria-hidden="true">
+      {balloons.map((balloon) => (
+        <span
+          key={balloon.key}
+          className="studio-academy-reaction-balloon"
+          style={
+            {
+              "--rx": `${balloon.x}%`,
+              "--drift": `${balloon.drift}px`,
+            } as CSSProperties
+          }
+          onAnimationEnd={(event: AnimationEvent<HTMLSpanElement>) => {
+            if (event.target !== event.currentTarget) return;
+            onDone(balloon.key);
+          }}
+        >
+          <StudioEmoji emoji={balloon.emoji} />
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function DiscussionBarFaceRow({ face }: { face: DiscussionBarFace }) {
@@ -1007,6 +1057,7 @@ function AcademyWatchPane({
   onPlay,
   onTimeUpdate,
   onSeekReady,
+  balloons,
 }: {
   role: "prev" | "current" | "next";
   title: string;
@@ -1021,6 +1072,7 @@ function AcademyWatchPane({
   onPlay: () => void;
   onTimeUpdate?: (seconds: number) => void;
   onSeekReady?: (seekTo: ((seconds: number) => void) | null) => void;
+  balloons?: ReactNode;
 }) {
   const active = role === "current";
   return (
@@ -1039,6 +1091,7 @@ function AcademyWatchPane({
           onTimeUpdate={active ? onTimeUpdate : undefined}
           onSeekReady={active ? onSeekReady : undefined}
         />
+        {active ? balloons : null}
       </div>
       <div className="public-offers-main-scroll">
         <main className="public-offers-body">
@@ -1123,10 +1176,15 @@ export function StudioAcademyPane({
   const [previewExpiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60,
   );
+  const [reactionBalloons, setReactionBalloons] = useState<ReactionBalloon[]>(
+    [],
+  );
   const clientRequestIdRef = useRef<string | null>(null);
   const videoTimeSecRef = useRef(0);
   const videoTimeHeardRef = useRef(false);
   const videoTickBucketRef = useRef(-1);
+  const balloonFiredRef = useRef(new Set<string>());
+  const balloonPrevTRef = useRef(0);
   const seekVideoRef = useRef<((seconds: number) => void) | null>(null);
   const headTabsScrollRef = useRef<HTMLElement | null>(null);
   useHorizontalWheelScroll(headTabsScrollRef);
@@ -1135,6 +1193,7 @@ export function StudioAcademyPane({
   const handleVideoTimeUpdate = (seconds: number) => {
     if (videoTimeHeardRef.current && seconds + 2.5 < videoTimeSecRef.current) {
       setPreviewSeed(Math.random());
+      balloonFiredRef.current.clear();
     }
     videoTimeHeardRef.current = true;
     videoTimeSecRef.current = seconds;
@@ -1167,6 +1226,9 @@ export function StudioAcademyPane({
     setPurchaseConfirmOpen(false);
     setCommentsOpen(false);
     setReactionBarOpen(false);
+    setReactionBalloons([]);
+    balloonFiredRef.current.clear();
+    balloonPrevTRef.current = 0;
     clientRequestIdRef.current = null;
     videoTimeSecRef.current = 0;
     videoTimeHeardRef.current = false;
@@ -1191,6 +1253,9 @@ export function StudioAcademyPane({
     setVideoTick(0);
     setPreviewSeed(Math.random());
     setReactionBarOpen(false);
+    setReactionBalloons([]);
+    balloonFiredRef.current.clear();
+    balloonPrevTRef.current = 0;
     if (academy.lessonId) {
       setIntroEmbed(null);
     }
@@ -1336,6 +1401,35 @@ export function StudioAcademyPane({
   );
   const reactionCount = videoReactions?.count ?? 0;
   const myReaction = videoReactions?.mine ?? null;
+  const timedReactions = videoReactions?.timed;
+
+  const pushReactionBalloon = useCallback((emoji: string) => {
+    setReactionBalloons((prev) => [
+      ...prev.slice(-20),
+      spawnReactionBalloon(emoji),
+    ]);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile || !videoHeard) return;
+    const t = videoTick;
+    const prev = balloonPrevTRef.current;
+    balloonPrevTRef.current = t;
+    if (!timedReactions?.length) return;
+    const jumped = t > prev + 1.5 || (prev > 0 && t + 2.5 < prev);
+    if (jumped) return;
+    let spawned = 0;
+    for (const row of timedReactions) {
+      if (balloonFiredRef.current.has(row._id)) continue;
+      if (t >= row.videoTimeSec && t < row.videoTimeSec + 0.75) {
+        balloonFiredRef.current.add(row._id);
+        if (spawned < 8) {
+          pushReactionBalloon(row.emoji);
+          spawned += 1;
+        }
+      }
+    }
+  }, [isMobile, pushReactionBalloon, timedReactions, videoHeard, videoTick]);
   const discussionPreviewRows = useQuery(
     api.academy.listComments,
     isMobile && owned && detail?._id
@@ -1389,18 +1483,23 @@ export function StudioAcademyPane({
   const pickVideoReaction = useCallback(
     async (emoji: string) => {
       if (!detail?._id) return;
+      pushReactionBalloon(emoji);
       try {
-        await setVideoReaction({
+        const result = await setVideoReaction({
           courseId: detail._id,
           ...(commentsLessonId ? { lessonId: commentsLessonId } : {}),
-          emoji: myReaction === emoji ? null : emoji,
+          emoji,
+          videoTimeSec: Math.floor(
+            videoTimeHeardRef.current ? videoTimeSecRef.current : 0,
+          ),
         });
+        if (result.addedId) balloonFiredRef.current.add(result.addedId);
         setReactionBarOpen(false);
       } catch (error) {
         toast.error(friendlyConvexError(error, "Could not react"));
       }
     },
-    [commentsLessonId, detail?._id, myReaction, setVideoReaction],
+    [commentsLessonId, detail?._id, pushReactionBalloon, setVideoReaction],
   );
   const commentsSidebarTitle =
     commentsLessonId && selectedLesson
@@ -1890,6 +1989,16 @@ export function StudioAcademyPane({
             onPlay={slide.onPlay}
             onTimeUpdate={handleVideoTimeUpdate}
             onSeekReady={handleSeekReady}
+            balloons={
+              <ReactionBalloonLayer
+                balloons={reactionBalloons}
+                onDone={(key) =>
+                  setReactionBalloons((prev) =>
+                    prev.filter((row) => row.key !== key),
+                  )
+                }
+              />
+            }
           />
         ))}
       </div>
