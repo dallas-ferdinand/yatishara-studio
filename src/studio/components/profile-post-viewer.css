@@ -2103,7 +2103,11 @@ button.post-compose-inline-chip.profile-description-chip {
   font-weight: 650;
 }
 
-.profile-comment-bubble-actions .profile-comment-like svg,
+.profile-comment-bubble-actions .profile-comment-like svg {
+  width: 20px;
+  height: 20px;
+}
+
 .profile-comment-bubble-actions .profile-comment-reply svg {
   width: 16px;
   height: 16px;
