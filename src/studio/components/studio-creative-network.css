@@ -1107,10 +1107,14 @@
   height: 100%;
 }
 
-/* Academy mobile: book bar is a sibling under .studio-cn-body — don't let the
-   catalog main claim height:100% or descriptions below the video never show. */
+/* Academy mobile: book bar is a sibling under .studio-cn-body — size the catalog
+   main to remaining flex space (not height:100%) so video+description share one
+   scroll and the player does not sit stuck while copy moves. */
 .studio-academy-pane .studio-cn-body.is-catalog > .studio-cn-catalog.public-offers-main {
+  flex: 1 1 0;
+  min-height: 0;
   height: auto;
+  max-height: none;
 }
 
 /* Filters live in the main Network browse pane — left rail is Messages. */

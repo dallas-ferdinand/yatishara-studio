@@ -23451,15 +23451,34 @@ export function StudioShell({
             );
         }
         .studio-polish.is-studio-mobile .studio-academy-player-shell {
-          padding: 3px;
-          border-radius: calc(var(--cursor-radius-lg, 12px) + 2px);
+          margin: 0;
+          padding: 8px;
+          border-radius: 14px;
+          position: relative;
+          top: auto;
+          z-index: 0;
         }
         .studio-polish.is-studio-mobile .studio-academy-player {
           border-radius: 10px;
+          overflow: hidden;
+          position: relative;
+          top: auto;
+        }
+        .studio-polish.is-studio-mobile .studio-academy-player iframe,
+        .studio-polish.is-studio-mobile .studio-academy-player-video {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
         }
         .studio-polish.is-studio-mobile .studio-academy-detail {
           gap: 12px;
-          padding: 0 0 16px;
+          padding: 0 12px 24px;
+        }
+        .studio-polish.is-studio-mobile .studio-academy-pane .public-offers-body {
+          padding-left: 0;
+          padding-right: 0;
+          padding-top: 10px;
         }
         .studio-academy-player {
           position: relative;

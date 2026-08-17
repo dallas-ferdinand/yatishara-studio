@@ -68,7 +68,8 @@ export function buildStreamEmbedUrl(args: {
   const params = new URLSearchParams();
   params.set("autoplay", "false");
   params.set("preload", "true");
-  params.set("responsive", "true");
+  // Keep iframe inside our 16:9 shell — responsive=true breaks out and feels stuck on mobile.
+  params.set("responsive", "false");
   if (args.token && args.expiresUnix) {
     params.set("token", args.token);
     params.set("expires", String(args.expiresUnix));
