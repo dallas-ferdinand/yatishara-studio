@@ -1355,6 +1355,16 @@
     bottom: 8px;
   }
 
+  .is-watch-layout .profile-post-book-bar {
+    order: -1;
+    height: var(--cursor-head-h, 32px);
+    min-height: var(--cursor-head-h, 32px);
+    max-height: var(--cursor-head-h, 32px);
+    padding: 0 20px;
+    border-top: 0;
+    border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  }
+
   .profile-comments-dock {
     position: relative;
     top: auto;
