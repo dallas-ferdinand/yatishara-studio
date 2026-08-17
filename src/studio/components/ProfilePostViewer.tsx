@@ -692,9 +692,15 @@ function FeedCaption({
   mentions,
   authorAvatarUrl,
   authorDisplayName,
+  authorFirstName,
+  authorLastName,
+  showFollow = false,
+  isFollowing = false,
   active = false,
   placement = "overlay",
+  onOpenProfile,
   onOpenDescription,
+  onToggleFollow,
   feedShare,
 }: {
   username?: string;
@@ -708,10 +714,15 @@ function FeedCaption({
   }>;
   authorAvatarUrl?: string;
   authorDisplayName?: string;
+  authorFirstName?: string;
+  authorLastName?: string;
+  showFollow?: boolean;
+  isFollowing?: boolean;
   /** Interactive current post — kept for callers. */
   active?: boolean;
   placement?: "overlay" | "page";
   onOpenProfile?: (username: string) => void;
+  onToggleFollow?: () => void;
   onOpenDescription?: () => void;
   /** Drag this caption into a Messages chat row to share the post. */
   feedShare?: {
@@ -731,8 +742,8 @@ function FeedCaption({
       className={`profile-post-caption${
         placement === "page" ? " is-page" : ""
       }${onOpenDescription ? " is-tappable" : ""}${feedShare ? " is-draggable" : ""}`}
-      role={onOpenDescription ? "button" : undefined}
-      tabIndex={onOpenDescription ? 0 : undefined}
+      role={onOpenDescription && placement !== "page" ? "button" : undefined}
+      tabIndex={onOpenDescription && placement !== "page" ? 0 : undefined}
       title={feedShare ? "Drag into a chat to share this post" : undefined}
       draggable={Boolean(feedShare)}
       onDragStart={
@@ -769,11 +780,63 @@ function FeedCaption({
           : undefined
       }
     >
-      {username ? (
+      {username && placement === "page" ? (
+        <div
+          className="profile-post-caption-head"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span className="profile-post-caption-avatar-wrap">
+            <StudioProfileAvatar
+              as="button"
+              className="profile-post-caption-avatar"
+              size="md"
+              src={authorAvatarUrl}
+              displayName={authorDisplayName}
+              firstName={authorFirstName}
+              lastName={authorLastName}
+              onClick={() => onOpenProfile?.(username)}
+              aria-label={`Open @${username}`}
+            />
+            {showFollow ? (
+              <span
+                className={`profile-post-rail-follow${isFollowing ? " is-following" : ""}`}
+                role="button"
+                tabIndex={0}
+                data-studio-sfx="follow"
+                aria-label={
+                  isFollowing ? `Unfollow @${username}` : `Follow @${username}`
+                }
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleFollow?.();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onToggleFollow?.();
+                }}
+              >
+                {isFollowing ? (
+                  <Check aria-hidden="true" strokeWidth={3} />
+                ) : (
+                  <Plus aria-hidden="true" strokeWidth={3} />
+                )}
+              </span>
+            ) : null}
+          </span>
+          <button
+            type="button"
+            className="profile-post-caption-user"
+            onClick={() => onOpenProfile?.(username)}
+          >
+            {authorDisplayName || username}
+          </button>
+        </div>
+      ) : username ? (
         <span className="profile-post-caption-user">
-          {placement === "page" && authorDisplayName
-            ? authorDisplayName
-            : username}
+          {username}
         </span>
       ) : null}
       {trimmed ? (
@@ -839,7 +902,6 @@ function FeedActions({
 }) {
   const saved = Boolean(post.savedByViewer);
   const liked = Boolean(post.likedByViewer);
-  const authorLabel = displayName || username;
   const likeIcon = (
     <Crown
       aria-hidden="true"
@@ -854,86 +916,36 @@ function FeedActions({
   if (variant === "bar") {
     return (
       <nav className="profile-post-book-bar" aria-label="Post actions">
-        <button
-          type="button"
-          className="profile-post-book-author"
-          onClick={() => {
-            if (username) onOpenProfile?.(username);
-          }}
-          aria-label={username ? `Open @${username}` : "Open profile"}
-        >
-          <span className="profile-post-book-avatar-wrap">
-            <StudioProfileAvatar
-              className="profile-post-book-avatar"
-              size="sm"
-              src={avatarUrl}
-              displayName={displayName}
-              firstName={firstName}
-              lastName={lastName}
-            />
-            {showFollow ? (
-              <span
-                className={`profile-post-rail-follow${isFollowing ? " is-following" : ""}`}
-                role="button"
-                tabIndex={0}
-                data-studio-sfx="follow"
-                aria-label={
-                  isFollowing ? `Unfollow @${username}` : `Follow @${username}`
-                }
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleFollow();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onToggleFollow();
-                }}
-              >
-                {isFollowing ? (
-                  <Check aria-hidden="true" strokeWidth={3} />
-                ) : (
-                  <Plus aria-hidden="true" strokeWidth={3} />
-                )}
-              </span>
-            ) : null}
-          </span>
-          <span className="profile-post-book-author-copy">
-            <strong>{authorLabel}</strong>
-            {username && authorLabel !== username ? (
-              <span>@{username}</span>
-            ) : null}
-          </span>
-        </button>
         <div className="profile-post-book-actions">
           <button
             type="button"
-            className={`profile-post-book-btn is-with-count${liked ? " is-liked" : ""}`}
+            className={`profile-post-book-btn is-labeled${liked ? " is-liked" : ""}`}
             data-studio-sfx="like"
             aria-pressed={liked}
-            aria-label={liked ? "Unlike" : "Like"}
+            aria-label={liked ? "Remove reward" : "Reward"}
             onClick={onLike}
           >
             {likeIcon}
-            <span>{formatCount(post.likeCount)}</span>
+            <span className="profile-post-book-label">Reward</span>
+            <span className="profile-post-book-count">{formatCount(post.likeCount)}</span>
           </button>
           <button
             type="button"
-            className="profile-post-book-btn is-with-count"
+            className="profile-post-book-btn is-labeled"
             data-studio-sfx="sheet"
-            aria-label="Comments"
+            aria-label="Contribute"
             onClick={() => {
               playUiSound("sheet");
               onOpenComments();
             }}
           >
             {commentIcon}
-            <span>{formatCount(localComments)}</span>
+            <span className="profile-post-book-label">Contribute</span>
+            <span className="profile-post-book-count">{formatCount(localComments)}</span>
           </button>
           <button
             type="button"
-            className={`profile-post-book-btn${saved ? " is-saved" : ""}`}
+            className={`profile-post-book-btn is-end${saved ? " is-saved" : ""}`}
             data-studio-sfx="save"
             aria-pressed={saved}
             aria-label={saved ? "Unsave" : "Save"}
@@ -2050,8 +2062,18 @@ export function ProfilePostViewer({
                   mentions={post.mentions}
                   authorAvatarUrl={post.avatarUrl}
                   authorDisplayName={post.displayName}
+                  authorFirstName={post.firstName}
+                  authorLastName={post.lastName}
+                  showFollow={Boolean(post.profileId) && !post.isOwner}
+                  isFollowing={Boolean(
+                    post.profileId
+                      ? (localFollows[post.profileId] ?? post.isFollowing)
+                      : post.isFollowing,
+                  )}
                   active={isInteractiveSlide}
                   placement={isMobile ? "page" : "overlay"}
+                  onOpenProfile={onOpenProfile}
+                  onToggleFollow={() => void handleFollowToggle(post)}
                   feedShare={
                     isInteractiveSlide
                       ? {

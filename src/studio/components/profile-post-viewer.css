@@ -1026,11 +1026,42 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
-    padding: 28px 16px 16px;
-    gap: 6px;
+    padding: 16px 16px 16px;
+    gap: 10px;
     color: var(--color-cursor-text-bright, var(--mos-text));
     text-shadow: none;
     pointer-events: auto;
+  }
+
+  .profile-post-caption.is-page .profile-post-caption-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    pointer-events: auto;
+  }
+
+  .profile-post-caption-avatar-wrap {
+    position: relative;
+    flex: 0 0 auto;
+    display: grid;
+    justify-items: center;
+    padding-bottom: 6px;
+  }
+
+  .profile-post-caption-avatar.studio-profile-avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .profile-post-caption-avatar-wrap .profile-post-rail-follow {
+    width: 16px;
+    height: 16px;
+  }
+
+  .profile-post-caption-avatar-wrap .profile-post-rail-follow svg {
+    width: 10px;
+    height: 10px;
   }
 
   .profile-post-caption.is-page .profile-post-caption-user,
@@ -1043,10 +1074,14 @@
   }
 
   .profile-post-caption.is-page .profile-post-caption-user {
+    min-width: 0;
+    flex: 1 1 auto;
     font-size: 18px;
     font-weight: 750;
     letter-spacing: -0.02em;
     pointer-events: auto;
+    cursor: pointer;
+    text-align: left;
   }
 
   .profile-post-caption.is-page .profile-post-caption-text {
@@ -1075,76 +1110,12 @@
     overflow: visible;
   }
 
-  .profile-post-book-author {
-    min-width: 0;
-    flex: 1 1 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-    text-align: left;
-  }
-
-  .profile-post-book-avatar-wrap {
-    position: relative;
-    flex: 0 0 auto;
-    display: grid;
-    justify-items: center;
-    padding-bottom: 6px;
-  }
-
-  .profile-post-book-avatar.studio-profile-avatar {
-    width: 28px;
-    height: 28px;
-  }
-
-  .profile-post-book-avatar-wrap .profile-post-rail-follow {
-    width: 14px;
-    height: 14px;
-  }
-
-  .profile-post-book-avatar-wrap .profile-post-rail-follow svg {
-    width: 9px;
-    height: 9px;
-  }
-
-  .profile-post-book-author-copy {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  .profile-post-book-author-copy strong {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 13px;
-    font-weight: 750;
-    line-height: 1.15;
-    color: var(--color-cursor-text-bright, var(--mos-text));
-  }
-
-  .profile-post-book-author-copy span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-cursor-muted, var(--mos-muted));
-  }
-
   .profile-post-book-actions {
     display: flex;
     align-items: center;
     gap: 6px;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .profile-post-book-btn {
@@ -1165,23 +1136,37 @@
     overflow: visible;
   }
 
+  .profile-post-book-btn.is-labeled {
+    width: auto;
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .profile-post-book-btn.is-end {
+    margin-left: auto;
+  }
+
+  .profile-post-book-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--color-cursor-text-bright, var(--mos-text));
+  }
+
+  .profile-post-book-count {
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1;
+    color: var(--color-cursor-muted, var(--mos-muted));
+  }
+
   .profile-post-book-btn svg {
     width: 14px;
     height: 14px;
     overflow: visible;
     fill: none;
     stroke-width: 2;
-  }
-
-  .profile-post-book-btn.is-with-count {
-    width: auto;
-    padding: 0 10px;
-  }
-
-  .profile-post-book-btn.is-with-count span {
-    font-size: 12px;
-    font-weight: 650;
-    line-height: 1;
   }
 
   .profile-post-book-btn.is-liked {
@@ -1191,6 +1176,10 @@
 
   .profile-post-book-btn.is-liked svg {
     fill: currentColor;
+    color: #d97706;
+  }
+
+  .profile-post-book-btn.is-liked .profile-post-book-label {
     color: #d97706;
   }
 
