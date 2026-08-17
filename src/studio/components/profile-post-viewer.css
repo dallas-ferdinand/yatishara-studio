@@ -1475,6 +1475,26 @@
   display: none;
 }
 
+.profile-comments-day {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 2px;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 0 auto;
+}
+
+.profile-comments-day span {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--mos-plate, var(--mos-panel));
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: var(--desk-text-2xs, 10px);
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
 .profile-comments-list.is-empty,
 .profile-comments-list.is-loading {
   display: grid;

@@ -144,6 +144,38 @@ function formatWhen(ts: number): string {
   return formatPostWhen(ts);
 }
 
+function commentDayLabel(value: number): string {
+  const date = new Date(value);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return "Today";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
+}
+
+type CommentListItem =
+  | { type: "day"; key: string; label: string }
+  | { type: "comment"; comment: CommentRow };
+
+function buildNewestCommentItems(rows: CommentRow[]): CommentListItem[] {
+  const items: CommentListItem[] = [];
+  let lastDay = "";
+  for (const comment of [...rows].reverse()) {
+    const day = commentDayLabel(comment.createdAt);
+    if (day !== lastDay) {
+      items.push({ type: "day", key: `day-${comment._id}`, label: day });
+      lastDay = day;
+    }
+    items.push({ type: "comment", comment });
+  }
+  return items;
+}
+
 function formatPostStamp(publishedAt: number, editedAt?: number): string {
   const when = formatPostWhen(publishedAt);
   return editedAt ? `${when} · edited` : when;
@@ -746,8 +778,12 @@ function CommentsBody({
       restoreScrollRef.current = null;
       return;
     }
+    if (commentSort === "newest" && comments && comments.length > 0) {
+      node.scrollTop = node.scrollHeight;
+      return;
+    }
     node.scrollTop = 0;
-  }, [parentId]);
+  }, [parentId, commentSort, comments, searching]);
 
   function saveCurrentScroll(): number {
     return listRef.current?.scrollTop ?? 0;
@@ -1244,6 +1280,16 @@ function CommentsBody({
                       : "Be the first to say something"}
               </span>
             </div>
+          ) : commentSort === "newest" ? (
+            buildNewestCommentItems(comments).map((item) =>
+              item.type === "day" ? (
+                <div key={item.key} className="profile-comments-day" role="separator">
+                  <span>{item.label}</span>
+                </div>
+              ) : (
+                renderComment(item.comment)
+              ),
+            )
           ) : (
             comments.map((comment) => renderComment(comment))
           )}
