@@ -23428,7 +23428,7 @@ export function StudioShell({
           border: 0;
           border-radius: var(--cursor-radius-lg, 12px);
           background: transparent;
-          box-shadow: none;
+          box-shadow: 0 1px 4px rgba(15, 18, 24, 0.16);
         }
         .studio-polish.is-studio-mobile .studio-academy-player-shell {
           margin: 0;
@@ -23436,10 +23436,10 @@ export function StudioShell({
           border: 0;
           border-radius: 12px;
           background: transparent;
-          box-shadow: none;
+          box-shadow: 0 1px 4px rgba(15, 18, 24, 0.16);
           position: relative;
           z-index: 0;
-          overflow: hidden;
+          overflow: visible;
         }
         .studio-polish.is-studio-mobile .studio-academy-player {
           border: 0;
@@ -23451,9 +23451,9 @@ export function StudioShell({
         .studio-polish.is-studio-mobile .studio-academy-player iframe,
         .studio-polish.is-studio-mobile .studio-academy-player-video {
           position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
+          inset: -1px;
+          width: calc(100% + 2px);
+          height: calc(100% + 2px);
         }
         .studio-polish.is-studio-mobile .studio-academy-detail {
           gap: 12px;
@@ -23479,7 +23479,9 @@ export function StudioShell({
           max-height: none;
           border-radius: var(--cursor-radius-lg, 12px);
           overflow: hidden;
-          background: #000;
+          isolation: isolate;
+          transform: translateZ(0);
+          background: transparent;
           border: 0;
           box-shadow: none;
         }
@@ -23500,13 +23502,14 @@ export function StudioShell({
         .studio-academy-player iframe,
         .studio-academy-player-video {
           position: absolute;
-          inset: 0;
+          inset: -1px;
           display: block;
-          width: 100%;
-          height: 100%;
+          width: calc(100% + 2px);
+          height: calc(100% + 2px);
           border: 0;
+          border-radius: inherit;
           object-fit: cover;
-          background: #000;
+          background: transparent;
         }
         .studio-academy-player-empty {
           position: absolute;
