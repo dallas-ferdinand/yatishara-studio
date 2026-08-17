@@ -323,6 +323,11 @@ import {
   withStudioProjectExt,
 } from "@/studio/lib/studioProjectExt";
 import {
+  POST_FILE_EXT,
+  isPostDocument,
+  serializePostDraft,
+} from "@/studio/lib/studioPostFile";
+import {
   downloadStudioArchive,
   downloadStudioEntry as downloadStudioFile,
 } from "@/studio/lib/studioFileDownloads";
@@ -3017,7 +3022,7 @@ export function StudioShell({
     // Metadata only — full markdown stays in the Convex query + editor, not shell tabs.
     setTabEntrySnapshots((snapshots) => {
       const prev = snapshots[key];
-      const nextName = `${activeDocumentDoc.title}.md`;
+      const nextName = documentToEntry(activeDocumentDoc).name;
       if (
         prev?.bodyHydrated &&
         prev.name === nextName &&
@@ -5107,12 +5112,37 @@ export function StudioShell({
     if (isMobile) setMobileSection("composer");
   }
 
-  function openCreatePost() {
+  function openCreatePost(seedAssetId?: string) {
     setMobileAppMenuOpen(false);
     setSettingsOpen(false);
     setHistoryOpen(false);
-    openTab("post:compose");
     if (isMobile) setMobileSection("composer");
+    void (async () => {
+      try {
+        const defaults = await ensureDefaults({});
+        const browseId = activeFolder?._id;
+        const folderId =
+          browseId &&
+          !isTrashView &&
+          !isRecentsView &&
+          !activeFolder?.systemKind &&
+          !activeFolder?.deletedAt
+            ? browseId
+            : defaults.rootFolderId;
+        const id = await createDocument({
+          folderId,
+          title: "Untitled post",
+          kind: "post",
+          contentMarkdown: serializePostDraft({
+            assetIds: seedAssetId ? [String(seedAssetId)] : [],
+          }),
+        });
+        openTab(`document:${id}`);
+      } catch (error) {
+        toast.error(friendlyConvexError(error, "Could not start post"));
+        openTab(seedAssetId ? `post:compose:${seedAssetId}` : "post:compose");
+      }
+    })();
   }
 
   function openProfilePost(username, postId) {
@@ -7093,7 +7123,10 @@ export function StudioShell({
     if (entry.studioKind === "folder") {
       await updateFolder({ folderId: entry.studioId, name: trimmed });
     } else if (entry.studioKind === "document") {
-      await updateDocument({ documentId: entry.studioId, title: trimmed.replace(/\.md$/i, "") });
+      await updateDocument({
+        documentId: entry.studioId,
+        title: trimmed.replace(/\.(md|post)$/i, ""),
+      });
     } else if (entry.studioKind === "asset") {
       await updateAsset({ assetId: entry.studioId, name: trimmed });
     } else if (entry.studioKind === "videoEdit") {
@@ -7117,7 +7150,11 @@ export function StudioShell({
           ...entry,
           name:
             entry.studioKind === "document"
-              ? `${trimmed.replace(/\.md$/i, "")}.md`
+              ? `${trimmed.replace(/\.(md|post)$/i, "")}${
+                  entry.documentKind === "post" || entry.ext === ".post"
+                    ? POST_FILE_EXT
+                    : ".md"
+                }`
               : entry.studioKind === "videoEdit"
                 ? withStudioProjectExt(trimmed)
                 : entry.studioKind === "element"
@@ -7139,7 +7176,7 @@ export function StudioShell({
           : entry.studioKind === "videoEdit"
             ? withStudioProjectExt(trimmed)
             : entry.studioKind === "document"
-              ? trimmed.replace(/\.md$/i, "")
+              ? trimmed.replace(/\.(md|post)$/i, "")
               : trimmed;
       setTabEntrySnapshots((snapshots) => ({
         ...snapshots,
@@ -8871,6 +8908,10 @@ export function StudioShell({
   }
 
   async function handleRunDocumentInCreate(entry) {
+    if (isPostDocument(entry)) {
+      if (entry?.studioId) openTab(`document:${entry.studioId}`);
+      return;
+    }
     let markdown = String(entry?.description ?? "");
     if (!markdown.trim() && entry?.studioId) {
       try {
@@ -8885,6 +8926,11 @@ export function StudioShell({
   }
 
   async function handleUseDocumentInAgent(entry) {
+    if (isPostDocument(entry)) {
+      toast.message("Open the .post file to keep editing it");
+      if (entry?.studioId) openTab(`document:${entry.studioId}`);
+      return;
+    }
     let markdown = String(entry?.description ?? "");
     if (!markdown.trim() && entry?.studioId) {
       try {
@@ -28390,7 +28436,7 @@ export function StudioShell({
                 openSettingsTab("profile");
                 return;
               }
-              openTab(`post:compose:${entry.studioId}`);
+              openCreatePost(entry.studioId);
             }
             if (action === "unshare-profile") {
               if (!entry?.studioId || entry.studioKind !== "asset") return;
@@ -34725,6 +34771,23 @@ function ActivePane({
     // Feed / profile stay mounted in socialKeepalive — no remount on tab switch.
     return wrapPane(null);
   }
+  if (activeEntry?.studioKind === "document" && isPostDocument(activeEntry)) {
+    return wrapPane(
+      <PostComposeTab
+        draftDocumentId={String(activeEntry.studioId ?? "")}
+        onRequestPickAsset={onRequestPickAsset}
+        onCancel={() => onCloseTab(activeTab)}
+        onPublished={({ handle, postId }) => {
+          onCloseTab(activeTab);
+          if (handle && postId) {
+            onOpenProfilePost?.(handle, postId);
+          } else if (handle) {
+            onOpenPublicProfile?.(handle);
+          }
+        }}
+      />,
+    );
+  }
   if (activeEntry?.studioKind === "document") {
     return wrapPane(
       <StudioScriptPane
@@ -39418,18 +39481,21 @@ function sharedListItemToEntry(item) {
 }
 
 function documentToEntry(doc) {
+  const isPost = isPostDocument(doc);
+  const ext = isPost ? POST_FILE_EXT : ".md";
   return {
     type: "file",
-    name: `${doc.title}.md`,
-    path: `/Studio/scripts/${doc._id}.md`,
-    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(doc.title, ".md")}`),
+    name: `${doc.title}${ext}`,
+    path: `/Studio/scripts/${doc._id}${ext}`,
+    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(doc.title, ext)}`),
     modified: doc.updatedAt,
     mtimeMs: doc.updatedAt,
-    ext: ".md",
+    ext,
     studioKind: "document",
     studioId: doc._id,
     folderId: doc.folderId,
-    kindLabel: "Script",
+    documentKind: isPost ? "post" : "script",
+    kindLabel: isPost ? "Post" : "Script",
     // Never stash full Script bodies on explorer/tab entries — opening an MD
     // used to dump 10–100KB into StudioShell state and wall the app.
     description: undefined,

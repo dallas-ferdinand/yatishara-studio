@@ -19,6 +19,7 @@ const documentReturn = v.object({
   folderId: v.id("folders"),
   title: v.string(),
   contentMarkdown: v.string(),
+  kind: v.optional(v.union(v.literal("script"), v.literal("post"))),
   assetId: v.optional(v.id("assets")),
   reactionEmoji: v.optional(v.string()),
   deletedAt: v.optional(v.number()),
@@ -74,20 +75,26 @@ export const create = authedMutation({
     folderId: v.id("folders"),
     title: v.string(),
     contentMarkdown: v.optional(v.string()),
+    kind: v.optional(v.union(v.literal("script"), v.literal("post"))),
   },
   returns: v.id("documents"),
   handler: async (ctx, args) => {
     await requireFolderOwnerOrEditShare(ctx, args.folderId);
     const now = Date.now();
     const title = args.title.trim();
+    const kind = args.kind === "post" ? "post" : undefined;
     // Empty shells are OK for Files UI (New Script → rename → edit).
     // Agent empty Prompt/Script creates are blocked in studioApiInternal + agentSchemas.
-    const contentMarkdown = sanitizeScriptMarkdown(args.contentMarkdown ?? "");
+    const contentMarkdown =
+      kind === "post"
+        ? String(args.contentMarkdown ?? "{}")
+        : sanitizeScriptMarkdown(args.contentMarkdown ?? "");
     return await ctx.db.insert("documents", {
       ownerId: ctx.user._id,
       folderId: args.folderId,
       title,
       contentMarkdown,
+      ...(kind ? { kind } : {}),
       createdAt: now,
       updatedAt: now,
     });
@@ -113,7 +120,7 @@ export const update = authedMutation({
       }
       await requireFolderOwner(ctx, args.folderId);
     }
-    if (args.contentMarkdown !== undefined) {
+    if (args.contentMarkdown !== undefined && doc.kind !== "post") {
       const next = sanitizeScriptMarkdown(args.contentMarkdown).trim();
       const title = String(args.title ?? doc.title).trim();
       const prev = String(doc.contentMarkdown ?? "").trim();
@@ -123,11 +130,15 @@ export const update = authedMutation({
         );
       }
     }
+    const nextBody =
+      args.contentMarkdown === undefined
+        ? undefined
+        : doc.kind === "post"
+          ? String(args.contentMarkdown)
+          : sanitizeScriptMarkdown(args.contentMarkdown);
     await ctx.db.patch(doc._id, {
       ...(args.title !== undefined ? { title: args.title.trim() } : {}),
-      ...(args.contentMarkdown !== undefined
-        ? { contentMarkdown: sanitizeScriptMarkdown(args.contentMarkdown) }
-        : {}),
+      ...(nextBody !== undefined ? { contentMarkdown: nextBody } : {}),
       ...(args.folderId !== undefined ? { folderId: args.folderId } : {}),
       updatedAt: Date.now(),
     });
@@ -170,6 +181,7 @@ export const duplicate = authedMutation({
       folderId,
       title: args.title?.trim() || `Copy of ${doc.title}`,
       contentMarkdown: doc.contentMarkdown,
+      ...(doc.kind ? { kind: doc.kind } : {}),
       assetId: doc.assetId,
       createdAt: now,
       updatedAt: now,

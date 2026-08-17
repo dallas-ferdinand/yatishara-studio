@@ -456,6 +456,8 @@ export default defineSchema({
     folderId: v.id("folders"),
     title: v.string(),
     contentMarkdown: v.string(),
+    /** script (default) = .md; post = Create-post draft (.post file). */
+    kind: v.optional(v.union(v.literal("script"), v.literal("post"))),
     assetId: v.optional(v.id("assets")),
     /** Owner emoji sticker in the file manager. */
     reactionEmoji: v.optional(v.string()),

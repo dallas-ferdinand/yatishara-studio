@@ -27,6 +27,7 @@ export function fileViewerKind(ext) {
   const e = ext?.startsWith(".") ? ext.toLowerCase() : fileExt(ext);
   if (!e) return "binary";
   if (e === ".studio" || e === ".edit") return "videoEdit";
+  if (e === ".post") return "post";
   if (IMAGE.has(e)) return "image";
   if (VIDEO.has(e)) return "video";
   if (AUDIO.has(e)) return "audio";
@@ -66,6 +67,7 @@ export function fileIconName(nameOrPath, { isDir = false } = {}) {
   if (kind === "image") return "image";
   if (kind === "video") return "play";
   if (kind === "videoEdit") return "studioProject";
+  if (kind === "post") return "share";
   if (kind === "audio") return "music";
   if (kind === "pdf") return "filePdf";
   if (kind === "csv") return "table";
@@ -107,6 +109,7 @@ export function explorerEntryIcon(entry) {
   }
   if (entry?.type === "dir" || entry?.type === "parent") return entry?.type === "parent" ? "chevL" : "folder";
   if (entry?.studioKind === "videoEdit") return "studioProject";
+  if (entry?.documentKind === "post" || entry?.ext === ".post") return "share";
   if (entry?.studioKind === "element") {
     if (entry.elementType === "character") return "user";
     if (entry.elementType === "prop") return "package";
@@ -142,7 +145,12 @@ export function matchesExplorerTypeFilter(entry, filterId) {
   const studioKind = entry.studioKind;
   if (studioKind === "videoEdit") return filterId === "videoEdit";
   if (studioKind === "element") return filterId === "element";
-  if (studioKind === "document") return filterId === "document";
+  if (studioKind === "document") {
+    if (entry.documentKind === "post" || entry.ext === ".post") {
+      return filterId === "all" || filterId === "document";
+    }
+    return filterId === "document";
+  }
 
   const viewerKind = fileViewerKind(entry.ext || entry.name || entry.path);
   switch (filterId) {

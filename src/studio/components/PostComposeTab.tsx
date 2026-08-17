@@ -39,6 +39,11 @@ import {
   plainTextFromClipboard,
 } from "@/studio/lib/composerPasteIntelligence";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
+import {
+  parsePostDraft,
+  serializePostDraft,
+  titleFromPostCaption,
+} from "@/studio/lib/studioPostFile";
 import { MediaLoadFrame } from "./media-load-frame";
 import { mentionFallbackAvatarStyle } from "@/studio/lib/profileAvatar";
 import { StudioAssetPickerSheet } from "./StudioAssetPickerSheet";
@@ -47,6 +52,7 @@ import { MicrophoneWaveform } from "@/components/ui/waveform";
 
 type PostComposeTabProps = {
   assetId?: string;
+  draftDocumentId?: string;
   onCancel: () => void;
   onPublished: (args: { handle: string; postId: string }) => void;
   /** Files rail / dock pick — same chooser as DMs, not the list-folder sheet. */
@@ -442,6 +448,7 @@ function recordingTimeLabel(seconds: number): string {
 
 export function PostComposeTab({
   assetId,
+  draftDocumentId,
   onCancel,
   onPublished,
   onRequestPickAsset,
@@ -449,14 +456,29 @@ export function PostComposeTab({
   const captionId = useId();
   const shareAsset = useMutation(api.profiles.shareAsset);
   const ensureStudioDefaults = useMutation(api.users.ensureStudioDefaults);
+  const updateDocument = useMutation(api.documents.update);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const myProfile = useQuery(api.profiles.getMine, { expiresUnix });
-  const seedIds = assetId ? [assetId as Id<"assets">] : [];
+  const draftDoc = useQuery(
+    api.documents.get,
+    draftDocumentId ? { documentId: draftDocumentId } : "skip",
+  );
+  const parsedDraft = useMemo(() => {
+    if (!draftDoc || draftDoc.kind !== "post") return null;
+    return parsePostDraft(draftDoc.contentMarkdown);
+  }, [draftDoc]);
+  const hydrateIds = useMemo(() => {
+    const ids: string[] = [];
+    if (assetId) ids.push(assetId);
+    for (const id of parsedDraft?.assetIds ?? []) ids.push(id);
+    if (parsedDraft?.voiceAssetId) ids.push(parsedDraft.voiceAssetId);
+    return [...new Set(ids)] as Id<"assets">[];
+  }, [assetId, parsedDraft]);
   const seededAssets = useQuery(
     api.assets.listByIds,
-    seedIds.length ? { assetIds: seedIds, quality: "preview", expiresUnix } : "skip",
+    hydrateIds.length ? { assetIds: hydrateIds, quality: "preview", expiresUnix } : "skip",
   );
   const seededAsset = seededAssets?.[0] ?? null;
   const signedSeed = seededAsset as
@@ -473,13 +495,19 @@ export function PostComposeTab({
   const [choiceOpen, setChoiceOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const seededRef = useRef(false);
+  const draftHydratedRef = useRef(false);
   const slotsRef = useRef<ComposeSlot[]>([]);
+  const captionRef = useRef("");
+  const pendingVoiceRef = useRef(pendingVoice);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistBusyRef = useRef(false);
 
   const [caption, setCaption] = useState("");
   const [caret, setCaret] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [pendingVoice, setPendingVoice] = useState<{
-    file: File;
+    file?: File;
+    assetId?: Id<"assets">;
     previewUrl: string;
     durationSec: number;
   } | null>(null);
@@ -506,6 +534,8 @@ export function PostComposeTab({
   const suggestWrapRef = useRef<HTMLDivElement>(null);
 
   slotsRef.current = slots;
+  captionRef.current = caption;
+  pendingVoiceRef.current = pendingVoice;
 
   const clearRecTimer = useCallback(() => {
     if (recTimerRef.current) {
@@ -642,13 +672,13 @@ export function PostComposeTab({
 
   function clearPendingVoice() {
     setPendingVoice((prev) => {
-      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      if (prev?.file && prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
       return null;
     });
   }
 
   useEffect(() => {
-    if (seededRef.current || !signedSeed) return;
+    if (seededRef.current || !signedSeed || draftDocumentId) return;
     const kind = signedSeed.kind;
     if (kind !== "image" && kind !== "video" && kind !== "audio") return;
     seededRef.current = true;
@@ -662,7 +692,156 @@ export function PostComposeTab({
           signedSeed.signedReadUrl || signedSeed.signedThumbnailUrl || undefined,
       },
     ]);
-  }, [signedSeed]);
+  }, [draftDocumentId, signedSeed]);
+
+  useEffect(() => {
+    if (draftHydratedRef.current || !draftDocumentId) return;
+    if (draftDoc === undefined) return;
+    if (!parsedDraft) {
+      draftHydratedRef.current = true;
+      return;
+    }
+    if (hydrateIds.length > 0 && seededAssets === undefined) return;
+    draftHydratedRef.current = true;
+    const byId = new Map(
+      (seededAssets ?? []).map((asset) => [String(asset._id), asset]),
+    );
+    const nextSlots: ComposeSlot[] = [];
+    for (const id of parsedDraft.assetIds) {
+      const asset = byId.get(id) as
+        | {
+            name: string;
+            kind?: string;
+            signedReadUrl?: string;
+            signedThumbnailUrl?: string;
+          }
+        | undefined;
+      if (!asset) continue;
+      const kind = asset.kind;
+      if (kind !== "image" && kind !== "video" && kind !== "audio") continue;
+      nextSlots.push({
+        key: id,
+        assetId: id as Id<"assets">,
+        kind,
+        name: asset.name,
+        previewUrl: asset.signedReadUrl || asset.signedThumbnailUrl || undefined,
+      });
+    }
+    if (nextSlots.length) setSlots(nextSlots);
+    if (parsedDraft.caption) {
+      setCaption(parsedDraft.caption);
+    }
+    if (parsedDraft.voiceAssetId) {
+      const voice = byId.get(parsedDraft.voiceAssetId) as
+        | { signedReadUrl?: string; signedThumbnailUrl?: string }
+        | undefined;
+      const url = voice?.signedReadUrl || voice?.signedThumbnailUrl;
+      if (url) {
+        setPendingVoice({
+          assetId: parsedDraft.voiceAssetId as Id<"assets">,
+          previewUrl: url,
+          durationSec: parsedDraft.voiceDurationSec ?? 0,
+        });
+      }
+    }
+  }, [draftDocumentId, draftDoc, hydrateIds.length, parsedDraft, seededAssets]);
+
+  const persistDraft = useCallback(async () => {
+    if (!draftDocumentId || !draftHydratedRef.current || publishing) return;
+    if (persistBusyRef.current) return;
+    persistBusyRef.current = true;
+    try {
+      const defaults = await ensureStudioDefaults({});
+      const folderId = defaults.rootFolderId;
+      const nextSlots = [...slotsRef.current];
+      const assetIds: Id<"assets">[] = [];
+      let slotsChanged = false;
+      for (let i = 0; i < nextSlots.length; i += 1) {
+        const slot = nextSlots[i];
+        if (!slot) continue;
+        if (slot.assetId) {
+          assetIds.push(slot.assetId);
+          continue;
+        }
+        if (!slot.file) continue;
+        const uploaded = await uploadStudioAsset({
+          file: slot.file,
+          folderId,
+          kind: slot.kind,
+          name: slot.name || slot.file.name,
+          reserveUpload,
+          commitStagingUpload,
+        });
+        nextSlots[i] = { ...slot, assetId: uploaded };
+        slotsChanged = true;
+        assetIds.push(uploaded);
+      }
+      if (slotsChanged) setSlots(nextSlots);
+
+      const voice = pendingVoiceRef.current;
+      let voiceAssetId = voice?.assetId;
+      const voiceDurationSec = voice?.durationSec;
+      if (voice?.file && !voiceAssetId) {
+        voiceAssetId = await uploadStudioAsset({
+          file: voice.file,
+          folderId,
+          kind: "audio",
+          name: voice.file.name || "Voice note",
+          reserveUpload,
+          commitStagingUpload,
+        });
+        setPendingVoice((prev) =>
+          prev ? { ...prev, assetId: voiceAssetId, file: undefined } : prev,
+        );
+      }
+
+      const captionNow = captionRef.current;
+      const nextTitle = titleFromPostCaption(captionNow);
+      await updateDocument({
+        documentId: draftDocumentId as Id<"documents">,
+        contentMarkdown: serializePostDraft({
+          caption: captionNow,
+          assetIds,
+          voiceAssetId,
+          voiceDurationSec,
+          publishedPostId: parsedDraft?.publishedPostId,
+        }),
+        ...(draftDoc?.title === "Untitled post" && nextTitle ? { title: nextTitle } : {}),
+      });
+    } catch {
+      /* keep editing */
+    } finally {
+      persistBusyRef.current = false;
+    }
+  }, [
+    commitStagingUpload,
+    draftDoc?.title,
+    draftDocumentId,
+    ensureStudioDefaults,
+    parsedDraft?.publishedPostId,
+    publishing,
+    reserveUpload,
+    updateDocument,
+  ]);
+
+  useEffect(() => {
+    if (!draftDocumentId || !draftHydratedRef.current) return;
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      void persistDraft();
+    }, 800);
+    return () => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    };
+  }, [caption, draftDocumentId, pendingVoice, persistDraft, slots]);
+
+  useLayoutEffect(() => {
+    const el = editorRef.current;
+    if (!el || !caption) return;
+    if (el.innerText.replace(/\u00a0/g, " ").trim()) return;
+    el.textContent = caption;
+    el.classList.toggle("is-empty", false);
+  }, [caption]);
 
   useEffect(() => {
     return () => {
@@ -693,7 +872,11 @@ export function PostComposeTab({
   const [previewSize, setPreviewSize] = useState<{ w: number; h: number } | null>(null);
   const canPublish = slots.length > 0 && !publishing && recState === "idle";
   const remaining = MAX_POST_MEDIA - slots.length;
-  const seeding = Boolean(assetId) && seededAssets === undefined;
+  const seeding =
+    (Boolean(assetId) && !draftDocumentId && seededAssets === undefined) ||
+    (Boolean(draftDocumentId) &&
+      (draftDoc === undefined ||
+        (hydrateIds.length > 0 && seededAssets === undefined)));
 
   useEffect(() => {
     setPreviewSize(null);
@@ -987,7 +1170,10 @@ export function PostComposeTab({
       }
       let voiceAssetId: Id<"assets"> | undefined;
       let voiceDurationSec: number | undefined;
-      if (pendingVoice) {
+      if (pendingVoice?.assetId) {
+        voiceAssetId = pendingVoice.assetId;
+        voiceDurationSec = pendingVoice.durationSec;
+      } else if (pendingVoice?.file) {
         voiceAssetId = await uploadStudioAsset({
           file: pendingVoice.file,
           folderId: defaults.rootFolderId,
@@ -1006,6 +1192,18 @@ export function PostComposeTab({
           : {}),
       });
       const handle = result.publicUrlPath.replace(/^\/u\//, "");
+      if (draftDocumentId) {
+        await updateDocument({
+          documentId: draftDocumentId as Id<"documents">,
+          contentMarkdown: serializePostDraft({
+            caption: caption.trim(),
+            assetIds,
+            voiceAssetId,
+            voiceDurationSec,
+            publishedPostId: result.postId,
+          }),
+        });
+      }
       toast.success("Post created");
       onPublished({ handle, postId: result.postId });
     } catch (error) {
