@@ -622,7 +622,10 @@ watch layout as mobile — native-ratio player, avatar in the title — except t
 Boost / Contribute book bar sits at the **top** of the feed column as a 32px
 secondary header (`--cursor-head-h`, `padding: 0 8px 0 10px`, bottom hairline).
 Mobile keeps that bar at the bottom with the same inset. Overflowing watch
-descriptions use click-to-scroll (`.is-scroll-active`) like `.md` Copy fences. Comments rail is a flat `--mos-panel` column with a left
+descriptions use click-to-scroll (`.is-scroll-active`) like `.md` Copy fences. Desktop comments head matches Academy: 20px avatar, name, Feather contribute
+count — not Boost/Save/time (those stay on the watch card / book bar). Head is
+`--cursor-head-h` with a bottom hairline; Search comments keeps its bottom
+hairline (no extra top line under the head). Comments rail is a flat `--mos-panel` column with a left
 hairline (like other Studio sidebars). Light mode: post stage L1 `--mos-page`
 (never hardcoded black); comments rail solid `--mos-panel` (excluded from
 StudioShell transparent/`aside` !important). Divider between post ↔ comments

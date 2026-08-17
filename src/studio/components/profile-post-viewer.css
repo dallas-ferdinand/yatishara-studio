@@ -1425,7 +1425,27 @@
 
   .profile-comments-dock .profile-comments-head {
     flex: 0 0 auto;
-    border-bottom: 0;
+    height: var(--cursor-head-h, 32px);
+    min-height: var(--cursor-head-h, 32px);
+    max-height: var(--cursor-head-h, 32px);
+    overflow: hidden;
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 1;
+    border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  }
+
+  .profile-comments-dock .profile-comments-thread-avatar,
+  .profile-comments-dock .profile-comments-thread-avatar.studio-profile-avatar {
+    width: 20px;
+    height: 20px;
+  }
+
+  .profile-comments-dock .profile-comments-thread-preview strong {
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1;
   }
 
   .profile-comments-dock .profile-comments-search {
@@ -1588,7 +1608,7 @@
   background: transparent;
 }
 
-/* Desktop feed dock sits under the workspace head — don't stack a second top line. */
+/* Head owns the top hairline (same as Academy comments). Search keeps the bottom. */
 @media (min-width: 900px) {
   .studio-polish .profile-comments-dock > .profile-comments-search .cursor-panel-search,
   .profile-comments-dock > .profile-comments-search .cursor-panel-search {
@@ -1640,6 +1660,24 @@
   width: 14px;
   height: 14px;
   display: block;
+}
+
+.profile-comments-head-meta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.profile-comments-head-meta svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 
 .profile-comments-post-actions {

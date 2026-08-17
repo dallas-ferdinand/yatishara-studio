@@ -1424,9 +1424,11 @@ function CommentsBody({
               />
               <div className="profile-comments-thread-preview">
                 <strong>{postName}</strong>
-                <time dateTime={new Date(postAuthor.publishedAt).toISOString()}>
-                  {formatPostStamp(postAuthor.publishedAt, postAuthor.editedAt)}
-                </time>
+                {variant === "sheet" ? (
+                  <time dateTime={new Date(postAuthor.publishedAt).toISOString()}>
+                    {formatPostStamp(postAuthor.publishedAt, postAuthor.editedAt)}
+                  </time>
+                ) : null}
               </div>
             </div>
           ) : (
@@ -1435,41 +1437,16 @@ function CommentsBody({
               <span>{commentCount}</span>
             </div>
           )}
-          {!inThread && postActions ? (
+          {!inThread && variant === "dock" ? (
+            <span
+              className="profile-comments-head-meta"
+              aria-label={`${formatCount(commentCount)} comments`}
+            >
+              <Feather aria-hidden="true" strokeWidth={2} />
+              <span>{formatCount(commentCount)}</span>
+            </span>
+          ) : !inThread && postActions ? (
             <div className="profile-comments-post-actions">
-              {variant !== "sheet" ? (
-                postAuthor?.isOwner ? (
-                <span
-                  className="profile-comments-post-action is-static"
-                  aria-label={`${formatCount(postActions.likeCount)} boosts`}
-                >
-                  <Crown aria-hidden="true" fill="currentColor" strokeWidth={0} />
-                  <span>{formatCount(postActions.likeCount)}</span>
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className={`profile-comments-post-action${postActions.liked || (postActions.undoLeft ?? 0) > 0 ? " is-liked" : ""}`}
-                  data-studio-sfx="like"
-                  aria-pressed={postActions.liked || (postActions.undoLeft ?? 0) > 0}
-                  aria-label={
-                    (postActions.undoLeft ?? 0) > 0
-                      ? `Undo boost, ${postActions.undoLeft} seconds left`
-                      : postActions.liked
-                        ? "Boosted"
-                        : "Boost"
-                  }
-                  onClick={postActions.onLike}
-                >
-                  <Crown aria-hidden="true" fill="currentColor" strokeWidth={0} />
-                  <span>
-                    {(postActions.undoLeft ?? 0) > 0
-                      ? postActions.undoLeft
-                      : formatCount(postActions.likeCount)}
-                  </span>
-                </button>
-              )
-              ) : null}
               <button
                 type="button"
                 className={`profile-comments-post-action${postActions.saved ? " is-saved" : ""}`}
