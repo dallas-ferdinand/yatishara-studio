@@ -5,10 +5,8 @@ import { useMutation, useQuery } from "convex/react";
 import {
   Bookmark,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   CircleCheck,
   Crown,
   Feather,
@@ -213,21 +211,7 @@ function isWatchFeedGestureTarget(target: EventTarget | null): boolean {
   ) {
     return false;
   }
-  // Armed description scrolls internally (prompt Copy fence pattern).
-  if (
-    target.closest(
-      ".profile-post-caption.is-page.is-scroll-active .profile-post-caption-text",
-    )
-  ) {
-    return false;
-  }
   return Boolean(target.closest(".profile-post-watch-stack"));
-}
-
-function captionScrollSurface(caption: HTMLElement): HTMLElement {
-  return (
-    caption.querySelector<HTMLElement>(".profile-post-caption-text") ?? caption
-  );
 }
 
 /** Collect up to `count` unique neighbors in one direction, wrapping the list. */
@@ -885,68 +869,11 @@ function FeedCaption({
   };
 }) {
   const updateCaption = useMutation(api.profiles.updatePostCaption);
-  const captionRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(caption ?? "");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const trimmed = caption?.trim();
-
-  useLayoutEffect(() => {
-    if (placement !== "page" || editing) return undefined;
-    const host = captionRef.current;
-    if (!host) return undefined;
-
-    const syncClip = () => {
-      const surface = captionScrollSurface(host);
-      const clipped = surface.scrollHeight > surface.clientHeight + 1;
-      host.classList.toggle("is-clipped", clipped);
-      if (!clipped) host.classList.remove("is-scroll-active");
-    };
-    syncClip();
-    const ro = new ResizeObserver(syncClip);
-    ro.observe(host);
-    const surface = captionScrollSurface(host);
-    if (surface !== host) ro.observe(surface);
-
-    const setActive = () => {
-      const next = captionScrollSurface(host);
-      if (next.scrollHeight <= next.clientHeight + 1) return;
-      host.classList.add("is-scroll-active");
-      if (!host.hasAttribute("tabindex")) host.setAttribute("tabindex", "-1");
-    };
-    const clearActive = () => host.classList.remove("is-scroll-active");
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (target.closest("button, a, textarea, input, [contenteditable='true']")) {
-        return;
-      }
-      if (!target.closest(".profile-post-caption-text")) return;
-      setActive();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") clearActive();
-    };
-    const onDocPointerDown = (event: PointerEvent) => {
-      if (!(event.target instanceof Node)) return;
-      if (host.contains(event.target)) return;
-      clearActive();
-    };
-
-    host.addEventListener("pointerdown", onPointerDown);
-    host.addEventListener("keydown", onKeyDown);
-    document.addEventListener("pointerdown", onDocPointerDown, true);
-    return () => {
-      ro.disconnect();
-      host.removeEventListener("pointerdown", onPointerDown);
-      host.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("pointerdown", onDocPointerDown, true);
-      host.classList.remove("is-scroll-active", "is-clipped");
-    };
-  }, [placement, editing, trimmed]);
 
   useEffect(() => {
     if (!editing) setDraft(caption ?? "");
@@ -981,7 +908,6 @@ function FeedCaption({
 
   return (
     <div
-      ref={placement === "page" ? captionRef : undefined}
       className={`profile-post-caption${
         placement === "page" ? " is-page" : ""
       }${editing ? " is-editing" : ""}${onOpenDescription ? " is-tappable" : ""}${feedShare && !editing ? " is-draggable" : ""}`}
@@ -1526,7 +1452,7 @@ export function ProfilePostViewer({
   >({});
   /** Optimistic follow state keyed by profileId — flips all slides from that author. */
   const [localFollows, setLocalFollows] = useState<Record<string, boolean>>({});
-  const [axis, setAxis] = useState<"x" | "y">("y");
+  const [axis, setAxis] = useState<"x" | "y">("x");
   const [animating, setAnimating] = useState(false);
   const [pendingUndo, setPendingUndo] = useState<{
     postId: Id<"profilePosts">;
@@ -1545,12 +1471,10 @@ export function ProfilePostViewer({
   const recordedRef = useRef<Set<string>>(new Set());
   const seededRef = useRef(false);
   const animatingRef = useRef(false);
-  const axisRef = useRef<"x" | "y">("y");
+  const axisRef = useRef<"x" | "y">("x");
   const activePostIdRef = useRef<Id<"profilePosts"> | null>(null);
   const feedIndexRef = useRef(0);
-  const authorIndexRef = useRef(-1);
   const feedLenRef = useRef(0);
-  const authorLenRef = useRef(0);
   const lastFeedIndexRef = useRef(0);
   const sizeRef = useRef({ w: 1, h: 1 });
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -1603,7 +1527,7 @@ export function ProfilePostViewer({
     lastFeedIndexRef.current = 0;
     activePostIdRef.current = null;
     setActivePostId(null);
-    setAxis("y");
+    setAxis("x");
     setCommentsOpen(false);
     setSidePanelMode("comments");
   }, [feedMode]);
@@ -1636,29 +1560,21 @@ export function ProfilePostViewer({
     });
   }, [authorPostsRaw, localLikes, localSaves, localShares]);
 
-  const authorIndex = activePostId
-    ? authorPosts.findIndex((post) => post._id === activePostId)
-    : -1;
-
   useEffect(() => {
     if (feedIndexExact >= 0) lastFeedIndexRef.current = feedIndexExact;
   }, [feedIndexExact]);
 
   activePostIdRef.current = activePostId;
   feedIndexRef.current = feedIndex;
-  authorIndexRef.current = authorIndex;
   axisRef.current = axis;
   feedLenRef.current = resolvedFeed.length;
-  authorLenRef.current = authorPosts.length;
 
   const resolvedFeedRef = useRef(resolvedFeed);
-  const authorPostsRef = useRef(authorPosts);
   resolvedFeedRef.current = resolvedFeed;
-  authorPostsRef.current = authorPosts;
 
-  const lockAxis = useCallback((next: "x" | "y") => {
-    axisRef.current = next;
-    if (axis !== next) setAxis(next);
+  const lockAxis = useCallback(() => {
+    axisRef.current = "x";
+    if (axis !== "x") setAxis("x");
   }, [axis]);
 
   // Snap the track back in the same commit as the active-post swap — before
@@ -1683,12 +1599,10 @@ export function ProfilePostViewer({
     );
   }, [activePostId, resolvedFeed, authorPosts]);
 
-  // Prefetch 3 posts each way (up/down feed + left/right author). Offset-1
-  // stays the animated prev/next; further offsets mount as idle warm slides.
+  // Prefetch 3 feed neighbors each way. Offset-1 stays the animated prev/next;
+  // further offsets mount as idle warm slides.
   const feedPrevList = collectAxisNeighbors(resolvedFeed, feedIndex, -1, 3);
   const feedNextList = collectAxisNeighbors(resolvedFeed, feedIndex, 1, 3);
-  const authorPrevList = collectAxisNeighbors(authorPosts, authorIndex, -1, 3);
-  const authorNextList = collectAxisNeighbors(authorPosts, authorIndex, 1, 3);
 
   const recordViewOnce = useCallback(
     async (id: Id<"profilePosts">, fallbackCount: number) => {
@@ -1763,24 +1677,17 @@ export function ProfilePostViewer({
   }, [setTrackTransform]);
 
   const commitSlide = useCallback(
-    (nextAxis: "x" | "y", delta: -1 | 1) => {
+    (delta: -1 | 1) => {
       if (animatingRef.current) return;
       const track = trackRef.current;
       if (!track) return;
 
-      // Lock neighbors to this axis BEFORE measuring/animating — otherwise a
-      // y→x switch mid-gesture shows the wrong adjacent post, then snaps.
-      lockAxis(nextAxis);
+      lockAxis();
 
-      const { w, h } = measureSize();
+      const { w } = measureSize();
       const feedIdx = feedIndexRef.current;
-      const authorIdx = authorIndexRef.current;
       const feedLen = feedLenRef.current;
-      const authorLen = authorLenRef.current;
-      const canMove =
-        nextAxis === "y"
-          ? feedIdx >= 0 && feedLen > 1
-          : authorIdx >= 0 && authorLen > 1;
+      const canMove = feedIdx >= 0 && feedLen > 1;
 
       if (isMobile) {
         setCommentsOpen(false);
@@ -1795,12 +1702,11 @@ export function ProfilePostViewer({
         return;
       }
 
-      const targetX = nextAxis === "x" ? -delta * w : 0;
-      const targetY = nextAxis === "y" ? -delta * h : 0;
+      const targetX = -delta * w;
       animatingRef.current = true;
       setAnimating(true);
       const token = ++commitTokenRef.current;
-      pendingCommitRef.current = { axis: nextAxis, delta };
+      pendingCommitRef.current = { axis: "x", delta };
 
       const finish = (event?: TransitionEvent) => {
         if (event && (event.target !== track || event.propertyName !== "transform")) return;
@@ -1811,13 +1717,9 @@ export function ProfilePostViewer({
         pendingCommitRef.current = null;
 
         const nextPost =
-          pending.axis === "y"
-            ? resolvedFeedRef.current[
-                wrapIndex(feedIndexRef.current + pending.delta, resolvedFeedRef.current.length)
-              ]
-            : authorPostsRef.current[
-                wrapIndex(authorIndexRef.current + pending.delta, authorPostsRef.current.length)
-              ];
+          resolvedFeedRef.current[
+            wrapIndex(feedIndexRef.current + pending.delta, resolvedFeedRef.current.length)
+          ];
         if (!nextPost) {
           setTrackTransform(0, 0, false);
           animatingRef.current = false;
@@ -1828,18 +1730,13 @@ export function ProfilePostViewer({
         track.style.transition = "none";
         pendingSnapRef.current = true;
         activePostIdRef.current = nextPost._id;
-        if (pending.axis === "y") {
-          lastFeedIndexRef.current = wrapIndex(
-            feedIndexRef.current + pending.delta,
-            resolvedFeedRef.current.length,
-          );
-        } else {
-          const fIdx = resolvedFeedRef.current.findIndex((row) => row._id === nextPost._id);
-          if (fIdx >= 0) lastFeedIndexRef.current = fIdx;
-        }
-        axisRef.current = pending.axis;
+        lastFeedIndexRef.current = wrapIndex(
+          feedIndexRef.current + pending.delta,
+          resolvedFeedRef.current.length,
+        );
+        axisRef.current = "x";
         setActivePostId(nextPost._id);
-        setAxis(pending.axis);
+        setAxis("x");
         animatingRef.current = false;
         setAnimating(false);
       };
@@ -1853,7 +1750,7 @@ export function ProfilePostViewer({
 
       requestAnimationFrame(() => {
         if (commitTokenRef.current !== token) return;
-        setTrackTransform(targetX, targetY, true);
+        setTrackTransform(targetX, 0, true);
       });
     },
     [isMobile, lockAxis, measureSize, resetTrack, setTrackTransform],
@@ -1888,18 +1785,12 @@ export function ProfilePostViewer({
       ) {
         return;
       }
-      if (event.key === "ArrowDown") {
+      if (event.key === "ArrowRight") {
         event.preventDefault();
-        commitSlide("y", 1);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        commitSlide("y", -1);
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        commitSlide("x", 1);
+        commitSlide(1);
       } else if (event.key === "ArrowLeft") {
         event.preventDefault();
-        commitSlide("x", -1);
+        commitSlide(-1);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -1930,41 +1821,18 @@ export function ProfilePostViewer({
       ) {
         return;
       }
-      const caption = target.closest(".profile-post-caption.is-page");
-      const captionEl = caption instanceof HTMLElement ? caption : null;
-      // Shift+wheel → horizontal author axis (desktop trackpads may already
-      // emit deltaX; treat shift as an explicit horizontal intent).
       const deltaX = normalizedWheelDelta(event.deltaX, event.deltaMode);
       const deltaY = normalizedWheelDelta(event.deltaY, event.deltaMode);
       const shiftHorizontal = event.shiftKey && Math.abs(deltaY) >= Math.abs(deltaX);
       const horizontal = shiftHorizontal || Math.abs(deltaY) < Math.abs(deltaX);
-      if (horizontal) {
-        const delta = shiftHorizontal ? deltaY : deltaX;
-        if (Math.abs(delta) < 8) return;
-        event.preventDefault();
-        event.stopPropagation();
-        if (animatingRef.current || Date.now() < wheelLockUntil) return;
-        wheelLockUntil = Date.now() + SLIDE_FALLBACK_MS;
-        commitSlide("x", delta > 0 ? 1 : -1);
-        return;
-      }
-      if (Math.abs(deltaY) < 8) return;
-      if (
-        captionEl?.classList.contains("is-scroll-active")
-      ) {
-        const surface = captionScrollSurface(captionEl);
-        if (surface.scrollHeight > surface.clientHeight + 1) {
-          const atTop = surface.scrollTop <= 0;
-          const atBottom =
-            surface.scrollTop + surface.clientHeight >= surface.scrollHeight - 1;
-          if ((deltaY < 0 && !atTop) || (deltaY > 0 && !atBottom)) return;
-        }
-      }
+      if (!horizontal) return;
+      const delta = shiftHorizontal ? deltaY : deltaX;
+      if (Math.abs(delta) < 8) return;
       event.preventDefault();
       event.stopPropagation();
       if (animatingRef.current || Date.now() < wheelLockUntil) return;
       wheelLockUntil = Date.now() + SLIDE_FALLBACK_MS;
-      commitSlide("y", deltaY > 0 ? 1 : -1);
+      commitSlide(delta > 0 ? 1 : -1);
     }
     layout.addEventListener("wheel", onWheel, { capture: true, passive: false });
     return () => layout.removeEventListener("wheel", onWheel, { capture: true });
@@ -1998,6 +1866,10 @@ export function ProfilePostViewer({
       if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
       start.axis = Math.abs(dy) >= Math.abs(dx) ? "y" : "x";
       start.moved = true;
+      if (start.axis === "y") {
+        pointerRef.current = null;
+        return;
+      }
       if (!start.captured) {
         try {
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -2007,24 +1879,15 @@ export function ProfilePostViewer({
         }
       }
       pointerRef.current = start;
-      // Sync neighbor slides to this axis before the drag transform paints.
-      lockAxis(start.axis);
+      lockAxis();
       setTrackTransform(0, 0, false);
     }
-    if (start.axis === "y") {
-      const atStart = feedIndexRef.current <= 0 && dy > 0;
-      const atEnd = feedIndexRef.current >= feedLenRef.current - 1 && dy < 0;
-      const resisted = atStart || atEnd ? dy * 0.28 : dy;
-      setTrackTransform(0, resisted, false);
-    } else {
-      const atStart = authorIndexRef.current <= 0 && dx > 0;
-      const atEnd =
-        (authorIndexRef.current < 0 ||
-          authorIndexRef.current >= authorLenRef.current - 1) &&
-        dx < 0;
-      const resisted = atStart || atEnd ? dx * 0.28 : dx;
-      setTrackTransform(resisted, 0, false);
-    }
+    if (start.axis !== "x") return;
+    const atStart = feedIndexRef.current <= 0 && dx > 0;
+    const atEnd =
+      feedIndexRef.current >= feedLenRef.current - 1 && dx < 0;
+    const resisted = atStart || atEnd ? dx * 0.28 : dx;
+    setTrackTransform(resisted, 0, false);
   }
 
   function cancelPointer(event: ReactPointerEvent<HTMLDivElement>) {
@@ -2075,21 +1938,19 @@ export function ProfilePostViewer({
       return;
     }
 
-    if (!gestureAxis) {
+    if (!gestureAxis || gestureAxis !== "x") {
       setTrackTransform(0, 0, false);
       return;
     }
 
-    const { w, h } = measureSize();
-    const size = gestureAxis === "y" ? h : w;
-    const delta = gestureAxis === "y" ? dy : dx;
-    const threshold = Math.min(64, size * 0.1);
-    if (delta <= -threshold) {
-      commitSlide(gestureAxis, 1);
+    const { w } = measureSize();
+    const threshold = Math.min(64, w * 0.1);
+    if (dx <= -threshold) {
+      commitSlide(1);
       return;
     }
-    if (delta >= threshold) {
-      commitSlide(gestureAxis, -1);
+    if (dx >= threshold) {
+      commitSlide(-1);
       return;
     }
     animatingRef.current = true;
@@ -2365,37 +2226,20 @@ export function ProfilePostViewer({
 
     const feedPrev = withProfile(feedPrevList[0] ?? null);
     const feedNext = withProfile(feedNextList[0] ?? null);
-    const authorPrev = withProfile(authorPrevList[0] ?? null);
-    const authorNext = withProfile(authorNextList[0] ?? null);
 
-    if (axis === "y" && feedPrev && feedNext && feedPrev._id === feedNext._id) {
+    if (feedPrev && feedNext && feedPrev._id === feedNext._id) {
       upsert(feedPrev, "prev", `${feedPrev._id}:prev`);
       upsert(feedNext, "next", `${feedNext._id}:next`);
     } else {
-      upsert(feedPrev, axis === "y" ? "prev" : "idle");
-      upsert(feedNext, axis === "y" ? "next" : "idle");
+      upsert(feedPrev, "prev");
+      upsert(feedNext, "next");
     }
 
-    if (axis === "x" && authorPrev && authorNext && authorPrev._id === authorNext._id) {
-      upsert(authorPrev, "prev", `${authorPrev._id}:prev`);
-      upsert(authorNext, "next", `${authorNext._id}:next`);
-    } else {
-      upsert(authorPrev, axis === "x" ? "prev" : "idle");
-      upsert(authorNext, axis === "x" ? "next" : "idle");
-    }
-
-    // Warm offsets 2–3 without creating duplicate mounts.
     for (let i = 1; i < feedPrevList.length; i += 1) {
       upsert(withProfile(feedPrevList[i] ?? null), "idle");
     }
     for (let i = 1; i < feedNextList.length; i += 1) {
       upsert(withProfile(feedNextList[i] ?? null), "idle");
-    }
-    for (let i = 1; i < authorPrevList.length; i += 1) {
-      upsert(withProfile(authorPrevList[i] ?? null), "idle");
-    }
-    for (let i = 1; i < authorNextList.length; i += 1) {
-      upsert(withProfile(authorNextList[i] ?? null), "idle");
     }
 
     return [...slots.values()];
@@ -2499,52 +2343,28 @@ export function ProfilePostViewer({
         </div>
 
         {!isMobile && tabActive ? (
-          <>
-            <div className="profile-post-nav-rail is-vertical" aria-label="Feed navigation">
-              <button
-                type="button"
-                className="profile-post-nav-btn"
-                aria-label="Previous post"
-                disabled={resolvedFeed.length <= 1 || animating}
-                onClick={() => commitSlide("y", -1)}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <ChevronUp aria-hidden="true" strokeWidth={2.25} />
-              </button>
-              <button
-                type="button"
-                className="profile-post-nav-btn"
-                aria-label="Next post"
-                disabled={resolvedFeed.length <= 1 || animating}
-                onClick={() => commitSlide("y", 1)}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <ChevronDown aria-hidden="true" strokeWidth={2.25} />
-              </button>
-            </div>
-            <div className="profile-post-nav-rail is-horizontal" aria-label="Author posts navigation">
-              <button
-                type="button"
-                className="profile-post-nav-btn"
-                aria-label="Previous author post"
-                disabled={authorIndex < 0 || authorPosts.length <= 1 || animating}
-                onClick={() => commitSlide("x", -1)}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <ChevronLeft aria-hidden="true" strokeWidth={2.25} />
-              </button>
-              <button
-                type="button"
-                className="profile-post-nav-btn"
-                aria-label="Next author post"
-                disabled={authorIndex < 0 || authorPosts.length <= 1 || animating}
-                onClick={() => commitSlide("x", 1)}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <ChevronRight aria-hidden="true" strokeWidth={2.25} />
-              </button>
-            </div>
-          </>
+          <div className="profile-post-nav-rail is-horizontal" aria-label="Feed navigation">
+            <button
+              type="button"
+              className="profile-post-nav-btn"
+              aria-label="Previous post"
+              disabled={resolvedFeed.length <= 1 || animating}
+              onClick={() => commitSlide(-1)}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <ChevronLeft aria-hidden="true" strokeWidth={2.25} />
+            </button>
+            <button
+              type="button"
+              className="profile-post-nav-btn"
+              aria-label="Next post"
+              disabled={resolvedFeed.length <= 1 || animating}
+              onClick={() => commitSlide(1)}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <ChevronRight aria-hidden="true" strokeWidth={2.25} />
+            </button>
+          </div>
         ) : null}
       </div>
 

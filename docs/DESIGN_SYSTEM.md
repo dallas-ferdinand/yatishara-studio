@@ -622,9 +622,13 @@ watch layout as mobile — native-ratio player, avatar in the title — except t
 Boost book bar sits at the **top** of the feed column as a 32px
 secondary header (`--cursor-head-h`, `padding: 0 8px 0 10px`, bottom hairline).
 Desktop left: labeled Save + Share; right: labeled Boost. Contribute is the
-comments sidebar head pill, not a bar button. Mobile keeps that bar at the bottom with the same inset. Overflowing watch
-descriptions use click-to-scroll (`.is-scroll-active`) like `.md` Copy fences,
-flush to the bottom edge with Academy under-video + bottom fades. Desktop comments head: 20px avatar, name, and a 24px Contribute pill
+comments sidebar head pill, not a bar button. Mobile keeps that bar at the bottom with the same inset.
+Pinned media (does not scroll). Name + description sit in the bottom pane and
+scroll natively, close under the player like Academy watch. Left/right (swipe,
+wheel, arrows) = next/prev **feed** post. No up/down post swipe and no
+left/right through an author’s profile posts. Overflowing copy uses the
+caption scroller, not click-to-scroll. Academy under-video + bottom fades.
+Desktop comments head: 20px avatar, name, and a 24px Contribute pill
 (Feather + label + count) — not Boost/Save/time. Head is
 `--cursor-head-h` with a bottom hairline; Search comments keeps its bottom
 hairline (no extra top line under the head). Comments rail is a flat `--mos-panel` column with a left
