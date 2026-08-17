@@ -629,7 +629,8 @@ and header arrows = next/prev **feed** post. Wheel over the **video** also
 goes next/prev; wheel over the caption scrolls the copy. No up/down post swipe and no
 left/right through an author’s profile posts. Overflowing copy uses the
 caption scroller, not click-to-scroll. 16px fades pin to the top and bottom of
-the caption pane (they do not scroll with the copy). Hairline under the player.
+the caption pane (they do not scroll with the copy). Hairline on the caption
+pane (flush under the video); title sits 8px below it.
 Desktop comments head: 20px avatar, name, and a 24px Contribute pill
 (Feather + label + count) — not Boost/Save/time. Head is
 `--cursor-head-h` with a bottom hairline; Search comments keeps its bottom
