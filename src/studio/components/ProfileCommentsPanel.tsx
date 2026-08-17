@@ -116,6 +116,12 @@ type PendingImage = {
   previewUrl: string;
 };
 
+type PendingVoice = {
+  file: File;
+  previewUrl: string;
+  durationSec: number;
+};
+
 type PostAuthorInfo = {
   displayName?: string;
   username?: string;
@@ -664,6 +670,7 @@ function CommentsBody({
     boxSelector: ".profile-comments-composer-box",
   });
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [pendingVoice, setPendingVoice] = useState<PendingVoice | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [likeLocal, setLikeLocal] = useState<
     Record<string, { liked: boolean; likeCount: number }>
@@ -789,6 +796,13 @@ function CommentsBody({
     if (imageInputRef.current) imageInputRef.current.value = "";
   }
 
+  function clearPendingVoice() {
+    setPendingVoice((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  }
+
   function openImagePreview(url: string) {
     setImagePreviewUrl(url);
   }
@@ -801,6 +815,7 @@ function CommentsBody({
     setDraft("");
     setError("");
     clearPendingImage();
+    clearPendingVoice();
     setImagePreviewUrl(null);
     setLikeLocal({});
     setCommentSearch("");
@@ -815,6 +830,10 @@ function CommentsBody({
   useEffect(() => {
     return () => {
       setPendingImage((prev) => {
+        if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+        return null;
+      });
+      setPendingVoice((prev) => {
         if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
         return null;
       });
@@ -866,6 +885,7 @@ function CommentsBody({
     setDraft("");
     setError("");
     clearPendingImage();
+    clearPendingVoice();
     setImagePreviewUrl(null);
   }
 
@@ -886,6 +906,7 @@ function CommentsBody({
     setDraft("");
     setError("");
     clearPendingImage();
+    clearPendingVoice();
     setImagePreviewUrl(null);
   }
 
@@ -897,6 +918,7 @@ function CommentsBody({
     setDraft("");
     setError("");
     clearPendingImage();
+    clearPendingVoice();
     setImagePreviewUrl(null);
   }
 
@@ -977,7 +999,7 @@ function CommentsBody({
     const body = draft.trim();
     const audioAssetId = opts?.audioAssetId;
     const audioDurationSec = opts?.audioDurationSec;
-    if ((!body && !pendingImage && !audioAssetId) || busy) return;
+    if ((!body && !pendingImage && !audioAssetId && !pendingVoice) || busy) return;
     if (!auth.isAuthenticated) {
       window.location.href = `/?next=${encodeURIComponent("/")}`;
       return;
@@ -990,10 +1012,17 @@ function CommentsBody({
       if (pendingImage) {
         imageAssetId = await uploadCommentImage(pendingImage.file);
       }
-      const voice =
+      let voice =
         audioAssetId
           ? { audioAssetId, ...(audioDurationSec != null ? { audioDurationSec } : {}) }
           : {};
+      if (!voice.audioAssetId && pendingVoice) {
+        const uploadedAudioId = await uploadCommentAudio(pendingVoice.file);
+        voice = {
+          audioAssetId: uploadedAudioId,
+          audioDurationSec: pendingVoice.durationSec,
+        };
+      }
       const stamp = getVideoTimeSec
         ? (() => {
             const t = getVideoTimeSec();
@@ -1021,6 +1050,7 @@ function CommentsBody({
           });
       setDraft("");
       clearPendingImage();
+      clearPendingVoice();
       onCommentCountChange?.(result.commentCount);
       if (parentId && frame.parentPreview) {
         setStack((prev) => {
@@ -1149,17 +1179,12 @@ function CommentsBody({
         "Voice note.webm",
         { type: blob.type || "audio/webm" },
       );
-      void (async () => {
-        try {
-          const audioAssetId = await uploadCommentAudio(file);
-          await submit({ audioAssetId, audioDurationSec: durationSec });
-        } catch (err) {
-          playUiSound("error");
-          setError(friendlyConvexError(err, "Could not send voice note"));
-        } finally {
-          setRecState("idle");
-        }
-      })();
+      const previewUrl = URL.createObjectURL(blob);
+      setPendingVoice((prev) => {
+        if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+        return { file, previewUrl, durationSec };
+      });
+      setRecState("idle");
     };
     recorder.start(250);
     setRecState("recording");
@@ -1605,6 +1630,25 @@ function CommentsBody({
             </button>
           </div>
         ) : null}
+        {pendingVoice ? (
+          <div className="profile-comments-attach-preview is-voice">
+            <StudioChatAudioPlayer
+              src={pendingVoice.previewUrl}
+              title="Voice note"
+              durationHint={pendingVoice.durationSec}
+              compact
+            />
+            <button
+              type="button"
+              className="profile-comments-attach-remove"
+              aria-label="Remove voice note"
+              disabled={busy}
+              onClick={clearPendingVoice}
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
         <div
           ref={composerResize.boxRef}
           className="profile-comments-composer-box studio-composer-resize-box"
@@ -1714,11 +1758,11 @@ function CommentsBody({
             ) : (
               <button
                 type="button"
-                className="studio-composer-circle-btn"
-                onClick={() => void startRecording()}
-                disabled={busy || !auth.isAuthenticated}
-                aria-label="Record a voice note"
-                title="Record"
+              className={`studio-composer-circle-btn${pendingVoice ? " is-on" : ""}`}
+              onClick={() => void startRecording()}
+              disabled={busy || !auth.isAuthenticated}
+              aria-label={pendingVoice ? "Replace voice note" : "Record a voice note"}
+              title={pendingVoice ? "Replace voice note" : "Record"}
               >
                 <Mic aria-hidden="true" />
               </button>
@@ -1728,9 +1772,10 @@ function CommentsBody({
               className="studio-composer-circle-btn studio-composer-send-btn"
               disabled={
                 recState === "sending" ||
-                (recState === "idle" && (busy || (!draft.trim() && !pendingImage)))
+                (recState === "idle" &&
+                  (busy || (!draft.trim() && !pendingImage && !pendingVoice)))
               }
-              aria-label={recState !== "idle" ? "Send voice note" : "Send comment"}
+              aria-label={recState !== "idle" ? "Attach voice note" : "Send comment"}
               onClick={() => {
                 if (recState !== "idle") {
                   finishRecording("send");

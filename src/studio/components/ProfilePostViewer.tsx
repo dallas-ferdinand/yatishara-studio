@@ -46,6 +46,7 @@ import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
 import { CaptionChipText } from "./CaptionChipText";
+import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
 import {
   feedCacheKey,
@@ -95,11 +96,23 @@ type MentionChip = {
   avatarUrl?: string;
 };
 
+type PostMediaKind = "image" | "video" | "audio";
+
+type PostMediaItem = {
+  assetId: Id<"assets">;
+  kind: PostMediaKind;
+  name: string;
+  thumbnailUrl?: string;
+  mediaUrl?: string;
+  width?: number;
+  height?: number;
+};
+
 type FeedPost = {
   _id: Id<"profilePosts">;
   assetId: Id<"assets">;
   profileId: Id<"profiles">;
-  kind: "image" | "video";
+  kind: PostMediaKind;
   name: string;
   caption?: string;
   keywords?: string[];
@@ -116,6 +129,7 @@ type FeedPost = {
   mediaUrl?: string;
   width?: number;
   height?: number;
+  items?: PostMediaItem[];
   likedByViewer: boolean;
   savedByViewer?: boolean;
   username: string;
@@ -132,7 +146,7 @@ type FeedPost = {
 type AuthorPost = {
   _id: Id<"profilePosts">;
   assetId: Id<"assets">;
-  kind: "image" | "video";
+  kind: PostMediaKind;
   name: string;
   caption?: string;
   keywords?: string[];
@@ -149,6 +163,7 @@ type AuthorPost = {
   mediaUrl?: string;
   width?: number;
   height?: number;
+  items?: PostMediaItem[];
   likedByViewer: boolean;
   savedByViewer?: boolean;
 };
@@ -286,6 +301,7 @@ function FeedMedia({
   const hideTimerRef = useRef<number | null>(null);
   const chromeVisibleRef = useRef(false);
   const postIdRef = useRef(post._id);
+  const itemKeyRef = useRef(String(post.assetId));
   const loadedSrcRef = useRef<string | null>(null);
   const resumeAtRef = useRef(0);
   const wasPlayingRef = useRef(false);
@@ -302,6 +318,7 @@ function FeedMedia({
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [policyMuted, setPolicyMuted] = useState(false);
   const [mediaSize, setMediaSize] = useState<{ w: number; h: number } | null>(null);
+  const [itemIndex, setItemIndex] = useState(0);
   const policyMutedRef = useRef(false);
   const userPausedRef = useRef(false);
 
@@ -315,12 +332,36 @@ function FeedMedia({
     userPausedRef.current = false;
   }
 
-  const mediaUrl = media?.mediaUrl ?? post.mediaUrl;
-  const thumbUrl = media?.thumbnailUrl ?? post.thumbnailUrl;
+  const items: PostMediaItem[] =
+    media?.items && media.items.length > 0
+      ? media.items
+      : post.items && post.items.length > 0
+        ? post.items
+        : [
+            {
+              assetId: post.assetId,
+              kind: post.kind,
+              name: post.name,
+              thumbnailUrl: media?.thumbnailUrl ?? post.thumbnailUrl,
+              mediaUrl: media?.mediaUrl ?? post.mediaUrl,
+              width: media?.width ?? post.width,
+              height: media?.height ?? post.height,
+            },
+          ];
+  const safeIndex = Math.min(itemIndex, Math.max(0, items.length - 1));
+  const item = items[safeIndex] ?? items[0]!;
+  const mediaUrl = item.mediaUrl ?? media?.mediaUrl ?? post.mediaUrl;
+  const thumbUrl = item.thumbnailUrl ?? media?.thumbnailUrl ?? post.thumbnailUrl;
   const thumbIsVideo =
     typeof thumbUrl === "string" && /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(thumbUrl);
+  const itemKind = item.kind ?? media?.kind ?? post.kind;
+  if (itemKeyRef.current !== String(item.assetId)) {
+    itemKeyRef.current = String(item.assetId);
+    lockedSrcRef.current = null;
+    loadedSrcRef.current = null;
+  }
   const candidateSrc =
-    post.kind === "video"
+    itemKind === "video"
       ? mediaUrl || (thumbIsVideo ? thumbUrl : undefined) || undefined
       : mediaUrl || thumbUrl || undefined;
 
@@ -339,8 +380,9 @@ function FeedMedia({
 
   const stableSrc = lockedSrcRef.current;
   const displaySrc = stableSrc;
-  const isVideo = post.kind === "video";
-  const playSrc = isVideo ? stableSrc ?? undefined : displaySrc ?? undefined;
+  const isVideo = itemKind === "video";
+  const isAudio = itemKind === "audio";
+  const playSrc = isVideo || isAudio ? stableSrc ?? undefined : displaySrc ?? undefined;
   const shouldWarm = active || preload;
 
   const clearHideTimer = useCallback(() => {
@@ -389,6 +431,7 @@ function FeedMedia({
     setMediaSize(null);
     resumeAtRef.current = 0;
     wasPlayingRef.current = false;
+    setItemIndex(0);
   }, [post._id, hideChrome]);
 
   useEffect(() => {
@@ -400,7 +443,7 @@ function FeedMedia({
 
   // Decode neighbor/active images early.
   useEffect(() => {
-    if (!shouldWarm || post.kind === "video" || !displaySrc) return;
+    if (!shouldWarm || itemKind === "video" || itemKind === "audio" || !displaySrc) return;
     if (typeof Image === "undefined") return;
     const img = new window.Image();
     img.decoding = "async";
@@ -412,12 +455,12 @@ function FeedMedia({
       }
     };
     img.src = displaySrc;
-  }, [shouldWarm, post.kind, displaySrc]);
+  }, [shouldWarm, itemKind, displaySrc]);
 
   // Kick video network fetch once per locked src — never reload on role/active flips.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || post.kind !== "video" || !playSrc || !shouldWarm) return;
+    if (!video || itemKind !== "video" || !playSrc || !shouldWarm) return;
     if (loadedSrcRef.current === playSrc) return;
     loadedSrcRef.current = playSrc;
     try {
@@ -425,12 +468,12 @@ function FeedMedia({
     } catch {
       /* ignore */
     }
-  }, [shouldWarm, playSrc, post.kind]);
+  }, [shouldWarm, playSrc, itemKind]);
 
   // Pause when leaving the slide/tab; autoplay with volume when scrolled to.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || post.kind !== "video" || !playSrc) return undefined;
+    if (!video || itemKind !== "video" || !playSrc) return undefined;
 
     if (!active) {
       // Leaving: stash position + pause so we don't burn decode/bandwidth off-slide.
@@ -489,11 +532,11 @@ function FeedMedia({
       video.removeEventListener("canplay", tryPlay);
       video.removeEventListener("loadeddata", tryPlay);
     };
-  }, [active, playSrc, post.kind, soundEnabled]);
+  }, [active, playSrc, itemKind, soundEnabled]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || post.kind !== "video") return undefined;
+    if (!video || itemKind !== "video") return undefined;
 
     const onTime = () => {
       if (!pointerSeekingRef.current) {
@@ -540,10 +583,10 @@ function FeedMedia({
       video.removeEventListener("pause", onPause);
       video.removeEventListener("error", onError);
     };
-  }, [clearHideTimer, playSrc, post.kind, scheduleHide]);
+  }, [clearHideTimer, playSrc, itemKind, scheduleHide]);
 
   useEffect(() => {
-    if (!active || post.kind !== "video") return undefined;
+    if (!active || itemKind !== "video") return undefined;
     function onFeedTap(event: Event) {
       const detail = (event as CustomEvent<{ postId?: string }>).detail;
       if (!detail?.postId || detail.postId !== post._id) return;
@@ -561,12 +604,12 @@ function FeedMedia({
     }
     window.addEventListener("ys-feed-media-tap", onFeedTap);
     return () => window.removeEventListener("ys-feed-media-tap", onFeedTap);
-  }, [active, hideChrome, post._id, post.kind, showChrome]);
+  }, [active, hideChrome, post._id, itemKind, showChrome]);
 
   useEffect(() => {
     function onUnlock() {
       const video = videoRef.current;
-      if (!video || post.kind !== "video" || !active) return;
+      if (!video || itemKind !== "video" || !active) return;
       policyMutedRef.current = false;
       setPolicyMuted(false);
       setSoundEnabled(true);
@@ -576,7 +619,7 @@ function FeedMedia({
     }
     window.addEventListener("ys-feed-sound-unlock", onUnlock);
     return () => window.removeEventListener("ys-feed-sound-unlock", onUnlock);
-  }, [active, post.kind]);
+  }, [active, itemKind]);
 
   function stopFeedGesture(event: ReactPointerEvent | ReactMouseEvent) {
     event.stopPropagation();
@@ -676,9 +719,16 @@ function FeedMedia({
   return (
     <div
       ref={mediaRootRef}
-      className={`profile-post-slide-media${isVideo ? " is-video" : ""}`}
+      className={`profile-post-slide-media${isVideo ? " is-video" : ""}${isAudio ? " is-audio" : ""}`}
     >
-      {isVideo && playSrc ? (
+      {isAudio && playSrc ? (
+        <div className="profile-post-audio-stage">
+          <StudioChatAudioPlayer
+            src={playSrc}
+            title={item.name || post.name}
+          />
+        </div>
+      ) : isVideo && playSrc ? (
         <MediaLoadFrame
           kind="video"
           src={playSrc}
@@ -805,6 +855,42 @@ function FeedMedia({
             <span className="profile-post-video-time">{formatVideoTime(duration)}</span>
           </div>
         </div>
+      ) : null}
+      {items.length > 1 ? (
+        <>
+          <button
+            type="button"
+            className="profile-post-items-nav is-prev"
+            aria-label="Previous in this post"
+            onPointerDown={stopFeedGesture}
+            onClick={(event) => {
+              stopFeedGesture(event);
+              setItemIndex((i) => (i - 1 + items.length) % items.length);
+            }}
+          >
+            <ChevronLeft aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="profile-post-items-nav is-next"
+            aria-label="Next in this post"
+            onPointerDown={stopFeedGesture}
+            onClick={(event) => {
+              stopFeedGesture(event);
+              setItemIndex((i) => (i + 1) % items.length);
+            }}
+          >
+            <ChevronRight aria-hidden="true" />
+          </button>
+          <div className="profile-post-items-dots" aria-hidden="true">
+            {items.map((entry, index) => (
+              <span
+                key={String(entry.assetId)}
+                className={index === safeIndex ? "is-current" : undefined}
+              />
+            ))}
+          </div>
+        </>
       ) : null}
     </div>
   );
