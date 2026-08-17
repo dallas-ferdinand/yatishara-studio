@@ -1579,6 +1579,7 @@ export function PostComposeTab({
       {pickerOpen ? (
         <StudioAssetPickerSheet
           title="Choose media"
+          doneLabel="Choose"
           kinds={["image", "video", "audio"]}
           multi
           stayOpen

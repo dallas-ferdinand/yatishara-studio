@@ -26622,8 +26622,8 @@ export function StudioShell({
                     req?.onPick?.(picked[0]);
                   }
                 }}
-                title={assetPickRequest.pickMode === "share" ? "Share" : "Send"}
-                aria-label={assetPickRequest.pickMode === "share" ? "Share" : "Send"}
+                title={assetPickRequest.pickMode === "share" ? "Share" : "Choose"}
+                aria-label={assetPickRequest.pickMode === "share" ? "Share" : "Choose"}
                 aria-expanded={
                   assetPickRequest.pickMode === "share" ? assetPickShareOpen : undefined
                 }
@@ -26635,7 +26635,7 @@ export function StudioShell({
                   <Share2 aria-hidden="true" />
                 ) : null}
                 <span>
-                  {assetPickRequest.pickMode === "share" ? "Share" : "Send"}
+                  {assetPickRequest.pickMode === "share" ? "Share" : "Choose"}
                 </span>
               </button>
             </div>
@@ -27707,10 +27707,10 @@ export function StudioShell({
                       }
                     }}
                     title={
-                      assetPickRequest.pickMode === "share" ? "Share" : "Send"
+                      assetPickRequest.pickMode === "share" ? "Share" : "Choose"
                     }
                     aria-label={
-                      assetPickRequest.pickMode === "share" ? "Share" : "Send"
+                      assetPickRequest.pickMode === "share" ? "Share" : "Choose"
                     }
                     aria-expanded={
                       assetPickRequest.pickMode === "share"
@@ -27725,7 +27725,7 @@ export function StudioShell({
                       <Share2 aria-hidden="true" />
                     ) : null}
                     <span>
-                      {assetPickRequest.pickMode === "share" ? "Share" : "Send"}
+                      {assetPickRequest.pickMode === "share" ? "Share" : "Choose"}
                     </span>
                   </button>
                 </div>
