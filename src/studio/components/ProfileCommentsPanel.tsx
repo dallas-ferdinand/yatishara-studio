@@ -454,7 +454,8 @@ function ProfileCommentBubble({
                   <img className="profile-comment-image" src={comment.imageUrl} alt="" />
                 </button>
               ) : null}
-              <div className="profile-comment-bubble-actions">
+            </div>
+            <div className="profile-comment-bubble-actions">
                 {locked ? (
                   <span
                     className={`profile-comment-like is-static${likeState.likeCount > 0 ? "" : " is-empty"}`}
@@ -513,7 +514,6 @@ function ProfileCommentBubble({
                   </span>
                 ) : null}
               </div>
-            </div>
           </div>
         </article>
       </div>

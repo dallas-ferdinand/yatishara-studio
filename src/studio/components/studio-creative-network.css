@@ -1632,6 +1632,11 @@ button.studio-cn-card-btn.public-offers-card {
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
+/* Comments search strip draws the hairline — avoid a double top border. */
+.studio-cn-book-sidebar:has(.is-comments-fill) .studio-cn-book-sidebar-head {
+  border-bottom: none;
+}
+
 .studio-cn-book-sidebar-head strong {
   min-width: 0;
 }

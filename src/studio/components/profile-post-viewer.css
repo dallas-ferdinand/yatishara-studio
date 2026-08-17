@@ -1092,7 +1092,7 @@
 
   .profile-comments-dock .profile-comments-head {
     flex: 0 0 auto;
-    border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+    border-bottom: 0;
   }
 
   .profile-comments-dock .profile-comments-search {
@@ -1204,7 +1204,8 @@
   gap: 8px;
   min-height: var(--cursor-head-h, 32px);
   padding: 0 8px 0 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  /* Search strip owns the hairline so the row has a visible top border. */
+  border-bottom: 0;
   flex: 0 0 auto;
 }
 
@@ -1241,9 +1242,6 @@
 
 .profile-comments-search .cursor-panel-search {
   width: 100%;
-  /* Comments head already has the top divider.
-     Beat `.studio-polish .cursor-panel-search` which re-adds border-top. */
-  border-top: none;
 }
 
 .studio-polish .profile-comments-search .cursor-panel-search,
@@ -1251,7 +1249,8 @@
 .profile-comments-dock .profile-comments-search .cursor-panel-search,
 .studio-cn-book-sidebar-body .profile-comments-search .cursor-panel-search,
 .studio-cn-book-sheet .profile-comments-search .cursor-panel-search {
-  border-top: none;
+  border-top: 1px solid var(--studio-chrome-divider);
+  border-bottom: 1px solid var(--studio-chrome-divider);
   width: 100%;
   background: transparent;
 }
@@ -1461,7 +1460,7 @@
 .profile-comments-list {
   min-height: 0;
   overflow: auto;
-  padding: 10px 10px 12px;
+  padding: 10px 14px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1986,17 +1985,16 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comment-row.is-mine .profile-comment-body {
   align-items: flex-end;
-  justify-items: end;
-  max-width: min(88%, calc(100% - 34px));
+  max-width: min(82%, calc(100% - 44px));
 }
 
 .profile-comment-row:not(.is-mine) .profile-comment-body {
-  max-width: min(88%, calc(100% - 34px));
+  max-width: min(82%, calc(100% - 44px));
 }
 
 .studio-polish.is-studio-mobile .profile-comment-row:not(.is-mine) .profile-comment-body,
 .studio-polish.is-studio-mobile .profile-comment-row.is-mine .profile-comment-body {
-  max-width: min(88%, calc(100% - 34px));
+  max-width: min(82%, calc(100% - 44px));
 }
 
 .profile-comment-row:active {
@@ -2014,9 +2012,12 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comment-body {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   min-width: 0;
+  width: fit-content;
 }
 
 .profile-comment-bubble {
@@ -2056,27 +2057,39 @@ button.post-compose-inline-chip.profile-description-chip {
 .profile-comment-bubble-actions {
   display: inline-flex;
   align-items: center;
-  gap: 0;
-  flex-shrink: 0;
-  margin: 2px 0 0;
+  gap: 2px;
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin: 1px -2px 0 0;
+  transform: translateX(4px);
 }
 
 .profile-comment-row.is-mine .profile-comment-bubble-actions {
   align-self: flex-end;
+  margin: 1px 0 0 -2px;
+  transform: translateX(-4px);
 }
 
 .profile-comment-bubble-actions .profile-comment-like,
 .profile-comment-bubble-actions .profile-comment-reply {
-  min-width: 24px;
-  min-height: 24px;
+  min-width: 0;
+  min-height: 0;
   padding: 0 3px;
-  gap: 2px;
+  gap: 3px;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .profile-comment-bubble-actions .profile-comment-like svg,
 .profile-comment-bubble-actions .profile-comment-reply svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
+}
+
+.profile-comment-bubble-actions .profile-comment-like:hover,
+.profile-comment-bubble-actions .profile-comment-reply:hover {
+  color: var(--color-cursor-text, var(--mos-text));
 }
 
 .profile-comment-reply {
@@ -2729,8 +2742,9 @@ button.post-compose-inline-chip.profile-description-chip {
   color: color-mix(in srgb, #0f172a 82%, transparent);
 }
 
-[data-appearance="light"] .profile-comment-like {
-  color: #0f172a;
+[data-appearance="light"] .profile-comment-like,
+[data-appearance="light"] .profile-comment-reply {
+  color: var(--color-cursor-muted, color-mix(in srgb, #0f172a 52%, transparent));
   text-shadow: none;
 }
 
@@ -2750,6 +2764,13 @@ button.post-compose-inline-chip.profile-description-chip {
 [data-appearance="light"] .profile-comment-like span,
 [data-appearance="light"] .profile-comments-post-action span {
   color: #0f172a;
+}
+
+[data-appearance="light"] .profile-comment-bubble-actions .profile-comment-like,
+[data-appearance="light"] .profile-comment-bubble-actions .profile-comment-reply,
+[data-appearance="light"] .profile-comment-bubble-actions .profile-comment-like span,
+[data-appearance="light"] .profile-comment-bubble-actions .profile-comment-reply span {
+  color: var(--color-cursor-muted, color-mix(in srgb, #0f172a 52%, transparent));
 }
 
 
