@@ -1126,6 +1126,7 @@
   min-height: 0;
   height: auto;
   max-height: none;
+  touch-action: pan-y;
 }
 
 .studio-academy-watch-player {

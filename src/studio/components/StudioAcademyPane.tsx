@@ -13,7 +13,8 @@ import {
   Tag,
   Zap,
 } from "lucide-react";
-import { useEffect, useRef, useState, Fragment } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -446,6 +447,61 @@ function CheckoutDock({
   );
 }
 
+const LESSON_SWIPE_MIN_PX = 56;
+
+function useAcademyLessonSwipe(
+  enabled: boolean,
+  onSwipe: (dir: "next" | "prev") => void,
+) {
+  const startRef = useRef<{
+    x: number;
+    y: number;
+    axis: "h" | "v" | null;
+  } | null>(null);
+  const onSwipeRef = useRef(onSwipe);
+  onSwipeRef.current = onSwipe;
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!enabled || event.pointerType === "mouse") return;
+    const target = event.target as HTMLElement | null;
+    if (
+      target?.closest(
+        "iframe, video, button, a, input, textarea, [role='dialog']",
+      )
+    ) {
+      return;
+    }
+    startRef.current = { x: event.clientX, y: event.clientY, axis: null };
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = startRef.current;
+    if (!start || start.axis) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+    start.axis = Math.abs(dx) > Math.abs(dy) * 1.15 ? "h" : "v";
+  };
+
+  const finish = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = startRef.current;
+    startRef.current = null;
+    if (!enabled || !start || start.axis !== "h") return;
+    const dx = event.clientX - start.x;
+    if (Math.abs(dx) < LESSON_SWIPE_MIN_PX) return;
+    onSwipeRef.current(dx < 0 ? "next" : "prev");
+  };
+
+  return {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp: finish,
+    onPointerCancel: () => {
+      startRef.current = null;
+    },
+  };
+}
+
 function BannerStage({
   bannerUrl,
   embedUrl,
@@ -674,6 +730,36 @@ export function StudioAcademyPane({
   const selectedLesson = academy.lessonId
     ? (detail?.lessons.find((l) => l._id === academy.lessonId) ?? null)
     : null;
+
+  const lessonSwipeIds = useMemo(() => {
+    const list = [...(detail?.lessons ?? [])].sort(
+      (a, b) => a.sortOrder - b.sortOrder,
+    );
+    return [null, ...list.map((lesson) => lesson._id)] as Array<
+      Id<"academyLessons"> | null
+    >;
+  }, [detail?.lessons]);
+
+  const swipeLesson = useCallback(
+    (dir: "next" | "prev") => {
+      const current = academy.lessonId ?? null;
+      const index = lessonSwipeIds.findIndex((id) => id === current);
+      if (index < 0) return;
+      const next = lessonSwipeIds[index + (dir === "next" ? 1 : -1)];
+      if (next === undefined) return;
+      academy.setLessonId(next);
+    },
+    [academy, lessonSwipeIds],
+  );
+
+  const lessonSwipeEnabled =
+    isMobile &&
+    Boolean(detailOpen && detail) &&
+    !lessonsSheetOpen &&
+    !commentsOpen &&
+    !checkoutSheetOpen;
+
+  const lessonSwipe = useAcademyLessonSwipe(lessonSwipeEnabled, swipeLesson);
 
   // Unlocked playback: mount Bunny Stream embed so the player shows Stream's
   // native thumbnail (not our Storage cover overlay). Locked stays on cover.
@@ -1126,6 +1212,7 @@ export function StudioAcademyPane({
       className={`public-offers-main studio-cn-catalog${
         isMobile ? " is-academy-watch" : ""
       }`}
+      {...lessonSwipe}
     >
       {isMobile ? (
         <div className="studio-academy-watch-player">
@@ -1219,6 +1306,7 @@ export function StudioAcademyPane({
       className={`public-offers-main studio-cn-catalog${
         isMobile ? " is-academy-watch" : ""
       }`}
+      {...lessonSwipe}
     >
       {isMobile ? (
         <div className="studio-academy-watch-player">
