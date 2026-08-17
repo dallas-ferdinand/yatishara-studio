@@ -1255,6 +1255,14 @@
   background: transparent;
 }
 
+/* Desktop feed dock sits under the workspace head — don't stack a second top line. */
+@media (min-width: 900px) {
+  .studio-polish .profile-comments-dock > .profile-comments-search .cursor-panel-search,
+  .profile-comments-dock > .profile-comments-search .cursor-panel-search {
+    border-top: none;
+  }
+}
+
 [data-appearance="light"] .studio-polish .profile-comments-search .cursor-panel-search,
 [data-appearance="light"] .profile-comments-panel .profile-comments-search .cursor-panel-search,
 [data-appearance="light"] .profile-comments-dock .profile-comments-search .cursor-panel-search,

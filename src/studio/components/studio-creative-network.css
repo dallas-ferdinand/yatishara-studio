@@ -1632,9 +1632,13 @@ button.studio-cn-card-btn.public-offers-card {
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
-/* Comments search strip draws the hairline — avoid a double top border. */
-.studio-cn-book-sidebar:has(.is-comments-fill) .studio-cn-book-sidebar-head {
-  border-bottom: none;
+/* Comments search strip draws the hairline — beat .studio-polish aside
+   .cursor-panel-head { border-bottom !important } or title + search stack. */
+.studio-polish aside.studio-cn-book-sidebar:has(.is-comments-fill) .studio-cn-book-sidebar-head.cursor-panel-head,
+.studio-polish aside.studio-cn-book-sidebar:has(.is-comments-fill) .studio-cn-book-sidebar-head.cursor-sidebar-head,
+[data-appearance="light"] .studio-polish aside.studio-cn-book-sidebar:has(.is-comments-fill) .studio-cn-book-sidebar-head.cursor-panel-head,
+[data-appearance="light"] .studio-polish aside.studio-cn-book-sidebar:has(.is-comments-fill) .studio-cn-book-sidebar-head.cursor-sidebar-head {
+  border-bottom: none !important;
 }
 
 .studio-cn-book-sidebar-head strong {
