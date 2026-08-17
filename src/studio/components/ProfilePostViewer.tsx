@@ -2359,7 +2359,7 @@ export function ProfilePostViewer({
                       ? (localFollows[post.profileId] ?? post.isFollowing)
                       : post.isFollowing,
                   )}
-                  showEdit={isMobile && Boolean(post.isOwner)}
+                  showEdit={Boolean(post.isOwner)}
                   active={isInteractiveSlide}
                   placement="page"
                   onOpenProfile={onOpenProfile}

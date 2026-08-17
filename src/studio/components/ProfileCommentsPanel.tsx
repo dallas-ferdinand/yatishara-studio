@@ -2348,11 +2348,6 @@ export function ProfileCommentsPanel({
       open={open}
       postAuthor={useSidebarChrome ? undefined : postAuthor}
       postActions={postId ? postActions : undefined}
-      onEditDescription={
-        !isMobile && postId && postAuthor?.isOwner && description
-          ? openDescriptionEditor
-          : undefined
-      }
       locked={locked}
       getVideoTimeSec={getVideoTimeSec}
       onSeekVideo={onSeekVideo}
