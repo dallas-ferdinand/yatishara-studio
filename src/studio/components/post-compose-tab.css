@@ -129,11 +129,17 @@
   aspect-ratio: auto;
   border-radius: 16px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, #fff 10%, transparent);
-  background: #050608;
+  border: 1px solid var(--pc-line);
+  background: var(--mos-page, var(--pc-bg));
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: var(--pc-shadow);
+}
+
+.post-compose-mock-slide.is-empty {
+  background: transparent;
+  border: 1.5px dotted var(--color-cursor-border, var(--pc-line-strong));
+  box-shadow: none;
 }
 
 @supports not (aspect-ratio: 9 / 16) {
@@ -149,7 +155,7 @@
   z-index: 0;
   display: grid;
   place-items: center;
-  background: #050608;
+  background: transparent;
 }
 
 .post-compose-mock-media .media-load-frame,
@@ -186,7 +192,7 @@
   min-height: 220px;
   color: var(--pc-muted);
   font-size: 13px;
-  background: color-mix(in srgb, var(--pc-bg) 72%, #000);
+  background: transparent;
 }
 
 .post-compose-form {
@@ -577,7 +583,7 @@
   padding: 24px;
   border: 0;
   background: transparent;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--pc-ink);
   cursor: pointer;
   text-align: center;
 }
@@ -591,7 +597,7 @@
   max-width: 16rem;
   font-size: 12px;
   line-height: 1.4;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--pc-muted);
 }
 
 .post-compose-media-choice {

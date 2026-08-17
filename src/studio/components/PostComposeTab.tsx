@@ -949,7 +949,7 @@ export function PostComposeTab({
 
       <div className="post-compose-body">
         <div className="post-compose-mock" aria-label="Post preview">
-          <div className="post-compose-mock-slide">
+          <div className={`post-compose-mock-slide${!current ? " is-empty" : ""}`}>
             <div className="post-compose-mock-media">
               <input
                 ref={fileInputRef}
