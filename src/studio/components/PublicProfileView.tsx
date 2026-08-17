@@ -21,7 +21,7 @@ import {
   UserPlus,
   UserRound,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type SyntheticEvent } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
@@ -59,11 +59,23 @@ type PublicPost = {
   height?: number;
 };
 
-function postAspectCss(post: PublicPost): string {
-  if (post.width != null && post.height != null && post.width > 0 && post.height > 0) {
-    return `${post.width} / ${post.height}`;
+function sizeAspectAttr(width?: number, height?: number): string | undefined {
+  if (width != null && height != null && width > 0 && height > 0) {
+    return `${width}:${height}`;
   }
-  return post.kind === "video" ? "16 / 9" : "1 / 1";
+  return undefined;
+}
+
+function mediaSizeFromEvent(event?: SyntheticEvent<HTMLImageElement | HTMLVideoElement>) {
+  const el = event?.currentTarget;
+  if (!el) return null;
+  if ("naturalWidth" in el && el.naturalWidth > 0 && el.naturalHeight > 0) {
+    return { w: el.naturalWidth, h: el.naturalHeight };
+  }
+  if ("videoWidth" in el && el.videoWidth > 0 && el.videoHeight > 0) {
+    return { w: el.videoWidth, h: el.videoHeight };
+  }
+  return null;
 }
 
 type ProfileTab = "posts" | "saved" | "liked" | "shared";
@@ -87,6 +99,130 @@ const OWNER_TABS: Array<{ id: ProfileTab; label: string; icon: typeof LayoutGrid
   { id: "liked", label: "Boosted", icon: Crown },
   { id: "shared", label: "Shared", icon: Forward },
 ];
+
+function ProfileGridTile({
+  post,
+  onOpen,
+}: {
+  post: PublicPost;
+  onOpen: (post: PublicPost) => void;
+}) {
+  const [measured, setMeasured] = useState<{ w: number; h: number } | null>(null);
+  const width = measured?.w ?? post.width;
+  const height = measured?.h ?? post.height;
+  const aspectAttr = sizeAspectAttr(width, height);
+  const captionPreview = captionGridPreviewText(post.caption);
+  const imageThumb =
+    post.thumbnailUrl && !/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(post.thumbnailUrl)
+      ? post.thumbnailUrl
+      : undefined;
+  const videoSrc =
+    post.kind === "video"
+      ? post.mediaUrl ||
+        (post.thumbnailUrl && /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(post.thumbnailUrl)
+          ? post.thumbnailUrl
+          : undefined)
+      : undefined;
+
+  function onMediaReady(event?: SyntheticEvent<HTMLImageElement | HTMLVideoElement>) {
+    const size = mediaSizeFromEvent(event);
+    if (size) setMeasured(size);
+  }
+
+  return (
+    <button
+      type="button"
+      className="public-profile-tile"
+      onClick={() => onOpen(post)}
+      aria-label={post.caption || post.name}
+    >
+      {imageThumb ? (
+        <MediaLoadFrame
+          kind="image"
+          src={imageThumb}
+          cacheKey={String(post._id)}
+          aspectRatio={aspectAttr}
+          ratio="image"
+          loaderSize="md"
+          loaderRing
+        >
+          {({ onLoad, onError }) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageThumb}
+              alt=""
+              loading="lazy"
+              onLoad={(event) => {
+                onMediaReady(event);
+                onLoad(event);
+              }}
+              onError={onError}
+            />
+          )}
+        </MediaLoadFrame>
+      ) : videoSrc ? (
+        <MediaLoadFrame
+          kind="video"
+          src={videoSrc}
+          cacheKey={String(post._id)}
+          aspectRatio={aspectAttr}
+          ratio="image"
+          loaderSize="md"
+          loaderRing
+        >
+          {({ onLoad, onError }) => (
+            <video
+              className="public-profile-tile-video"
+              src={videoSrc}
+              muted
+              playsInline
+              preload="metadata"
+              onLoadedMetadata={(event) => {
+                onMediaReady(event);
+                onLoad(event);
+              }}
+              onLoadedData={(event) => {
+                onMediaReady(event);
+                onLoad(event);
+              }}
+              onError={onError}
+            />
+          )}
+        </MediaLoadFrame>
+      ) : (
+        <span className="public-profile-tile-fallback">
+          <LogoLoader size="sm" />
+          {post.kind === "video" ? "Video" : "Image"}
+        </span>
+      )}
+      <span className="public-profile-tile-top" aria-hidden="true">
+        <span className="public-profile-tile-meta">
+          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          {formatCount(post.viewCount ?? 0)}
+        </span>
+        <span
+          className="public-profile-tile-kind"
+          title={post.kind === "video" ? "Video" : "Image"}
+        >
+          {post.kind === "video" ? (
+            <Play
+              className="public-profile-tile-kind-icon is-play"
+              strokeWidth={2.85}
+              aria-hidden="true"
+            />
+          ) : (
+            <ImageIcon className="public-profile-tile-kind-icon" />
+          )}
+        </span>
+      </span>
+      {captionPreview ? (
+        <span className="public-profile-tile-caption">
+          <span className="public-profile-tile-description">{captionPreview}</span>
+        </span>
+      ) : null}
+    </button>
+  );
+}
 
 export function PublicProfileView({
   username,
@@ -390,116 +526,13 @@ export function PublicProfileView({
             <div ref={masonryRef} className="public-profile-grid">
               {masonryColumns.map((column, columnIndex) => (
                 <div key={columnIndex} className="public-profile-masonry-col">
-                  {column.map((post) => {
-                    const captionPreview = captionGridPreviewText(post.caption);
-                    return (
-                    <button
+                  {column.map((post) => (
+                    <ProfileGridTile
                       key={post._id}
-                      type="button"
-                      className="public-profile-tile"
-                      style={{ aspectRatio: postAspectCss(post) }}
-                      onClick={() => handleOpenPost(post)}
-                      aria-label={post.caption || post.name}
-                    >
-                      {(() => {
-                        const imageThumb =
-                          post.thumbnailUrl &&
-                          !/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(post.thumbnailUrl)
-                            ? post.thumbnailUrl
-                            : undefined;
-                        const videoSrc =
-                          post.kind === "video"
-                            ? post.mediaUrl ||
-                              (post.thumbnailUrl &&
-                              /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(post.thumbnailUrl)
-                                ? post.thumbnailUrl
-                                : undefined)
-                            : undefined;
-                        if (imageThumb) {
-                          return (
-                            <MediaLoadFrame
-                              kind="image"
-                              src={imageThumb}
-                              cacheKey={String(post._id)}
-                              ratio="fill"
-                              loaderSize="md"
-                              loaderRing
-                            >
-                              {({ onLoad, onError }) => (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={imageThumb}
-                                  alt=""
-                                  loading="lazy"
-                                  onLoad={onLoad}
-                                  onError={onError}
-                                />
-                              )}
-                            </MediaLoadFrame>
-                          );
-                        }
-                        if (videoSrc) {
-                          return (
-                            <MediaLoadFrame
-                              kind="video"
-                              src={videoSrc}
-                              cacheKey={String(post._id)}
-                              ratio="fill"
-                              loaderSize="md"
-                              loaderRing
-                            >
-                              {({ onLoad, onError }) => (
-                                <video
-                                  className="public-profile-tile-video"
-                                  src={videoSrc}
-                                  muted
-                                  playsInline
-                                  preload="metadata"
-                                  onLoadedMetadata={onLoad}
-                                  onLoadedData={onLoad}
-                                  onError={onError}
-                                />
-                              )}
-                            </MediaLoadFrame>
-                          );
-                        }
-                        return (
-                          <span className="public-profile-tile-fallback">
-                            <LogoLoader size="sm" />
-                            {post.kind === "video" ? "Video" : "Image"}
-                          </span>
-                        );
-                      })()}
-                      <span className="public-profile-tile-top" aria-hidden="true">
-                        <span className="public-profile-tile-meta">
-                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                          {formatCount(post.viewCount ?? 0)}
-                        </span>
-                        <span
-                          className="public-profile-tile-kind"
-                          title={post.kind === "video" ? "Video" : "Image"}
-                        >
-                          {post.kind === "video" ? (
-                            <Play
-                              className="public-profile-tile-kind-icon is-play"
-                              strokeWidth={2.85}
-                              aria-hidden="true"
-                            />
-                          ) : (
-                            <ImageIcon className="public-profile-tile-kind-icon" />
-                          )}
-                        </span>
-                      </span>
-                      {captionPreview ? (
-                        <span className="public-profile-tile-caption">
-                          <span className="public-profile-tile-description">
-                            {captionPreview}
-                          </span>
-                        </span>
-                      ) : null}
-                    </button>
-                    );
-                  })}
+                      post={post}
+                      onOpen={handleOpenPost}
+                    />
+                  ))}
                 </div>
               ))}
             </div>
