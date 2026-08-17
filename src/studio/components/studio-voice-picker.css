@@ -770,6 +770,12 @@
   color: #fff;
 }
 
+.studio-voice-picker-more-sentinel {
+  height: 1px;
+  width: 100%;
+  pointer-events: none;
+}
+
 .studio-voice-picker-more {
   appearance: none;
   border: 1px dashed color-mix(in srgb, var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) 70%, transparent);

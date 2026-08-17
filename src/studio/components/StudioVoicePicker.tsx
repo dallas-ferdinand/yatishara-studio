@@ -189,11 +189,30 @@ function StudioVoicePickerInner({
   const [hasMore, setHasMore] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 280);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    if (tab !== "explore" || !hasMore || loading) return;
+    const sentinel = loadMoreRef.current;
+    const root = listRef.current;
+    if (!sentinel || !root) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        setPage((value) => value + 1);
+      },
+      { root, rootMargin: "120px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [tab, hasMore, loading, voices.length]);
 
   // Reset page in the same turn as filter changes (avoids fetching stale page first).
   useEffect(() => {
@@ -684,7 +703,7 @@ function StudioVoicePickerInner({
       ) : null}
       </div>
 
-      <div className="studio-voice-picker-list" role="listbox" aria-label="Voices">
+      <div ref={listRef} className="studio-voice-picker-list" role="listbox" aria-label="Voices">
         {loading && page === 0 ? (
           <div className="studio-voice-picker-empty is-loading" role="status" aria-label="Loading voices">
             <MediaLoadWave size="md" />
@@ -766,14 +785,16 @@ function StudioVoicePickerInner({
           );
         })}
         {tab === "explore" && hasMore ? (
-          <button
-            type="button"
-            className="studio-voice-picker-more"
-            disabled={loading}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            {loading ? "Loading…" : "Load more"}
-          </button>
+          <div
+            ref={loadMoreRef}
+            className="studio-voice-picker-more-sentinel"
+            aria-hidden="true"
+          />
+        ) : null}
+        {tab === "explore" && loading && page > 0 ? (
+          <div className="studio-voice-picker-empty is-loading" role="status" aria-label="Loading more voices">
+            <MediaLoadWave size="md" />
+          </div>
         ) : null}
       </div>
     </div>
