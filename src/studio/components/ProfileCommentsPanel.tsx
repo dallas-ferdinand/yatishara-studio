@@ -52,6 +52,7 @@ import {
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { useStudioComposerResize } from "@/studio/lib/composerHeight";
 import { useLongPress } from "@/desk/hooks/use-long-press";
+import { parseCaptionParts } from "./CaptionChipText";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { MediaLoadFrame } from "./media-load-frame";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
@@ -1803,42 +1804,6 @@ function CommentsBody({
   );
 }
 
-function parseCaptionParts(caption: string | undefined): Array<{
-  type: "text" | "hash" | "mention";
-  value: string;
-}> {
-  const trimmed = caption?.trim() ?? "";
-  const parts: Array<{ type: "text" | "hash" | "mention"; value: string }> = [];
-  if (!trimmed) return parts;
-  const re = /([#@][a-zA-Z0-9._]+)/g;
-  let last = 0;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(trimmed)) !== null) {
-    if (match.index > last) {
-      const collapsed = trimmed.slice(last, match.index).replace(/\s+/g, " ");
-      if (collapsed.length > 0) {
-        parts.push({ type: "text", value: collapsed });
-      }
-    }
-    const token = match[1] ?? "";
-    if (token.startsWith("#") && /^#[a-zA-Z0-9_]{2,32}$/.test(token)) {
-      parts.push({ type: "hash", value: token.slice(1) });
-    } else if (token.startsWith("@") && /^@[a-zA-Z][a-zA-Z0-9._]{2,29}$/.test(token)) {
-      parts.push({ type: "mention", value: token.slice(1).toLowerCase() });
-    } else {
-      parts.push({ type: "text", value: token });
-    }
-    last = match.index + token.length;
-  }
-  if (last < trimmed.length) {
-    const collapsed = trimmed.slice(last).replace(/\s+/g, " ");
-    if (collapsed.length > 0) {
-      parts.push({ type: "text", value: collapsed });
-    }
-  }
-  return parts;
-}
-
 function DescriptionHashChip({ tag }: { tag: string }) {
   return (
     <span className="post-compose-inline-chip is-hash profile-description-chip">
@@ -2181,7 +2146,7 @@ function DescriptionBody({
                   const prev = parts[index - 1];
                   const next = parts[index + 1];
                   const betweenChips =
-                    /^\s+$/.test(part.value) &&
+                    /^[ \t]+$/.test(part.value) &&
                     prev != null &&
                     next != null &&
                     prev.type !== "text" &&

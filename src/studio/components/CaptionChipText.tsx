@@ -24,13 +24,7 @@ export function parseCaptionParts(caption: string | undefined): CaptionPart[] {
   let match: RegExpExecArray | null;
   while ((match = re.exec(trimmed)) !== null) {
     if (match.index > last) {
-      // Collapse runs of whitespace to a single normal space so chips
-      // don't pick up exaggerated gaps from the source caption.
-      const raw = trimmed.slice(last, match.index);
-      const collapsed = raw.replace(/\s+/g, " ");
-      if (collapsed.length > 0) {
-        parts.push({ type: "text", value: collapsed });
-      }
+      parts.push({ type: "text", value: trimmed.slice(last, match.index) });
     }
     const token = match[1] ?? "";
     if (token.startsWith("#") && /^#[a-zA-Z0-9_]{2,32}$/.test(token)) {
@@ -43,10 +37,7 @@ export function parseCaptionParts(caption: string | undefined): CaptionPart[] {
     last = match.index + token.length;
   }
   if (last < trimmed.length) {
-    const collapsed = trimmed.slice(last).replace(/\s+/g, " ");
-    if (collapsed.length > 0) {
-      parts.push({ type: "text", value: collapsed });
-    }
+    parts.push({ type: "text", value: trimmed.slice(last) });
   }
   return parts;
 }
@@ -164,7 +155,7 @@ export function CaptionChipText({
         const prev = parts[index - 1];
         const next = parts[index + 1];
         const betweenChips =
-          /^\s+$/.test(part.value) &&
+          /^[ \t]+$/.test(part.value) &&
           prev != null &&
           next != null &&
           prev.type !== "text" &&
