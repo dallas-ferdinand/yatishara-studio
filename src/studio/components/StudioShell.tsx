@@ -23436,7 +23436,9 @@ export function StudioShell({
           border: 0;
           border-radius: 12px;
           background: transparent;
-          box-shadow: 0 1px 4px rgba(15, 18, 24, 0.16);
+          box-shadow: none;
+          /* Filter paints outside overflow:hidden on the 16:9 player child. */
+          filter: drop-shadow(0 2px 6px rgba(15, 18, 24, 0.2));
           position: relative;
           z-index: 0;
           overflow: visible;
