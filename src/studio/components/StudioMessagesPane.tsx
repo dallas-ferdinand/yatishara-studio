@@ -76,6 +76,7 @@ import {
 } from "@/studio/lib/dmClientCache";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { downloadMediaUrl } from "@/studio/lib/mediaUrls";
+import { useStudioComposerResize } from "@/studio/lib/composerHeight";
 import { playUiSound } from "@/mos-app/sounds.js";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import {
@@ -2240,6 +2241,10 @@ export function StudioMessagesPane({
   onOpenStudioShareItem,
 }: StudioMessagesPaneProps) {
   const { isMobile } = useMobileLayout();
+  const composerResize = useStudioComposerResize({
+    enabled: !isMobile,
+    boxSelector: ".studio-dm-composer-box",
+  });
   const showBack = showChatListWhenEmpty || embeddedInRail;
   const [expiresUnix, setExpiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60 * 12,
@@ -2591,8 +2596,12 @@ export function StudioMessagesPane({
 
   function autosizeComposerInput(el: HTMLTextAreaElement | null) {
     if (!el) return;
-    // Mobile stays one line until the text wraps; desktop keeps the 36px well.
-    const minPx = isMobile ? 22 : 36;
+    if (!isMobile) {
+      el.style.height = "";
+      el.classList.remove("is-single-line");
+      return;
+    }
+    const minPx = 22;
     el.style.height = "0px";
     const scroll = el.scrollHeight;
     const lineCount = el.value.split("\n").length;
@@ -4107,7 +4116,19 @@ export function StudioMessagesPane({
             event.target.value = "";
           }}
         />
-        <div className="studio-dm-composer-box">
+        <div ref={composerResize.boxRef} className="studio-dm-composer-box studio-composer-resize-box">
+            {!isMobile ? (
+              <button
+                type="button"
+                className="studio-composer-resize-handle"
+                aria-label="Resize composer"
+                title="Drag to resize"
+                onPointerDown={composerResize.begin}
+                onPointerMove={composerResize.move}
+                onPointerUp={composerResize.end}
+                onPointerCancel={composerResize.end}
+              />
+            ) : null}
             <div
               className={`studio-dm-composer-row is-message${recState !== "idle" ? " is-recording" : ""}`}
               {...(recState !== "idle"

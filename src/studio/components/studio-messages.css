@@ -1526,6 +1526,27 @@
     0 0 28px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 14%, transparent);
 }
 
+@media (min-width: 900px) {
+  .studio-dm-composer-box {
+    min-height: var(--studio-composer-min-height, 118px);
+    height: var(--studio-composer-box-max-height, 280px);
+    max-height: min(72vh, var(--studio-composer-box-max-height, 280px));
+  }
+  .studio-dm-composer.is-split .studio-dm-composer-row.is-message {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .studio-dm-composer.is-split .studio-dm-composer-row.is-extras {
+    flex: 0 0 auto;
+  }
+  .studio-dm-composer.is-split textarea {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+}
+
 .studio-dm-composer.is-split .studio-dm-composer-row {
   display: flex;
   align-items: center;
@@ -1539,7 +1560,7 @@
   width: calc(100% - 16px);
   max-width: 100%;
   min-width: 0;
-  min-height: calc(36px + 8px + 6px);
+  min-height: calc(44px + 8px + 6px);
   margin: 8px 8px 4px;
   padding: 8px 14px 6px 10px;
   border-bottom: none;
@@ -1625,7 +1646,7 @@
   min-height: 22px;
   padding: 0;
   line-height: 22px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 550;
 }
 
@@ -1711,9 +1732,8 @@
   flex: 1 1 auto;
   min-width: 0;
   width: 100%;
-  /* Two-line content; Create inputline owns 6/10/4 pad around the radius. */
-  height: 36px;
-  min-height: 36px;
+  height: 44px;
+  min-height: 44px;
   max-height: 120px;
   resize: none;
   margin: 0;
@@ -1723,7 +1743,6 @@
   background: transparent;
   color: var(--color-cursor-text-bright, var(--mos-text));
   font: inherit;
-  /* Match Create composer text rhythm. */
   font-size: 13px;
   font-weight: 550;
   line-height: 22px;

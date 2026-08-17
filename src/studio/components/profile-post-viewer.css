@@ -2102,13 +2102,37 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comments-composer-box {
-  display: grid;
-  grid-template-rows: auto auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  grid-template-rows: none;
   width: 100%;
+  min-width: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: 16px;
   background: transparent;
   overflow: hidden;
+}
+
+@media (min-width: 900px) {
+  .profile-comments-composer-box {
+    min-height: var(--studio-composer-min-height, 118px);
+    height: var(--studio-composer-box-max-height, 280px);
+    max-height: min(72vh, var(--studio-composer-box-max-height, 280px));
+  }
+  .profile-comments-composer-box .profile-comments-inputline {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .profile-comments-composer-box textarea {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+  .profile-comments-composer-toolbar {
+    flex: 0 0 auto;
+  }
 }
 
 .profile-comments-inputline {

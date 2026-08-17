@@ -28,6 +28,7 @@ import { formatPostWhen } from "@/studio/lib/formatPostWhen";
 import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
+import { useStudioComposerResize } from "@/studio/lib/composerHeight";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { MediaLoadFrame } from "./media-load-frame";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
@@ -189,6 +190,10 @@ function CommentsBody({
   const [commentSort, setCommentSort] = useState<CommentSort>("newest");
   const deferredSearch = useDeferredValue(commentSearch.trim());
   const searching = deferredSearch.length > 0 && !locked;
+  const composerResize = useStudioComposerResize({
+    enabled: variant === "dock",
+    boxSelector: ".profile-comments-composer-box",
+  });
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [likeLocal, setLikeLocal] = useState<
@@ -1028,81 +1033,62 @@ function CommentsBody({
             </button>
           </div>
         ) : null}
-        {variant === "sheet" ? (
-          <div className="profile-comments-composer-box">
-            <div className="profile-comments-inputline">
-              <textarea
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void submit();
-                  }
-                }}
-                placeholder={composerPlaceholder}
-                maxLength={500}
-                disabled={busy}
-                rows={1}
-              />
-            </div>
-            <div className="profile-comments-composer-toolbar">
-              <button
-                type="button"
-                className={`profile-comments-circle-btn${pendingImage ? " is-on" : ""}`}
-                aria-label={pendingImage ? "Replace image" : "Attach image"}
-                disabled={busy || !auth.isAuthenticated}
-                onClick={() => imageInputRef.current?.click()}
-              >
-                <ImageIcon aria-hidden="true" />
-              </button>
-              <button
-                type="submit"
-                className="profile-comments-circle-btn is-send"
-                disabled={busy || (!draft.trim() && !pendingImage)}
-                aria-label="Send comment"
-              >
-                {busy ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <ArrowUp aria-hidden="true" />
-                )}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="profile-comments-input-row">
+        <div
+          ref={composerResize.boxRef}
+          className="profile-comments-composer-box studio-composer-resize-box"
+        >
+          {variant === "dock" ? (
             <button
               type="button"
-              className={`profile-comments-attach-btn${pendingImage ? " is-on" : ""}`}
+              className="studio-composer-resize-handle"
+              aria-label="Resize composer"
+              title="Drag to resize"
+              onPointerDown={composerResize.begin}
+              onPointerMove={composerResize.move}
+              onPointerUp={composerResize.end}
+              onPointerCancel={composerResize.end}
+            />
+          ) : null}
+          <div className="profile-comments-inputline">
+            <textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void submit();
+                }
+              }}
+              placeholder={composerPlaceholder}
+              maxLength={500}
+              disabled={busy}
+              rows={variant === "dock" ? 2 : 1}
+            />
+          </div>
+          <div className="profile-comments-composer-toolbar">
+            <button
+              type="button"
+              className={`profile-comments-circle-btn${pendingImage ? " is-on" : ""}`}
               aria-label={pendingImage ? "Replace image" : "Attach image"}
               disabled={busy || !auth.isAuthenticated}
               onClick={() => imageInputRef.current?.click()}
             >
-              <ImageIcon className="h-4 w-4" aria-hidden="true" />
+              <ImageIcon aria-hidden="true" />
             </button>
-            <div className="profile-comments-inputline">
-              <input
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder={composerPlaceholder}
-                maxLength={500}
-                disabled={busy}
-              />
-            </div>
             <button
               type="submit"
+              className="profile-comments-circle-btn is-send"
               disabled={busy || (!draft.trim() && !pendingImage)}
               aria-label="Send comment"
             >
               {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                <Loader2 className="animate-spin" aria-hidden="true" />
               ) : (
-                <ArrowUp className="h-4 w-4" aria-hidden="true" />
+                <ArrowUp aria-hidden="true" />
               )}
             </button>
           </div>
-        )}
+        </div>
           </form>
         )}
       </div>

@@ -18,6 +18,7 @@ import {
   readExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
+import { useStudioComposerResize } from "@/studio/lib/composerHeight";
 import {
   flattenPastedHtmlInComposer,
   insertPlainTextAtSelection,
@@ -579,6 +580,10 @@ export function StudioAgentPane({
   const flushPendingIfYolo = useMutation(api.agentPreferences.flushPendingIfYolo);
   const elements = useQuery(api.elements.list, {});
   const convex = useConvex();
+  const composerResize = useStudioComposerResize({
+    enabled: !isMobile,
+    boxSelector: ".studio-dm-composer-box",
+  });
 
   const [draft, setDraft] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -1184,9 +1189,22 @@ export function StudioAgentPane({
             }}
           />
           <div
-            className={`studio-dm-composer-box${recording ? " is-recording" : ""}${transcribing ? " is-transcribing" : ""}${dragOver ? " is-drop-target is-touch-drop-hover" : ""}`}
+            ref={composerResize.boxRef}
+            className={`studio-dm-composer-box studio-composer-resize-box${recording ? " is-recording" : ""}${transcribing ? " is-transcribing" : ""}${dragOver ? " is-drop-target is-touch-drop-hover" : ""}`}
             data-drop-target="composer"
           >
+            {!isMobile ? (
+              <button
+                type="button"
+                className="studio-composer-resize-handle"
+                aria-label="Resize composer"
+                title="Drag to resize"
+                onPointerDown={composerResize.begin}
+                onPointerMove={composerResize.move}
+                onPointerUp={composerResize.end}
+                onPointerCancel={composerResize.end}
+              />
+            ) : null}
             <div
               className="studio-dm-composer-row is-message"
               onMouseDown={(event) => {

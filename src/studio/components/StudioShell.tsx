@@ -230,6 +230,11 @@ import {
 } from "@/studio/lib/composerPasteIntelligence";
 import { writeComposerSelectionToClipboard } from "@/studio/lib/composerCopy";
 import {
+  clampStudioComposerHeight,
+  readStudioComposerHeight,
+  writeStudioComposerHeight,
+} from "@/studio/lib/composerHeight";
+import {
   hydrateComposerFromText,
   looksLikePromptScript,
   parsePromptDocument,
@@ -28338,35 +28343,16 @@ export function StudioShell({
   );
 }
 
-const CREATE_COMPOSER_MAX_HEIGHT_KEY = "ys-create-composer-max-height";
-const CREATE_COMPOSER_MAX_HEIGHT_MIN = 118;
-
 function clampCreateComposerMaxHeight(px) {
-  const max = Math.round((typeof window !== "undefined" ? window.innerHeight : 800) * 0.72);
-  return Math.min(max, Math.max(CREATE_COMPOSER_MAX_HEIGHT_MIN, Math.round(Number(px) || 0)));
+  return clampStudioComposerHeight(px);
 }
 
 function readCreateComposerMaxHeight() {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = Number(window.localStorage.getItem(CREATE_COMPOSER_MAX_HEIGHT_KEY));
-    if (!Number.isFinite(raw) || raw < CREATE_COMPOSER_MAX_HEIGHT_MIN) return null;
-    return clampCreateComposerMaxHeight(raw);
-  } catch {
-    return null;
-  }
+  return readStudioComposerHeight();
 }
 
 function writeCreateComposerMaxHeight(px) {
-  if (typeof window === "undefined" || px == null) return;
-  try {
-    window.localStorage.setItem(
-      CREATE_COMPOSER_MAX_HEIGHT_KEY,
-      String(clampCreateComposerMaxHeight(px)),
-    );
-  } catch {
-    /* ignore quota */
-  }
+  writeStudioComposerHeight(px);
 }
 
 /** Chip label: first segment only ("Matilda - Knowledgeable…" → "Matilda"). */
