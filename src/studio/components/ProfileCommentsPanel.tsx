@@ -7,16 +7,27 @@ import {
   Bookmark,
   Check,
   ChevronLeft,
+  Copy,
   Heart,
   Image as ImageIcon,
   Loader2,
   Lock,
   MessageCircle,
   Pencil,
+  Reply,
   Trash2,
   X,
 } from "lucide-react";
-import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type TouchEvent as ReactTouchEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -29,8 +40,13 @@ import { formatPostWhen } from "@/studio/lib/formatPostWhen";
 import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
 import { StudioCnBookSheet } from "@/studio/components/StudioCnBookSheet";
+import {
+  StudioDmContextMenu,
+  type StudioDmContextMenuItem,
+} from "@/studio/components/StudioDmContextMenu";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { useStudioComposerResize } from "@/studio/lib/composerHeight";
+import { useLongPress } from "@/desk/hooks/use-long-press";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { MediaLoadFrame } from "./media-load-frame";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
@@ -143,6 +159,381 @@ function postAuthorLabel(author: PostAuthorInfo): string {
   if (author.username?.trim()) return author.username.trim();
   const fromParts = [author.firstName, author.lastName].filter(Boolean).join(" ").trim();
   return fromParts || "User";
+}
+
+function clearNativeTextSelection() {
+  const sel = window.getSelection?.();
+  if (sel && sel.rangeCount > 0) sel.removeAllRanges();
+}
+
+const COMMENT_SWIPE_REPLY_THRESHOLD = 56;
+const COMMENT_SWIPE_REPLY_MAX = 72;
+
+function ProfileCommentBubble({
+  comment,
+  searching,
+  locked,
+  canDrag,
+  postId,
+  postThumbnailUrl,
+  likeState,
+  onToggleLike,
+  onReply,
+  onOpenSearchHit,
+  onDelete,
+  onSeekVideo,
+  onOpenImage,
+}: {
+  comment: CommentRow;
+  searching: boolean;
+  locked: boolean;
+  canDrag: boolean;
+  postId?: Id<"profilePosts">;
+  postThumbnailUrl?: string;
+  likeState: { liked: boolean; likeCount: number };
+  onToggleLike: (comment: CommentRow) => void;
+  onReply: (comment: CommentRow) => void;
+  onOpenSearchHit: (comment: CommentRow) => void;
+  onDelete: (id: CommentRow["_id"]) => void;
+  onSeekVideo?: (seconds: number) => void;
+  onOpenImage: (url: string) => void;
+}) {
+  const { isMobile } = useMobileLayout();
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [swipeX, setSwipeX] = useState(0);
+  const swipeRef = useRef<{
+    startX: number;
+    startY: number;
+    tracking: boolean;
+    horizontal: boolean;
+    dx: number;
+  } | null>(null);
+  const swipeEnabled = isMobile && !locked;
+  const replyCount = comment.replyCount ?? 0;
+  const label = commentLabel(comment);
+  const initials = profileNameInitials({
+    displayName: comment.displayName,
+    name: comment.username,
+  });
+
+  const openMenu = useCallback((coords: { x: number; y: number }) => {
+    clearNativeTextSelection();
+    setMenu(coords);
+  }, []);
+
+  const { longPressHandlers, longPressFired, clearLongPressFired } = useLongPress(
+    locked ? undefined : openMenu,
+    { onMenuArmed: () => clearNativeTextSelection() },
+  );
+
+  const goReply = useCallback(() => {
+    if (searching && comment.parentId) {
+      onOpenSearchHit(comment);
+      return;
+    }
+    onReply(comment);
+  }, [comment, onOpenSearchHit, onReply, searching]);
+
+  const menuItems: StudioDmContextMenuItem[] = [];
+  if (!locked) {
+    menuItems.push({
+      key: "reply",
+      label: searching && comment.parentId ? "Open thread" : "Reply",
+      icon: <Reply aria-hidden="true" />,
+      onSelect: goReply,
+    });
+  }
+  if (comment.body) {
+    menuItems.push({
+      key: "copy",
+      label: "Copy",
+      icon: <Copy aria-hidden="true" />,
+      onSelect: () => {
+        void navigator.clipboard.writeText(comment.body).catch(() => {});
+      },
+    });
+  }
+  if (!locked) {
+    menuItems.push({
+      key: "like",
+      label: likeState.liked ? "Unlike" : "Like",
+      icon: (
+        <Heart
+          aria-hidden="true"
+          fill={likeState.liked ? "currentColor" : "none"}
+        />
+      ),
+      onSelect: () => onToggleLike(comment),
+    });
+  }
+  if (replyCount > 0 && !locked) {
+    menuItems.push({
+      key: "replies",
+      label: `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`,
+      icon: <MessageCircle aria-hidden="true" />,
+      onSelect: () => onReply(comment),
+    });
+  }
+  if (comment.isMine && !locked) {
+    menuItems.push({
+      key: "delete",
+      label: "Delete",
+      icon: <Trash2 aria-hidden="true" />,
+      danger: true,
+      onSelect: () => onDelete(comment._id),
+    });
+  }
+
+  const rowStyle: CSSProperties | undefined = swipeX
+    ? {
+        transform: `translateX(${swipeX}px)`,
+        transition: swipeRef.current?.tracking ? "none" : "transform 160ms ease",
+      }
+    : undefined;
+
+  return (
+    <>
+      <div
+        className={`profile-comment-swipe-shell${comment.isMine ? " is-mine" : ""}`}
+      >
+        {swipeEnabled ? (
+          <span
+            className="profile-comment-swipe-reply"
+            style={{
+              opacity: Math.min(1, swipeX / COMMENT_SWIPE_REPLY_THRESHOLD),
+            }}
+            aria-hidden="true"
+          >
+            <Reply />
+          </span>
+        ) : null}
+        <article
+          className={`profile-comment-row${comment.isMine ? " is-mine" : ""}${comment.parentId ? " is-reply" : ""}`}
+          style={rowStyle}
+          draggable={canDrag}
+          title={canDrag ? "Drag into a chat to share this comment" : undefined}
+          onDragStart={
+            canDrag && postId
+              ? (event) => {
+                  const target = event.target as HTMLElement | null;
+                  if (
+                    target?.closest(
+                      "button, a, input, textarea, [contenteditable='true']",
+                    )
+                  ) {
+                    event.preventDefault();
+                    return;
+                  }
+                  setFeedShareDataTransfer(event.dataTransfer, {
+                    type: "comment",
+                    postId,
+                    commentId: comment._id as Id<"profileComments">,
+                    username: comment.username,
+                    displayName: comment.displayName,
+                    body: comment.body,
+                    thumbnailUrl: postThumbnailUrl,
+                  });
+                }
+              : undefined
+          }
+          onContextMenu={(event) => {
+            event.preventDefault();
+            if (locked || menuItems.length === 0) return;
+            clearNativeTextSelection();
+            openMenu({ x: event.clientX, y: event.clientY });
+          }}
+          onTouchStart={(event: ReactTouchEvent) => {
+            const lp = longPressHandlers as {
+              onTouchStart?: (e: ReactTouchEvent) => void;
+            };
+            lp.onTouchStart?.(event);
+            if (!swipeEnabled) return;
+            const target = event.target as HTMLElement | null;
+            if (target?.closest("button, a, input, textarea")) return;
+            const touch = event.touches[0];
+            if (!touch) return;
+            swipeRef.current = {
+              startX: touch.clientX,
+              startY: touch.clientY,
+              tracking: true,
+              horizontal: false,
+              dx: 0,
+            };
+            setSwipeX(0);
+          }}
+          onTouchMove={(event: ReactTouchEvent) => {
+            const lp = longPressHandlers as {
+              onTouchMove?: (e: ReactTouchEvent) => void;
+            };
+            lp.onTouchMove?.(event);
+            const state = swipeRef.current;
+            const touch = event.touches[0];
+            if (!state?.tracking || !touch) return;
+            const dx = touch.clientX - state.startX;
+            const dy = touch.clientY - state.startY;
+            if (!state.horizontal) {
+              if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+              if (Math.abs(dx) <= Math.abs(dy)) {
+                swipeRef.current = null;
+                setSwipeX(0);
+                return;
+              }
+              state.horizontal = true;
+            }
+            const next = Math.max(0, Math.min(COMMENT_SWIPE_REPLY_MAX, dx));
+            state.dx = next;
+            setSwipeX(next);
+          }}
+          onTouchEnd={() => {
+            const lp = longPressHandlers as {
+              onTouchEnd?: () => void;
+            };
+            lp.onTouchEnd?.();
+            const state = swipeRef.current;
+            swipeRef.current = null;
+            if (state?.horizontal && state.dx >= COMMENT_SWIPE_REPLY_THRESHOLD) {
+              goReply();
+            }
+            setSwipeX(0);
+          }}
+          onTouchCancel={() => {
+            const lp = longPressHandlers as {
+              onTouchCancel?: () => void;
+            };
+            lp.onTouchCancel?.();
+            swipeRef.current = null;
+            setSwipeX(0);
+          }}
+          onClick={() => {
+            if (longPressFired()) clearLongPressFired();
+          }}
+        >
+          <StudioProfileAvatar
+            className="profile-comment-avatar"
+            size="sm"
+            src={comment.avatarUrl}
+            initials={initials}
+            displayName={comment.displayName}
+            name={comment.username}
+          />
+          <div className="profile-comment-body">
+            <div className="profile-comment-bubble">
+              <div className="profile-comment-meta">
+                <div className="profile-comment-meta-text">
+                  <div className="profile-comment-meta-top">
+                    <strong>{label}</strong>
+                    {comment.isOwner ? (
+                      <span className="profile-comment-creator-tag">Creator</span>
+                    ) : null}
+                    {searching && comment.parentId ? (
+                      <span className="profile-comment-creator-tag">Reply</span>
+                    ) : null}
+                  </div>
+                  <div className="profile-comment-meta-sub">
+                    <time dateTime={new Date(comment.createdAt).toISOString()}>
+                      {formatWhen(comment.createdAt)}
+                    </time>
+                    {typeof comment.videoTimeSec === "number" &&
+                    Number.isFinite(comment.videoTimeSec) ? (
+                      <button
+                        type="button"
+                        className="profile-comment-video-time"
+                        aria-label={`Jump to ${formatVideoTimecode(comment.videoTimeSec)} in video`}
+                        onClick={() => onSeekVideo?.(comment.videoTimeSec!)}
+                        disabled={!onSeekVideo}
+                      >
+                        {formatVideoTimecode(comment.videoTimeSec)}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="profile-comment-bubble-actions">
+                  {locked ? (
+                    <span
+                      className={`profile-comment-like is-static${likeState.likeCount > 0 ? "" : " is-empty"}`}
+                      aria-label={`${likeState.likeCount} likes`}
+                    >
+                      <Heart
+                        aria-hidden="true"
+                        fill={likeState.likeCount > 0 ? "currentColor" : "none"}
+                        strokeWidth={likeState.likeCount > 0 ? 0 : 2}
+                      />
+                      {likeState.likeCount > 0 ? (
+                        <span>{likeState.likeCount}</span>
+                      ) : null}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`profile-comment-like${likeState.liked ? " is-liked" : ""}`}
+                      aria-pressed={likeState.liked}
+                      aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
+                      onClick={() => onToggleLike(comment)}
+                    >
+                      <Heart
+                        aria-hidden="true"
+                        fill={likeState.liked ? "currentColor" : "none"}
+                        strokeWidth={likeState.liked ? 0 : 2}
+                      />
+                      {likeState.likeCount > 0 ? (
+                        <span>{likeState.likeCount}</span>
+                      ) : null}
+                    </button>
+                  )}
+                  {!locked ? (
+                    <button
+                      type="button"
+                      className="profile-comment-reply"
+                      aria-label={
+                        replyCount
+                          ? `Reply, ${replyCount}`
+                          : searching && comment.parentId
+                            ? "Open thread"
+                            : "Reply"
+                      }
+                      onClick={goReply}
+                    >
+                      <MessageCircle aria-hidden="true" strokeWidth={2} />
+                      {replyCount > 0 ? <span>{replyCount}</span> : null}
+                    </button>
+                  ) : replyCount > 0 ? (
+                    <span
+                      className="profile-comment-reply is-static"
+                      aria-label={`${replyCount} replies`}
+                    >
+                      <MessageCircle aria-hidden="true" strokeWidth={2} />
+                      <span>{replyCount}</span>
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              {comment.body ? <p>{comment.body}</p> : null}
+              {comment.imageUrl ? (
+                <button
+                  type="button"
+                  className="profile-comment-image-btn"
+                  aria-label="View image"
+                  onClick={() => onOpenImage(comment.imageUrl!)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img className="profile-comment-image" src={comment.imageUrl} alt="" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </article>
+      </div>
+      {menu && menuItems.length > 0 ? (
+        <StudioDmContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems}
+          title="Comment"
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
+    </>
+  );
 }
 
 function CommentsBody({
@@ -636,189 +1027,27 @@ function CommentsBody({
         </section>
       );
     }
-    const label = commentLabel(comment);
-    const initials = profileNameInitials({
-      displayName: comment.displayName,
-      name: comment.username,
-    });
     const likeState = likeLocal[comment._id] ?? {
       liked: comment.likedByMe,
       likeCount: comment.likeCount,
     };
-    const replyCount = comment.replyCount ?? 0;
     return (
-      <article
+      <ProfileCommentBubble
         key={comment._id}
-        className={`profile-comment-row${comment.isMine ? " is-mine" : ""}${comment.parentId ? " is-reply" : ""}`}
-        draggable={!isCourse && Boolean(postId)}
-        title={
-          !isCourse && postId
-            ? "Drag into a chat to share this comment"
-            : undefined
-        }
-        onDragStart={
-          !isCourse && postId
-            ? (event) => {
-                const target = event.target as HTMLElement | null;
-                if (
-                  target?.closest(
-                    "button, a, input, textarea, [contenteditable='true']",
-                  )
-                ) {
-                  event.preventDefault();
-                  return;
-                }
-                setFeedShareDataTransfer(event.dataTransfer, {
-                  type: "comment",
-                  postId,
-                  commentId: comment._id as Id<"profileComments">,
-                  username: comment.username,
-                  displayName: comment.displayName,
-                  body: comment.body,
-                  thumbnailUrl: postAuthor?.thumbnailUrl,
-                });
-              }
-            : undefined
-        }
-      >
-        <StudioProfileAvatar
-          className="profile-comment-avatar"
-          size="sm"
-          src={comment.avatarUrl}
-          initials={initials}
-          displayName={comment.displayName}
-          name={comment.username}
-        />
-        <div className="profile-comment-body">
-          <div className="profile-comment-bubble">
-            <div className="profile-comment-meta">
-            <div className="profile-comment-meta-text">
-              <div className="profile-comment-meta-top">
-                <strong>{label}</strong>
-                {comment.isOwner ? <span className="profile-comment-creator-tag">Creator</span> : null}
-                {searching && comment.parentId ? (
-                  <span className="profile-comment-creator-tag">Reply</span>
-                ) : null}
-              </div>
-              <div className="profile-comment-meta-sub">
-                <time dateTime={new Date(comment.createdAt).toISOString()}>
-                  {formatWhen(comment.createdAt)}
-                </time>
-                {typeof comment.videoTimeSec === "number" &&
-                Number.isFinite(comment.videoTimeSec) ? (
-                  <button
-                    type="button"
-                    className="profile-comment-video-time"
-                    aria-label={`Jump to ${formatVideoTimecode(comment.videoTimeSec)} in video`}
-                    onClick={() => onSeekVideo?.(comment.videoTimeSec!)}
-                    disabled={!onSeekVideo}
-                  >
-                    {formatVideoTimecode(comment.videoTimeSec)}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            {comment.isMine && !locked ? (
-              <button
-                type="button"
-                className="profile-comment-delete"
-                aria-label="Delete comment"
-                disabled={busy}
-                onClick={() => void remove(comment._id)}
-              >
-                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            ) : null}
-          </div>
-          {comment.body ? <p>{comment.body}</p> : null}
-          {comment.imageUrl ? (
-            <button
-              type="button"
-              className="profile-comment-image-btn"
-              aria-label="View image"
-              onClick={() => openImagePreview(comment.imageUrl!)}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="profile-comment-image" src={comment.imageUrl} alt="" />
-            </button>
-          ) : null}
-          </div>
-          <div className="profile-comment-actions">
-            <div className="profile-comment-actions-left">
-              {searching && comment.parentId ? (
-                <button
-                  type="button"
-                  className="profile-comment-view-replies"
-                  onClick={() => openSearchHit(comment)}
-                >
-                  Open thread
-                </button>
-              ) : null}
-              {!locked && !searching ? (
-                <button
-                  type="button"
-                  className="profile-comment-action"
-                  aria-label="Reply"
-                  onClick={() => openReplies(comment)}
-                >
-                  Reply
-                </button>
-              ) : null}
-              {!locked && !searching && replyCount > 0 ? (
-                <button
-                  type="button"
-                  className="profile-comment-view-replies"
-                  onClick={() => openReplies(comment)}
-                >
-                  View {replyCount} {replyCount === 1 ? "reply" : "replies"}
-                </button>
-              ) : null}
-              {locked && replyCount > 0 ? (
-                <span className="profile-comment-view-replies is-static">
-                  {replyCount} {replyCount === 1 ? "reply" : "replies"}
-                </span>
-              ) : null}
-              {searching && !comment.parentId && !locked && replyCount > 0 ? (
-                <button
-                  type="button"
-                  className="profile-comment-view-replies"
-                  onClick={() => openReplies(comment)}
-                >
-                  View {replyCount} {replyCount === 1 ? "reply" : "replies"}
-                </button>
-              ) : null}
-            </div>
-            {locked ? (
-              <span
-                className={`profile-comment-like is-static${likeState.likeCount > 0 ? "" : " is-empty"}`}
-                aria-label={`${likeState.likeCount} likes`}
-              >
-                <Heart
-                  aria-hidden="true"
-                  fill={likeState.likeCount > 0 ? "currentColor" : "none"}
-                  strokeWidth={likeState.likeCount > 0 ? 0 : 2}
-                />
-                {likeState.likeCount > 0 ? <span>{likeState.likeCount}</span> : null}
-              </span>
-            ) : (
-              <button
-                type="button"
-                className={`profile-comment-like${likeState.liked ? " is-liked" : ""}`}
-                aria-pressed={likeState.liked}
-                aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
-                onClick={() => void toggleLike(comment)}
-              >
-                <Heart
-                  aria-hidden="true"
-                  fill={likeState.liked ? "currentColor" : "none"}
-                  strokeWidth={likeState.liked ? 0 : 2}
-                />
-                {likeState.likeCount > 0 ? <span>{likeState.likeCount}</span> : null}
-              </button>
-            )}
-          </div>
-        </div>
-      </article>
+        comment={comment}
+        searching={searching}
+        locked={locked}
+        canDrag={!isCourse && Boolean(postId)}
+        postId={postId}
+        postThumbnailUrl={postAuthor?.thumbnailUrl}
+        likeState={likeState}
+        onToggleLike={(row) => void toggleLike(row)}
+        onReply={openReplies}
+        onOpenSearchHit={openSearchHit}
+        onDelete={(id) => void remove(id)}
+        onSeekVideo={onSeekVideo}
+        onOpenImage={openImagePreview}
+      />
     );
   }
 
