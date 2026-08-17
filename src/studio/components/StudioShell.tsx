@@ -23416,29 +23416,19 @@ export function StudioShell({
         }
         .studio-academy-detail {
           display: grid;
-          gap: 16px;
+          gap: 10px;
           width: 100%;
           max-width: none;
-          padding: 0 0 28px;
+          padding: 0 0 20px;
         }
         .studio-academy-player-shell {
           width: 100%;
           max-width: 100%;
-          padding: 12px;
-          border-radius: calc(var(--cursor-radius-lg, 12px) + 6px);
-          background: var(--mos-plate, var(--cursor-surface));
-          border: 1px solid
-            color-mix(
-              in srgb,
-              var(--cursor-accent, var(--mos-accent)) 34%,
-              var(--color-cursor-border, var(--mos-border))
-            );
-          box-shadow: 0 0 0 1px
-            color-mix(
-              in srgb,
-              var(--cursor-accent, var(--mos-accent)) 10%,
-              transparent
-            );
+          padding: 0;
+          border: 0;
+          border-radius: var(--cursor-radius-lg, 12px);
+          background: transparent;
+          box-shadow: none;
         }
         .studio-polish.is-studio-mobile .studio-academy-player-shell {
           margin: 0;
@@ -23490,18 +23480,8 @@ export function StudioShell({
           border-radius: var(--cursor-radius-lg, 12px);
           overflow: hidden;
           background: #000;
-          border: 1.5px solid
-            color-mix(
-              in srgb,
-              var(--cursor-accent, var(--mos-accent)) 55%,
-              var(--color-cursor-border, var(--mos-border))
-            );
-          box-shadow: inset 0 0 0 1px
-            color-mix(
-              in srgb,
-              var(--cursor-accent, var(--mos-accent)) 18%,
-              transparent
-            );
+          border: 0;
+          box-shadow: none;
         }
         .studio-academy-player-cover.media-load-frame,
         .studio-academy-player-cover.media-load-frame.is-ready {
@@ -23519,6 +23499,8 @@ export function StudioShell({
         }
         .studio-academy-player iframe,
         .studio-academy-player-video {
+          position: absolute;
+          inset: 0;
           display: block;
           width: 100%;
           height: 100%;
