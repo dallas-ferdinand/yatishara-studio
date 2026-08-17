@@ -42,9 +42,10 @@
   height: 32px;
   padding: 0 10px;
   box-sizing: border-box;
-  border-top: 1px solid var(--color-cursor-border, var(--mos-border));
-  border-bottom: 1px solid var(--color-cursor-border, var(--mos-border));
-  background: var(--mos-plate, var(--cursor-surface, #fff));
+  /* One hairline only — never stack top+bottom against the tab row. */
+  border: 0;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border-soft)));
+  background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
 }
 
@@ -113,10 +114,11 @@
 }
 
 .studio-voice-picker-lib-bar {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
   flex: 0 0 auto;
+  align-self: flex-start;
   min-width: 0;
   min-height: 32px;
   height: 32px;
@@ -125,8 +127,8 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  border-bottom: 1px solid var(--color-cursor-border, var(--mos-border));
-  background: var(--mos-plate, var(--cursor-surface, #fff));
+  border: 0;
+  background: transparent;
 }
 
 .studio-voice-picker-lib-bar::-webkit-scrollbar {
@@ -172,7 +174,9 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  border-bottom: 1px solid var(--color-cursor-border, var(--mos-border));
+  border: 0;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border-soft)));
+  background: transparent;
 }
 
 .studio-voice-picker-filter-slider::-webkit-scrollbar {

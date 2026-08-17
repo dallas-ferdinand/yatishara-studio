@@ -469,6 +469,30 @@ function StudioVoicePickerInner({
   return (
     <div className={`studio-voice-picker${embedded ? " is-embedded" : ""}`}>
       <div className="studio-voice-picker-controls" ref={toolbarRef}>
+        <nav
+          className="studio-voice-picker-lib-bar"
+          role="tablist"
+          aria-label="Voice library"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "explore"}
+            className={`studio-voice-picker-lib-tab${tab === "explore" ? " is-active" : ""}`}
+            onClick={() => setTab("explore")}
+          >
+            Explore
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "mine"}
+            className={`studio-voice-picker-lib-tab${tab === "mine" ? " is-active" : ""}`}
+            onClick={() => setTab("mine")}
+          >
+            My Voices
+          </button>
+        </nav>
         <div className="studio-voice-picker-search-bar">
           <Search size={14} aria-hidden="true" />
           <input
@@ -523,30 +547,6 @@ function StudioVoicePickerInner({
             </div>
           ) : null}
         </div>
-        <nav
-          className="studio-voice-picker-lib-bar"
-          role="tablist"
-          aria-label="Voice library"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "explore"}
-            className={`studio-voice-picker-lib-tab${tab === "explore" ? " is-active" : ""}`}
-            onClick={() => setTab("explore")}
-          >
-            Explore
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "mine"}
-            className={`studio-voice-picker-lib-tab${tab === "mine" ? " is-active" : ""}`}
-            onClick={() => setTab("mine")}
-          >
-            My Voices
-          </button>
-        </nav>
 
       {tab === "explore" ? (
         <div
