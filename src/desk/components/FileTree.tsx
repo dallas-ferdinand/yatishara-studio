@@ -1046,6 +1046,7 @@ function FileEntryButton({
   children,
   onOpen,
   enableLongPress,
+  enableNativeDrag = true,
   onLongPress,
   longPressDelay,
   pickupDelay,
@@ -1196,7 +1197,15 @@ function FileEntryButton({
         onContextMenu?.(event);
       }}
       // Mobile touch-drag owns the gesture — native HTML5 drag fights Android.
-      draggable={entry.type !== "parent" && !selectionMode && !canTouchDrag && !renaming}
+      // Pick mode must stay undraggable too: turning long-press off used to
+      // flip draggable back on, so a pan over Trash/Messages started a drag.
+      draggable={
+        enableNativeDrag &&
+        entry.type !== "parent" &&
+        !selectionMode &&
+        !canTouchDrag &&
+        !renaming
+      }
       onDragStart={(event) => {
         if (canTouchDrag) {
           event.preventDefault();
@@ -1418,6 +1427,7 @@ function renderEntryRows({
   selectionMode,
   onEntrySelect,
   enableLongPress,
+  enableNativeDrag = true,
   longPressDelay,
   pickupDelay,
   rowClass,
@@ -1514,6 +1524,7 @@ function renderEntryRows({
               label={label}
               onOpen={() => onEntry(e)}
               enableLongPress={enableLongPress}
+              enableNativeDrag={enableNativeDrag}
               longPressDelay={longPressDelay}
               pickupDelay={pickupDelay}
               workspaceId={workspaceId}
@@ -1559,6 +1570,7 @@ function renderEntryRows({
                 label={label}
                 onOpen={() => onEntry(e)}
                 enableLongPress={enableLongPress}
+                enableNativeDrag={enableNativeDrag}
                 onLongPress={onEntryLongPress}
                 onContextMenu={(ev) => onEntryContextMenu(ev, e)}
                 onDragStart={(ev) => onEntryDragStart(ev, e)}
@@ -1591,6 +1603,7 @@ function renderEntryRows({
               label={label}
               onOpen={() => onEntry(e)}
               enableLongPress={enableLongPress}
+              enableNativeDrag={enableNativeDrag}
               longPressDelay={longPressDelay}
               pickupDelay={pickupDelay}
               workspaceId={workspaceId}
@@ -1655,6 +1668,7 @@ function renderEntryRows({
             label={label}
             onOpen={() => onEntry(e)}
             enableLongPress={enableLongPress}
+            enableNativeDrag={enableNativeDrag}
             longPressDelay={longPressDelay}
             pickupDelay={pickupDelay}
             workspaceId={workspaceId}
@@ -1755,6 +1769,7 @@ export function FileTree({
   pinnedPaths,
   pinnedShortcuts = [],
   enableLongPress = false,
+  enableNativeDrag = true,
   longPressDelay,
   pickupDelay,
   onEntryLongPress,
@@ -1891,6 +1906,7 @@ export function FileTree({
     selectionMode,
     onEntrySelect,
     enableLongPress,
+    enableNativeDrag,
     longPressDelay,
     pickupDelay,
     rowClass,

@@ -12115,11 +12115,37 @@ export function StudioShell({
         }
         .studio-files-dock.is-picking .desk-file-grid-item,
         .studio-files-dock.is-picking .desk-file-list-row,
+        .studio-files-dock.is-picking .desk-file-preview-item,
         .studio-files-mobile-sheet.is-picking .desk-file-grid-item,
         .studio-files-mobile-sheet.is-picking .desk-file-list-row,
+        .studio-files-mobile-sheet.is-picking .desk-file-preview-item,
         aside.is-asset-picking .desk-file-grid-item,
-        aside.is-asset-picking .desk-file-list-row {
+        aside.is-asset-picking .desk-file-list-row,
+        aside.is-asset-picking .desk-file-preview-item,
+        .cursor-explorer-body.is-picking .desk-file-grid-item,
+        .cursor-explorer-body.is-picking .desk-file-list-row,
+        .cursor-explorer-body.is-picking .desk-file-preview-item,
+        .studio-files-dock.is-picking .desk-file-thumb-visual,
+        .studio-files-dock.is-picking .desk-file-thumb-peek-wrap,
+        .studio-files-mobile-sheet.is-picking .desk-file-thumb-visual,
+        .studio-files-mobile-sheet.is-picking .desk-file-thumb-peek-wrap,
+        aside.is-asset-picking .desk-file-thumb-visual,
+        aside.is-asset-picking .desk-file-thumb-peek-wrap,
+        .cursor-explorer-body.is-picking .desk-file-thumb-visual,
+        .cursor-explorer-body.is-picking .desk-file-thumb-peek-wrap {
           touch-action: pan-y !important;
+          -webkit-user-drag: none !important;
+        }
+        /* overflow:hidden on folder/system peeks is a nested scroller on iOS and eats the pan. */
+        .studio-files-dock.is-picking .desk-file-thumb-visual,
+        .studio-files-dock.is-picking .desk-file-thumb-peek-wrap,
+        .studio-files-mobile-sheet.is-picking .desk-file-thumb-visual,
+        .studio-files-mobile-sheet.is-picking .desk-file-thumb-peek-wrap,
+        aside.is-asset-picking .desk-file-thumb-visual,
+        aside.is-asset-picking .desk-file-thumb-peek-wrap,
+        .cursor-explorer-body.is-picking .desk-file-thumb-visual,
+        .cursor-explorer-body.is-picking .desk-file-thumb-peek-wrap {
+          overflow: clip;
         }
         /* Pickers hide Your files / Asset library, so search is the first chrome — needs a top hairline. */
         .studio-files-dock.is-picking .studio-files-search-row,
@@ -36382,6 +36408,7 @@ function StudioFilesExplorerBody({
         onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
         onBlankContextMenu={(x, y) => setContextMenu({ entry: { type: "blank", path: activeFolder?.name ?? "" }, x, y })}
         enableLongPress={isMobile && !picking}
+        enableNativeDrag={!picking}
         /* Short hold = drag pickup; longer hold = context sheet. Off while picking so the list can scroll. */
         pickupDelay={isMobile && !picking ? 220 : undefined}
         longPressDelay={isMobile ? 650 : 450}
