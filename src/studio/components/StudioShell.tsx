@@ -23437,8 +23437,8 @@ export function StudioShell({
           border-radius: 12px;
           background: transparent;
           box-shadow: none;
-          /* Filter paints outside overflow:hidden on the 16:9 player child. */
-          filter: drop-shadow(0 2px 6px rgba(15, 18, 24, 0.2));
+          /* Close low-spread — 6px blur read as a haze around the video. */
+          filter: drop-shadow(0 1px 2px rgba(15, 18, 24, 0.18));
           position: relative;
           z-index: 0;
           overflow: visible;
