@@ -1210,6 +1210,7 @@ function FeedActions({
   onOpenProfile?: (username: string) => void;
   onToggleFollow: () => void;
 }) {
+  const { isMobile } = useMobileLayout();
   const saved = Boolean(post.savedByViewer);
   const liked = Boolean(post.likedByViewer);
   const undoing = boostUndoLeft > 0;
@@ -1225,73 +1226,107 @@ function FeedActions({
   );
 
   if (variant === "bar") {
+    const boostClass = `profile-post-book-btn is-labeled${liked || undoing ? " is-liked" : ""}${isMobile ? "" : " is-end"}`;
+    const boostBtn = post.isOwner ? (
+      <span
+        className={boostClass}
+        aria-label={`${formatCount(post.likeCount)} boosts`}
+      >
+        {likeIcon}
+        <span className="profile-post-book-label">Boost</span>
+        <span className="profile-post-book-count">{formatCount(post.likeCount)}</span>
+      </span>
+    ) : (
+      <button
+        type="button"
+        className={boostClass}
+        data-studio-sfx="like"
+        aria-pressed={liked || undoing}
+        aria-label={
+          undoing
+            ? `Undo boost, ${boostUndoLeft} seconds left`
+            : liked
+              ? "Boosted"
+              : "Boost"
+        }
+        onClick={onBoost}
+      >
+        {likeIcon}
+        <span className="profile-post-book-label">{undoing ? "Undo" : "Boost"}</span>
+        <span className="profile-post-book-count">
+          {undoing ? boostUndoLeft : formatCount(post.likeCount)}
+        </span>
+      </button>
+    );
+    const contributeBtn = (
+      <button
+        type="button"
+        className="profile-post-book-btn is-labeled"
+        data-studio-sfx="sheet"
+        aria-label="Contribute"
+        onClick={() => {
+          playUiSound("sheet");
+          onOpenComments();
+        }}
+      >
+        {commentIcon}
+        <span className="profile-post-book-label">Contribute</span>
+        <span className="profile-post-book-count">{formatCount(localComments)}</span>
+      </button>
+    );
+    const saveBtn = (
+      <button
+        type="button"
+        className={`profile-post-book-btn${isMobile ? " is-end" : " is-labeled"}${saved ? " is-saved" : ""}`}
+        data-studio-sfx="save"
+        aria-pressed={saved}
+        aria-label={saved ? "Unsave" : "Save"}
+        onClick={onSave}
+      >
+        <Bookmark aria-hidden="true" fill={saved ? "currentColor" : "none"} strokeWidth={saved ? 0 : 2} />
+        {isMobile ? null : (
+          <>
+            <span className="profile-post-book-label">{saved ? "Saved" : "Save"}</span>
+            <span className="profile-post-book-count">{formatCount(localSaves)}</span>
+          </>
+        )}
+      </button>
+    );
+    const shareBtn = (
+      <button
+        type="button"
+        className={`profile-post-book-btn${isMobile ? "" : " is-labeled"}`}
+        data-studio-sfx="share"
+        aria-label="Share"
+        onClick={onShare}
+      >
+        <Send aria-hidden="true" strokeWidth={2} />
+        {isMobile ? null : (
+          <>
+            <span className="profile-post-book-label">Share</span>
+            <span className="profile-post-book-count">{formatCount(localShares)}</span>
+          </>
+        )}
+      </button>
+    );
     return (
       <nav className="profile-post-book-bar" aria-label="Post actions">
         <div className="profile-post-book-actions">
-          {post.isOwner ? (
-            <span
-              className={`profile-post-book-btn is-labeled${liked ? " is-liked" : ""}`}
-              aria-label={`${formatCount(post.likeCount)} boosts`}
-            >
-              {likeIcon}
-              <span className="profile-post-book-label">Boost</span>
-              <span className="profile-post-book-count">{formatCount(post.likeCount)}</span>
-            </span>
+          {isMobile ? (
+            <>
+              {boostBtn}
+              {contributeBtn}
+              {saveBtn}
+              {shareBtn}
+            </>
           ) : (
-          <button
-            type="button"
-            className={`profile-post-book-btn is-labeled${liked || undoing ? " is-liked" : ""}`}
-            data-studio-sfx="like"
-            aria-pressed={liked || undoing}
-            aria-label={
-              undoing
-                ? `Undo boost, ${boostUndoLeft} seconds left`
-                : liked
-                  ? "Boosted"
-                  : "Boost"
-            }
-            onClick={onBoost}
-          >
-            {likeIcon}
-            <span className="profile-post-book-label">{undoing ? "Undo" : "Boost"}</span>
-            <span className="profile-post-book-count">
-              {undoing ? boostUndoLeft : formatCount(post.likeCount)}
-            </span>
-          </button>
+            <>
+              {saveBtn}
+              {shareBtn}
+              {contributeBtn}
+              {boostBtn}
+            </>
           )}
-          <button
-            type="button"
-            className="profile-post-book-btn is-labeled"
-            data-studio-sfx="sheet"
-            aria-label="Contribute"
-            onClick={() => {
-              playUiSound("sheet");
-              onOpenComments();
-            }}
-          >
-            {commentIcon}
-            <span className="profile-post-book-label">Contribute</span>
-            <span className="profile-post-book-count">{formatCount(localComments)}</span>
-          </button>
-          <button
-            type="button"
-            className={`profile-post-book-btn is-end${saved ? " is-saved" : ""}`}
-            data-studio-sfx="save"
-            aria-pressed={saved}
-            aria-label={saved ? "Unsave" : "Save"}
-            onClick={onSave}
-          >
-            <Bookmark aria-hidden="true" fill={saved ? "currentColor" : "none"} strokeWidth={saved ? 0 : 2} />
-          </button>
-          <button
-            type="button"
-            className="profile-post-book-btn"
-            data-studio-sfx="share"
-            aria-label="Share"
-            onClick={onShare}
-          >
-            <Send aria-hidden="true" strokeWidth={2} />
-          </button>
         </div>
       </nav>
     );
