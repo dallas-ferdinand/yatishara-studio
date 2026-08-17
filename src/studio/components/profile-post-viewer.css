@@ -2082,7 +2082,7 @@ button.post-compose-inline-chip.profile-description-chip {
 .profile-comment-bubble-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   float: right;
   margin: 2px 0 0 8px;
   transform: none;
@@ -2101,25 +2101,45 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comment-bubble-actions .profile-comment-like,
-.profile-comment-bubble-actions .profile-comment-reply {
-  min-width: 0;
-  min-height: 0;
+.profile-comment-bubble-actions .profile-comment-reply,
+.profile-comment-bubble-actions .profile-comment-video-time {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
   padding: 0;
-  gap: 3px;
+  gap: 5px;
+  border-radius: 999px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
   color: var(--color-cursor-muted, var(--mos-muted));
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
+  box-shadow: none;
+}
+
+.profile-comment-bubble-actions .profile-comment-like:has(span),
+.profile-comment-bubble-actions .profile-comment-reply:has(span) {
+  width: auto;
+  padding: 0 10px;
 }
 
 .profile-comment-bubble-actions .profile-comment-like svg,
 .profile-comment-bubble-actions .profile-comment-reply svg {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
   stroke-width: 2;
+  fill: none;
+}
+
+.profile-comment-bubble-actions .profile-comment-like.is-liked svg {
+  fill: currentColor;
 }
 
 .profile-comment-bubble-actions .profile-comment-like:hover,
-.profile-comment-bubble-actions .profile-comment-reply:hover {
+.profile-comment-bubble-actions .profile-comment-reply:hover,
+.profile-comment-bubble-actions .profile-comment-video-time:hover:not(:disabled) {
+  background: var(--mos-hover, var(--color-cursor-hover));
   color: var(--color-cursor-text, var(--mos-text));
 }
 
@@ -2127,22 +2147,12 @@ button.post-compose-inline-chip.profile-description-chip {
 .profile-comment-bubble-actions .profile-comment-video-time {
   display: inline-flex;
   align-items: center;
-  height: auto;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  font-size: 9.5px;
-  font-weight: 600;
+  justify-content: center;
+  width: auto;
+  padding: 0 10px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   white-space: nowrap;
-}
-
-.profile-comment-bubble-actions .profile-comment-video-time:hover:not(:disabled) {
-  color: var(--color-cursor-text, var(--mos-text));
-  background: transparent;
 }
 
 .profile-comment-bubble-actions .profile-comment-video-time:disabled {
@@ -2819,6 +2829,7 @@ button.post-compose-inline-chip.profile-description-chip {
 
 [data-appearance="light"] .profile-comment-bubble-actions .profile-comment-like,
 [data-appearance="light"] .profile-comment-bubble-actions .profile-comment-reply,
+[data-appearance="light"] .profile-comment-bubble-actions .profile-comment-video-time,
 [data-appearance="light"] .profile-comment-bubble-actions .profile-comment-like span,
 [data-appearance="light"] .profile-comment-bubble-actions .profile-comment-reply span {
   color: var(--color-cursor-muted, color-mix(in srgb, #0f172a 52%, transparent));
