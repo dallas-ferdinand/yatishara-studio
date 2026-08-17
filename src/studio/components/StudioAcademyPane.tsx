@@ -753,6 +753,7 @@ export function StudioAcademyPane({
   const [lessonsSheetOpen, setLessonsSheetOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
+  const [swipeAnim, setSwipeAnim] = useState<"next" | "prev" | null>(null);
   const clientRequestIdRef = useRef<string | null>(null);
   const videoTimeSecRef = useRef(0);
   const videoTimeHeardRef = useRef(false);
@@ -842,6 +843,7 @@ export function StudioAcademyPane({
       if (index < 0) return;
       const next = lessonSwipeIds[index + (dir === "next" ? 1 : -1)];
       if (next === undefined) return;
+      setSwipeAnim(dir);
       academy.setLessonId(next);
     },
     [academy, lessonSwipeIds],
@@ -1309,6 +1311,13 @@ export function StudioAcademyPane({
       }`}
       ref={lessonSwipe}
     >
+      <div
+        key={isMobile ? selectedLesson._id : "desk"}
+        className={`studio-academy-watch-swap${swipeAnim ? ` is-${swipeAnim}` : ""}`}
+        onAnimationEnd={(event) => {
+          if (event.currentTarget === event.target) setSwipeAnim(null);
+        }}
+      >
       {isMobile ? (
         <div className="studio-academy-watch-player">
           <BannerStage
@@ -1395,6 +1404,7 @@ export function StudioAcademyPane({
           </div>
         </main>
       </div>
+      </div>
     </div>
   ) : (
     <div
@@ -1403,6 +1413,13 @@ export function StudioAcademyPane({
       }`}
       ref={lessonSwipe}
     >
+      <div
+        key={isMobile ? "intro" : "desk"}
+        className={`studio-academy-watch-swap${swipeAnim ? ` is-${swipeAnim}` : ""}`}
+        onAnimationEnd={(event) => {
+          if (event.currentTarget === event.target) setSwipeAnim(null);
+        }}
+      >
       {isMobile ? (
         <div className="studio-academy-watch-player">
           <BannerStage
@@ -1468,6 +1485,7 @@ export function StudioAcademyPane({
             </div>
           </div>
         </main>
+      </div>
       </div>
     </div>
   );

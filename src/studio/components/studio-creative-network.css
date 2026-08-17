@@ -1140,6 +1140,64 @@
   touch-action: pan-y;
 }
 
+.studio-academy-watch-swap {
+  display: contents;
+}
+
+.studio-cn-catalog.is-academy-watch > .studio-academy-watch-swap {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio-cn-catalog.is-academy-watch > .studio-academy-watch-swap.is-next {
+  animation: studio-academy-swipe-in-next 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.studio-cn-catalog.is-academy-watch > .studio-academy-watch-swap.is-prev {
+  animation: studio-academy-swipe-in-prev 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes studio-academy-swipe-in-next {
+  from {
+    transform: translate3d(22%, 0, 0);
+    opacity: 0.28;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes studio-academy-swipe-in-prev {
+  from {
+    transform: translate3d(-22%, 0, 0);
+    opacity: 0.28;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-cn-catalog.is-academy-watch > .studio-academy-watch-swap.is-next,
+  .studio-cn-catalog.is-academy-watch > .studio-academy-watch-swap.is-prev {
+    animation: studio-academy-swipe-in-fade 180ms ease both;
+  }
+}
+
+@keyframes studio-academy-swipe-in-fade {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .studio-academy-player-swipe {
   display: none;
 }
@@ -1161,14 +1219,14 @@
   z-index: 2;
 }
 
-.studio-cn-catalog.is-academy-watch > .public-offers-main-scroll {
+.studio-cn-catalog.is-academy-watch > .studio-academy-watch-swap > .public-offers-main-scroll {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
 }
 
 /* Soft fade under the pinned video — copy dissolves as it scrolls up. */
-.studio-cn-catalog.is-academy-watch > .public-offers-main-scroll::before {
+.studio-cn-catalog.is-academy-watch > .studio-academy-watch-swap > .public-offers-main-scroll::before {
   content: "";
   position: sticky;
   top: 0;
