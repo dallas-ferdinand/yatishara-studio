@@ -10110,7 +10110,7 @@ export function StudioShell({
             display: inline-flex;
             align-items: center;
             gap: 2px;
-            padding: 2px !important;
+            padding: 0 !important;
             border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 55%, transparent) !important;
             border-radius: 999px !important;
             overflow: hidden;
