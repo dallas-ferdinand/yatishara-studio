@@ -39,6 +39,8 @@ export type PlayBusFrames = {
   assetIdA?: string;
   /** Middle picture lanes (between top A and bottom B), bottom→top paint order. */
   stack?: PlayBusStackFrame[];
+  /** Every video lane keyed by slice.video index (stills are omitted). */
+  layers?: PlayBusStackFrame[];
 };
 
 type SlotId = "a" | "b";
@@ -110,6 +112,9 @@ export class PlayBus {
   private duration = 0;
   private playing = false;
   private pausedTimeline = 0;
+  /** Wall-clock fallback when every picture lane is a still (no HTMLVideo clock). */
+  private stillPlayOriginSec = 0;
+  private stillPlayOriginPerf = 0;
   private plan: PlaybackPlan | null = null;
   private paintedOnce = false;
   private waiting = false;
@@ -203,17 +208,33 @@ export class PlayBus {
     return this.waiting;
   }
 
+  private clockState(): SlotState | null {
+    const program = this.slots[this.program];
+    if (program.assignment) return program;
+    const partner = this.slots[this.program === "a" ? "b" : "a"];
+    if (partner.assignment && partner.sampleIndex != null) return partner;
+    for (const state of this.stackSlots) {
+      if (state.assignment && state.sampleIndex != null) return state;
+    }
+    return null;
+  }
+
   /**
-   * Timeline seconds from the program element. Master clock while playing.
+   * Timeline seconds from a playing video lane. An image overlay must never
+   * own this clock or middle video rows freeze / drop out of the composite.
    */
   timelineTime(): number {
     if (!this.playing) {
       return Math.max(0, Math.min(this.duration, this.pausedTimeline));
     }
-    const state = this.slots[this.program];
-    const slot = state.assignment;
-    if (!slot) {
-      return Math.max(0, Math.min(this.duration, this.pausedTimeline));
+    const state = this.clockState();
+    const slot = state?.assignment;
+    if (!slot || !state) {
+      const elapsed = performance.now() / 1000 - this.stillPlayOriginPerf;
+      return Math.max(
+        0,
+        Math.min(this.duration, this.stillPlayOriginSec + Math.max(0, elapsed)),
+      );
     }
     const source = state.video.currentTime;
     const local = Math.max(0, (source - slot.trimIn) / slot.speed);
@@ -248,6 +269,8 @@ export class PlayBus {
     this.plan = plan;
     this.duration = Math.max(this.duration, plan.duration);
     this.pausedTimeline = Math.max(0, Math.min(this.duration, timelineTime));
+    this.stillPlayOriginSec = this.pausedTimeline;
+    this.stillPlayOriginPerf = performance.now() / 1000;
     const slice = sliceAt(plan, this.pausedTimeline);
     await this.assignFromSlice(slice, mediaById ?? this.mediaRef.current, {
       playProgram: true,
@@ -299,74 +322,32 @@ export class PlayBus {
   }
 
   /**
-   * Capture VideoFrames for the compositor. Program → A, partner → B,
-   * middle lanes → stack (bottom→top).
+   * Capture every playing video lane, tagged with slice.video index.
+   * Stills are omitted — the play tick fills those from the PNG cache.
    */
   captureFrames(): PlayBusFrames {
     const out: PlayBusFrames = {};
-    const programId = this.program;
-    const partnerId: SlotId = programId === "a" ? "b" : "a";
-    this.captureSlot(programId, "a", out);
-    if (this.slots[partnerId].assignment) {
-      this.captureSlot(partnerId, "b", out);
-    }
-    const stack: PlayBusStackFrame[] = [];
-    for (let i = 0; i < this.stackSlots.length; i += 1) {
-      const state = this.stackSlots[i]!;
-      if (!state.assignment || state.sampleIndex == null) continue;
+    const layers: PlayBusStackFrame[] = [];
+    const captureState = (state: SlotState) => {
+      if (!state.assignment || state.sampleIndex == null) return;
       const frame = this.captureStackSlot(state);
-      if (!frame) continue;
-      stack.push({
+      if (!frame) return;
+      layers.push({
         frame,
-        textureKey: `play:stack:${i}`,
+        textureKey: `play:${state.sampleIndex}`,
         width: frame.displayWidth,
         height: frame.displayHeight,
         sampleIndex: state.sampleIndex,
       });
+    };
+    captureState(this.slots.a);
+    captureState(this.slots.b);
+    for (const state of this.stackSlots) captureState(state);
+    if (layers.length) {
+      out.layers = layers;
+      out.stack = layers;
     }
-    if (stack.length) out.stack = stack;
     return out;
-  }
-
-  private captureSlot(
-    id: SlotId,
-    compositorSlot: "a" | "b",
-    out: PlayBusFrames,
-  ): void {
-    const state = this.slots[id];
-    if (!state.assignment) return;
-    const hasRvfc =
-      typeof (state.video as HTMLVideoElement & {
-        requestVideoFrameCallback?: unknown;
-      }).requestVideoFrameCallback === "function";
-    if (hasRvfc && state.presented === state.lastCaptured && state.lastCaptured >= 0) {
-      return;
-    }
-    if (state.video.readyState < HAVE_CURRENT_DATA) return;
-    try {
-      const frame = new VideoFrame(state.video);
-      if (compositorSlot === "a") {
-        out.frameA = frame;
-        out.textureKeyA = "play:a";
-        out.widthA = frame.displayWidth;
-        out.heightA = frame.displayHeight;
-        out.assetIdA = state.assignment.assetId;
-      } else {
-        out.frameB = frame;
-        out.textureKeyB = "play:b";
-        out.widthB = frame.displayWidth;
-        out.heightB = frame.displayHeight;
-      }
-      state.lastCaptured = state.presented;
-      this.paintedOnce = true;
-    } catch {
-      if (!this.corsWarned) {
-        this.corsWarned = true;
-        console.warn(
-          "[PlayBus] VideoFrame(video) failed (CORS?). Skipping frame; not falling back to WebCodecs play.",
-        );
-      }
-    }
   }
 
   private captureStackSlot(state: SlotState): VideoFrame | null {
@@ -413,11 +394,11 @@ export class PlayBus {
   }
 
   private refreshWaiting(): void {
-    const program = this.slots[this.program];
+    const clock = this.clockState();
     const next =
       this.playing &&
-      Boolean(program.assignment) &&
-      (program.video.readyState < HAVE_CURRENT_DATA || program.video.seeking);
+      Boolean(clock?.assignment) &&
+      Boolean(clock && (clock.video.readyState < HAVE_CURRENT_DATA || clock.video.seeking));
     if (next === this.waiting) return;
     this.waiting = next;
     this.onWaitingChange?.(next);
@@ -440,55 +421,53 @@ export class PlayBus {
     opts: { playProgram: boolean },
   ): Promise<void> {
     const videos = slice.video;
-    const primary = videos[0];
     const stacking = !slice.transition && videos.length >= 2;
 
-    let secondary: VideoSample | null = null;
-    let middles: Array<{ sample: VideoSample; sampleIndex: number }> = [];
-
-    if (slice.transition) {
-      secondary = videos[1] ?? null;
-      // Extra overlapping lanes after A/B (overlays on other rows).
-      const midSamples = videos.slice(2);
-      const capped =
-        midSamples.length > MAX_STACK_SLOTS
-          ? midSamples.slice(midSamples.length - MAX_STACK_SLOTS)
-          : midSamples;
-      const indexOffset = 2 + (midSamples.length - capped.length);
-      middles = capped.map((sample, i) => ({
-        sample,
-        sampleIndex: indexOffset + i,
-      }));
-      middles = middles.reverse();
-    } else if (videos.length <= 1) {
-      secondary = slice.preload[0] ?? null;
-    } else if (videos.length === 2) {
-      secondary = videos[1]!;
-    } else {
-      // Top = [0], bottom = last, middles = [1..n-2] (cap stack slots).
-      secondary = videos[videos.length - 1]!;
-      const midSamples = videos.slice(1, -1);
-      const capped =
-        midSamples.length > MAX_STACK_SLOTS
-          ? midSamples.slice(midSamples.length - MAX_STACK_SLOTS)
-          : midSamples;
-      const indexOffset = 1 + (midSamples.length - capped.length);
-      middles = capped.map((sample, i) => ({
-        sample,
-        sampleIndex: indexOffset + i,
-      }));
-      // Compositor paints bottom→top: reverse so first stack slot is lowest mid.
-      middles = middles.reverse();
+    type VideoBind = { sample: VideoSample; sampleIndex: number; url: string };
+    const binds: VideoBind[] = [];
+    for (let index = 0; index < videos.length; index += 1) {
+      const sample = videos[index]!;
+      const url = this.resolveUrl(sample, mediaById);
+      if (!url) continue;
+      binds.push({ sample, sampleIndex: index, url });
     }
 
-    const primaryUrl = primary ? this.resolveUrl(primary, mediaById) : null;
-    const secondaryUrl = secondary ? this.resolveUrl(secondary, mediaById) : null;
+    // Clock = bottom-most video so an image overlay never owns transport.
+    // During a transition prefer the outgoing (then incoming) movie.
+    let clock: VideoBind | null = null;
+    if (slice.transition) {
+      clock =
+        binds.find((bind) => bind.sample.role === "outgoing") ??
+        binds.find((bind) => bind.sample.role === "incoming") ??
+        binds[binds.length - 1] ??
+        null;
+    } else if (binds.length) {
+      clock = binds.reduce((best, bind) =>
+        bind.sampleIndex > best.sampleIndex ? bind : best,
+      );
+    }
 
-    const wantProgram = primary && primaryUrl ? slotFromSample(primary, primaryUrl) : null;
-    const wantPartner =
-      secondary && secondaryUrl ? slotFromSample(secondary, secondaryUrl) : null;
+    const rest = clock
+      ? binds.filter((bind) => bind.sampleIndex !== clock!.sampleIndex)
+      : binds;
+    // Top-most remaining video on the partner element; extras on stack slots.
+    const partnerLive = rest[0] ?? null;
+    const stackBinds = rest.slice(1, 1 + MAX_STACK_SLOTS);
 
-    // Swap when the upcoming partner is already on the other element.
+    const prerollSample =
+      !slice.transition && videos.length <= 1 ? slice.preload[0] ?? null : null;
+    const prerollUrl = prerollSample ? this.resolveUrl(prerollSample, mediaById) : null;
+    const partnerBind = partnerLive;
+    const prerollWant =
+      !partnerBind && prerollSample && prerollUrl
+        ? slotFromSample(prerollSample, prerollUrl)
+        : null;
+
+    const wantProgram = clock ? slotFromSample(clock.sample, clock.url) : null;
+    const wantPartner = partnerBind
+      ? slotFromSample(partnerBind.sample, partnerBind.url)
+      : prerollWant;
+
     if (
       wantProgram &&
       this.slots[this.program].assignment?.clipId !== wantProgram.clipId
@@ -499,31 +478,31 @@ export class PlayBus {
       }
     }
 
+    this.slots[this.program].sampleIndex = clock?.sampleIndex;
     await this.ensureSlot(this.program, wantProgram, {
       play: opts.playProgram,
-      sourceTime: primary?.sourceTime,
+      sourceTime: clock?.sample.sourceTime,
     });
 
     const partnerId: SlotId = this.program === "a" ? "b" : "a";
+    this.slots[partnerId].sampleIndex = partnerBind?.sampleIndex;
     await this.ensureSlot(partnerId, wantPartner, {
-      // Stack overlays must play live (not only transitions).
-      play: Boolean(opts.playProgram && (slice.transition || stacking) && wantPartner),
-      sourceTime: secondary?.sourceTime ?? wantPartner?.trimIn,
-      preroll: !slice.transition && !stacking,
+      play: Boolean(opts.playProgram && (slice.transition || stacking) && partnerBind),
+      sourceTime: partnerBind?.sample.sourceTime ?? wantPartner?.trimIn,
+      preroll: Boolean(prerollWant && !partnerBind),
     });
 
     const stackPlay = Boolean(
-      opts.playProgram && (stacking || (slice.transition && middles.length > 0)),
+      opts.playProgram && (stacking || (slice.transition && stackBinds.length > 0)),
     );
     for (let i = 0; i < this.stackSlots.length; i += 1) {
-      const mid = middles[i];
-      const url = mid ? this.resolveUrl(mid.sample, mediaById) : null;
-      const want = mid && url ? slotFromSample(mid.sample, url) : null;
+      const bind = stackBinds[i];
+      const want = bind ? slotFromSample(bind.sample, bind.url) : null;
       const state = this.stackSlots[i]!;
-      state.sampleIndex = mid?.sampleIndex;
+      state.sampleIndex = bind?.sampleIndex;
       await this.ensureSlotState(state, want, {
         play: Boolean(stackPlay && want),
-        sourceTime: mid?.sample.sourceTime ?? want?.trimIn,
+        sourceTime: bind?.sample.sourceTime ?? want?.trimIn,
         preroll: false,
       });
     }

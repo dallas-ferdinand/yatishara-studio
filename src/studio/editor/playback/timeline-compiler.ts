@@ -170,6 +170,40 @@ export function stackOverlappingVideo<T>(
   return [active[0]!, ...active.slice(active.length - keepBottom)];
 }
 
+export type PictureStackPlan = {
+  topIndex: number;
+  bottomIndex: number;
+  /** Timeline order (top → bottom), not paint order. */
+  middleIndexes: number[];
+};
+
+/**
+ * Compositor roles for the current slice. Indexes into slice.video
+ * (already top-lane-first). A still on top is still index 0 — callers must
+ * not treat that lane as the HTMLVideo play clock.
+ */
+export function pictureStackPlan(slice: RenderSlice): PictureStackPlan {
+  const n = slice.video.length;
+  if (n === 0) return { topIndex: -1, bottomIndex: -1, middleIndexes: [] };
+  if (slice.transition) {
+    const topIndex = slice.video.findIndex((sample) => sample.role === "outgoing");
+    const bottomIndex = slice.video.findIndex((sample) => sample.role === "incoming");
+    const middleIndexes = slice.video
+      .map((sample, index) => (sample.role === "single" ? index : -1))
+      .filter((index) => index >= 0);
+    return {
+      topIndex: topIndex >= 0 ? topIndex : 0,
+      bottomIndex: bottomIndex >= 0 ? bottomIndex : Math.max(0, n - 1),
+      middleIndexes,
+    };
+  }
+  return {
+    topIndex: 0,
+    bottomIndex: n > 1 ? n - 1 : 0,
+    middleIndexes: n > 2 ? Array.from({ length: n - 2 }, (_, i) => i + 1) : [],
+  };
+}
+
 /**
  * Identity of everything that decides which bytes get decoded and which audio
  * is mixed. Cosmetic edits — transform drags, text styling, colours — leave it

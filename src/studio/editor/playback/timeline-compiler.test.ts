@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyProject } from "../editorState";
 import type { EditorClip } from "../types";
-import { compileTimeline, playbackSignature, sliceAt, stackOverlappingVideo } from "./timeline-compiler";
+import { compileTimeline, pictureStackPlan, playbackSignature, sliceAt, stackOverlappingVideo } from "./timeline-compiler";
 
 function clip(
   id: string,
@@ -282,6 +282,42 @@ describe("timeline compiler", () => {
       "mid",
       "bottom",
     ]);
+  });
+
+  it("keeps middle videos when the top lane is an image", () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.tracks = [
+      { id: "track-v1", kind: "video", label: "V1" },
+      { id: "track-v2", kind: "video", label: "V2" },
+      { id: "track-v3", kind: "video", label: "V3" },
+      { id: "track-v4", kind: "video", label: "V4" },
+      { id: "track-audio", kind: "audio", label: "Audio" },
+    ];
+    project.clips = [
+      { ...clip("img", 0, 3), trackId: "track-v1", kind: "image" },
+      { ...clip("mid-a", 0, 3), trackId: "track-v2" },
+      { ...clip("mid-b", 0, 3), trackId: "track-v3" },
+      { ...clip("main", 0, 3), trackId: "track-v4" },
+    ];
+    const plan = compileTimeline(project);
+    expect(sliceAt(plan, 1).video.map((sample) => sample.clip.clipId)).toEqual([
+      "img",
+      "mid-a",
+      "mid-b",
+      "main",
+    ]);
+    expect(sliceAt(plan, 1).video.map((sample) => sample.clip.kind)).toEqual([
+      "image",
+      "video",
+      "video",
+      "video",
+    ]);
+    const roles = pictureStackPlan(sliceAt(plan, 1));
+    expect(roles).toEqual({
+      topIndex: 0,
+      bottomIndex: 3,
+      middleIndexes: [1, 2],
+    });
   });
 
   it("mutes only the muted video row so lower-row audio still mixes", () => {

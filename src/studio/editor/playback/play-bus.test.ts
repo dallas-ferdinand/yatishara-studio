@@ -86,12 +86,12 @@ function fakeVideo(): HTMLVideoElement {
   return video as unknown as HTMLVideoElement;
 }
 
-function mediaItem(assetId: string, file: string): EditorMediaItem {
+function mediaItem(assetId: string, file: string, kind: EditorMediaItem["kind"] = "video"): EditorMediaItem {
   return {
     assetId,
-    kind: "video",
-    url: `https://cdn.example/${file}.mp4`,
-    proxyUrl: `https://cdn.example/${file}-720.mp4`,
+    kind,
+    url: `https://cdn.example/${file}.${kind === "image" ? "png" : "mp4"}`,
+    proxyUrl: kind === "image" ? undefined : `https://cdn.example/${file}-720.mp4`,
     name: file,
   } as EditorMediaItem;
 }
@@ -200,6 +200,53 @@ describe("PlayBus", () => {
     expect(srcs.some((s) => s.includes("bot-720"))).toBe(true);
     expect(srcs.some((s) => s.includes("mid-720"))).toBe(true);
     expect(videos.filter((v) => !v.paused).length).toBeGreaterThanOrEqual(3);
+    bus.dispose();
+  });
+
+  it("keeps middle videos playing when the top lane is an image", async () => {
+    const videos: HTMLVideoElement[] = [];
+    const media = new Map([
+      ["img", mediaItem("img", "sheet", "image")],
+      ["mid-a", mediaItem("mid-a", "mid-a")],
+      ["mid-b", mediaItem("mid-b", "mid-b")],
+      ["main", mediaItem("main", "main")],
+    ]);
+    const bus = new PlayBus(
+      { current: media },
+      {
+        createVideo: () => {
+          const video = fakeVideo();
+          videos.push(video);
+          return video;
+        },
+      },
+    );
+    const project = createEmptyProject({ name: "t", folderId: "f" });
+    project.tracks = [
+      { id: "track-v1", kind: "video", label: "V1" },
+      { id: "track-v2", kind: "video", label: "V2" },
+      { id: "track-v3", kind: "video", label: "V3" },
+      { id: "track-v4", kind: "video", label: "V4" },
+      { id: "track-audio", kind: "audio", label: "Audio" },
+    ];
+    project.clips = [
+      { ...clip("img", "img", 0, 0, 4), trackId: "track-v1", kind: "image" },
+      { ...clip("mid-a", "mid-a", 0, 0, 4), trackId: "track-v2" },
+      { ...clip("mid-b", "mid-b", 0, 0, 4), trackId: "track-v3" },
+      { ...clip("main", "main", 0, 0, 4), trackId: "track-v4" },
+    ];
+    project.duration = 4;
+    const plan = compileTimeline(project);
+    await bus.play(plan, 1, media);
+    const srcs = videos.map((v) => v.src).filter(Boolean);
+    expect(srcs.some((s) => s.includes("sheet.png"))).toBe(false);
+    expect(srcs.some((s) => s.includes("mid-a-720"))).toBe(true);
+    expect(srcs.some((s) => s.includes("mid-b-720"))).toBe(true);
+    expect(srcs.some((s) => s.includes("main-720"))).toBe(true);
+    expect(videos.filter((v) => !v.paused).length).toBeGreaterThanOrEqual(3);
+    const mainEl = videos.find((v) => v.src.includes("main-720"))!;
+    mainEl.currentTime = 2.5;
+    expect(bus.timelineTime()).toBeCloseTo(2.5, 1);
     bus.dispose();
   });
 

@@ -16,7 +16,7 @@ import {
   MediaDecoderClient,
 } from "./media-decoder-client";
 import { FrameScheduler, type FrameConsumer, type SchedulerMetrics } from "./frame-scheduler";
-import { compileTimeline, playbackSignature, sliceAt } from "./timeline-compiler";
+import { compileTimeline, pictureStackPlan, playbackSignature, sliceAt } from "./timeline-compiler";
 import type { PlaybackPlan, RenderSlice } from "./timeline-compiler";
 import { TransportClock } from "./transport-clock";
 import { isLegacySystemFont, loadGoogleFont } from "../loadGoogleFont";
@@ -65,7 +65,7 @@ function warmPlayheadVideos(
 ): void {
   if (!decoder) return;
   const slice = sliceAt(plan, timelineTime);
-  for (const sample of slice.video.slice(0, 2)) {
+  for (const sample of slice.video) {
     const assetId = sample.clip.assetId;
     if (!assetId) continue;
     const media = mediaById.get(assetId);
@@ -260,14 +260,16 @@ class EngineConsumer implements FrameConsumer {
 
     bus.syncSlice(slice, this.mediaRef.current);
     const captured = bus.captureFrames();
-
-    // PNG stills from cache only — never await fetch on the play tick.
-    let frameA = captured.frameA;
-    let frameB = captured.frameB;
-    let textureKeyA = captured.textureKeyA ?? (slice.video[0] ? "play:a" : undefined);
-    let textureKeyB =
-      captured.textureKeyB ??
-      (slice.video.length > 1 || slice.transition ? "play:b" : undefined);
+    const byIndex = new Map(
+      (captured.layers ?? captured.stack ?? []).map((layer) => [layer.sampleIndex, layer]),
+    );
+    const roles = pictureStackPlan(slice);
+    const opacityFor = (sample: RenderSlice["video"][number] | undefined) => {
+      if (!sample) return 1;
+      const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
+      const local = slice.timelineTime - sample.clip.timelineStart;
+      return clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local);
+    };
 
     const stillForSample = (
       sample: (typeof slice.video)[number] | undefined,
@@ -287,58 +289,37 @@ class EngineConsumer implements FrameConsumer {
       return { textureKey: key };
     };
 
-    const top = slice.video[0];
-    const topStill = stillForSample(top);
-    if (topStill) {
-      textureKeyA = topStill.textureKey;
-      if (topStill.frame) {
-        frameA?.close();
-        frameA = topStill.frame;
-      } else {
-        frameA?.close();
-        frameA = undefined;
+    const usedBusFrames = new Set<VideoFrame>();
+    const resolveLane = (index: number) => {
+      const sample = slice.video[index];
+      if (!sample) return null;
+      const still = stillForSample(sample);
+      if (still) {
+        return {
+          sample,
+          frame: still.frame,
+          textureKey: still.textureKey,
+          width: still.frame?.displayWidth,
+          height: still.frame?.displayHeight,
+        };
       }
-    }
-
-    const sampleA = slice.video[0];
-    const sampleB =
-      slice.transition || slice.video.length <= 2
-        ? slice.video[1]
-        : slice.video[slice.video.length - 1];
-
-    if (!slice.transition) {
-      const bottomStill = stillForSample(sampleB);
-      if (bottomStill) {
-        textureKeyB = bottomStill.textureKey;
-        if (bottomStill.frame) {
-          frameB?.close();
-          frameB = bottomStill.frame;
-        } else {
-          frameB?.close();
-          frameB = undefined;
-        }
-      }
-    }
-
-    if (captured.assetIdA && captured.widthA && captured.heightA) {
-      this.onSourceSize({
-        assetId: captured.assetIdA,
-        width: captured.widthA,
-        height: captured.heightA,
-      });
-    }
-
-    const textsUnder = mapTextItems(slice.textUnder, slice.timelineTime);
-    const textsOver = mapTextItems(slice.textOver, slice.timelineTime);
-    // Fonts must already be on the worker from paused paints — never await here.
-    const opacityFor = (sample: typeof sampleA | undefined) => {
-      if (!sample) return 1;
-      const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
-      const local = slice.timelineTime - sample.clip.timelineStart;
-      return clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local);
+      const fromBus = byIndex.get(index);
+      if (fromBus?.frame) usedBusFrames.add(fromBus.frame);
+      if (!fromBus) return { sample, frame: undefined, textureKey: undefined };
+      return {
+        sample,
+        frame: fromBus.frame,
+        textureKey: fromBus.textureKey,
+        width: fromBus.width,
+        height: fromBus.height,
+      };
     };
 
-    // Middles: PlayBus stack (videos) + image stills for PNG middles not on the bus.
+    const top = roles.topIndex >= 0 ? resolveLane(roles.topIndex) : null;
+    const bottom =
+      roles.bottomIndex >= 0 && roles.bottomIndex !== roles.topIndex
+        ? resolveLane(roles.bottomIndex)
+        : null;
     const stack: Array<{
       frame?: VideoFrame;
       textureKey?: string;
@@ -347,48 +328,19 @@ class EngineConsumer implements FrameConsumer {
       width?: number;
       height?: number;
     }> = [];
-    const usedBusFrames = new Set<VideoFrame>();
-    const midSamples = slice.transition
-      ? slice.video.slice(2)
-      : slice.video.length > 2
-        ? slice.video.slice(1, -1)
-        : [];
-    if (midSamples.length > 0) {
-      const indexBase = slice.transition ? 2 : 1;
-      const byIndex = new Map(
-        (captured.stack ?? []).map((layer) => [layer.sampleIndex, layer]),
-      );
-      // Paint bottom→top (same order as paused prepare()).
-      for (let i = midSamples.length - 1; i >= 0; i -= 1) {
-        const sample = midSamples[i]!;
-        const sampleIndex = indexBase + i;
-        const fromBus = byIndex.get(sampleIndex);
-        const still = stillForSample(sample);
-        if (still) {
-          stack.push({
-            frame: still.frame,
-            textureKey: still.textureKey,
-            transform: transformTuple(sample.clip.clip.effects),
-            opacity: opacityFor(sample),
-            width: still.frame?.displayWidth,
-            height: still.frame?.displayHeight,
-          });
-          continue;
-        }
-        if (fromBus?.frame) {
-          usedBusFrames.add(fromBus.frame);
-          stack.push({
-            frame: fromBus.frame,
-            textureKey: fromBus.textureKey,
-            transform: transformTuple(sample.clip.clip.effects),
-            opacity: opacityFor(sample),
-            width: fromBus.width,
-            height: fromBus.height,
-          });
-        }
-      }
+    for (let i = roles.middleIndexes.length - 1; i >= 0; i -= 1) {
+      const layer = resolveLane(roles.middleIndexes[i]!);
+      if (!layer || (!layer.frame && !layer.textureKey)) continue;
+      stack.push({
+        frame: layer.frame,
+        textureKey: layer.textureKey,
+        transform: transformTuple(layer.sample.clip.clip.effects),
+        opacity: opacityFor(layer.sample),
+        width: layer.width,
+        height: layer.height,
+      });
     }
-    for (const layer of captured.stack ?? []) {
+    for (const layer of captured.layers ?? captured.stack ?? []) {
       if (layer.frame && !usedBusFrames.has(layer.frame)) {
         try {
           layer.frame.close();
@@ -397,6 +349,30 @@ class EngineConsumer implements FrameConsumer {
         }
       }
     }
+
+    const sampleA = top?.sample;
+    const sampleB = bottom?.sample;
+    const frameA = top?.frame;
+    const frameB = bottom?.frame;
+    const textureKeyA = top?.textureKey;
+    const textureKeyB = bottom?.textureKey;
+
+    if (sampleA?.clip.assetId && top?.width && top.height) {
+      this.onSourceSize({
+        assetId: sampleA.clip.assetId,
+        width: top.width,
+        height: top.height,
+      });
+    } else if (sampleB?.clip.assetId && bottom?.width && bottom.height) {
+      this.onSourceSize({
+        assetId: sampleB.clip.assetId,
+        width: bottom.width,
+        height: bottom.height,
+      });
+    }
+
+    const textsUnder = mapTextItems(slice.textUnder, slice.timelineTime);
+    const textsOver = mapTextItems(slice.textOver, slice.timelineTime);
 
     const painted = this.compositor.paint({
       frameA,
@@ -527,7 +503,17 @@ class EngineConsumer implements FrameConsumer {
       return false;
     }
     this.onAudioReady();
-    const primary = valid[0];
+    const roles = pictureStackPlan(slice);
+    const top = roles.topIndex >= 0 ? decoded[roles.topIndex] ?? undefined : undefined;
+    const bottom =
+      roles.bottomIndex >= 0 && roles.bottomIndex !== roles.topIndex
+        ? decoded[roles.bottomIndex] ?? undefined
+        : undefined;
+    const middles = roles.middleIndexes
+      .map((index) => decoded[index])
+      .filter((item): item is NonNullable<typeof item> => item != null)
+      .reverse();
+    const primary = top ?? bottom ?? valid[0];
     this.onSourceSize(
       primary
         ? {
@@ -537,22 +523,8 @@ class EngineConsumer implements FrameConsumer {
           }
         : null,
     );
-    // Pick layers by role, not by index into the decoded array: one lane failing
-    // to decode used to shift the array and blend an overlay as the transition
-    // partner. slice.video is ordered top lane first, so middles paint bottom→top.
-    const top = slice.transition
-      ? valid.find((item) => item.sample.role === "outgoing")
-      : valid[0];
-    const bottom = slice.transition
-      ? valid.find((item) => item.sample.role === "incoming")
-      : valid.length > 1
-        ? valid[valid.length - 1]
-        : undefined;
-    const middles = slice.transition
-      ? valid.filter((item) => item.sample.role === "single").reverse()
-      : valid.length > 2
-        ? valid.slice(1, -1).reverse()
-        : [];
+    // Match compositor lanes to slice.video indexes so a failed middle decode
+    // cannot steal top/bottom (or hide videos under an image overlay).
     const frameA = top?.frame;
     let frameB = bottom?.frame;
     if (frameA && frameB && frameA === frameB) {
@@ -619,11 +591,12 @@ class EngineConsumer implements FrameConsumer {
     await Promise.all(families.map((family) => loadGoogleFont(family)));
     await this.compositor.ensureFonts(families);
     const videos = prepared.slice.video;
-    const sampleA = videos[0];
+    const roles = pictureStackPlan(prepared.slice);
+    const sampleA = roles.topIndex >= 0 ? videos[roles.topIndex] : undefined;
     const sampleB =
-      slice.transition || videos.length <= 2
-        ? videos[1]
-        : videos[videos.length - 1];
+      roles.bottomIndex >= 0 && roles.bottomIndex !== roles.topIndex
+        ? videos[roles.bottomIndex]
+        : undefined;
     const opacityFor = (sample: typeof sampleA | undefined) => {
       if (!sample) return 1;
       const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
