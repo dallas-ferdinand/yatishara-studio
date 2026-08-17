@@ -1921,6 +1921,33 @@ button.post-compose-inline-chip.profile-description-chip {
   grid-template-columns: 22px minmax(0, 1fr);
 }
 
+.profile-comment-row.is-mine {
+  display: flex;
+  justify-content: flex-end;
+  grid-template-columns: none;
+}
+
+.profile-comment-row.is-mine.is-reply {
+  padding-left: 0;
+  padding-right: 16px;
+}
+
+.profile-comment-row.is-mine .profile-comment-avatar {
+  display: none;
+}
+
+.profile-comment-row.is-mine .profile-comment-body {
+  align-items: flex-end;
+  justify-items: end;
+  max-width: var(--studio-chat-bubble-max, 88%);
+}
+
+.profile-comment-row.is-mine .profile-comment-actions {
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+}
+
 .profile-comment-row:active {
   cursor: grabbing;
 }
