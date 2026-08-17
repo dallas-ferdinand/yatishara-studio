@@ -410,7 +410,7 @@ function ProfileCommentBubble({
         >
           <StudioProfileAvatar
             className="profile-comment-avatar"
-            size="sm"
+            size="md"
             src={comment.avatarUrl}
             initials={initials}
             displayName={comment.displayName}
