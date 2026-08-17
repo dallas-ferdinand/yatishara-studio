@@ -2054,6 +2054,67 @@ export const clearLegacyDisplayNames = internalMutation({
   },
 });
 
+/** One-time: drop free post likes so Boost counts are paid 5¢ only. */
+export const resetLegacyPostLikes = internalMutation({
+  args: {
+    phase: v.optional(v.union(v.literal("likes"), v.literal("counts"))),
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
+  returns: v.object({
+    phase: v.string(),
+    processed: v.number(),
+    done: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const phase = args.phase ?? "likes";
+    if (phase === "likes") {
+      const page = await ctx.db.query("profileLikes").paginate({
+        cursor: args.cursor ?? null,
+        numItems: 64,
+      });
+      for (const row of page.page) {
+        await ctx.db.delete(row._id);
+      }
+      if (!page.isDone) {
+        await ctx.scheduler.runAfter(0, internal.profiles.resetLegacyPostLikes, {
+          phase: "likes",
+          cursor: page.continueCursor,
+        });
+        return { phase, processed: page.page.length, done: false };
+      }
+      await ctx.scheduler.runAfter(0, internal.profiles.resetLegacyPostLikes, {
+        phase: "counts",
+      });
+      return { phase, processed: page.page.length, done: false };
+    }
+
+    const page = await ctx.db.query("profilePosts").paginate({
+      cursor: args.cursor ?? null,
+      numItems: BACKFILL_PROFILE_BATCH,
+    });
+    let processed = 0;
+    for (const post of page.page) {
+      const boosts = await ctx.db
+        .query("profileBoosts")
+        .withIndex("by_post", (q) => q.eq("postId", post._id))
+        .collect();
+      const likeCount = boosts.filter((row) => row.status === "active").length;
+      if (post.likeCount !== likeCount) {
+        await ctx.db.patch(post._id, { likeCount });
+        processed += 1;
+      }
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.profiles.resetLegacyPostLikes, {
+        phase: "counts",
+        cursor: page.continueCursor,
+      });
+      return { phase, processed, done: false };
+    }
+    return { phase, processed, done: true };
+  },
+});
+
 export const toggleLike = authedMutation({
   args: { postId: v.id("profilePosts") },
   returns: v.object({
@@ -2069,38 +2130,10 @@ export const toggleLike = authedMutation({
     if (!profile || !profile.isPublic) {
       throw new Error("Post not found");
     }
-    const existing = await ctx.db
-      .query("profileLikes")
-      .withIndex("by_user_and_post", (q) =>
-        q.eq("userId", ctx.user._id).eq("postId", post._id),
-      )
-      .unique();
-    if (existing) {
-      await ctx.db.delete(existing._id);
-      const likeCount = Math.max(0, post.likeCount - 1);
-      await ctx.db.patch(post._id, { likeCount });
-      await applyPostAffinity(ctx, {
-        userId: ctx.user._id,
-        post,
-        event: "like",
-        direction: -1,
-      });
-      return { liked: false, likeCount };
-    }
-    await ctx.db.insert("profileLikes", {
-      userId: ctx.user._id,
-      postId: post._id,
-      createdAt: Date.now(),
-    });
-    const likeCount = post.likeCount + 1;
-    await ctx.db.patch(post._id, { likeCount });
-    await applyPostAffinity(ctx, {
-      userId: ctx.user._id,
-      post,
-      event: "like",
-      direction: 1,
-    });
-    return { liked: true, likeCount };
+    return {
+      liked: await viewerHasActiveBoost(ctx, ctx.user._id, post._id),
+      likeCount: post.likeCount,
+    };
   },
 });
 
@@ -3510,38 +3543,10 @@ export const toggleLikeForApi = internalMutation({
     if (!profile || !profile.isPublic) {
       throw new Error("Post not found");
     }
-    const existing = await ctx.db
-      .query("profileLikes")
-      .withIndex("by_user_and_post", (q) =>
-        q.eq("userId", user._id).eq("postId", post._id),
-      )
-      .unique();
-    if (existing) {
-      await ctx.db.delete(existing._id);
-      const likeCount = Math.max(0, post.likeCount - 1);
-      await ctx.db.patch(post._id, { likeCount });
-      await applyPostAffinity(ctx, {
-        userId: user._id,
-        post,
-        event: "like",
-        direction: -1,
-      });
-      return { liked: false, likeCount };
-    }
-    await ctx.db.insert("profileLikes", {
-      userId: user._id,
-      postId: post._id,
-      createdAt: Date.now(),
-    });
-    const likeCount = post.likeCount + 1;
-    await ctx.db.patch(post._id, { likeCount });
-    await applyPostAffinity(ctx, {
-      userId: user._id,
-      post,
-      event: "like",
-      direction: 1,
-    });
-    return { liked: true, likeCount };
+    return {
+      liked: await viewerHasActiveBoost(ctx, user._id, post._id),
+      likeCount: post.likeCount,
+    };
   },
 });
 
