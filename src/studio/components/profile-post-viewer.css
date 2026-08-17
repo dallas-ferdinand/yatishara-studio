@@ -1113,6 +1113,27 @@
     border-color: var(--color-cursor-border-soft, var(--mos-border-soft));
   }
 
+  .profile-post-edit-btn {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    margin: 0 0 0 auto;
+    padding: 0;
+    border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-cursor-text-bright, var(--mos-text));
+    cursor: pointer;
+  }
+
+  .profile-post-edit-btn svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+  }
+
   .profile-post-caption.is-page .profile-post-caption-user,
   .profile-post-caption.is-page .profile-post-caption-text,
   .profile-post-caption.is-page .profile-post-caption-tag,

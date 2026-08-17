@@ -257,7 +257,7 @@ Do **not** invent one-off heights. Match siblings on the same surface.
 
 Rules:
 - On a public profile hero, Follow must match Hire Me / website chips (28×12), never a taller accent pill.
-- Feed watch caption Follow is a 28px idle bordered pill on the **right** of the name/time stack — not accent/`is-primary`, not a plus on the avatar. Time under the name uses the same `ago · date` stamp as comments.
+- Feed watch caption Follow is a 28px idle bordered pill on the **right** of the name/time stack — not accent/`is-primary`, not a plus on the avatar. Time under the name uses the same `ago · date` stamp as comments. On **mobile**, the owner’s own post uses that same right slot as a 28px icon-only Pencil (no label); desktop keeps the comments-dock pencil.
 - Prefer shared classes (`.public-profile-links a`, `.public-profile-follow`) over inline sizes.
 - Header bars stay exactly `--cursor-head-h` (32px); nest 24–28px chips inside, don’t grow the bar.
 - **In-rail / inline panel heads** (DM New/Edit label, assign sheets, secondary pane titles) use the

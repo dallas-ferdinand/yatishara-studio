@@ -2231,6 +2231,8 @@ export function ProfileCommentsPanel({
   postActions,
   mode = "comments",
   onModeChange,
+  startEditing = false,
+  onStartEditingConsumed,
   description,
   chrome = "feed",
   sidebarTitle,
@@ -2250,6 +2252,8 @@ export function ProfileCommentsPanel({
   postActions?: PostActionsInfo;
   mode?: CommentsPanelMode;
   onModeChange?: (mode: CommentsPanelMode) => void;
+  startEditing?: boolean;
+  onStartEditingConsumed?: () => void;
   description?: DescriptionInfo;
   chrome?: "feed" | "sidebar";
   /** Sidebar chrome title (e.g. lesson name). */
@@ -2321,8 +2325,11 @@ export function ProfileCommentsPanel({
         postAuthor={postAuthor}
         variant={isMobile ? "sheet" : "dock"}
         onClose={backToComments}
-        startEditing={startEditingDescription}
-        onStartEditingConsumed={() => setStartEditingDescription(false)}
+        startEditing={startEditingDescription || startEditing}
+        onStartEditingConsumed={() => {
+          setStartEditingDescription(false);
+          onStartEditingConsumed?.();
+        }}
       />
     ) : null;
 

@@ -13,6 +13,7 @@ import {
   Crown,
   Feather,
   Pause,
+  Pencil,
   Play,
   Plus,
   Send,
@@ -822,11 +823,13 @@ function FeedCaption({
   editedAt,
   showFollow = false,
   isFollowing = false,
+  showEdit = false,
   active = false,
   placement = "overlay",
   onOpenProfile,
   onOpenDescription,
   onToggleFollow,
+  onEdit,
   feedShare,
 }: {
   username?: string;
@@ -846,11 +849,13 @@ function FeedCaption({
   editedAt?: number;
   showFollow?: boolean;
   isFollowing?: boolean;
+  showEdit?: boolean;
   /** Interactive current post — kept for callers. */
   active?: boolean;
   placement?: "overlay" | "page";
   onOpenProfile?: (username: string) => void;
   onToggleFollow?: () => void;
+  onEdit?: () => void;
   onOpenDescription?: () => void;
   /** Drag this caption into a Messages chat row to share the post. */
   feedShare?: {
@@ -958,6 +963,18 @@ function FeedCaption({
                 <UserPlus className="profile-post-follow-icon" aria-hidden="true" />
               )}
               <span>{isFollowing ? "Unfollow" : "Follow"}</span>
+            </button>
+          ) : showEdit ? (
+            <button
+              type="button"
+              className="profile-post-edit-btn"
+              aria-label="Edit description"
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdit?.();
+              }}
+            >
+              <Pencil aria-hidden="true" strokeWidth={2.25} />
             </button>
           ) : null}
         </div>
@@ -1296,6 +1313,7 @@ export function ProfilePostViewer({
   const [activePostId, setActivePostId] = useState<Id<"profilePosts"> | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [sidePanelMode, setSidePanelMode] = useState<CommentsPanelMode>("comments");
+  const [startCaptionEdit, setStartCaptionEdit] = useState(false);
   const [localLikes, setLocalLikes] = useState<
     Record<string, { liked: boolean; likeCount: number }>
   >({});
@@ -1502,6 +1520,7 @@ export function ProfilePostViewer({
 
   useEffect(() => {
     setSidePanelMode("comments");
+    setStartCaptionEdit(false);
     if (isMobile) setCommentsOpen(false);
   }, [activePost?._id, isMobile]);
 
@@ -2249,10 +2268,16 @@ export function ProfilePostViewer({
                       ? (localFollows[post.profileId] ?? post.isFollowing)
                       : post.isFollowing,
                   )}
+                  showEdit={isMobile && Boolean(post.isOwner)}
                   active={isInteractiveSlide}
                   placement="page"
                   onOpenProfile={onOpenProfile}
                   onToggleFollow={() => void handleFollowToggle(post)}
+                  onEdit={() => {
+                    setStartCaptionEdit(true);
+                    setSidePanelMode("description");
+                    setCommentsOpen(true);
+                  }}
                   feedShare={
                     isInteractiveSlide
                       ? {
@@ -2356,6 +2381,7 @@ export function ProfilePostViewer({
           onSave={() => void handleSave(activeSlidePost)}
           onShare={() => void handleShare(activeSlidePost)}
           onOpenComments={() => {
+            setStartCaptionEdit(false);
             setSidePanelMode("comments");
             setCommentsOpen(true);
           }}
@@ -2371,9 +2397,12 @@ export function ProfilePostViewer({
         onClose={() => {
           setCommentsOpen(false);
           setSidePanelMode("comments");
+          setStartCaptionEdit(false);
         }}
         mode={sidePanelMode}
         onModeChange={setSidePanelMode}
+        startEditing={startCaptionEdit}
+        onStartEditingConsumed={() => setStartCaptionEdit(false)}
         description={{
           caption: localCaptions[activePost._id]
             ? localCaptions[activePost._id]!.caption
