@@ -32,19 +32,29 @@
   overflow: visible;
 }
 
-.studio-voice-picker-search-bar {
+.studio-voice-picker-chrome-row {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
   min-width: 0;
-  min-height: 32px;
-  height: 32px;
-  padding: 0 10px;
+  padding: 0 8px;
   box-sizing: border-box;
-  /* One hairline only — never stack top+bottom against the tab row. */
-  border: 0;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border-soft)));
+  background: transparent;
+}
+
+.studio-voice-picker-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 28px;
+  height: 28px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 0;
   background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
 }
@@ -116,17 +126,14 @@
 .studio-voice-picker-lib-bar {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex: 0 0 auto;
-  align-self: flex-start;
   min-width: 0;
   min-height: 32px;
   height: 32px;
-  padding: 0 8px;
+  padding: 0;
   box-sizing: border-box;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
+  overflow: visible;
   border: 0;
   background: transparent;
 }
@@ -142,7 +149,7 @@
   justify-content: center;
   flex: 0 0 auto;
   height: 24px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 0;
   border-radius: 7px;
   background: transparent;

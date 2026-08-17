@@ -469,6 +469,7 @@ function StudioVoicePickerInner({
   return (
     <div className={`studio-voice-picker${embedded ? " is-embedded" : ""}`}>
       <div className="studio-voice-picker-controls" ref={toolbarRef}>
+        <div className="studio-voice-picker-chrome-row">
         <nav
           className="studio-voice-picker-lib-bar"
           role="tablist"
@@ -499,7 +500,7 @@ function StudioVoicePickerInner({
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search voices…"
+            placeholder="Search…"
             aria-label="Search voices"
           />
           {search ? (
@@ -546,6 +547,7 @@ function StudioVoicePickerInner({
               ) : null}
             </div>
           ) : null}
+        </div>
         </div>
 
       {tab === "explore" ? (
