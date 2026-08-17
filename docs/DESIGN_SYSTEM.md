@@ -677,6 +677,8 @@ ops tabs unchanged.
 `.studio-cn-head` (and nested `.studio-admin-head`) use **L1** `--mos-panel` /
 `--mos-page` — same fill as `cursor-workspace-head`, never `--mos-bg`/plate (reads as a
 deeper second bar in light). Memory: **712**.
+Open Academy course on desktop: prev/next lesson chevrons sit on the **right** of
+`.studio-cn-head` (24px). Mobile keeps the Lessons sheet pill there. Memory: **1473**.
 Listings are *services/packages* in product copy. CSS: `studio-creative-network.css` +
 shared `public-offers.css` tokens. Memory: Creative Network Studio tab model.
 

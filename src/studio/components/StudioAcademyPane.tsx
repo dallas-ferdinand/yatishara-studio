@@ -3,6 +3,8 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   GraduationCap,
   Library,
@@ -2195,18 +2197,41 @@ export function StudioAcademyPane({
           </button>
         )}
       </nav>
-      {isMobile && detailOpen && academy.courseId ? (
+      {detailOpen && academy.courseId ? (
         <div className="studio-cn-head-action">
-          <button
-            type="button"
-            className={`studio-academy-lessons-sheet-btn${lessonsSheetOpen ? " is-active" : ""}`}
-            aria-label="Lessons"
-            aria-expanded={lessonsSheetOpen}
-            aria-pressed={lessonsSheetOpen}
-            onClick={() => setLessonsSheetOpen(true)}
-          >
-            <ListVideo aria-hidden="true" />
-          </button>
+          {isMobile ? (
+            <button
+              type="button"
+              className={`studio-academy-lessons-sheet-btn${lessonsSheetOpen ? " is-active" : ""}`}
+              aria-label="Lessons"
+              aria-expanded={lessonsSheetOpen}
+              aria-pressed={lessonsSheetOpen}
+              onClick={() => setLessonsSheetOpen(true)}
+            >
+              <ListVideo aria-hidden="true" />
+            </button>
+          ) : (
+            <div className="studio-cn-head-nav" aria-label="Lesson navigation">
+              <button
+                type="button"
+                className="studio-cn-head-nav-btn"
+                aria-label="Previous lesson"
+                disabled={!canSwipePrev}
+                onClick={() => swipeLesson("prev")}
+              >
+                <ChevronLeft aria-hidden="true" strokeWidth={2.25} />
+              </button>
+              <button
+                type="button"
+                className="studio-cn-head-nav-btn"
+                aria-label="Next lesson"
+                disabled={!canSwipeNext}
+                onClick={() => swipeLesson("next")}
+              >
+                <ChevronRight aria-hidden="true" strokeWidth={2.25} />
+              </button>
+            </div>
+          )}
         </div>
       ) : null}
     </header>
