@@ -1985,16 +1985,16 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comment-row.is-mine .profile-comment-body {
   align-items: flex-end;
-  max-width: min(82%, calc(100% - 44px));
+  max-width: min(88%, calc(100% - 44px));
 }
 
 .profile-comment-row:not(.is-mine) .profile-comment-body {
-  max-width: min(82%, calc(100% - 44px));
+  max-width: min(88%, calc(100% - 44px));
 }
 
 .studio-polish.is-studio-mobile .profile-comment-row:not(.is-mine) .profile-comment-body,
 .studio-polish.is-studio-mobile .profile-comment-row.is-mine .profile-comment-body {
-  max-width: min(82%, calc(100% - 44px));
+  max-width: min(88%, calc(100% - 44px));
 }
 
 .profile-comment-row:active {
@@ -2025,7 +2025,7 @@ button.post-compose-inline-chip.profile-description-chip {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  min-width: 0;
+  min-width: min(10.5rem, 100%);
   width: fit-content;
   max-width: 100%;
   padding: 7px 10px 8px;
@@ -2050,9 +2050,7 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comment-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
+  display: block;
   min-width: 0;
 }
 

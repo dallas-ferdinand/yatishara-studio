@@ -144,22 +144,6 @@ function formatWhen(ts: number): string {
   return formatPostWhen(ts);
 }
 
-function commentClock(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function commentPostedAt(ts: number): string {
-  const date = new Date(ts);
-  const day = date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-  return `${day}, ${commentClock(ts)}`;
-}
-
 function formatPostStamp(publishedAt: number, editedAt?: number): string {
   const when = formatPostWhen(publishedAt);
   return editedAt ? `${when} · edited` : when;
@@ -435,10 +419,12 @@ function ProfileCommentBubble({
           <div className="profile-comment-body">
             <div className="profile-comment-bubble">
               <div className="profile-comment-meta">
-                <strong>{label}</strong>
-                <time dateTime={new Date(comment.createdAt).toISOString()}>
-                  {commentPostedAt(comment.createdAt)}
-                </time>
+                <div className="profile-comment-meta-text">
+                  <strong>{label}</strong>
+                  <time dateTime={new Date(comment.createdAt).toISOString()}>
+                    {formatWhen(comment.createdAt)}
+                  </time>
+                </div>
               </div>
               <div className="profile-comment-bubble-copy">
               {comment.body ? <p>{comment.body}</p> : null}
