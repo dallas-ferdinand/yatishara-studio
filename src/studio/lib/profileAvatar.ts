@@ -73,11 +73,17 @@ export function profileNameInitials({
   return "?";
 }
 
-export function profileAvatarGradient(initials: string): string {
+export function profileAvatarGradient(
+  initials: string,
+  compact = false,
+): string {
   const text = String(initials || "?").trim().toUpperCase() || "?";
   const a = letterColor(text[0] ?? "?");
   const b = letterColor(text[1] ?? text[0] ?? "?");
   if (text.length < 2 || a === b) {
+    if (compact) {
+      return `linear-gradient(145deg, color-mix(in srgb, ${a} 78%, #ffffff) 0%, ${a} 38%, color-mix(in srgb, ${a} 62%, #111827) 100%)`;
+    }
     return `linear-gradient(145deg, color-mix(in srgb, ${a} 62%, #ffffff) 0%, ${a} 48%, color-mix(in srgb, ${a} 52%, #111827) 100%)`;
   }
   return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`;
@@ -95,12 +101,30 @@ export function mentionFallbackInitials(
   });
 }
 
-export function profileAvatarStyle(initials: string): {
-  background: string;
+export function profileAvatarStyle(
+  initials: string,
+  opts?: { compact?: boolean },
+): {
+  backgroundImage: string;
+  backgroundSize: string;
+  backgroundRepeat: string;
   color: string;
 } {
+  const compact = Boolean(opts?.compact);
   return {
-    background: profileAvatarGradient(initials),
+    backgroundImage: profileAvatarGradient(initials, compact),
+    backgroundSize: "100% 100%",
+    backgroundRepeat: "no-repeat",
     color: "#ffffff",
   };
+}
+
+/** Hue-only fallback for ~1em mention chips — no letter. */
+export function mentionFallbackAvatarStyle(
+  displayName?: string | null,
+  username?: string | null,
+): ReturnType<typeof profileAvatarStyle> {
+  return profileAvatarStyle(mentionFallbackInitials(displayName, username), {
+    compact: true,
+  });
 }

@@ -30,7 +30,7 @@ import {
 import { MediaLoadFrame } from "./media-load-frame";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { CaptionChipText } from "./CaptionChipText";
-import { mentionFallbackInitials, profileAvatarStyle } from "@/studio/lib/profileAvatar";
+import { mentionFallbackAvatarStyle } from "@/studio/lib/profileAvatar";
 
 type PostComposeTabProps = {
   assetId: string;
@@ -179,12 +179,10 @@ function createMentionChip(doc: Document, meta: MentionMeta): HTMLSpanElement {
     img.draggable = false;
     media.appendChild(img);
   } else {
-    const initials = mentionFallbackInitials(meta.displayName, meta.username);
-    Object.assign(media.style, profileAvatarStyle(initials));
-    const initial = doc.createElement("span");
-    initial.className = "post-compose-inline-chip-initial";
-    initial.textContent = initials.slice(0, 1);
-    media.appendChild(initial);
+    Object.assign(
+      media.style,
+      mentionFallbackAvatarStyle(meta.displayName, meta.username),
+    );
   }
 
   const label = doc.createElement("span");
@@ -522,8 +520,12 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
         continue;
       }
       media.replaceChildren();
-      (media as HTMLElement).style.background = "";
-      (media as HTMLElement).style.color = "";
+      const node = media as HTMLElement;
+      node.style.backgroundImage = "";
+      node.style.backgroundSize = "";
+      node.style.backgroundRepeat = "";
+      node.style.background = "";
+      node.style.color = "";
       const img = document.createElement("img");
       img.src = url;
       img.alt = "";
@@ -985,25 +987,16 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                           style={
                             person.avatarUrl
                               ? undefined
-                              : profileAvatarStyle(
-                                  mentionFallbackInitials(
-                                    person.displayName,
-                                    person.username,
-                                  ),
+                              : mentionFallbackAvatarStyle(
+                                  person.displayName,
+                                  person.username,
                                 )
                           }
                         >
                           {person.avatarUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={person.avatarUrl} alt="" />
-                          ) : (
-                            <span className="post-compose-inline-chip-initial">
-                              {mentionFallbackInitials(
-                                person.displayName,
-                                person.username,
-                              ).slice(0, 1)}
-                            </span>
-                          )}
+                          ) : null}
                         </span>
                         <span className="post-compose-inline-chip-label">
                           {index === menuIndex && ghostSuffix ? (

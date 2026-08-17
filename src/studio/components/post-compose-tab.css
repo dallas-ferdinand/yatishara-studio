@@ -418,10 +418,6 @@
   flex-shrink: 0;
 }
 
-.profile-post-caption .post-compose-inline-chip .post-compose-inline-chip-initial {
-  color: #fff;
-}
-
 .profile-post-caption .post-compose-inline-chip .post-compose-inline-chip-label {
   color: inherit;
 }
@@ -456,9 +452,11 @@
   overflow: hidden;
   flex-shrink: 0;
   align-self: center;
-  /* Keep img/initial from defining the chip's outer baseline. */
+  /* Keep img from defining the chip's outer baseline. */
   vertical-align: middle;
-  background: transparent;
+  background-color: transparent;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
   box-shadow: none;
 }
 
@@ -485,13 +483,6 @@
   display: block;
   /* Replaced elements otherwise sit on a different baseline than hash labels. */
   vertical-align: middle;
-}
-
-.post-compose-inline-chip-initial {
-  font-size: 10px;
-  font-weight: 700;
-  color: #fff;
-  line-height: 1;
 }
 
 .post-compose-inline-chip-label {
