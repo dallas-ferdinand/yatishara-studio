@@ -10146,15 +10146,17 @@ textarea.cursor-input {
 
 /* --- composer focus: keep default glass bg; accent ring via border/shadow only --- */
 
-/* --- mode switcher: free-standing pills only (no glass tray) --- */
-.studio-polish .studio-mode-switcher {
-  background: transparent !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  box-shadow: none !important;
+/* --- mode switcher: free-standing pills on desktop only (mobile keeps a pill tray) --- */
+@media (min-width: 900px) {
+  .studio-polish .studio-mode-switcher {
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+  }
 }
 
 .studio-polish .studio-mode-row {

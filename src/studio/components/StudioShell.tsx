@@ -10110,9 +10110,10 @@ export function StudioShell({
             display: inline-flex;
             align-items: center;
             gap: 2px;
-            padding: 2px;
+            padding: 2px !important;
             border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 55%, transparent) !important;
-            border-radius: 999px;
+            border-radius: 999px !important;
+            overflow: hidden;
             background: var(--studio-composer-glass-muted, color-mix(in srgb, var(--mos-panel, #12151c) 78%, transparent)) !important;
             backdrop-filter: var(--studio-composer-glass-blur, saturate(120%) blur(4px));
             -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(120%) blur(4px));
