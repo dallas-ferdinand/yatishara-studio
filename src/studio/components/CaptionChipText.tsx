@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Tag } from "lucide-react";
 
 export type CaptionPart = {
   type: "text" | "hash" | "mention";
@@ -62,7 +63,10 @@ export function captionGridPreviewText(caption: string | undefined): string {
 function OverlayHashChip({ tag }: { tag: string }) {
   return (
     <span className="post-compose-inline-chip is-hash">
-      <span className="post-compose-inline-chip-label">#{tag}</span>
+      <span className="post-compose-inline-chip-tag" aria-hidden="true">
+        <Tag strokeWidth={2.25} />
+      </span>
+      <span className="post-compose-inline-chip-label">{tag}</span>
     </span>
   );
 }

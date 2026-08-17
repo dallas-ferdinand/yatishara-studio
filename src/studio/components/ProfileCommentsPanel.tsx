@@ -19,6 +19,7 @@ import {
   Pencil,
   Play,
   Reply,
+  Tag,
   Trash2,
   X,
 } from "lucide-react";
@@ -1818,7 +1819,10 @@ function parseCaptionParts(caption: string | undefined): Array<{
 function DescriptionHashChip({ tag }: { tag: string }) {
   return (
     <span className="post-compose-inline-chip is-hash profile-description-chip">
-      <span className="post-compose-inline-chip-label">#{tag}</span>
+      <span className="post-compose-inline-chip-tag" aria-hidden="true">
+        <Tag strokeWidth={2.25} />
+      </span>
+      <span className="post-compose-inline-chip-label">{tag}</span>
     </span>
   );
 }
