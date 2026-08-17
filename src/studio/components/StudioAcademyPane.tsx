@@ -6,6 +6,7 @@ import {
   Clock,
   GraduationCap,
   Library,
+  ListVideo,
   Loader2,
   Lock,
   MessageCircle,
@@ -33,6 +34,7 @@ import {
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { useStudioAcademy } from "./StudioAcademyContext";
+import { AcademyLessonRail } from "./StudioAcademySidebar";
 import { ProfileCommentsPanel } from "./ProfileCommentsPanel";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
 import { StudioConfirmOverlay } from "./StudioConfirmOverlay";
@@ -576,6 +578,7 @@ export function StudioAcademyPane({
   const [lessonEmbed, setLessonEmbed] = useState<string | null>(null);
   const [loadingPlay, setLoadingPlay] = useState(false);
   const [checkoutSheetOpen, setCheckoutSheetOpen] = useState(false);
+  const [lessonsSheetOpen, setLessonsSheetOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
   const clientRequestIdRef = useRef<string | null>(null);
@@ -592,6 +595,7 @@ export function StudioAcademyPane({
     setIntroEmbed(null);
     setLessonEmbed(null);
     setCheckoutSheetOpen(false);
+    setLessonsSheetOpen(false);
     setPurchaseConfirmOpen(false);
     setCommentsOpen(false);
     clientRequestIdRef.current = null;
@@ -1315,6 +1319,20 @@ export function StudioAcademyPane({
           My courses
         </button>
       </nav>
+      {isMobile && detailOpen && academy.courseId ? (
+        <div className="studio-cn-head-action">
+          <button
+            type="button"
+            className="studio-academy-lessons-sheet-btn"
+            aria-label="Lessons"
+            aria-expanded={lessonsSheetOpen}
+            onClick={() => setLessonsSheetOpen(true)}
+          >
+            <ListVideo aria-hidden="true" />
+            <span>Lessons</span>
+          </button>
+        </div>
+      ) : null}
     </header>
   );
 
@@ -1322,6 +1340,18 @@ export function StudioAcademyPane({
     isMobile && detailOpen && detail ? (
       <>
         {commentsPanel}
+        <StudioCnBookSheet
+          open={lessonsSheetOpen}
+          onClose={() => setLessonsSheetOpen(false)}
+          ariaLabel="Course lessons"
+          className="is-academy-lessons"
+          backLayerId="academy-lessons-sheet"
+        >
+          <AcademyLessonRail
+            courseId={detail._id}
+            onPick={() => setLessonsSheetOpen(false)}
+          />
+        </StudioCnBookSheet>
         <nav
           className="public-offers-mobile-book-nav studio-cn-book-bar"
           aria-label={

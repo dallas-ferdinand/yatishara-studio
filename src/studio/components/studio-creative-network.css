@@ -1804,6 +1804,54 @@ button.studio-cn-card-btn.public-offers-card {
   padding-bottom: 12px;
 }
 
+.studio-cn-book-sheet.is-academy-lessons .studio-cn-book-sheet-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.studio-cn-book-sheet.is-academy-lessons .studio-cn-sidebar-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.studio-cn-book-sheet.is-academy-lessons .studio-cn-rail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.studio-academy-lessons-sheet-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--studio-mobile-chrome-control, 34px);
+  height: var(--studio-mobile-chrome-control, 34px);
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.studio-academy-lessons-sheet-btn svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.studio-academy-lessons-sheet-btn:hover {
+  background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+}
+
 @keyframes studio-cn-book-sheet-in {
   from {
     transform: translate3d(0, 16px, 0);

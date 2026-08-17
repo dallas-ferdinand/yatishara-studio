@@ -200,8 +200,10 @@ function CatalogFilters() {
 
 function LessonRail({
   courseId,
+  onPick,
 }: {
   courseId: Id<"academyCourses">;
+  onPick?: () => void;
 }) {
   const academy = useStudioAcademyOptional();
   const detail = useQuery(api.academy.getCourse, { courseId });
@@ -237,7 +239,10 @@ function LessonRail({
                 <button
                   type="button"
                   className={`studio-academy-lesson-row${introActive ? " is-active" : ""}`}
-                  onClick={() => academy.setLessonId(null)}
+                  onClick={() => {
+                    academy.setLessonId(null);
+                    onPick?.();
+                  }}
                 >
                   <span
                     className="studio-academy-lesson-num"
@@ -259,7 +264,10 @@ function LessonRail({
                   <button
                     type="button"
                     className={`studio-academy-lesson-row${active ? " is-active" : ""}`}
-                    onClick={() => academy.setLessonId(lesson._id)}
+                    onClick={() => {
+                      academy.setLessonId(lesson._id);
+                      onPick?.();
+                    }}
                   >
                     <span
                       className="studio-academy-lesson-num"
@@ -280,6 +288,17 @@ function LessonRail({
       </div>
     </div>
   );
+}
+
+/** Lesson list + search — desktop rail and mobile bottom sheet. */
+export function AcademyLessonRail({
+  courseId,
+  onPick,
+}: {
+  courseId: Id<"academyCourses">;
+  onPick?: () => void;
+}) {
+  return <LessonRail courseId={courseId} onPick={onPick} />;
 }
 
 /**
