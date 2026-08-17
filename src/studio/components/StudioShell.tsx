@@ -23441,7 +23441,6 @@ export function StudioShell({
           background: transparent;
           box-shadow: none;
           position: relative;
-          top: auto;
           z-index: 0;
         }
         .studio-polish.is-studio-mobile .studio-academy-player {
@@ -23450,7 +23449,6 @@ export function StudioShell({
           box-shadow: none;
           overflow: hidden;
           position: relative;
-          top: auto;
         }
         .studio-polish.is-studio-mobile .studio-academy-player iframe,
         .studio-polish.is-studio-mobile .studio-academy-player-video {
@@ -23461,7 +23459,7 @@ export function StudioShell({
         }
         .studio-polish.is-studio-mobile .studio-academy-detail {
           gap: 12px;
-          padding: 0 0 24px;
+          padding: 12px 0 24px;
         }
         .studio-polish.is-studio-mobile .studio-academy-detail-top,
         .studio-polish.is-studio-mobile .studio-academy-body {
@@ -23472,6 +23470,7 @@ export function StudioShell({
           padding-left: 0;
           padding-right: 0;
           padding-top: 0;
+          padding-bottom: 16px;
         }
         .studio-academy-player {
           position: relative;

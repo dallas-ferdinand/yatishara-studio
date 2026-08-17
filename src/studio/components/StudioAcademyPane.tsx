@@ -1079,30 +1079,60 @@ export function StudioAcademyPane({
       </div>
     </div>
   ) : selectedLesson ? (
-    <div className="public-offers-main studio-cn-catalog">
+    <div
+      className={`public-offers-main studio-cn-catalog${
+        isMobile ? " is-academy-watch" : ""
+      }`}
+    >
+      {isMobile ? (
+        <div className="studio-academy-watch-player">
+          <BannerStage
+            bannerUrl={
+              selectedLesson.coverUrl ||
+              courseBannerUrl({
+                slug: detail.slug,
+                coverUrl: detail.coverUrl,
+              })
+            }
+            embedUrl={owned ? lessonEmbed : null}
+            loading={loadingPlay}
+            locked={!owned}
+            onPlay={() => {
+              if (!owned) {
+                toast.message("Buy the course to watch this lesson");
+                return;
+              }
+              void playLesson();
+            }}
+            playLabel={`Play ${selectedLesson.title}`}
+          />
+        </div>
+      ) : null}
       <div className="public-offers-main-scroll">
         <main className="public-offers-body">
           <div className="studio-academy-detail">
-            <BannerStage
-              bannerUrl={
-                selectedLesson.coverUrl ||
-                courseBannerUrl({
-                  slug: detail.slug,
-                  coverUrl: detail.coverUrl,
-                })
-              }
-              embedUrl={owned ? lessonEmbed : null}
-              loading={loadingPlay}
-              locked={!owned}
-              onPlay={() => {
-                if (!owned) {
-                  toast.message("Buy the course to watch this lesson");
-                  return;
+            {!isMobile ? (
+              <BannerStage
+                bannerUrl={
+                  selectedLesson.coverUrl ||
+                  courseBannerUrl({
+                    slug: detail.slug,
+                    coverUrl: detail.coverUrl,
+                  })
                 }
-                void playLesson();
-              }}
-              playLabel={`Play ${selectedLesson.title}`}
-            />
+                embedUrl={owned ? lessonEmbed : null}
+                loading={loadingPlay}
+                locked={!owned}
+                onPlay={() => {
+                  if (!owned) {
+                    toast.message("Buy the course to watch this lesson");
+                    return;
+                  }
+                  void playLesson();
+                }}
+                playLabel={`Play ${selectedLesson.title}`}
+              />
+            ) : null}
             <div className="studio-academy-detail-top">
               <div>
                 <h1 className="studio-academy-detail-title">
@@ -1138,20 +1168,40 @@ export function StudioAcademyPane({
       </div>
     </div>
   ) : (
-    <div className="public-offers-main studio-cn-catalog">
+    <div
+      className={`public-offers-main studio-cn-catalog${
+        isMobile ? " is-academy-watch" : ""
+      }`}
+    >
+      {isMobile ? (
+        <div className="studio-academy-watch-player">
+          <BannerStage
+            bannerUrl={courseBannerUrl({
+              slug: detail.slug,
+              coverUrl: detail.coverUrl,
+            })}
+            embedUrl={introEmbed}
+            loading={loadingPlay}
+            onPlay={() => void playIntro()}
+            playLabel="Play course intro"
+          />
+        </div>
+      ) : null}
       <div className="public-offers-main-scroll">
         <main className="public-offers-body">
           <div className="studio-academy-detail">
-            <BannerStage
-              bannerUrl={courseBannerUrl({
-                slug: detail.slug,
-                coverUrl: detail.coverUrl,
-              })}
-              embedUrl={introEmbed}
-              loading={loadingPlay}
-              onPlay={() => void playIntro()}
-              playLabel="Play course intro"
-            />
+            {!isMobile ? (
+              <BannerStage
+                bannerUrl={courseBannerUrl({
+                  slug: detail.slug,
+                  coverUrl: detail.coverUrl,
+                })}
+                embedUrl={introEmbed}
+                loading={loadingPlay}
+                onPlay={() => void playIntro()}
+                playLabel="Play course intro"
+              />
+            ) : null}
             <div className="studio-academy-detail-top">
               <div>
                 <h1 className="studio-academy-detail-title">{detail.title}</h1>

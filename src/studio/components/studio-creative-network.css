@@ -1107,10 +1107,30 @@
   height: 100%;
 }
 
-/* Academy mobile: book bar is a sibling under .studio-cn-body — size the catalog
-   main to remaining flex space (not height:100%) so video+description share one
-   scroll and the player does not sit stuck while copy moves. */
-.studio-academy-pane .studio-cn-body.is-catalog > .studio-cn-catalog.public-offers-main {
+/* Academy mobile watch: player is a fixed top slot; only title/body scroll. */
+.studio-cn-catalog.public-offers-main.is-academy-watch {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+}
+
+.studio-academy-watch-player {
+  flex: 0 0 auto;
+  width: 100%;
+  background: #000;
+  z-index: 2;
+}
+
+.studio-cn-catalog.is-academy-watch > .public-offers-main-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Academy mobile catalog (list): book bar sibling — size main to remaining flex space. */
+.studio-academy-pane .studio-cn-body.is-catalog > .studio-cn-catalog.public-offers-main:not(.is-academy-watch) {
   flex: 1 1 0;
   min-height: 0;
   height: auto;
