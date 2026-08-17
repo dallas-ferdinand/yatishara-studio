@@ -13,7 +13,16 @@ import {
   Tag,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, Fragment } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  Fragment,
+  type AnimationEvent,
+} from "react";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
 import { createPortal } from "react-dom";
@@ -188,6 +197,109 @@ function pickDiscussionPreview(
     return pickWeightedRow(untimed, weight, rngFor(`u:${Math.floor(t / 8)}`));
   }
   return pickWeightedRow(pool, weight, rngFor("all"));
+}
+
+type DiscussionBarFace =
+  | {
+      kind: "comment";
+      id: string;
+      displayName: string;
+      username?: string;
+      avatarUrl?: string;
+      text: string;
+    }
+  | {
+      kind: "empty";
+      displayName: string;
+      username?: string;
+      avatarUrl?: string;
+    }
+  | { kind: "label" };
+
+function discussionBarFaceKey(face: DiscussionBarFace): string {
+  if (face.kind === "comment") return `c:${face.id}`;
+  return face.kind;
+}
+
+function DiscussionBarFaceRow({ face }: { face: DiscussionBarFace }) {
+  if (face.kind === "label") {
+    return <span>Discussion</span>;
+  }
+  const name =
+    face.displayName ||
+    (face.username ? `@${face.username}` : face.kind === "empty" ? "You" : "Comment");
+  const text = face.kind === "empty" ? "Be the first to comment" : face.text;
+  return (
+    <>
+      <StudioProfileAvatar
+        className="studio-cn-book-bar-preview-avatar"
+        size="sm"
+        src={face.avatarUrl}
+        initials={profileNameInitials({
+          displayName: face.displayName,
+          name: face.username,
+        })}
+        displayName={face.displayName}
+        name={face.username}
+      />
+      <span className="studio-cn-book-bar-preview-copy">
+        <strong>{name}</strong>
+        <span>{text}</span>
+      </span>
+    </>
+  );
+}
+
+function DiscussionBarPreview({ face }: { face: DiscussionBarFace }) {
+  const [current, setCurrent] = useState(face);
+  const [outgoing, setOutgoing] = useState<DiscussionBarFace | null>(null);
+  const currentRef = useRef(current);
+  currentRef.current = current;
+
+  useLayoutEffect(() => {
+    const nextKey = discussionBarFaceKey(face);
+    const curKey = discussionBarFaceKey(currentRef.current);
+    if (nextKey === curKey) {
+      setCurrent(face);
+      return;
+    }
+    setOutgoing(currentRef.current);
+    setCurrent(face);
+  }, [face]);
+
+  useEffect(() => {
+    if (!outgoing) return;
+    const timer = window.setTimeout(() => setOutgoing(null), 320);
+    return () => window.clearTimeout(timer);
+  }, [outgoing]);
+
+  function onLeaveEnd(event: AnimationEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget) return;
+    setOutgoing(null);
+  }
+
+  const sliding = outgoing != null;
+
+  return (
+    <div className="studio-cn-book-bar-preview-stage">
+      {outgoing ? (
+        <div
+          key={`out-${discussionBarFaceKey(outgoing)}`}
+          className="studio-cn-book-bar-preview-slide is-layer is-leave"
+          aria-hidden="true"
+          onAnimationEnd={onLeaveEnd}
+        >
+          <DiscussionBarFaceRow face={outgoing} />
+        </div>
+      ) : null}
+      <div
+        key={`in-${discussionBarFaceKey(current)}`}
+        className={`studio-cn-book-bar-preview-slide is-layer${sliding ? " is-enter" : ""}`}
+      >
+        <DiscussionBarFaceRow face={current} />
+      </div>
+    </div>
+  );
 }
 
 function usePreloadAcademyHero() {
@@ -1235,6 +1347,27 @@ export function StudioAcademyPane({
       : "skip",
   );
   const discussionEmpty = owned && !discussionPreview && commentCount === 0;
+  const discussionBarFace = useMemo((): DiscussionBarFace => {
+    if (discussionPreview) {
+      return {
+        kind: "comment",
+        id: discussionPreview._id,
+        displayName: discussionPreview.displayName,
+        username: discussionPreview.username,
+        avatarUrl: discussionPreview.avatarUrl,
+        text: discussionPreviewText(discussionPreview),
+      };
+    }
+    if (discussionEmpty) {
+      return {
+        kind: "empty",
+        displayName: myProfile?.displayName ?? "",
+        username: myProfile?.username,
+        avatarUrl: myProfile?.avatarUrl,
+      };
+    }
+    return { kind: "label" };
+  }, [discussionEmpty, discussionPreview, myProfile]);
   const commentsSidebarTitle =
     commentsLessonId && selectedLesson
       ? selectedLesson.title
@@ -2011,55 +2144,7 @@ export function StudioAcademyPane({
               }
               onClick={() => setCommentsOpen(true)}
             >
-              {discussionPreview ? (
-                <>
-                  <StudioProfileAvatar
-                    className="studio-cn-book-bar-preview-avatar"
-                    size="sm"
-                    src={discussionPreview.avatarUrl}
-                    initials={profileNameInitials({
-                      displayName: discussionPreview.displayName,
-                      name: discussionPreview.username,
-                    })}
-                    displayName={discussionPreview.displayName}
-                    name={discussionPreview.username}
-                  />
-                  <span className="studio-cn-book-bar-preview-copy">
-                    <strong>
-                      {discussionPreview.displayName ||
-                        (discussionPreview.username
-                          ? `@${discussionPreview.username}`
-                          : "Comment")}
-                    </strong>
-                    <span>{discussionPreviewText(discussionPreview)}</span>
-                  </span>
-                </>
-              ) : discussionEmpty ? (
-                <>
-                  <StudioProfileAvatar
-                    className="studio-cn-book-bar-preview-avatar"
-                    size="sm"
-                    src={myProfile?.avatarUrl}
-                    initials={profileNameInitials({
-                      displayName: myProfile?.displayName,
-                      name: myProfile?.username,
-                    })}
-                    displayName={myProfile?.displayName}
-                    name={myProfile?.username}
-                  />
-                  <span className="studio-cn-book-bar-preview-copy">
-                    <strong>
-                      {myProfile?.displayName ||
-                        (myProfile?.username
-                          ? `@${myProfile.username}`
-                          : "You")}
-                    </strong>
-                    <span>Be the first to comment</span>
-                  </span>
-                </>
-              ) : (
-                <span>Discussion</span>
-              )}
+              <DiscussionBarPreview face={discussionBarFace} />
             </button>
           )}
           <div className="studio-cn-book-bar-actions">

@@ -1720,7 +1720,64 @@ button.studio-cn-book-bar-price.is-discussion {
 }
 
 button.studio-cn-book-bar-price.is-discussion.has-preview {
+  align-items: stretch;
+  gap: 0;
+}
+
+.studio-cn-book-bar-preview-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: stretch;
+  overflow: hidden;
+  display: grid;
   align-items: center;
+}
+
+.studio-cn-book-bar-preview-slide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+.studio-cn-book-bar-preview-slide.is-layer {
+  grid-area: 1 / 1;
+}
+
+.studio-cn-book-bar-preview-slide.is-leave {
+  animation: studio-cn-preview-leave 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.studio-cn-book-bar-preview-slide.is-enter {
+  animation: studio-cn-preview-enter 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes studio-cn-preview-leave {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, -100%, 0);
+  }
+}
+
+@keyframes studio-cn-preview-enter {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-cn-book-bar-preview-slide.is-leave,
+  .studio-cn-book-bar-preview-slide.is-enter {
+    animation: none;
+  }
 }
 
 .studio-cn-book-bar-preview-avatar.studio-profile-avatar {
