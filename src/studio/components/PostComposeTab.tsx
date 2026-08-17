@@ -4,9 +4,9 @@ import { useMutation, useQuery } from "convex/react";
 import {
   Bookmark,
   Crown,
-  Forward,
   Loader2,
   Feather,
+  Send,
 } from "lucide-react";
 import {
   useEffect,
@@ -883,7 +883,7 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                 <span>0</span>
               </div>
               <div className="profile-post-rail-btn">
-                <Forward className="profile-post-rail-share" aria-hidden="true" strokeWidth={2.35} />
+                <Send className="profile-post-rail-share" aria-hidden="true" strokeWidth={2} />
                 <span>0</span>
               </div>
             </div>

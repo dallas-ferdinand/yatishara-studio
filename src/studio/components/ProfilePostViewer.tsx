@@ -10,11 +10,11 @@ import {
   ChevronRight,
   ChevronUp,
   Crown,
-  Forward,
   Feather,
   Pause,
   Play,
   Plus,
+  Send,
 } from "lucide-react";
 import {
   useCallback,
@@ -996,7 +996,7 @@ function FeedActions({
             aria-label="Share"
             onClick={onShare}
           >
-            <Forward aria-hidden="true" strokeWidth={2.35} />
+            <Send aria-hidden="true" strokeWidth={2} />
           </button>
         </div>
       </nav>
@@ -1106,10 +1106,10 @@ function FeedActions({
         onPointerDown={(event) => event.stopPropagation()}
         aria-label="Share"
       >
-        <Forward
+        <Send
           className="profile-post-rail-share"
           aria-hidden="true"
-          strokeWidth={2.35}
+          strokeWidth={2}
         />
         <span>{formatCount(localShares)}</span>
       </button>
