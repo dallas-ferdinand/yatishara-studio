@@ -9846,19 +9846,7 @@ export function StudioShell({
             /* No focus-line width/height GPU tween while typing */
             transition: none !important;
           }
-          .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box::before,
-          .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box::after {
-            transition: opacity 180ms ease !important;
-            width: 0 !important;
-            height: 0 !important;
-            opacity: 0 !important;
-          }
-          .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box:focus-within::before,
-          .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box:focus-within::after {
-            width: 0 !important;
-            height: 0 !important;
-            opacity: 0 !important;
-          }
+          /* Same TL/BR accent corners as .studio-dm-composer-box — do not zero them. */
           .studio-polish.is-studio-mobile .studio-mode-row {
             background: transparent !important;
             backdrop-filter: none !important;
