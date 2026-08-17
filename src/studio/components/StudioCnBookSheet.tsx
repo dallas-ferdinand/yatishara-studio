@@ -22,6 +22,22 @@ type SheetDragState = {
   pending: boolean;
 };
 
+const SHEET_VIDEO_GAP_PX = 8;
+
+function measureVideoClearance(): number | null {
+  const video =
+    document.querySelector(".studio-academy-player-shell") ??
+    document.querySelector(".studio-academy-watch-player") ??
+    document.querySelector(".profile-post-slide-media.is-video");
+  if (!(video instanceof HTMLElement)) return null;
+  const bottom = video.getBoundingClientRect().bottom;
+  if (!Number.isFinite(bottom) || bottom <= 0) return null;
+  const room = Math.floor(window.innerHeight - bottom - SHEET_VIDEO_GAP_PX);
+  // Full-bleed feed video leaves no useful band — keep the token cap.
+  if (room < 160) return null;
+  return room;
+}
+
 type StudioCnBookSheetProps = {
   open: boolean;
   onClose: () => void;
@@ -117,10 +133,17 @@ export function StudioCnBookSheet({
       window.innerHeight - 24,
     );
     const cappedFull = Math.min(full, band > 0 ? band : full);
+    let nextPeek = Math.min(peek, cappedFull);
+    let nextFull = Math.max(cappedFull, nextPeek + 40);
+    const room = measureVideoClearance();
+    if (room != null) {
+      nextFull = Math.min(nextFull, room);
+      nextPeek = Math.min(nextPeek, nextFull);
+    }
     metricsRef.current = {
-      peek: Math.min(peek, cappedFull),
-      full: Math.max(cappedFull, Math.min(peek, cappedFull) + 40),
-      min: Math.max(110, peek * 0.42),
+      peek: nextPeek,
+      full: Math.max(nextFull, nextPeek),
+      min: Math.max(110, nextPeek * 0.42),
     };
     return metricsRef.current;
   };
@@ -234,9 +257,20 @@ export function StudioCnBookSheet({
         setEntered(true);
       });
     });
+    const onResize = () => {
+      if (cancelled) return;
+      const { full } = refreshMetrics();
+      const h = heightRef.current;
+      if (h == null) return;
+      applyHeight(Math.min(h, full));
+    };
+    window.addEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(id);
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
     };
   }, [open, fitContent]);
 
