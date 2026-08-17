@@ -2487,10 +2487,10 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comment-meta {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-start;
-  justify-content: flex-start;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -2614,7 +2614,7 @@ button.post-compose-inline-chip.profile-description-chip {
   display: grid;
   gap: 1px;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 auto;
 }
 
 .profile-comment-meta-top {
@@ -2637,6 +2637,9 @@ button.post-compose-inline-chip.profile-description-chip {
   font-size: 13px;
   font-weight: 700;
   line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-comment-video-time {
