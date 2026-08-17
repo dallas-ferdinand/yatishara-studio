@@ -10104,16 +10104,18 @@ export function StudioShell({
           }
           .studio-polish .studio-mode-switcher {
             width: auto;
-            height: 34px;
-            min-height: 34px;
+            height: auto;
+            min-height: 0;
             flex: 0 0 auto;
             display: inline-flex;
             align-items: center;
-            gap: 2px;
-            padding: 0 !important;
+            justify-content: center;
+            gap: 3px;
+            padding: 3px !important;
             border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 55%, transparent) !important;
             border-radius: 999px !important;
-            overflow: hidden;
+            overflow: visible;
+            box-sizing: border-box;
             background: var(--studio-composer-glass-muted, color-mix(in srgb, var(--mos-panel, #12151c) 78%, transparent)) !important;
             backdrop-filter: var(--studio-composer-glass-blur, saturate(120%) blur(4px));
             -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(120%) blur(4px));
@@ -10121,17 +10123,18 @@ export function StudioShell({
           }
           .studio-polish .studio-mode-row {
             flex-direction: row;
-            width: 30px;
-            min-width: 30px;
-            height: 30px;
-            min-height: 30px;
-            flex: 0 0 30px;
+            width: 28px;
+            min-width: 28px;
+            height: 28px;
+            min-height: 28px;
+            flex: 0 0 28px;
             aspect-ratio: 1 / 1;
             justify-content: center;
             gap: 0;
             padding: 0;
+            overflow: visible !important;
             border: 1px solid transparent;
-            border-radius: 999px;
+            border-radius: 999px !important;
             background: transparent !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
@@ -19143,11 +19146,10 @@ export function StudioShell({
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar-left {
           flex-wrap: nowrap;
-          gap: 5px;
-          overflow-x: auto;
-          overflow-y: hidden;
-          overscroll-behavior-inline: contain;
-          scrollbar-width: none;
+          align-items: center;
+          gap: 8px;
+          overflow: visible;
+          min-width: 0;
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar-left::-webkit-scrollbar {
           display: none;
