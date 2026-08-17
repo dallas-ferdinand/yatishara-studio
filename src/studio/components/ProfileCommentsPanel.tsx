@@ -1094,10 +1094,10 @@ function CommentsBody({
               rows={variant === "dock" ? 2 : 1}
             />
           </div>
-          <div className="profile-comments-composer-toolbar">
+          <div className="profile-comments-composer-toolbar studio-composer-toolbar">
             <button
               type="button"
-              className={`profile-comments-circle-btn${pendingImage ? " is-on" : ""}`}
+              className={`studio-composer-circle-btn${pendingImage ? " is-on" : ""}`}
               aria-label={pendingImage ? "Replace image" : "Attach image"}
               disabled={busy || !auth.isAuthenticated}
               onClick={() => imageInputRef.current?.click()}
@@ -1106,7 +1106,7 @@ function CommentsBody({
             </button>
             <button
               type="submit"
-              className="profile-comments-circle-btn is-send"
+              className="studio-composer-circle-btn studio-composer-send-btn"
               disabled={busy || (!draft.trim() && !pendingImage)}
               aria-label="Send comment"
             >

@@ -1855,7 +1855,12 @@ button.studio-cn-card-btn.public-offers-card {
 .studio-cn-book-sheet.is-academy-comments .profile-comments-composer.is-sheet-composer,
 .studio-cn-book-sheet.is-profile-comments .profile-comments-composer.is-sheet-composer {
   flex: 0 0 auto;
-  border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-top: none;
+}
+
+.studio-cn-book-sidebar-body.is-comments-fill .profile-comments-composer {
+  border-top: none !important;
+  padding: 8px;
 }
 
 .studio-academy-lessons-sheet-btn {

@@ -1114,8 +1114,8 @@
   .profile-comments-dock .profile-comments-composer {
     flex: 0 0 auto;
     background: transparent;
-    border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-    padding-bottom: 12px;
+    border-top: none;
+    padding: 8px 8px 8px;
   }
 }
 
@@ -1194,7 +1194,7 @@
 
 .profile-comments-panel.is-sheet .profile-comments-composer {
   padding: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: none;
 }
 
 .profile-comments-head {
@@ -2132,16 +2132,16 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comments-composer {
-  padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px;
+  border-top: none;
   display: grid;
-  gap: 8px;
+  gap: 0;
 }
 
 .profile-comments-composer.is-sheet-composer {
   padding: 0;
   gap: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: none;
 }
 
 .profile-comments-composer-box {
@@ -2153,28 +2153,50 @@ button.post-compose-inline-chip.profile-description-chip {
   min-width: 0;
   border: 0;
   border-radius: 16px;
-  background: transparent;
   overflow: hidden;
+  background: var(
+    --studio-composer-glass,
+    color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent)
+  );
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(170%) blur(18px));
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(170%) blur(18px));
+  box-shadow: var(
+    --studio-composer-glass-shadow,
+    0 20px 48px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08)
+  );
 }
 
 @media (min-width: 900px) {
   .profile-comments-composer-box {
-    min-height: var(--studio-composer-min-height, 118px);
-    height: var(--studio-composer-box-max-height, 280px);
-    max-height: min(72vh, var(--studio-composer-box-max-height, 280px));
+    min-height: 0;
+    height: auto;
+    max-height: min(42vh, var(--studio-composer-box-max-height, 280px));
   }
   .profile-comments-composer-box .profile-comments-inputline {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
   }
   .profile-comments-composer-box textarea {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     height: auto;
-    min-height: 0;
-    max-height: none;
+    min-height: 44px;
+    max-height: 96px;
   }
   .profile-comments-composer-toolbar {
     flex: 0 0 auto;
+    padding: 2px 8px 6px;
+  }
+  .profile-comments-composer .studio-composer-circle-btn.studio-composer-send-btn {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0;
+    gap: 0;
+  }
+  .profile-comments-composer-box > .studio-composer-resize-handle {
+    display: none;
   }
 }
 
@@ -2241,7 +2263,7 @@ button.post-compose-inline-chip.profile-description-chip {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 10px 8px;
+  padding: 2px 8px 6px;
 }
 
 .profile-comments-circle-btn {
@@ -2428,7 +2450,17 @@ button.post-compose-inline-chip.profile-description-chip {
 
 [data-appearance="light"] .profile-comments-dock .profile-comments-composer {
   background: transparent;
-  border-top-color: var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-top: none;
+}
+
+[data-appearance="light"] .profile-comments-composer-box {
+  background: var(
+    --studio-composer-glass,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 92%, transparent)
+  );
+  box-shadow:
+    0 12px 28px color-mix(in srgb, #000 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent);
 }
 
 [data-appearance="light"] .profile-comments-dock .profile-comments-head,
