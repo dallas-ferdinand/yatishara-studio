@@ -13,7 +13,7 @@ import {
   Tag,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -450,23 +450,43 @@ function CheckoutDock({
 }
 
 const LESSON_SWIPE_MIN_PX = 56;
+const LESSON_SLIDE_MS = 180;
+const LESSON_SLIDE_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 const LESSON_SWIPE_IGNORE =
   "a[href], input, textarea, select, [role='dialog'], .studio-cn-head, .studio-cn-book-bar, .studio-cn-book-sheet";
 
 function useAcademyLessonSwipe(
   enabled: boolean,
-  onSwipe: (dir: "next" | "prev") => void,
+  onCommit: (dir: "next" | "prev") => void,
+  canPrev: boolean,
+  canNext: boolean,
 ) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
   const startRef = useRef<{
     x: number;
     y: number;
     axis: "h" | "v" | null;
   } | null>(null);
-  const onSwipeRef = useRef(onSwipe);
+  const animatingRef = useRef(false);
+  const commitTokenRef = useRef(0);
+  const onCommitRef = useRef(onCommit);
   const enabledRef = useRef(enabled);
-  onSwipeRef.current = onSwipe;
+  const canPrevRef = useRef(canPrev);
+  const canNextRef = useRef(canNext);
+  onCommitRef.current = onCommit;
   enabledRef.current = enabled;
+  canPrevRef.current = canPrev;
+  canNextRef.current = canNext;
+
+  const applyX = (x: number, animate: boolean) => {
+    const track = trackRef.current;
+    if (!track) return;
+    track.style.transition = animate
+      ? `transform ${LESSON_SLIDE_MS}ms ${LESSON_SLIDE_EASE}`
+      : "none";
+    track.style.transform = `translate3d(${x}px, 0, 0)`;
+  };
 
   useEffect(() => {
     const el = hostRef.current;
@@ -477,8 +497,10 @@ function useAcademyLessonSwipe(
       return Boolean(target.closest(LESSON_SWIPE_IGNORE));
     };
 
+    const widthOf = () => Math.max(1, el.getBoundingClientRect().width);
+
     const begin = (x: number, y: number, target: EventTarget | null) => {
-      if (!enabledRef.current || ignoreTarget(target)) {
+      if (!enabledRef.current || animatingRef.current || ignoreTarget(target)) {
         startRef.current = null;
         return;
       }
@@ -487,7 +509,7 @@ function useAcademyLessonSwipe(
 
     const move = (x: number, y: number, event: Event) => {
       const start = startRef.current;
-      if (!start) return;
+      if (!start || animatingRef.current) return;
       const dx = x - start.x;
       const dy = y - start.y;
       if (!start.axis) {
@@ -498,16 +520,47 @@ function useAcademyLessonSwipe(
           return;
         }
       }
-      if (start.axis === "h" && event.cancelable) event.preventDefault();
+      if (start.axis !== "h") return;
+      if (event.cancelable) event.preventDefault();
+      const atStart = !canPrevRef.current && dx > 0;
+      const atEnd = !canNextRef.current && dx < 0;
+      applyX(atStart || atEnd ? dx * 0.28 : dx, false);
     };
 
     const end = (x: number) => {
       const start = startRef.current;
       startRef.current = null;
-      if (!start || start.axis !== "h") return;
+      if (!start || start.axis !== "h" || animatingRef.current) {
+        applyX(0, true);
+        return;
+      }
       const dx = x - start.x;
-      if (Math.abs(dx) < LESSON_SWIPE_MIN_PX) return;
-      onSwipeRef.current(dx < 0 ? "next" : "prev");
+      const w = widthOf();
+      const threshold = Math.min(LESSON_SWIPE_MIN_PX, w * 0.1);
+      const dir: "next" | "prev" | null =
+        dx <= -threshold && canNextRef.current
+          ? "next"
+          : dx >= threshold && canPrevRef.current
+            ? "prev"
+            : null;
+      if (!dir) {
+        applyX(0, true);
+        return;
+      }
+      animatingRef.current = true;
+      const token = ++commitTokenRef.current;
+      applyX(dir === "next" ? -w : w, true);
+      const track = trackRef.current;
+      const finish = (event?: TransitionEvent) => {
+        if (event && event.propertyName !== "transform") return;
+        if (commitTokenRef.current !== token) return;
+        commitTokenRef.current += 1;
+        track?.removeEventListener("transitionend", finish);
+        onCommitRef.current(dir);
+        animatingRef.current = false;
+      };
+      track?.addEventListener("transitionend", finish);
+      window.setTimeout(() => finish(), LESSON_SLIDE_MS + 40);
       const blockClick = (event: Event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -542,13 +595,12 @@ function useAcademyLessonSwipe(
     };
     const onTouchCancel = () => {
       startRef.current = null;
+      applyX(0, true);
     };
     const onPointerDown = (event: PointerEvent) => {
       if (event.pointerType === "touch") return;
       begin(event.clientX, event.clientY, event.target);
-      if (startRef.current && event.target instanceof Element) {
-        event.target.setPointerCapture?.(event.pointerId);
-      }
+      if (startRef.current) el.setPointerCapture?.(event.pointerId);
     };
     const onPointerMove = (event: PointerEvent) => {
       if (event.pointerType === "touch") return;
@@ -561,6 +613,7 @@ function useAcademyLessonSwipe(
     const onPointerCancel = (event: PointerEvent) => {
       if (event.pointerType === "touch") return;
       startRef.current = null;
+      applyX(0, true);
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
@@ -583,7 +636,7 @@ function useAcademyLessonSwipe(
     };
   }, [enabled]);
 
-  return hostRef;
+  return { hostRef, trackRef };
 }
 
 function BannerStage({
@@ -713,6 +766,84 @@ function BannerStage({
   );
 }
 
+function AcademyWatchPane({
+  role,
+  title,
+  sub,
+  markdown,
+  bannerUrl,
+  playLabel,
+  locked,
+  bodyLocked,
+  embedUrl,
+  loadingPlay,
+  onPlay,
+  onTimeUpdate,
+  onSeekReady,
+}: {
+  role: "prev" | "current" | "next";
+  title: string;
+  sub: string;
+  markdown: string;
+  bannerUrl?: string;
+  playLabel: string;
+  locked: boolean;
+  bodyLocked: boolean;
+  embedUrl: string | null;
+  loadingPlay: boolean;
+  onPlay: () => void;
+  onTimeUpdate?: (seconds: number) => void;
+  onSeekReady?: (seekTo: ((seconds: number) => void) | null) => void;
+}) {
+  const active = role === "current";
+  return (
+    <div
+      className={`studio-academy-watch-slide is-${role}`}
+      aria-hidden={!active}
+    >
+      <div className="studio-academy-watch-player">
+        <BannerStage
+          bannerUrl={bannerUrl}
+          embedUrl={active ? embedUrl : null}
+          loading={active && loadingPlay}
+          locked={locked}
+          onPlay={onPlay}
+          playLabel={playLabel}
+          onTimeUpdate={active ? onTimeUpdate : undefined}
+          onSeekReady={active ? onSeekReady : undefined}
+        />
+      </div>
+      <div className="public-offers-main-scroll">
+        <main className="public-offers-body">
+          <div className="studio-academy-detail">
+            <div className="studio-academy-detail-top">
+              <div>
+                <h1 className="studio-academy-detail-title">{title}</h1>
+                <p className="studio-academy-detail-sub">{sub}</p>
+              </div>
+            </div>
+            <div className={`studio-academy-body${bodyLocked ? " is-locked" : ""}`}>
+              <div className="studio-academy-body-clip">
+                <StudioChatMarkdown
+                  className="studio-academy-md"
+                  text={academyBodyMarkdown(markdown, title)}
+                />
+              </div>
+              {bodyLocked ? (
+                <div className="studio-academy-lock-overlay" aria-hidden="true">
+                  <span className="studio-academy-lock-badge">
+                    <Lock aria-hidden="true" />
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
 export function StudioAcademyPane({
   onOpenCredits,
   onWamHandoff,
@@ -757,7 +888,6 @@ export function StudioAcademyPane({
   const [lessonsSheetOpen, setLessonsSheetOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
-  const [swipeAnim, setSwipeAnim] = useState<"next" | "prev" | null>(null);
   const clientRequestIdRef = useRef<string | null>(null);
   const videoTimeSecRef = useRef(0);
   const videoTimeHeardRef = useRef(false);
@@ -847,11 +977,17 @@ export function StudioAcademyPane({
       if (index < 0) return;
       const next = lessonSwipeIds[index + (dir === "next" ? 1 : -1)];
       if (next === undefined) return;
-      setSwipeAnim(dir);
       academy.setLessonId(next);
     },
     [academy, lessonSwipeIds],
   );
+
+  const swipeIndex = lessonSwipeIds.findIndex(
+    (id) => id === (academy.lessonId ?? null),
+  );
+  const canSwipePrev = swipeIndex > 0;
+  const canSwipeNext =
+    swipeIndex >= 0 && swipeIndex < lessonSwipeIds.length - 1;
 
   const lessonSwipeEnabled =
     isMobile &&
@@ -860,7 +996,19 @@ export function StudioAcademyPane({
     !commentsOpen &&
     !checkoutSheetOpen;
 
-  const lessonSwipe = useAcademyLessonSwipe(lessonSwipeEnabled, swipeLesson);
+  const lessonSwipe = useAcademyLessonSwipe(
+    lessonSwipeEnabled,
+    swipeLesson,
+    canSwipePrev,
+    canSwipeNext,
+  );
+
+  useLayoutEffect(() => {
+    const track = lessonSwipe.trackRef.current;
+    if (!track) return;
+    track.style.transition = "none";
+    track.style.transform = "translate3d(0px, 0, 0)";
+  }, [academy.lessonId, lessonSwipe.trackRef]);
 
   // Unlocked playback: mount Bunny Stream embed so the player shows Stream's
   // native thumbnail (not our Storage cover overlay). Locked stays on cover.
@@ -1296,6 +1444,85 @@ export function StudioAcademyPane({
     </div>
   );
 
+  const watchSlideFor = (
+    id: Id<"academyLessons"> | null,
+    role: "prev" | "current" | "next",
+  ) => {
+    if (!detail) return null;
+    const active = role === "current";
+    if (id === null) {
+      return {
+        key: "intro",
+        role,
+        title: detail.title,
+        sub: owned
+          ? "Intro"
+          : detail.hasIntroVideo
+            ? "Free intro · buy for full lessons"
+            : "Course overview",
+        markdown: detail.descriptionMarkdown,
+        bannerUrl: courseBannerUrl({
+          slug: detail.slug,
+          coverUrl: detail.coverUrl,
+        }),
+        playLabel: "Play course intro",
+        locked: false,
+        bodyLocked: !owned,
+        embedUrl: active ? introEmbed : null,
+        onPlay: () => void playIntro(),
+      };
+    }
+    const lesson = detail.lessons.find((row) => row._id === id);
+    if (!lesson) return null;
+    return {
+      key: lesson._id,
+      role,
+      title: lesson.title,
+      sub: owned
+        ? `${detail.title} · Lesson`
+        : `${detail.title} · Buy to unlock`,
+      markdown: lesson.descriptionMarkdown,
+      bannerUrl:
+        lesson.coverUrl ||
+        courseBannerUrl({
+          slug: detail.slug,
+          coverUrl: detail.coverUrl,
+        }),
+      playLabel: `Play ${lesson.title}`,
+      locked: !owned,
+      bodyLocked: !owned,
+      embedUrl: active && owned ? lessonEmbed : null,
+      onPlay: () => {
+        if (!owned) {
+          toast.message("Buy the course to watch this lesson");
+          return;
+        }
+        void playLesson();
+      },
+    };
+  };
+
+  const mobileWatchSlides = !isMobile || !detail
+    ? []
+    : (
+        [
+          canSwipePrev ? lessonSwipeIds[swipeIndex - 1] : undefined,
+          academy.lessonId ?? null,
+          canSwipeNext ? lessonSwipeIds[swipeIndex + 1] : undefined,
+        ] as const
+      )
+        .map((id, index) => {
+          if (id === undefined) return null;
+          const role = (["prev", "current", "next"] as const)[index]!;
+          return watchSlideFor(id, role);
+        })
+        .filter(
+          (
+            slide,
+          ): slide is NonNullable<ReturnType<typeof watchSlideFor>> =>
+            Boolean(slide),
+        );
+
   const courseMain = !detail ? (
     <div className="public-offers-main studio-cn-catalog">
       <div className="public-offers-main-scroll">
@@ -1307,46 +1534,34 @@ export function StudioAcademyPane({
         </main>
       </div>
     </div>
-  ) : selectedLesson ? (
+  ) : isMobile ? (
     <div
-      className={`public-offers-main studio-cn-catalog${
-        isMobile ? " is-academy-watch" : ""
-      }`}
-      ref={lessonSwipe}
+      className="public-offers-main studio-cn-catalog is-academy-watch"
+      ref={lessonSwipe.hostRef}
     >
-      <div
-        key={isMobile ? selectedLesson._id : "desk"}
-        className={`studio-academy-watch-swap${swipeAnim ? ` is-${swipeAnim}` : ""}`}
-        onAnimationEnd={(event) => {
-          if (event.currentTarget === event.target) setSwipeAnim(null);
-        }}
-      >
-      {isMobile ? (
-        <div className="studio-academy-watch-player">
-          <BannerStage
-            bannerUrl={
-              selectedLesson.coverUrl ||
-              courseBannerUrl({
-                slug: detail.slug,
-                coverUrl: detail.coverUrl,
-              })
-            }
-            embedUrl={owned ? lessonEmbed : null}
-            loading={loadingPlay}
-            locked={!owned}
-            onPlay={() => {
-              if (!owned) {
-                toast.message("Buy the course to watch this lesson");
-                return;
-              }
-              void playLesson();
-            }}
-            playLabel={`Play ${selectedLesson.title}`}
+      <div className="studio-academy-watch-track" ref={lessonSwipe.trackRef}>
+        {mobileWatchSlides.map((slide) => (
+          <AcademyWatchPane
+            key={slide.key}
+            role={slide.role}
+            title={slide.title}
+            sub={slide.sub}
+            markdown={slide.markdown}
+            bannerUrl={slide.bannerUrl}
+            playLabel={slide.playLabel}
+            locked={slide.locked}
+            bodyLocked={slide.bodyLocked}
+            embedUrl={slide.embedUrl}
+            loadingPlay={loadingPlay}
+            onPlay={slide.onPlay}
             onTimeUpdate={handleVideoTimeUpdate}
             onSeekReady={handleSeekReady}
           />
-        </div>
-      ) : null}
+        ))}
+      </div>
+    </div>
+  ) : selectedLesson ? (
+    <div className="public-offers-main studio-cn-catalog">
       <div className="public-offers-main-scroll">
         <main className="public-offers-body">
           <div className="studio-academy-detail">
@@ -1407,38 +1622,9 @@ export function StudioAcademyPane({
           </div>
         </main>
       </div>
-      </div>
     </div>
   ) : (
-    <div
-      className={`public-offers-main studio-cn-catalog${
-        isMobile ? " is-academy-watch" : ""
-      }`}
-      ref={lessonSwipe}
-    >
-      <div
-        key={isMobile ? "intro" : "desk"}
-        className={`studio-academy-watch-swap${swipeAnim ? ` is-${swipeAnim}` : ""}`}
-        onAnimationEnd={(event) => {
-          if (event.currentTarget === event.target) setSwipeAnim(null);
-        }}
-      >
-      {isMobile ? (
-        <div className="studio-academy-watch-player">
-          <BannerStage
-            bannerUrl={courseBannerUrl({
-              slug: detail.slug,
-              coverUrl: detail.coverUrl,
-            })}
-            embedUrl={introEmbed}
-            loading={loadingPlay}
-            onPlay={() => void playIntro()}
-            playLabel="Play course intro"
-            onTimeUpdate={handleVideoTimeUpdate}
-            onSeekReady={handleSeekReady}
-          />
-        </div>
-      ) : null}
+    <div className="public-offers-main studio-cn-catalog">
       <div className="public-offers-main-scroll">
         <main className="public-offers-body">
           <div className="studio-academy-detail">
@@ -1488,7 +1674,6 @@ export function StudioAcademyPane({
             </div>
           </div>
         </main>
-      </div>
       </div>
     </div>
   );
