@@ -1188,36 +1188,38 @@ export function StudioAcademyPane({
     </div>
   );
 
-  const commentsDock =
+  const commentsPanel =
     detailOpen && detail ? (
+      <ProfileCommentsPanel
+        key={
+          commentsLessonId
+            ? `lesson-${commentsLessonId}`
+            : `course-${detail._id}`
+        }
+        courseId={detail._id}
+        lessonId={commentsLessonId}
+        chrome="sidebar"
+        open={isMobile ? commentsOpen : true}
+        onClose={() => setCommentsOpen(false)}
+        commentCount={commentCount}
+        onCommentCountChange={setCommentCount}
+        sidebarTitle={commentsSidebarTitle}
+        sidebarAvatarUrl={commentsSidebarAvatar}
+        locked={!owned}
+      />
+    ) : null;
+
+  // Desktop only — height:100% dock must not sit beside the mobile scroll column
+  // or lesson/course descriptions get crushed out of view.
+  const commentsDock =
+    detailOpen && detail && !isMobile ? (
       <div className="studio-academy-right-dock">
-        {!owned && !isMobile ? (
+        {!owned ? (
           <div className="studio-academy-checkout-strip">
-            <CheckoutDock
-              showHead={false}
-              {...checkoutDockProps}
-            />
+            <CheckoutDock showHead={false} {...checkoutDockProps} />
           </div>
         ) : null}
-        <div className="studio-academy-comments-host">
-          <ProfileCommentsPanel
-            key={
-              commentsLessonId
-                ? `lesson-${commentsLessonId}`
-                : `course-${detail._id}`
-            }
-            courseId={detail._id}
-            lessonId={commentsLessonId}
-            chrome="sidebar"
-            open={isMobile ? commentsOpen : true}
-            onClose={() => setCommentsOpen(false)}
-            commentCount={commentCount}
-            onCommentCountChange={setCommentCount}
-            sidebarTitle={commentsSidebarTitle}
-            sidebarAvatarUrl={commentsSidebarAvatar}
-            locked={!owned}
-          />
-        </div>
+        <div className="studio-academy-comments-host">{commentsPanel}</div>
       </div>
     ) : null;
 
@@ -1269,7 +1271,7 @@ export function StudioAcademyPane({
   const mobileExtras =
     isMobile && detailOpen && detail ? (
       <>
-        {commentsDock}
+        {commentsPanel}
         <nav
           className="public-offers-mobile-book-nav studio-cn-book-bar"
           aria-label={

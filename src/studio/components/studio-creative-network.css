@@ -1107,6 +1107,12 @@
   height: 100%;
 }
 
+/* Academy mobile: book bar is a sibling under .studio-cn-body — don't let the
+   catalog main claim height:100% or descriptions below the video never show. */
+.studio-academy-pane .studio-cn-body.is-catalog > .studio-cn-catalog.public-offers-main {
+  height: auto;
+}
+
 /* Filters live in the main Network browse pane — left rail is Messages. */
 .studio-cn-main-filters {
   display: grid;
