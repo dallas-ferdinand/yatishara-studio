@@ -197,8 +197,8 @@
 
 .post-compose-mock-caption {
   z-index: 3;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  text-shadow: none;
 }
 
 .post-compose-mock-caption .profile-post-caption-user,
@@ -206,7 +206,7 @@
 .post-compose-mock-caption .profile-post-caption-tag,
 .post-compose-mock-caption .profile-post-caption-mention,
 .post-compose-mock-caption .profile-post-caption-mention.is-plain {
-  color: #fff;
+  color: inherit;
   text-shadow: inherit;
 }
 
@@ -377,46 +377,37 @@
   align-items: center;
 }
 
-.post-compose-inline-chip.is-preview,
-.post-compose-inline-chip.is-on-media {
+/* Compact overlay chips inherit appearance ink — never sample the video. */
+.profile-post-caption .post-compose-inline-chip {
   height: 1.15em;
   font-size: 0.88em;
-  /* Tight chrome so chip-to-chip gap ≈ normal word space (not padding+space). */
   margin: 0;
   padding: 0 0.22em;
-  /* middle — not baseline: mention avatars would otherwise shift the chip vs hash labels */
   vertical-align: middle;
   text-shadow: none;
   background: transparent;
-  border-color: color-mix(in srgb, #fff 45%, transparent);
-  color: #fff;
+  border-color: color-mix(in srgb, currentColor 45%, transparent);
+  color: inherit;
 }
 
-.post-compose-inline-chip.is-preview.is-mention,
-.post-compose-inline-chip.is-on-media.is-mention {
+.profile-post-caption .post-compose-inline-chip.is-mention {
   padding: 0 0.22em 0 0.06em;
   gap: 2px;
-  /* Same outer alignment as hash chips (avatar must not change line position). */
   vertical-align: middle;
   align-items: center;
 }
 
-.post-compose-inline-chip.is-preview .post-compose-inline-chip-avatar,
-.post-compose-inline-chip.is-on-media .post-compose-inline-chip-avatar {
+.profile-post-caption .post-compose-inline-chip .post-compose-inline-chip-avatar {
   width: 0.85em;
   height: 0.85em;
-  /* Avoid replaced-element baseline pulling the whole chip off the text line. */
   align-self: center;
   flex-shrink: 0;
-  background: color-mix(in srgb, #000 35%, transparent);
+  background: color-mix(in srgb, currentColor 18%, transparent);
 }
 
-.post-compose-inline-chip.is-on-media .post-compose-inline-chip-initial {
-  color: #fff;
-}
-
-.post-compose-inline-chip.is-on-media .post-compose-inline-chip-label {
-  color: #fff;
+.profile-post-caption .post-compose-inline-chip .post-compose-inline-chip-initial,
+.profile-post-caption .post-compose-inline-chip .post-compose-inline-chip-label {
+  color: inherit;
 }
 
 .caption-chip-text {
@@ -497,17 +488,11 @@
 
 .post-compose-mock-caption .post-compose-inline-chip.is-hash .post-compose-inline-chip-label,
 .post-compose-mock-caption .post-compose-inline-chip.is-mention .post-compose-inline-chip-label {
-  color: #fff;
+  color: inherit;
 }
 
 .post-compose-mock-caption .post-compose-chip-ghost {
-  color: color-mix(in srgb, #fff 45%, transparent);
-}
-
-[data-appearance="light"] .post-compose-mock-caption .post-compose-inline-chip {
-  border-color: color-mix(in srgb, #fff 40%, transparent);
-  background: transparent;
-  color: #fff;
+  color: color-mix(in srgb, currentColor 45%, transparent);
 }
 
 .post-compose-suggest-hint {

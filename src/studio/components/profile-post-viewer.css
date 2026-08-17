@@ -652,9 +652,21 @@
   gap: 2px;
   max-width: min(420px, 78%);
   pointer-events: auto;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  text-shadow: none;
   min-width: 0;
+}
+
+[data-appearance="dark"] .profile-post-caption:not(.is-page) {
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.65),
+    0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+[data-appearance="light"] .profile-post-caption:not(.is-page) {
+  text-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.8),
+    0 2px 8px rgba(255, 255, 255, 0.35);
 }
 
 .profile-post-caption.is-tappable {
@@ -670,7 +682,7 @@
 }
 
 .profile-post-caption.is-tappable:focus-visible {
-  outline: 2px solid color-mix(in srgb, #fff 70%, transparent);
+  outline: 2px solid color-mix(in srgb, currentColor 45%, transparent);
   outline-offset: 4px;
   border-radius: 6px;
 }
@@ -679,7 +691,7 @@
   align-self: flex-start;
   border: 0;
   background: transparent;
-  color: #fff;
+  color: inherit;
   font: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -695,7 +707,7 @@
 
 .profile-post-caption-text {
   margin: 0;
-  color: #fff;
+  color: inherit;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.55;
@@ -718,7 +730,7 @@
   display: inline;
 }
 
-.profile-post-caption-text .post-compose-inline-chip.is-on-media {
+.profile-post-caption-text .post-compose-inline-chip {
   pointer-events: none;
 }
 
@@ -731,7 +743,7 @@
 .profile-post-caption-tag {
   font-size: inherit;
   font-weight: 650;
-  color: #fff;
+  color: inherit;
 }
 
 .profile-post-caption-tags .profile-post-caption-tag {
@@ -744,7 +756,7 @@
   padding: 0;
   margin: 0;
   background: transparent;
-  color: #fff;
+  color: inherit;
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -753,63 +765,8 @@
 
 .profile-post-caption-mention.is-plain {
   cursor: default;
-  color: #fff;
+  color: inherit;
   font-weight: 650;
-}
-
-/* Ink follows sampled backdrop (letterbox / media), not appearance mode. */
-.profile-post-caption.is-on-dark {
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
-}
-
-.profile-post-caption.is-on-dark .profile-post-caption-user,
-.profile-post-caption.is-on-dark .profile-post-caption-text,
-.profile-post-caption.is-on-dark .profile-post-caption-tag,
-.profile-post-caption.is-on-dark .profile-post-caption-mention,
-.profile-post-caption.is-on-dark .profile-post-caption-mention.is-plain {
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
-}
-
-.profile-post-caption.is-on-dark .profile-post-caption-text .post-compose-inline-chip.is-on-media {
-  color: #fff;
-  border-color: color-mix(in srgb, #fff 45%, transparent);
-  text-shadow: none;
-}
-
-.profile-post-caption.is-on-dark .profile-post-caption-text .post-compose-inline-chip.is-on-media .post-compose-inline-chip-label,
-.profile-post-caption.is-on-dark .profile-post-caption-text .post-compose-inline-chip.is-on-media .post-compose-inline-chip-initial {
-  color: #fff;
-}
-
-.profile-post-caption.is-on-light {
-  color: var(--color-cursor-text-bright, #0f172a);
-  text-shadow: none;
-}
-
-.profile-post-caption.is-on-light.is-tappable:focus-visible {
-  outline-color: color-mix(in srgb, var(--color-cursor-text-bright, #0f172a) 45%, transparent);
-}
-
-.profile-post-caption.is-on-light .profile-post-caption-user,
-.profile-post-caption.is-on-light .profile-post-caption-text,
-.profile-post-caption.is-on-light .profile-post-caption-tag,
-.profile-post-caption.is-on-light .profile-post-caption-mention,
-.profile-post-caption.is-on-light .profile-post-caption-mention.is-plain {
-  color: var(--color-cursor-text-bright, #0f172a);
-  text-shadow: none;
-}
-
-.profile-post-caption.is-on-light .profile-post-caption-text .post-compose-inline-chip.is-on-media {
-  color: var(--color-cursor-text-bright, #0f172a);
-  border-color: color-mix(in srgb, var(--color-cursor-text-bright, #0f172a) 28%, transparent);
-  text-shadow: none;
-}
-
-.profile-post-caption.is-on-light .profile-post-caption-text .post-compose-inline-chip.is-on-media .post-compose-inline-chip-label,
-.profile-post-caption.is-on-light .profile-post-caption-text .post-compose-inline-chip.is-on-media .post-compose-inline-chip-initial {
-  color: var(--color-cursor-text-bright, #0f172a);
 }
 
 @media (min-width: 900px) {
@@ -959,79 +916,43 @@
   color: #fff;
 }
 
-/* Action rail ink follows sampled backdrop (same as caption). */
-.profile-post-rail.is-on-dark .profile-post-rail-btn {
-  color: #fff;
-  text-shadow:
-    0 1px 1px rgba(0, 0, 0, 0.65),
-    0 2px 8px rgba(0, 0, 0, 0.45);
-}
-
-.profile-post-rail.is-on-dark .profile-post-rail-btn svg,
-.profile-post-rail.is-on-dark .profile-post-rail-btn .profile-post-rail-share,
-.profile-post-rail.is-on-dark .profile-post-rail-spin {
-  filter:
-    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
-    drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
-}
-
-.profile-post-rail.is-on-dark .profile-post-rail-btn span {
-  color: #fff;
-}
-
-.profile-post-rail.is-on-dark .profile-post-rail-avatar {
-  filter:
-    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5))
-    drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4));
-}
-
-.profile-post-rail.is-on-dark .profile-post-rail-btn.is-liked svg,
-.profile-post-rail.is-on-dark .profile-post-rail-btn.is-liked:hover svg {
-  color: #f5c400 !important;
-}
-
-.profile-post-rail.is-on-dark .profile-post-rail-btn.is-saved svg,
-.profile-post-rail.is-on-dark .profile-post-rail-btn.is-saved:hover svg {
-  color: #ffc53d !important;
-}
-
-.profile-post-rail.is-on-light .profile-post-rail-btn {
+[data-appearance="light"] .profile-post-rail .profile-post-rail-btn {
   color: var(--color-cursor-text-bright, #0f172a);
   text-shadow: none;
 }
 
-.profile-post-rail.is-on-light .profile-post-rail-btn svg,
-.profile-post-rail.is-on-light .profile-post-rail-btn .profile-post-rail-share,
-.profile-post-rail.is-on-light .profile-post-rail-spin {
+[data-appearance="light"] .profile-post-rail .profile-post-rail-btn svg,
+[data-appearance="light"] .profile-post-rail .profile-post-rail-btn .profile-post-rail-share,
+[data-appearance="light"] .profile-post-rail .profile-post-rail-spin {
   filter: none;
 }
 
-.profile-post-rail.is-on-light .profile-post-rail-btn span {
+[data-appearance="light"] .profile-post-rail .profile-post-rail-btn span {
   color: var(--color-cursor-text-bright, #0f172a);
 }
 
-.profile-post-rail.is-on-light .profile-post-rail-avatar {
+[data-appearance="light"] .profile-post-rail .profile-post-rail-avatar {
   filter:
     drop-shadow(0 1px 1px rgba(255, 255, 255, 0.65))
     drop-shadow(0 2px 6px rgba(15, 23, 42, 0.18));
 }
 
-.profile-post-rail.is-on-light .profile-post-rail-btn.is-liked {
+[data-appearance="light"] .profile-post-rail .profile-post-rail-btn.is-liked {
   color: var(--color-cursor-text-bright, #0f172a);
 }
 
-.profile-post-rail.is-on-light .profile-post-rail-btn.is-liked svg,
-.profile-post-rail.is-on-light .profile-post-rail-btn.is-liked:hover svg {
+[data-appearance="light"] .profile-post-rail .profile-post-rail-btn.is-liked svg,
+[data-appearance="light"] .profile-post-rail .profile-post-rail-btn.is-liked:hover svg {
   color: #d97706 !important;
   filter: none;
 }
 
-.profile-post-rail.is-on-light .profile-post-rail-btn.is-saved {
+[data-appearance="light"] .profile-post-rail .profile-post-rail-btn.is-saved {
   color: var(--color-cursor-text-bright, #0f172a);
 }
 
-.profile-post-rail.is-on-light .profile-post-rail-btn.is-saved svg,
-.profile-post-rail.is-on-light .profile-post-rail-btn.is-saved:hover svg {
+[data-appearance="light"] .profile-post-rail .profile-post-rail-btn.is-saved svg,
+[data-appearance="light"] .profile-post-rail .profile-post-rail-btn.is-saved:hover svg {
   color: #ca8a04 !important;
   filter: none;
 }

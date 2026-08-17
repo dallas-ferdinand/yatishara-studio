@@ -61,7 +61,7 @@ export function captionGridPreviewText(caption: string | undefined): string {
 
 function OverlayHashChip({ tag }: { tag: string }) {
   return (
-    <span className="post-compose-inline-chip is-hash is-on-media">
+    <span className="post-compose-inline-chip is-hash">
       <span className="post-compose-inline-chip-label">#{tag}</span>
     </span>
   );
@@ -81,7 +81,7 @@ function OverlayMentionChip({
   const showImg = Boolean(avatarUrl) && !imgFailed;
 
   return (
-    <span className="post-compose-inline-chip is-mention is-on-media">
+    <span className="post-compose-inline-chip is-mention">
       <span className="post-compose-inline-chip-avatar">
         {showImg ? (
           // eslint-disable-next-line @next/next/no-img-element

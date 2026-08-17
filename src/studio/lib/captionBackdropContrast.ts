@@ -1,6 +1,6 @@
 /**
- * Pick caption ink from what's actually behind the caption (letterbox stage
- * and/or media), not from light/dark appearance mode.
+ * Unused. Feed caption/rail/mentions/tags follow `[data-appearance]` only.
+ * Do not wire this back into ProfilePostViewer.
  */
 
 export type CaptionBackdrop = "light" | "dark";

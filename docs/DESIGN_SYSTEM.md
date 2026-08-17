@@ -622,11 +622,9 @@ main pane; comments rail is a flat `--mos-panel` column with a left hairline (li
 Studio sidebars). Light mode: post stage L1 `--mos-page` (never hardcoded black);
 comments rail solid `--mos-panel` (excluded from StudioShell transparent/`aside`
 !important). Divider between post ↔ comments (and between swipe posts) = L2
-`--mos-plate`. Memory: **775**. Caption username/body ink is **backdrop-
-sampled** (`captionBackdropContrast.ts` → `.is-on-light` / `.is-on-dark` on caption
-**and** action rail), not tied to appearance — letterbox vs media luminance.
-Caption uses mean luma; the action rail always uses white ink (`.is-on-dark`)
-so candle/neon posts don’t flip icons black — comments dock stays theme panel.
+`--mos-plate`. Memory: **775**. Caption, mentions, tags, and action-rail ink
+follow Studio appearance (`[data-appearance="light"|"dark"]` +
+`--color-cursor-text-bright`) — do **not** sample video/letterbox luminance.
 Comments/description dock stays theme ink.
 Mobile comments stay a bottom glass sheet.
 Post timestamps always show relative ago · short date

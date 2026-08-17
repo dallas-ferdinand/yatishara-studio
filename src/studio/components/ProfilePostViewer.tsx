@@ -42,11 +42,6 @@ import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
 import { CaptionChipText } from "./CaptionChipText";
-import {
-  sampleOverlayBackdrop,
-  type CaptionBackdrop,
-  type OverlaySampleBias,
-} from "@/studio/lib/captionBackdropContrast";
 import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
 import {
   feedCacheKey,
@@ -57,70 +52,6 @@ import {
 import { markStudioPaint } from "@/studio/lib/studioPaintMarks";
 import "./profile-post-viewer.css";
 import "./post-compose-tab.css";
-
-function useSlideOverlayBackdrop(
-  active: boolean,
-  bias: OverlaySampleBias = "average",
-) {
-  const overlayRef = useRef<HTMLDivElement | null>(null);
-  const [backdrop, setBackdrop] = useState<CaptionBackdrop>("dark");
-
-  useLayoutEffect(() => {
-    const node = overlayRef.current;
-    if (!node) return undefined;
-    const slide = node.closest(".profile-post-slide") as HTMLElement | null;
-    if (!slide) return undefined;
-
-    let cancelled = false;
-    let frame = 0;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const run = () => {
-      if (cancelled) return;
-      const next = sampleOverlayBackdrop(slide, node, { bias });
-      if (next) setBackdrop(next);
-    };
-
-    const schedule = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(run);
-    };
-
-    schedule();
-
-    const media = slide.querySelector(
-      ".profile-post-slide-media img, .profile-post-slide-media video",
-    ) as HTMLImageElement | HTMLVideoElement | null;
-    media?.addEventListener("loadeddata", schedule);
-    media?.addEventListener("load", schedule);
-
-    const ro = new ResizeObserver(schedule);
-    ro.observe(slide);
-    ro.observe(node);
-
-    const mo = new MutationObserver(schedule);
-    mo.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-appearance"],
-    });
-
-    if (active && media instanceof HTMLVideoElement) {
-      intervalId = setInterval(schedule, 1800);
-    }
-
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(frame);
-      if (intervalId) clearInterval(intervalId);
-      media?.removeEventListener("loadeddata", schedule);
-      media?.removeEventListener("load", schedule);
-      ro.disconnect();
-      mo.disconnect();
-    };
-  }, [active, bias]);
-
-  return { overlayRef, backdrop };
-}
 
 type FeedMode = "forYou" | "following";
 
@@ -777,7 +708,7 @@ function FeedCaption({
   }>;
   authorAvatarUrl?: string;
   authorDisplayName?: string;
-  /** Sample backdrop when this slide is the interactive current post. */
+  /** Interactive current post — kept for callers. */
   active?: boolean;
   placement?: "overlay" | "page";
   onOpenProfile?: (username: string) => void;
@@ -792,17 +723,13 @@ function FeedCaption({
   };
 }) {
   const trimmed = caption?.trim();
-  const { overlayRef, backdrop } = useSlideOverlayBackdrop(
-    placement === "overlay" && active,
-  );
 
   if (!trimmed && !(hashtags?.length) && !username) return null;
 
   return (
     <div
-      ref={overlayRef}
       className={`profile-post-caption${
-        placement === "page" ? " is-page" : ` is-on-${backdrop}`
+        placement === "page" ? " is-page" : ""
       }${onOpenDescription ? " is-tappable" : ""}${feedShare ? " is-draggable" : ""}`}
       role={onOpenDescription ? "button" : undefined}
       tabIndex={onOpenDescription ? 0 : undefined}
@@ -1032,7 +959,7 @@ function FeedActions({
   // kept flipping to black icons on candlelit / neon posts; caption stays adaptive.
 
   return (
-    <div className="profile-post-rail is-on-dark">
+    <div className="profile-post-rail">
       <div className="profile-post-rail-avatar-wrap">
         <StudioProfileAvatar
           as="button"
