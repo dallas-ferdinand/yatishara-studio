@@ -392,7 +392,9 @@ function FeedMedia({
     img.decoding = "async";
     img.onload = () => {
       if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-        setMediaSize({ w: img.naturalWidth, h: img.naturalHeight });
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        setMediaSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
       }
     };
     img.src = displaySrc;
@@ -487,8 +489,10 @@ function FeedMedia({
     };
     const onMeta = () => {
       setDuration(Number.isFinite(video.duration) ? video.duration : 0);
-      if (video.videoWidth > 0 && video.videoHeight > 0) {
-        setMediaSize({ w: video.videoWidth, h: video.videoHeight });
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (w > 0 && h > 0) {
+        setMediaSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
       }
     };
     const onPlay = () => {
@@ -644,8 +648,14 @@ function FeedMedia({
     if (!(aspectW > 0 && aspectH > 0)) return;
     const frame = mediaRootRef.current?.closest(".profile-post-watch-frame");
     if (!(frame instanceof HTMLElement)) return;
-    frame.style.setProperty("--post-aw", String(aspectW));
-    frame.style.setProperty("--post-ah", String(aspectH));
+    const aw = String(aspectW);
+    const ah = String(aspectH);
+    if (frame.style.getPropertyValue("--post-aw") !== aw) {
+      frame.style.setProperty("--post-aw", aw);
+    }
+    if (frame.style.getPropertyValue("--post-ah") !== ah) {
+      frame.style.setProperty("--post-ah", ah);
+    }
     frame.classList.toggle("is-portrait", aspectH > aspectW);
   }, [aspectW, aspectH]);
 
@@ -708,7 +718,11 @@ function FeedMedia({
               onLoad={(event) => {
                 const img = event.currentTarget;
                 if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                  setMediaSize({ w: img.naturalWidth, h: img.naturalHeight });
+                  const w = img.naturalWidth;
+                  const h = img.naturalHeight;
+                  setMediaSize((prev) =>
+                    prev && prev.w === w && prev.h === h ? prev : { w, h },
+                  );
                 }
                 onLoad(event);
               }}

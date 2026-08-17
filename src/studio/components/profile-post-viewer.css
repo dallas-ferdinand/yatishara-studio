@@ -996,16 +996,14 @@
   flex: 0 1 auto;
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 10px 14px;
+  padding: 8px 10px;
   overflow: visible;
   background: var(--mos-page, #f5f5f7);
   z-index: 2;
   touch-action: none;
   display: flex;
   justify-content: center;
-  align-items: center;
   max-height: min(72dvh, calc(100dvh - 12.5rem));
-  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border-soft)));
 }
 
 .profile-post-watch-frame {
@@ -1018,7 +1016,7 @@
   border-radius: 12px;
   overflow: hidden;
   background: #0b0d12;
-  filter: drop-shadow(0 0 2px rgba(15, 18, 24, 0.16));
+  filter: drop-shadow(0 1px 2px rgba(15, 18, 24, 0.18));
 }
 
 @media (max-width: 899px) {
@@ -1286,7 +1284,7 @@
 
 @media (min-width: 900px) {
   .profile-post-watch-player {
-    padding: 16px 20px 22px;
+    padding: 16px 20px;
     max-height: min(70%, calc(100dvh - 11rem));
   }
 
