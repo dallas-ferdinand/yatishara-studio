@@ -130,9 +130,11 @@ export async function setStreamThumbnail(args: {
   let body: BodyInit | undefined;
   if (args.bytes) {
     headers["Content-Type"] = "application/octet-stream";
-    const bytes =
+    const src =
       args.bytes instanceof Uint8Array ? args.bytes : new Uint8Array(args.bytes);
-    body = new Blob([bytes], { type: "application/octet-stream" });
+    const copy = new Uint8Array(src.byteLength);
+    copy.set(src);
+    body = copy.buffer as ArrayBuffer;
   }
   const res = await fetch(url, { method: "POST", headers, body });
   if (!res.ok) {
