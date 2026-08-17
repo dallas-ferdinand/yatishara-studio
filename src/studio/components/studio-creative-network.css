@@ -1868,7 +1868,7 @@ button.studio-cn-card-btn.public-offers-card {
     height 140ms cubic-bezier(0.22, 1, 0.36, 1),
     max-height 140ms cubic-bezier(0.22, 1, 0.36, 1),
     border-radius 120ms ease;
-  will-change: height;
+  will-change: height, transform;
 }
 
 .studio-cn-book-sheet.is-entered .studio-cn-book-sheet-panel {
@@ -1876,7 +1876,7 @@ button.studio-cn-card-btn.public-offers-card {
 }
 
 .studio-cn-book-sheet.is-leaving .studio-cn-book-sheet-panel {
-  transform: translate3d(0, 110%, 0);
+  transform: translate3d(0, 110%, 0) !important;
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1) !important;
   pointer-events: none;
 }
@@ -1894,12 +1894,20 @@ button.studio-cn-card-btn.public-offers-card {
 .studio-cn-book-sheet.is-dragging .studio-cn-book-sheet-panel {
   transition: none !important;
   animation: none !important;
+  touch-action: none;
+}
+
+.studio-cn-book-sheet.is-dragging .studio-cn-book-sheet-body,
+.studio-cn-book-sheet.is-dragging .profile-comments-list {
+  touch-action: none;
+  overflow: hidden;
 }
 
 .studio-cn-book-sheet.is-settling .studio-cn-book-sheet-panel {
   transition:
     height 140ms cubic-bezier(0.22, 1, 0.36, 1),
     max-height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
     border-radius 120ms ease;
 }
 

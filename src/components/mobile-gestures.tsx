@@ -15,6 +15,17 @@ function insideZoomRegion(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest("[data-allow-zoom]"));
 }
 
+function insideDismissibleSheet(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        ".studio-cn-book-sheet-panel, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet",
+      ),
+    )
+  );
+}
+
 function verticalPanBlocked(target: EventTarget | null): boolean {
   let el = target instanceof Element ? target : null;
   while (el && el !== document.documentElement) {
@@ -226,7 +237,9 @@ export function MobileGestures() {
       lastY = touch.clientY;
       dragging = false;
       const blocked =
-        insideZoomRegion(event.target) || verticalPanBlocked(event.target);
+        insideZoomRegion(event.target) ||
+        verticalPanBlocked(event.target) ||
+        insideDismissibleSheet(event.target);
       armed = !blocked && leftoverVerticalOverscroll(event.target, 1);
       const scroller = nearestVerticalScroller(event.target);
       const atEdge =
@@ -245,7 +258,8 @@ export function MobileGestures() {
       if (
         leftoverVerticalOverscroll(event.target, dyInc) &&
         !insideZoomRegion(event.target) &&
-        !verticalPanBlocked(event.target)
+        !verticalPanBlocked(event.target) &&
+        !insideDismissibleSheet(event.target)
       ) {
         attachEdgeMove();
       }
