@@ -2583,12 +2583,85 @@ button.post-compose-inline-chip.profile-description-chip {
   }
 }
 
+.profile-comments-inputline.is-recording {
+  flex-direction: row;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.profile-comments-rec-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.profile-comments-rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--mos-danger, #f87171);
+  opacity: 0.5;
+}
+
+.profile-comments-rec-dot.is-live {
+  opacity: 1;
+  animation: profile-comments-rec-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes profile-comments-rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.profile-comments-rec-time {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.profile-comments-rec-wave {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .profile-comments-composer-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 2px 8px 6px;
+}
+
+.profile-comments-composer-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.profile-comments-composer-toolbar .studio-composer-circle-btn.is-discard {
+  color: var(--mos-danger, #f87171);
+}
+
+.profile-comment-voice {
+  width: 100%;
+  min-width: 0;
+  margin: 4px 0 2px;
+}
+
+.profile-comment-voice .studio-chat-audio-player {
+  width: 100%;
+  max-width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
 }
 
 .profile-comments-circle-btn {

@@ -1627,6 +1627,8 @@ const academyCommentReturn = v.object({
   replyCount: v.number(),
   likedByMe: v.boolean(),
   imageUrl: v.optional(v.string()),
+  audioUrl: v.optional(v.string()),
+  audioDurationSec: v.optional(v.number()),
   videoTimeSec: v.optional(v.number()),
 });
 
@@ -1671,6 +1673,8 @@ async function hydrateAcademyComments(
     likedByMe: boolean;
     avatarAssetId?: Id<"assets">;
     imageAssetId?: Id<"assets">;
+    audioAssetId?: Id<"assets">;
+    audioDurationSec?: number;
     videoTimeSec?: number;
   }> = [];
 
@@ -1718,6 +1722,13 @@ async function hydrateAcademyComments(
       likedByMe: Boolean(like),
       avatarAssetId: profile?.avatarAssetId,
       imageAssetId: row.imageAssetId,
+      audioAssetId: row.audioAssetId,
+      audioDurationSec:
+        typeof row.audioDurationSec === "number" &&
+        Number.isFinite(row.audioDurationSec) &&
+        row.audioDurationSec > 0
+          ? row.audioDurationSec
+          : undefined,
       ...(videoTimeSec != null ? { videoTimeSec } : {}),
     });
   }
@@ -1744,6 +1755,20 @@ async function hydrateAcademyComments(
     }),
   );
 
+  const audioAssets = await Promise.all(
+    prepared.map((c) =>
+      c.audioAssetId ? ctx.db.get("assets", c.audioAssetId) : null,
+    ),
+  );
+  const audioUrls = await Promise.all(
+    audioAssets.map(async (asset) => {
+      if (!asset || asset.deletedAt || !asset.bunnyPath || asset.kind !== "audio") {
+        return undefined;
+      }
+      return signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind);
+    }),
+  );
+
   return prepared.map((comment, index) => ({
     _id: comment._id,
     body: comment.body,
@@ -1759,6 +1784,10 @@ async function hydrateAcademyComments(
     replyCount: comment.replyCount,
     likedByMe: comment.likedByMe,
     imageUrl: imageUrls[index],
+    audioUrl: audioUrls[index],
+    ...(comment.audioDurationSec != null
+      ? { audioDurationSec: comment.audioDurationSec }
+      : {}),
     ...(comment.videoTimeSec != null
       ? { videoTimeSec: comment.videoTimeSec }
       : {}),
@@ -2046,6 +2075,8 @@ export const addComment = authedMutation({
     body: v.string(),
     parentId: v.optional(v.id("academyComments")),
     imageAssetId: v.optional(v.id("assets")),
+    audioAssetId: v.optional(v.id("assets")),
+    audioDurationSec: v.optional(v.number()),
     videoTimeSec: v.optional(v.number()),
   },
   returns: v.object({
@@ -2066,7 +2097,7 @@ export const addComment = authedMutation({
       }
     }
     const body = sanitizeCommentBody(args.body, {
-      allowEmpty: Boolean(args.imageAssetId),
+      allowEmpty: Boolean(args.imageAssetId || args.audioAssetId),
     });
     let imageAssetId: Id<"assets"> | undefined;
     if (args.imageAssetId) {
@@ -2082,7 +2113,29 @@ export const addComment = authedMutation({
       }
       imageAssetId = asset._id;
     }
-    if (!body && !imageAssetId) {
+    let audioAssetId: Id<"assets"> | undefined;
+    let audioDurationSec: number | undefined;
+    if (args.audioAssetId) {
+      const asset = await ctx.db.get("assets", args.audioAssetId);
+      if (
+        !asset ||
+        asset.ownerId !== ctx.user._id ||
+        asset.deletedAt ||
+        asset.kind !== "audio" ||
+        !asset.bunnyPath
+      ) {
+        throw new Error("Voice note not found");
+      }
+      audioAssetId = asset._id;
+      if (
+        typeof args.audioDurationSec === "number" &&
+        Number.isFinite(args.audioDurationSec) &&
+        args.audioDurationSec >= 1
+      ) {
+        audioDurationSec = Math.min(Math.round(args.audioDurationSec), 300);
+      }
+    }
+    if (!body && !imageAssetId && !audioAssetId) {
       throw new Error("Comment cannot be empty");
     }
     let parent: Doc<"academyComments"> | null = null;
@@ -2113,6 +2166,8 @@ export const addComment = authedMutation({
       likeCount: 0,
       replyCount: 0,
       imageAssetId,
+      ...(audioAssetId ? { audioAssetId } : {}),
+      ...(audioDurationSec != null ? { audioDurationSec } : {}),
       ...(videoTimeSec != null ? { videoTimeSec } : {}),
     });
     if (parent) {

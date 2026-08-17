@@ -87,8 +87,6 @@ function formatPlanDueLabel(cents: number) {
 }
 
 const DISCUSSION_PREVIEW_HOLD = 5.5;
-const DISCUSSION_UNTIMED_EVERY = 13;
-const DISCUSSION_UNTIMED_HOLD = 4.5;
 
 type DiscussionPreviewRow = {
   _id: string;
@@ -99,6 +97,7 @@ type DiscussionPreviewRow = {
   likeCount: number;
   replyCount: number;
   videoTimeSec?: number;
+  audioUrl?: string;
 };
 
 function hashSeed(parts: string): number {
@@ -120,8 +119,11 @@ function mulberry32(seed: number) {
   };
 }
 
-function discussionPreviewText(body: string): string {
-  return body.replace(/\s+/g, " ").trim();
+function discussionPreviewText(row: DiscussionPreviewRow | string): string {
+  if (typeof row === "string") return row.replace(/\s+/g, " ").trim();
+  const text = row.body.replace(/\s+/g, " ").trim();
+  if (text) return text;
+  return row.audioUrl ? "Voice note" : "";
 }
 
 function pickWeightedRow<T>(
@@ -141,37 +143,51 @@ function pickWeightedRow<T>(
 function pickDiscussionPreview(
   rows: DiscussionPreviewRow[] | undefined,
   timeSec: number,
-  heard: boolean,
+  _heard: boolean,
   playSeed: number,
 ): DiscussionPreviewRow | null {
-  if (!heard || !rows?.length) return null;
-  const withText = rows.filter((row) => discussionPreviewText(row.body).length > 0);
-  if (!withText.length) return null;
+  if (!rows?.length) return null;
+  const pool = rows.filter((row) => discussionPreviewText(row).length > 0);
+  if (!pool.length) return null;
 
-  const timed = withText.filter(
-    (row) => typeof row.videoTimeSec === "number" && Number.isFinite(row.videoTimeSec),
-  );
-  const near = timed.filter(
-    (row) =>
-      timeSec >= row.videoTimeSec! &&
-      timeSec < row.videoTimeSec! + DISCUSSION_PREVIEW_HOLD,
-  );
+  const t = Number.isFinite(timeSec) ? Math.max(0, timeSec) : 0;
   const rngFor = (salt: string) => mulberry32(hashSeed(`${playSeed}:${salt}`));
   const weight = (row: DiscussionPreviewRow) =>
     1 + row.likeCount + Math.min(row.replyCount, 6);
 
+  const timed = pool
+    .filter(
+      (row) => typeof row.videoTimeSec === "number" && Number.isFinite(row.videoTimeSec),
+    )
+    .slice()
+    .sort((a, b) => a.videoTimeSec! - b.videoTimeSec!);
+  const untimed = pool.filter((row) => typeof row.videoTimeSec !== "number");
+
+  const near = timed.filter(
+    (row) =>
+      t >= row.videoTimeSec! && t < row.videoTimeSec! + DISCUSSION_PREVIEW_HOLD,
+  );
   if (near.length) {
     const cluster = Math.min(...near.map((row) => row.videoTimeSec!));
     return pickWeightedRow(near, weight, rngFor(`t:${Math.floor(cluster)}`));
   }
 
-  const untimed = withText.filter((row) => typeof row.videoTimeSec !== "number");
-  if (!untimed.length) return null;
-  const slot = Math.floor(timeSec / DISCUSSION_UNTIMED_EVERY);
-  if (timeSec - slot * DISCUSSION_UNTIMED_EVERY >= DISCUSSION_UNTIMED_HOLD) {
-    return null;
+  const last = [...timed].reverse().find((row) => row.videoTimeSec! <= t);
+  if (last) {
+    const cluster = timed.filter((row) => row.videoTimeSec === last.videoTimeSec);
+    return pickWeightedRow(cluster, weight, rngFor(`last:${Math.floor(last.videoTimeSec!)}`));
   }
-  return pickWeightedRow(untimed, weight, rngFor(`u:${slot}`));
+
+  const next = timed.find((row) => row.videoTimeSec! > t);
+  if (next) {
+    const cluster = timed.filter((row) => row.videoTimeSec === next.videoTimeSec);
+    return pickWeightedRow(cluster, weight, rngFor(`next:${Math.floor(next.videoTimeSec!)}`));
+  }
+
+  if (untimed.length) {
+    return pickWeightedRow(untimed, weight, rngFor(`u:${Math.floor(t / 8)}`));
+  }
+  return pickWeightedRow(pool, weight, rngFor("all"));
 }
 
 function usePreloadAcademyHero() {
@@ -1979,7 +1995,7 @@ export function StudioAcademyPane({
               className={`studio-cn-book-bar-price is-discussion${discussionPreview ? " has-preview" : ""}`}
               aria-label={
                 discussionPreview
-                  ? `${discussionPreview.displayName}: ${discussionPreviewText(discussionPreview.body)}`
+                  ? `${discussionPreview.displayName}: ${discussionPreviewText(discussionPreview)}`
                   : "Open comments"
               }
               onClick={() => setCommentsOpen(true)}
@@ -2004,7 +2020,7 @@ export function StudioAcademyPane({
                           ? `@${discussionPreview.username}`
                           : "Comment")}
                     </strong>
-                    <span>{discussionPreviewText(discussionPreview.body)}</span>
+                    <span>{discussionPreviewText(discussionPreview)}</span>
                   </span>
                 </>
               ) : (

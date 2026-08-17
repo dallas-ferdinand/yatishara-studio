@@ -1340,6 +1340,9 @@ export default defineSchema({
     replyCount: v.optional(v.number()),
     /** Optional single image attachment. */
     imageAssetId: v.optional(v.id("assets")),
+    /** Optional voice note. */
+    audioAssetId: v.optional(v.id("assets")),
+    audioDurationSec: v.optional(v.number()),
   })
     .index("by_post_and_created", ["postId", "createdAt"])
     .index("by_parent_and_created", ["parentId", "createdAt"])
@@ -1879,6 +1882,9 @@ export default defineSchema({
     likeCount: v.optional(v.number()),
     replyCount: v.optional(v.number()),
     imageAssetId: v.optional(v.id("assets")),
+    /** Optional voice note. */
+    audioAssetId: v.optional(v.id("assets")),
+    audioDurationSec: v.optional(v.number()),
     /** Playback position (seconds) when the comment was posted on intro or lesson video. */
     videoTimeSec: v.optional(v.number()),
   })

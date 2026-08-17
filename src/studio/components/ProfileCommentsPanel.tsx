@@ -7,14 +7,17 @@ import {
   Bookmark,
   Check,
   ChevronLeft,
+  Clock,
   Copy,
   Heart,
   Image as ImageIcon,
   Loader2,
-  Clock,
   Lock,
   MessageCircle,
+  Mic,
+  Pause,
   Pencil,
+  Play,
   Reply,
   Trash2,
   X,
@@ -50,10 +53,26 @@ import { useStudioComposerResize } from "@/studio/lib/composerHeight";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { MediaLoadFrame } from "./media-load-frame";
+import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
+import { MicrophoneWaveform } from "@/components/ui/waveform";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import "./media-load-frame.css";
 
 const MAX_POST_CAPTION = 2200;
+const VOICE_NOTE_MAX_SECONDS = 300;
+
+function pickRecorderMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined;
+  return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((type) =>
+    MediaRecorder.isTypeSupported(type),
+  );
+}
+
+function recordingTimeLabel(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
 type CommentSort = "newest" | "oldest" | "liked" | "replies";
 
@@ -79,6 +98,8 @@ type CommentRow = {
   replyCount: number;
   likedByMe: boolean;
   imageUrl?: string;
+  audioUrl?: string;
+  audioDurationSec?: number;
   videoTimeSec?: number;
 };
 
@@ -537,6 +558,20 @@ function ProfileCommentBubble({
                 </button>
               ) : null}
               {comment.body ? <p>{comment.body}</p> : null}
+              {comment.audioUrl ? (
+                <div
+                  className="profile-comment-voice"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <StudioChatAudioPlayer
+                    src={comment.audioUrl}
+                    title="Voice note"
+                    durationHint={comment.audioDurationSec}
+                    compact
+                  />
+                </div>
+              ) : null}
               {comment.imageUrl ? (
                 <button
                   type="button"
@@ -628,6 +663,18 @@ function CommentsBody({
     Record<string, { liked: boolean; likeCount: number }>
   >({});
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const [recState, setRecState] = useState<
+    "idle" | "recording" | "paused" | "sending"
+  >("idle");
+  const [recSeconds, setRecSeconds] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recChunksRef = useRef<Blob[]>([]);
+  const recStreamRef = useRef<MediaStream | null>(null);
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recElapsedMsRef = useRef(0);
+  const recTickStartRef = useRef(0);
+  const recFinalDurationRef = useRef(0);
+  const recIntentRef = useRef<"send" | "cancel">("cancel");
 
   const rootPostComments = useQuery(
     api.profiles.listComments,
@@ -871,9 +918,55 @@ function CommentsBody({
     });
   }
 
-  async function submit() {
+  async function uploadCommentAudio(file: File): Promise<Id<"assets">> {
+    const defaults = await ensureStudioDefaults({});
+    return await uploadStudioAsset({
+      file,
+      folderId: defaults.rootFolderId,
+      kind: "audio",
+      name: file.name || "Voice note",
+      reserveUpload,
+      commitStagingUpload,
+    });
+  }
+
+  const clearRecTimer = useCallback(() => {
+    if (recTimerRef.current) {
+      clearInterval(recTimerRef.current);
+      recTimerRef.current = null;
+    }
+  }, []);
+
+  const teardownRecorder = useCallback(() => {
+    clearRecTimer();
+    recStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recStreamRef.current = null;
+    recorderRef.current = null;
+  }, [clearRecTimer]);
+
+  const finishRecordingRef = useRef<((intent: "send" | "cancel") => void) | null>(
+    null,
+  );
+
+  const startRecTimer = useCallback(() => {
+    clearRecTimer();
+    recTickStartRef.current = Date.now();
+    recTimerRef.current = setInterval(() => {
+      const elapsed =
+        (recElapsedMsRef.current + (Date.now() - recTickStartRef.current)) / 1000;
+      setRecSeconds(elapsed);
+      if (elapsed >= VOICE_NOTE_MAX_SECONDS) finishRecordingRef.current?.("send");
+    }, 250);
+  }, [clearRecTimer]);
+
+  async function submit(opts?: {
+    audioAssetId?: Id<"assets">;
+    audioDurationSec?: number;
+  }) {
     const body = draft.trim();
-    if ((!body && !pendingImage) || busy) return;
+    const audioAssetId = opts?.audioAssetId;
+    const audioDurationSec = opts?.audioDurationSec;
+    if ((!body && !pendingImage && !audioAssetId) || busy) return;
     if (!auth.isAuthenticated) {
       window.location.href = `/?next=${encodeURIComponent("/")}`;
       return;
@@ -886,6 +979,18 @@ function CommentsBody({
       if (pendingImage) {
         imageAssetId = await uploadCommentImage(pendingImage.file);
       }
+      const voice =
+        audioAssetId
+          ? { audioAssetId, ...(audioDurationSec != null ? { audioDurationSec } : {}) }
+          : {};
+      const stamp = getVideoTimeSec
+        ? (() => {
+            const t = getVideoTimeSec();
+            return typeof t === "number" && Number.isFinite(t)
+              ? { videoTimeSec: t }
+              : {};
+          })()
+        : {};
       const result = isCourse && courseId
         ? await addCourseComment({
             courseId,
@@ -893,20 +998,15 @@ function CommentsBody({
             body,
             parentId: (parentId as Id<"academyComments"> | null) ?? undefined,
             imageAssetId,
-            ...(getVideoTimeSec
-              ? (() => {
-                  const t = getVideoTimeSec();
-                  return typeof t === "number" && Number.isFinite(t)
-                    ? { videoTimeSec: t }
-                    : {};
-                })()
-              : {}),
+            ...voice,
+            ...stamp,
           })
         : await addPostComment({
             postId: postId!,
             body,
             parentId: (parentId as Id<"profileComments"> | null) ?? undefined,
             imageAssetId,
+            ...voice,
           });
       setDraft("");
       clearPendingImage();
@@ -934,6 +1034,130 @@ function CommentsBody({
       setBusy(false);
     }
   }
+
+  const finishRecording = useCallback(
+    (intent: "send" | "cancel") => {
+      const recorder = recorderRef.current;
+      if (!recorder || recorder.state === "inactive") return;
+      if (recorder.state === "recording") {
+        recElapsedMsRef.current += Date.now() - recTickStartRef.current;
+      }
+      clearRecTimer();
+      recFinalDurationRef.current = Math.min(
+        VOICE_NOTE_MAX_SECONDS,
+        recElapsedMsRef.current / 1000,
+      );
+      recIntentRef.current = intent;
+      setRecState(intent === "send" ? "sending" : "idle");
+      recorder.stop();
+    },
+    [clearRecTimer],
+  );
+  finishRecordingRef.current = finishRecording;
+
+  const pauseRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    try {
+      recorder.pause();
+    } catch {
+      setError("Pause is not supported on this device");
+      return;
+    }
+    recElapsedMsRef.current += Date.now() - recTickStartRef.current;
+    clearRecTimer();
+    setRecSeconds(recElapsedMsRef.current / 1000);
+    setRecState("paused");
+  }, [clearRecTimer]);
+
+  const resumeRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== "paused") return;
+    try {
+      recorder.resume();
+    } catch {
+      setError("Could not resume recording");
+      return;
+    }
+    setRecState("recording");
+    startRecTimer();
+  }, [startRecTimer]);
+
+  const startRecording = useCallback(async () => {
+    if (recState !== "idle" || busy) return;
+    if (!auth.isAuthenticated) {
+      window.location.href = `/?next=${encodeURIComponent("/")}`;
+      return;
+    }
+    setError("");
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError("Microphone access was blocked");
+      return;
+    }
+    const mimeType = pickRecorderMimeType();
+    const recorder = new MediaRecorder(
+      stream,
+      mimeType ? { mimeType } : undefined,
+    );
+    recStreamRef.current = stream;
+    recorderRef.current = recorder;
+    recChunksRef.current = [];
+    recIntentRef.current = "cancel";
+    recElapsedMsRef.current = 0;
+    recFinalDurationRef.current = 0;
+    setRecSeconds(0);
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) recChunksRef.current.push(event.data);
+    };
+    recorder.onstop = () => {
+      const durationSec = Math.min(
+        VOICE_NOTE_MAX_SECONDS,
+        recFinalDurationRef.current || recElapsedMsRef.current / 1000,
+      );
+      const blob = new Blob(recChunksRef.current, {
+        type: recorder.mimeType || "audio/webm",
+      });
+      const intent = recIntentRef.current;
+      recChunksRef.current = [];
+      teardownRecorder();
+
+      if (intent !== "send" || durationSec < 1 || blob.size === 0) {
+        setRecState("idle");
+        if (intent === "send" && durationSec < 1) {
+          setError("Voice note too short — hold on a bit longer");
+        }
+        return;
+      }
+
+      const file = new File(
+        [blob],
+        "Voice note.webm",
+        { type: blob.type || "audio/webm" },
+      );
+      void (async () => {
+        try {
+          const audioAssetId = await uploadCommentAudio(file);
+          await submit({ audioAssetId, audioDurationSec: durationSec });
+        } catch (err) {
+          playUiSound("error");
+          setError(friendlyConvexError(err, "Could not send voice note"));
+        } finally {
+          setRecState("idle");
+        }
+      })();
+    };
+    recorder.start(250);
+    setRecState("recording");
+    startRecTimer();
+  }, [auth.isAuthenticated, busy, recState, startRecTimer, teardownRecorder]);
+
+  useEffect(() => {
+    return () => teardownRecorder();
+  }, [teardownRecorder]);
 
   async function remove(
     commentId: Id<"profileComments"> | Id<"academyComments">,
@@ -1308,6 +1532,7 @@ function CommentsBody({
             className={`profile-comments-composer${variant === "sheet" ? " is-sheet-composer" : ""}`}
             onSubmit={(event) => {
               event.preventDefault();
+              if (recState !== "idle") return;
               void submit();
             }}
           >
@@ -1353,39 +1578,124 @@ function CommentsBody({
               onPointerCancel={composerResize.end}
             />
           ) : null}
-          <div className="profile-comments-inputline">
-            <textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void submit();
-                }
-              }}
-              placeholder={composerPlaceholder}
-              maxLength={500}
-              disabled={busy}
-              rows={variant === "dock" ? 2 : 1}
-            />
+          <div
+            className={`profile-comments-inputline${recState !== "idle" ? " is-recording" : ""}`}
+            {...(recState !== "idle"
+              ? { role: "status", "aria-label": "Recording voice note" }
+              : {})}
+          >
+            {recState !== "idle" ? (
+              <>
+                <span className="profile-comments-rec-meta">
+                  <span
+                    className={`profile-comments-rec-dot${recState === "recording" ? " is-live" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <span className="profile-comments-rec-time">
+                    {recordingTimeLabel(recSeconds)}
+                    {recState === "paused" ? " · paused" : ""}
+                  </span>
+                </span>
+                <MicrophoneWaveform
+                  className="profile-comments-rec-wave"
+                  active={recState === "recording"}
+                  processing={recState === "sending"}
+                  height={28}
+                  barWidth={3}
+                  barGap={2}
+                  barRadius={1}
+                  barColor="gray"
+                  sensitivity={1.6}
+                  fadeEdges
+                  fadeWidth={20}
+                />
+                <button
+                  type="button"
+                  className="studio-composer-circle-btn"
+                  onClick={() =>
+                    recState === "paused" ? resumeRecording() : pauseRecording()
+                  }
+                  disabled={recState === "sending"}
+                  aria-label={
+                    recState === "paused" ? "Resume recording" : "Pause recording"
+                  }
+                  title={recState === "paused" ? "Resume" : "Pause"}
+                >
+                  {recState === "paused" ? (
+                    <Play aria-hidden="true" />
+                  ) : (
+                    <Pause aria-hidden="true" />
+                  )}
+                </button>
+              </>
+            ) : (
+              <textarea
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void submit();
+                  }
+                }}
+                placeholder={composerPlaceholder}
+                maxLength={500}
+                disabled={busy}
+                rows={variant === "dock" ? 2 : 1}
+              />
+            )}
           </div>
           <div className="profile-comments-composer-toolbar studio-composer-toolbar">
             <button
               type="button"
               className={`studio-composer-circle-btn${pendingImage ? " is-on" : ""}`}
               aria-label={pendingImage ? "Replace image" : "Attach image"}
-              disabled={busy || !auth.isAuthenticated}
+              disabled={busy || recState !== "idle" || !auth.isAuthenticated}
               onClick={() => imageInputRef.current?.click()}
             >
               <ImageIcon aria-hidden="true" />
             </button>
+            <span className="profile-comments-composer-spacer" aria-hidden="true" />
+            {recState !== "idle" ? (
+              <button
+                type="button"
+                className="studio-composer-circle-btn is-discard"
+                onClick={() => finishRecording("cancel")}
+                disabled={recState === "sending"}
+                aria-label="Discard recording"
+                title="Delete"
+              >
+                <Trash2 aria-hidden="true" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="studio-composer-circle-btn"
+                onClick={() => void startRecording()}
+                disabled={busy || !auth.isAuthenticated}
+                aria-label="Record a voice note"
+                title="Record"
+              >
+                <Mic aria-hidden="true" />
+              </button>
+            )}
             <button
-              type="submit"
+              type="button"
               className="studio-composer-circle-btn studio-composer-send-btn"
-              disabled={busy || (!draft.trim() && !pendingImage)}
-              aria-label="Send comment"
+              disabled={
+                recState === "sending" ||
+                (recState === "idle" && (busy || (!draft.trim() && !pendingImage)))
+              }
+              aria-label={recState !== "idle" ? "Send voice note" : "Send comment"}
+              onClick={() => {
+                if (recState !== "idle") {
+                  finishRecording("send");
+                  return;
+                }
+                void submit();
+              }}
             >
-              {busy ? (
+              {busy || recState === "sending" ? (
                 <Loader2 className="animate-spin" aria-hidden="true" />
               ) : (
                 <ArrowUp aria-hidden="true" />
