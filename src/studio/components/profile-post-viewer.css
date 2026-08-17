@@ -1070,6 +1070,13 @@
     height: 36px;
   }
 
+  .profile-post-caption-identity {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
   .profile-post-follow-btn {
     display: inline-flex;
     align-items: center;
@@ -1078,11 +1085,11 @@
     gap: 5px;
     height: 28px;
     min-height: 28px;
-    margin: 0;
+    margin: 0 0 0 auto;
     padding: 0 10px;
-    border: 1px solid var(--mos-border, var(--color-cursor-border));
+    border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
     border-radius: 999px;
-    background: var(--mos-plate, var(--color-cursor-sidebar));
+    background: transparent;
     color: var(--color-cursor-text-bright, var(--mos-text));
     font: inherit;
     font-size: 12px;
@@ -1100,14 +1107,9 @@
     stroke-width: 2.25;
   }
 
-  .profile-post-follow-btn.is-primary {
-    background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 20%, var(--mos-plate, var(--color-cursor-sidebar)));
-    border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 48%, var(--mos-border, var(--color-cursor-border)));
-  }
-
   .profile-post-follow-btn.is-following {
-    background: var(--mos-plate, var(--color-cursor-sidebar));
-    border-color: var(--mos-border, var(--color-cursor-border));
+    background: transparent;
+    border-color: var(--color-cursor-border-soft, var(--mos-border-soft));
   }
 
   .profile-post-caption.is-page .profile-post-caption-user,
@@ -1121,7 +1123,6 @@
 
   .profile-post-caption.is-page .profile-post-caption-user {
     min-width: 0;
-    flex: 0 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1131,6 +1132,17 @@
     pointer-events: auto;
     cursor: pointer;
     text-align: left;
+  }
+
+  .profile-post-caption-identity time {
+    color: var(--color-cursor-muted, color-mix(in srgb, currentColor 55%, transparent));
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    margin-top: -1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .profile-post-caption.is-page .profile-post-caption-text {

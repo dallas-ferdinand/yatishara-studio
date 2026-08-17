@@ -54,6 +54,7 @@ import {
   studioLiveOrCached,
 } from "@/studio/lib/studioLiveCache";
 import { markStudioPaint } from "@/studio/lib/studioPaintMarks";
+import { formatPostWhen } from "@/studio/lib/formatPostWhen";
 import "./profile-post-viewer.css";
 import "./post-compose-tab.css";
 
@@ -175,6 +176,12 @@ function formatCount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
   return String(value);
+}
+
+function formatPostStamp(publishedAt?: number, editedAt?: number): string {
+  if (!publishedAt) return "";
+  const when = formatPostWhen(publishedAt);
+  return editedAt ? `${when} · edited` : when;
 }
 
 function postAspectVars(post: { width?: number; height?: number }): CSSProperties | undefined {
@@ -784,6 +791,8 @@ function FeedCaption({
   authorDisplayName,
   authorFirstName,
   authorLastName,
+  publishedAt,
+  editedAt,
   showFollow = false,
   isFollowing = false,
   active = false,
@@ -806,6 +815,8 @@ function FeedCaption({
   authorDisplayName?: string;
   authorFirstName?: string;
   authorLastName?: string;
+  publishedAt?: number;
+  editedAt?: number;
   showFollow?: boolean;
   isFollowing?: boolean;
   /** Interactive current post — kept for callers. */
@@ -889,17 +900,24 @@ function FeedCaption({
               aria-label={`Open @${username}`}
             />
           </span>
-          <button
-            type="button"
-            className="profile-post-caption-user"
-            onClick={() => onOpenProfile?.(username)}
-          >
-            {authorDisplayName || username}
-          </button>
+          <div className="profile-post-caption-identity">
+            <button
+              type="button"
+              className="profile-post-caption-user"
+              onClick={() => onOpenProfile?.(username)}
+            >
+              {authorDisplayName || username}
+            </button>
+            {publishedAt ? (
+              <time dateTime={new Date(publishedAt).toISOString()}>
+                {formatPostStamp(publishedAt, editedAt)}
+              </time>
+            ) : null}
+          </div>
           {showFollow ? (
             <button
               type="button"
-              className={`profile-post-follow-btn${isFollowing ? " is-following" : " is-primary"}`}
+              className={`profile-post-follow-btn${isFollowing ? " is-following" : ""}`}
               data-studio-sfx="follow"
               aria-label={
                 isFollowing ? `Unfollow @${username}` : `Follow @${username}`
@@ -2191,6 +2209,8 @@ export function ProfilePostViewer({
                   authorDisplayName={post.displayName}
                   authorFirstName={post.firstName}
                   authorLastName={post.lastName}
+                  publishedAt={post.publishedAt}
+                  editedAt={localCaptions[post._id]?.editedAt ?? post.editedAt}
                   showFollow={Boolean(post.profileId) && !post.isOwner}
                   isFollowing={Boolean(
                     post.profileId
