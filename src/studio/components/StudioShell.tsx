@@ -2175,6 +2175,7 @@ export function StudioShell({
       activeTab.startsWith("document:") ||
       activeTab.startsWith("element:") ||
       activeTab.startsWith("listAsset:") ||
+      activeTab === "post:compose" ||
       activeTab.startsWith("post:compose:") ||
       (!activeTab.startsWith("messages:") &&
         !activeTab.startsWith("files:") &&
@@ -5041,6 +5042,14 @@ export function StudioShell({
     openTab(`profile:${normalized}`);
     setSettingsOpen(false);
     setHistoryOpen(false);
+    if (isMobile) setMobileSection("composer");
+  }
+
+  function openCreatePost() {
+    setMobileAppMenuOpen(false);
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    openTab("post:compose");
     if (isMobile) setMobileSection("composer");
   }
 
@@ -27252,6 +27261,7 @@ export function StudioShell({
             activeEditTab={activeTab}
             onOpenPublicProfile={openPublicProfile}
             onOpenProfilePost={openProfilePost}
+            onCreatePost={openCreatePost}
             onOpenFeedTab={openFeedTab}
             openTabs={openTabs}
             dmConversationId={activeDmConversationId}
@@ -27966,6 +27976,20 @@ export function StudioShell({
           }
           tools={
             <>
+              <button
+                type="button"
+                className={`studio-settings-pill studio-settings-trigger${
+                  activeTab === "post:compose" ||
+                  String(activeTab || "").startsWith("post:compose:")
+                    ? " is-active"
+                    : ""
+                }`}
+                aria-label="Create post"
+                title="Create post"
+                onClick={openCreatePost}
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
               <StudioProfileMenu
                 currentUser={currentUser}
                 profile={myPublicProfile}
@@ -28019,6 +28043,9 @@ export function StudioShell({
           onViewProfile={() => {
             setMobileAppMenuOpen(false);
             openOwnProfile();
+          }}
+          onCreatePost={() => {
+            openCreatePost();
           }}
           onEditProfile={() => {
             setMobileAppMenuOpen(false);
@@ -31294,6 +31321,7 @@ function StudioMobileAppMenu({
   creditPriceCents,
   onClose,
   onViewProfile,
+  onCreatePost,
   onEditProfile,
   onOpenOffers,
   onOpenAcademy,
@@ -31568,6 +31596,15 @@ function StudioMobileAppMenu({
   // Phone home-screen style grid — short labels under L3 app tiles.
   const items = [
     { label: "Profile", ariaLabel: "View profile", Icon: UserRound, onClick: onViewProfile },
+    {
+      label: "Post",
+      ariaLabel: "Create post",
+      Icon: Plus,
+      onClick: () => {
+        onClose?.();
+        onCreatePost?.();
+      },
+    },
     { label: "Edit", ariaLabel: "Edit profile", Icon: Pencil, onClick: onEditProfile },
     {
       label: "Network",
@@ -34229,6 +34266,7 @@ function ActivePane({
   activeEditTab,
   onOpenPublicProfile,
   onOpenProfilePost,
+  onCreatePost,
   onOpenFeedTab,
   openTabs = [],
   dmConversationId = null,
@@ -34393,6 +34431,7 @@ function ActivePane({
               ownerName={currentUser}
               onOpenPost={(post) => onOpenProfilePost?.(username, post._id)}
               onMessage={onOpenChat}
+              onCreatePost={onCreatePost}
             />
           </div>
         );
@@ -34541,13 +34580,11 @@ function ActivePane({
       />,
     );
   }
-  if (activeTab.startsWith("post:compose:")) {
-    const composeAssetId = activeTab.slice("post:compose:".length).trim();
-    if (!composeAssetId) {
-      return wrapPane(
-        <div className="p-6 text-sm text-cursor-muted">Missing asset for this post.</div>,
-      );
-    }
+  if (activeTab === "post:compose" || activeTab.startsWith("post:compose:")) {
+    const composeAssetId =
+      activeTab === "post:compose"
+        ? undefined
+        : activeTab.slice("post:compose:".length).trim() || undefined;
     return wrapPane(
       <PostComposeTab
         assetId={composeAssetId}
@@ -39627,9 +39664,12 @@ function tabDescriptor({
         : "Agent chat";
     return { key, kind: "chat", title, status: "ready", studioKind: "agent" };
   }
-  if (key.startsWith("post:compose:")) {
-    const assetId = key.slice("post:compose:".length).trim();
-    const asset = (assets ?? []).find((entry) => entry._id === assetId || entry.studioId === assetId);
+  if (key === "post:compose" || key.startsWith("post:compose:")) {
+    const assetId =
+      key === "post:compose" ? "" : key.slice("post:compose:".length).trim();
+    const asset = assetId
+      ? (assets ?? []).find((entry) => entry._id === assetId || entry.studioId === assetId)
+      : null;
     const title = asset?.name ? `Create · ${asset.name}` : "Create post";
     return {
       key,

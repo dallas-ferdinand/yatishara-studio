@@ -10,13 +10,16 @@ import {
   Award,
   Crown,
   Image as ImageIcon,
+  Layers,
   LayoutGrid,
   Link2,
   Loader2,
   Mail,
   MessageCircle,
+  Music2,
   Phone,
   Play,
+  Plus,
   UserMinus,
   UserPlus,
   UserRound,
@@ -37,7 +40,7 @@ import "./public-profile.css";
 type PublicPost = {
   _id: Id<"profilePosts">;
   assetId: Id<"assets">;
-  kind: "image" | "video";
+  kind: "image" | "video" | "audio";
   name: string;
   caption?: string;
   hashtags?: Array<{ tag: string; displayTag: string }>;
@@ -57,6 +60,13 @@ type PublicPost = {
   username?: string;
   width?: number;
   height?: number;
+  items?: Array<{
+    assetId: Id<"assets">;
+    kind: "image" | "video" | "audio";
+    name: string;
+    thumbnailUrl?: string;
+    mediaUrl?: string;
+  }>;
 };
 
 function sizeAspectAttr(width?: number, height?: number): string | undefined {
@@ -191,8 +201,12 @@ function ProfileGridTile({
         </MediaLoadFrame>
       ) : (
         <span className="public-profile-tile-fallback">
-          <LogoLoader size="sm" />
-          {post.kind === "video" ? "Video" : "Image"}
+          {post.kind === "audio" ? (
+            <Music2 className="h-6 w-6" aria-hidden="true" />
+          ) : (
+            <LogoLoader size="sm" />
+          )}
+          {post.kind === "video" ? "Video" : post.kind === "audio" ? "Audio" : "Image"}
         </span>
       )}
       <span className="public-profile-tile-top" aria-hidden="true">
@@ -202,14 +216,30 @@ function ProfileGridTile({
         </span>
         <span
           className="public-profile-tile-kind"
-          title={post.kind === "video" ? "Video" : "Image"}
+          title={
+            (post.items?.length ?? 0) > 1
+              ? `${post.items?.length} items`
+              : post.kind === "video"
+                ? "Video"
+                : post.kind === "audio"
+                  ? "Audio"
+                  : "Image"
+          }
         >
-          {post.kind === "video" ? (
+          {(post.items?.length ?? 0) > 1 ? (
+            <Layers
+              className="public-profile-tile-kind-icon"
+              strokeWidth={2.2}
+              aria-hidden="true"
+            />
+          ) : post.kind === "video" ? (
             <Play
               className="public-profile-tile-kind-icon is-play"
               strokeWidth={2.85}
               aria-hidden="true"
             />
+          ) : post.kind === "audio" ? (
+            <Music2 className="public-profile-tile-kind-icon" />
           ) : (
             <ImageIcon className="public-profile-tile-kind-icon" />
           )}
@@ -230,6 +260,7 @@ export function PublicProfileView({
   ownerName,
   onOpenPost,
   onMessage,
+  onCreatePost,
 }: {
   username: string;
   embedded?: boolean;
@@ -240,6 +271,7 @@ export function PublicProfileView({
   } | null;
   onOpenPost?: (post: PublicPost) => void;
   onMessage?: (username: string) => void;
+  onCreatePost?: () => void;
 }) {
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const [tab, setTab] = useState<ProfileTab>("posts");
@@ -427,6 +459,18 @@ export function PublicProfileView({
                       <span>Message</span>
                     </button>
                   ) : null}
+                </div>
+              ) : onCreatePost ? (
+                <div className="public-profile-actions">
+                  <button
+                    type="button"
+                    className="public-profile-action is-primary"
+                    onClick={onCreatePost}
+                    aria-label="Create post"
+                  >
+                    <Plus className="public-profile-action-icon" aria-hidden="true" />
+                    <span>Post</span>
+                  </button>
                 </div>
               ) : null}
             </div>

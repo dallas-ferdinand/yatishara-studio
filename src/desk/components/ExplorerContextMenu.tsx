@@ -188,7 +188,7 @@ function buildMenuItems(entry, {
   const isShareableMedia =
     isFile &&
     entry.studioKind === "asset" &&
-    (entry.kind === "image" || entry.kind === "video") &&
+    (entry.kind === "image" || entry.kind === "video" || entry.kind === "audio") &&
     entry.studioId;
 
   // —— Primary ——

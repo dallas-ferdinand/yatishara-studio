@@ -107,6 +107,7 @@
 
 .post-compose-mock {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   justify-content: stretch;
   min-width: 0;
@@ -114,6 +115,7 @@
   height: 100%;
   width: 100%;
   padding: 0;
+  gap: 10px;
 }
 
 /* Full-bleed preview panel — fills available width like the feed stage */
@@ -121,7 +123,7 @@
   position: relative;
   flex: 1 1 auto;
   width: 100%;
-  height: 100%;
+  min-height: 0;
   max-width: none;
   max-height: none;
   aspect-ratio: auto;
@@ -630,4 +632,176 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+.post-compose-media-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 24px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  text-align: center;
+}
+
+.post-compose-media-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.post-compose-media-empty-copy {
+  max-width: 16rem;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.post-compose-media-choice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 11rem;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--pc-line);
+  background: var(--pc-panel);
+  box-shadow: var(--pc-shadow);
+  transform: translate(-50%, -50%);
+}
+
+.post-compose-media-choice button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pc-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.post-compose-media-choice button:hover {
+  background: var(--pc-hover);
+}
+
+.post-compose-media-choice svg {
+  width: 15px;
+  height: 15px;
+}
+
+.post-compose-media-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 46%, transparent);
+  color: #fff;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.post-compose-media-nav.is-prev {
+  left: 10px;
+}
+
+.post-compose-media-nav.is-next {
+  right: 10px;
+}
+
+.post-compose-media-nav svg {
+  width: 16px;
+  height: 16px;
+}
+
+.post-compose-audio-stage {
+  display: grid;
+  place-items: center;
+  width: min(100%, 22rem);
+  padding: 24px;
+}
+
+.post-compose-media-strip {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  min-height: 56px;
+  overflow-x: auto;
+  padding: 0 2px 2px;
+}
+
+.post-compose-media-thumb {
+  position: relative;
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--pc-line);
+  border-radius: 10px;
+  background: var(--pc-surface);
+  color: var(--pc-muted);
+  cursor: pointer;
+}
+
+.post-compose-media-thumb.is-current {
+  border-color: var(--pc-accent);
+}
+
+.post-compose-media-thumb.is-add {
+  display: grid;
+  place-items: center;
+}
+
+.post-compose-media-thumb img,
+.post-compose-media-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-compose-media-thumb svg {
+  width: 18px;
+  height: 18px;
+}
+
+.post-compose-media-thumb-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 72%, transparent);
+  color: #fff;
+}
+
+.post-compose-media-thumb-remove svg {
+  width: 10px;
+  height: 10px;
 }

@@ -1,12 +1,20 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   Bookmark,
+  ChevronLeft,
+  ChevronRight,
   Crown,
+  Folder,
+  Image as ImageIcon,
   Loader2,
+  Music2,
   Feather,
+  Plus,
   Send,
+  Upload,
+  X,
 } from "lucide-react";
 import {
   useEffect,
@@ -27,19 +35,34 @@ import {
   isRichComposerInputType,
   plainTextFromClipboard,
 } from "@/studio/lib/composerPasteIntelligence";
+import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { MediaLoadFrame } from "./media-load-frame";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { CaptionChipText } from "./CaptionChipText";
 import { mentionFallbackAvatarStyle } from "@/studio/lib/profileAvatar";
+import { StudioAssetPickerSheet } from "./StudioAssetPickerSheet";
+import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 
 type PostComposeTabProps = {
-  assetId: string;
+  assetId?: string;
   onCancel: () => void;
   onPublished: (args: { handle: string; postId: string }) => void;
 };
 
 const MAX_CAPTION = 2200;
+const MAX_POST_MEDIA = 6;
 const CHIP_CLASS = "post-compose-inline-chip";
+
+type PostMediaKind = "image" | "video" | "audio";
+
+type ComposeSlot = {
+  key: string;
+  assetId?: Id<"assets">;
+  kind: PostMediaKind;
+  name: string;
+  previewUrl?: string;
+  file?: File;
+};
 
 type InlineTrigger =
   | { kind: "hash"; query: string; start: number; end: number }
@@ -378,6 +401,13 @@ function getCaretMenuPosition(wrap: HTMLElement): { top: number; left: number } 
   return { top, left };
 }
 
+function fileMediaKind(file: File): PostMediaKind | null {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("audio/")) return "audio";
+  return null;
+}
+
 function PreviewCaption({
   caption,
   username,
@@ -425,20 +455,32 @@ function PreviewCaption({
 export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTabProps) {
   const captionId = useId();
   const shareAsset = useMutation(api.profiles.shareAsset);
+  const ensureStudioDefaults = useMutation(api.users.ensureStudioDefaults);
+  const reserveUpload = useMutation(api.assets.reserveUpload);
+  const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const myProfile = useQuery(api.profiles.getMine, { expiresUnix });
-  const assets = useQuery(api.assets.listByIds, {
-    assetIds: [assetId as Id<"assets">],
-    quality: "preview",
-    expiresUnix,
-  });
-  const asset = assets?.[0] ?? null;
-  const signedAsset = asset as
-    | (NonNullable<typeof asset> & {
+  const seedIds = assetId ? [assetId as Id<"assets">] : [];
+  const seededAssets = useQuery(
+    api.assets.listByIds,
+    seedIds.length ? { assetIds: seedIds, quality: "preview", expiresUnix } : "skip",
+  );
+  const seededAsset = seededAssets?.[0] ?? null;
+  const signedSeed = seededAsset as
+    | (NonNullable<typeof seededAsset> & {
         signedReadUrl?: string;
         signedThumbnailUrl?: string;
+        kind?: string;
       })
     | null;
+
+  const [slots, setSlots] = useState<ComposeSlot[]>([]);
+  const [slotIndex, setSlotIndex] = useState(0);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [choiceOpen, setChoiceOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const seededRef = useRef(false);
+  const slotsRef = useRef<ComposeSlot[]>([]);
 
   const [caption, setCaption] = useState("");
   const [caret, setCaret] = useState(0);
@@ -449,6 +491,33 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
   const [mentionMeta, setMentionMeta] = useState<Record<string, MentionMeta>>({});
   const editorRef = useRef<HTMLDivElement>(null);
   const suggestWrapRef = useRef<HTMLDivElement>(null);
+
+  slotsRef.current = slots;
+
+  useEffect(() => {
+    if (seededRef.current || !signedSeed) return;
+    const kind = signedSeed.kind;
+    if (kind !== "image" && kind !== "video" && kind !== "audio") return;
+    seededRef.current = true;
+    setSlots([
+      {
+        key: String(signedSeed._id),
+        assetId: signedSeed._id as Id<"assets">,
+        kind,
+        name: signedSeed.name,
+        previewUrl:
+          signedSeed.signedReadUrl || signedSeed.signedThumbnailUrl || undefined,
+      },
+    ]);
+  }, [signedSeed]);
+
+  useEffect(() => {
+    return () => {
+      for (const slot of slotsRef.current) {
+        if (slot.file && slot.previewUrl) URL.revokeObjectURL(slot.previewUrl);
+      }
+    };
+  }, []);
 
   const trigger = useMemo(() => getInlineTrigger(caption, caret), [caption, caret]);
 
@@ -463,13 +532,16 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
       : "skip",
   );
 
-  const previewUrl =
-    signedAsset?.signedReadUrl || signedAsset?.signedThumbnailUrl || undefined;
-  const isVideo = asset?.kind === "video";
-  const canPublish = Boolean(asset) && !publishing;
+  const current = slots[Math.min(slotIndex, Math.max(0, slots.length - 1))] ?? null;
+  const previewUrl = current?.previewUrl;
+  const isVideo = current?.kind === "video";
+  const isAudio = current?.kind === "audio";
+  const canPublish = slots.length > 0 && !publishing;
   const username = myProfile?.username;
   const avatarUrl = myProfile?.avatarUrl;
   const displayName = myProfile?.displayName;
+  const remaining = MAX_POST_MEDIA - slots.length;
+  const seeding = Boolean(assetId) && seededAssets === undefined;
 
   const showHashSuggest = trigger?.kind === "hash" && (hashSuggestions?.length ?? 0) > 0;
   const showPeopleSuggest =
@@ -732,11 +804,33 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
   }
 
   async function handlePublish() {
-    if (!canPublish || !asset) return;
+    if (!canPublish) return;
     setPublishing(true);
     try {
+      const defaults = await ensureStudioDefaults({});
+      const assetIds: Id<"assets">[] = [];
+      for (const slot of slots) {
+        if (slot.assetId) {
+          assetIds.push(slot.assetId);
+          continue;
+        }
+        if (!slot.file) continue;
+        const uploaded = await uploadStudioAsset({
+          file: slot.file,
+          folderId: defaults.rootFolderId,
+          kind: slot.kind,
+          name: slot.name || slot.file.name,
+          reserveUpload,
+          commitStagingUpload,
+        });
+        assetIds.push(uploaded);
+      }
+      if (assetIds.length === 0) {
+        toast.error("Add a photo, video, or audio first");
+        return;
+      }
       const result = await shareAsset({
-        assetId: asset._id,
+        assetIds,
         caption: caption.trim() || undefined,
       });
       const handle = result.publicUrlPath.replace(/^\/u\//, "");
@@ -747,6 +841,65 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
     } finally {
       setPublishing(false);
     }
+  }
+
+  function addFiles(list: FileList | File[] | null | undefined) {
+    if (!list) return;
+    const files = Array.from(list);
+    setSlots((prev) => {
+      const room = MAX_POST_MEDIA - prev.length;
+      if (room <= 0) return prev;
+      const next = [...prev];
+      for (const file of files) {
+        if (next.length >= MAX_POST_MEDIA) break;
+        const kind = fileMediaKind(file);
+        if (!kind) continue;
+        next.push({
+          key: `${file.name}:${file.size}:${file.lastModified}:${next.length}`,
+          file,
+          kind,
+          name: file.name,
+          previewUrl: URL.createObjectURL(file),
+        });
+      }
+      return next;
+    });
+    setChoiceOpen(false);
+  }
+
+  function addPickedAsset(pick: {
+    _id: string;
+    name: string;
+    kind: string;
+    signedThumbnailUrl?: string;
+  }) {
+    const kind = pick.kind;
+    if (kind !== "image" && kind !== "video" && kind !== "audio") return;
+    setSlots((prev) => {
+      if (prev.length >= MAX_POST_MEDIA) return prev;
+      if (prev.some((slot) => slot.assetId === pick._id)) return prev;
+      return [
+        ...prev,
+        {
+          key: pick._id,
+          assetId: pick._id as Id<"assets">,
+          kind,
+          name: pick.name,
+          previewUrl: pick.signedThumbnailUrl,
+        },
+      ];
+    });
+    setChoiceOpen(false);
+  }
+
+  function removeSlot(key: string) {
+    setSlots((prev) => {
+      const hit = prev.find((slot) => slot.key === key);
+      if (hit?.file && hit.previewUrl) URL.revokeObjectURL(hit.previewUrl);
+      const next = prev.filter((slot) => slot.key !== key);
+      setSlotIndex((i) => Math.max(0, Math.min(i, next.length - 1)));
+      return next;
+    });
   }
 
   const visibleMenu = menuOpen && !menuDismissed;
@@ -809,16 +962,44 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
         <div className="post-compose-mock" aria-label="Post preview">
           <div className="post-compose-mock-slide">
             <div className="post-compose-mock-media">
-              {!asset ? (
-                <div className="post-compose-preview-empty" aria-busy="true">
-                  Loading…
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*,audio/*"
+                multiple
+                hidden
+                onChange={(event) => {
+                  addFiles(event.target.files);
+                  event.currentTarget.value = "";
+                }}
+              />
+              {!current ? (
+                seeding ? (
+                  <div className="post-compose-preview-empty" aria-busy="true">
+                    Loading…
+                  </div>
+                ) : (
+                <button
+                  type="button"
+                  className="post-compose-media-empty"
+                  onClick={() => setChoiceOpen((open) => !open)}
+                >
+                  <span className="post-compose-media-empty-title">Add to this post</span>
+                  <span className="post-compose-media-empty-copy">
+                    Click anywhere to upload or choose up to {MAX_POST_MEDIA} photos, videos, or audio
+                  </span>
+                </button>
+                )
+              ) : isAudio && previewUrl ? (
+                <div className="post-compose-audio-stage">
+                  <StudioChatAudioPlayer src={previewUrl} title={current.name} />
                 </div>
               ) : isVideo && previewUrl ? (
                 <MediaLoadFrame
                   className="post-compose-mock-frame"
                   kind="video"
                   src={previewUrl}
-                  cacheKey={asset._id}
+                  cacheKey={current.key}
                   ratio="fill"
                 >
                   {({ onLoad, onError }) => (
@@ -838,17 +1019,63 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                   className="post-compose-mock-frame"
                   kind="image"
                   src={previewUrl}
-                  cacheKey={asset._id}
+                  cacheKey={current.key}
                   ratio="fill"
                 >
                   {({ onLoad, onError }) => (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={previewUrl} alt={asset.name} onLoad={onLoad} onError={onError} />
+                    <img src={previewUrl} alt={current.name} onLoad={onLoad} onError={onError} />
                   )}
                 </MediaLoadFrame>
               ) : (
-                <div className="post-compose-preview-empty">{asset.name}</div>
+                <div className="post-compose-preview-empty">{current.name}</div>
               )}
+              {choiceOpen ? (
+                <div className="post-compose-media-choice" role="menu">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChoiceOpen(false);
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    <Upload aria-hidden="true" />
+                    Upload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChoiceOpen(false);
+                      setPickerOpen(true);
+                    }}
+                  >
+                    <Folder aria-hidden="true" />
+                    Choose media
+                  </button>
+                </div>
+              ) : null}
+              {slots.length > 1 ? (
+                <>
+                  <button
+                    type="button"
+                    className="post-compose-media-nav is-prev"
+                    aria-label="Previous item"
+                    onClick={() =>
+                      setSlotIndex((i) => (i - 1 + slots.length) % slots.length)
+                    }
+                  >
+                    <ChevronLeft aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="post-compose-media-nav is-next"
+                    aria-label="Next item"
+                    onClick={() => setSlotIndex((i) => (i + 1) % slots.length)}
+                  >
+                    <ChevronRight aria-hidden="true" />
+                  </button>
+                </>
+              ) : null}
             </div>
 
             <PreviewCaption
@@ -894,6 +1121,51 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                 <span>0</span>
               </div>
             </div>
+          </div>
+          <div className="post-compose-media-strip" aria-label="Post media">
+            {slots.map((slot, index) => (
+              <button
+                key={slot.key}
+                type="button"
+                className={`post-compose-media-thumb${index === slotIndex ? " is-current" : ""}`}
+                aria-label={slot.name}
+                onClick={() => setSlotIndex(index)}
+              >
+                {slot.kind === "audio" ? (
+                  <Music2 aria-hidden="true" />
+                ) : slot.kind === "video" && slot.previewUrl ? (
+                  <video src={slot.previewUrl} muted playsInline />
+                ) : slot.previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={slot.previewUrl} alt="" />
+                ) : slot.kind === "video" ? (
+                  <ImageIcon aria-hidden="true" />
+                ) : (
+                  <ImageIcon aria-hidden="true" />
+                )}
+                <span
+                  className="post-compose-media-thumb-remove"
+                  role="button"
+                  aria-label={`Remove ${slot.name}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    removeSlot(slot.key);
+                  }}
+                >
+                  <X aria-hidden="true" />
+                </span>
+              </button>
+            ))}
+            {remaining > 0 ? (
+              <button
+                type="button"
+                className="post-compose-media-thumb is-add"
+                aria-label="Add media"
+                onClick={() => setChoiceOpen(true)}
+              >
+                <Plus aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -1020,6 +1292,21 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
           </div>
         </div>
       </div>
+      {pickerOpen ? (
+        <StudioAssetPickerSheet
+          title="Choose media"
+          kinds={["image", "video", "audio"]}
+          multi
+          stayOpen
+          maxSelected={MAX_POST_MEDIA}
+          selectedIds={slots.map((slot) => slot.assetId).filter(Boolean) as string[]}
+          countLabel={`${slots.length}/${MAX_POST_MEDIA}`}
+          expiresUnix={expiresUnix}
+          onPick={(asset) => addPickedAsset(asset)}
+          onClose={() => setPickerOpen(false)}
+          onDone={() => setPickerOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
