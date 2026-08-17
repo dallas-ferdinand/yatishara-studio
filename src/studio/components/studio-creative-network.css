@@ -1871,6 +1871,17 @@ button.studio-cn-book-bar-price.is-discussion.has-preview {
   --spa-size: 28px;
   --spa-font: 10px;
   flex: 0 0 auto;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  filter: none;
+}
+
+.studio-cn-book-bar-preview-avatar.studio-profile-avatar:not(:has(> .studio-profile-avatar-media)) {
+  background: transparent;
+  border-color: transparent;
 }
 
 .studio-cn-book-bar-preview-copy {
