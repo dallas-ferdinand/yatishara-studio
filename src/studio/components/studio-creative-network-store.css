@@ -229,7 +229,7 @@
   min-height: var(--cursor-head-h, 32px);
   height: var(--cursor-head-h, 32px);
   max-height: var(--cursor-head-h, 32px);
-  border-bottom: none;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
   background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel, #f5f5f7)));
 }
 
@@ -240,6 +240,9 @@
   height: 100%;
   min-height: 0;
   max-height: none;
+  border-top: none !important;
+  border-bottom: none !important;
+  background: transparent !important;
 }
 
 /* Full Files workspace only: switcher shares the search strip. */
@@ -253,7 +256,7 @@
   height: var(--cursor-head-h, 32px);
   max-height: var(--cursor-head-h, 32px);
   box-sizing: border-box;
-  border-bottom: none;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
   background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel, #f5f5f7)));
 }
 

@@ -1239,6 +1239,8 @@
 
 .profile-comments-search .cursor-panel-search {
   width: 100%;
+  /* Comments head already has the top divider.
+     Beat `.studio-polish .cursor-panel-search` which re-adds border-top. */
   border-top: none;
 }
 

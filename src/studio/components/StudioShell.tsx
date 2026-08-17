@@ -9937,8 +9937,8 @@ export function StudioShell({
             height: 15px;
           }
           .studio-polish.is-studio-mobile .cursor-panel-search {
-            min-height: var(--studio-mobile-nav-height, 44px);
-            height: var(--studio-mobile-nav-height, 44px);
+            min-height: var(--studio-mobile-chrome-control, 34px);
+            height: var(--studio-mobile-chrome-control, 34px);
           }
           .studio-polish.is-studio-mobile .desk-explorer-type-filter-trigger {
             font-size: 13px;
@@ -12100,12 +12100,16 @@ export function StudioShell({
         .studio-files-mobile-sheet .cursor-panel-search {
           flex: 0 0 auto;
           width: 100%;
+          border-top: none;
         }
         .studio-files-dock .studio-files-search-row .cursor-panel-search,
         .studio-files-mobile-sheet .studio-files-search-row .cursor-panel-search {
+          border-top: none !important;
+          border-bottom: none !important;
           width: auto;
           flex: 1 1 auto;
           min-width: 0;
+          background: transparent !important;
         }
         .studio-files-mobile-sheet .cursor-explorer-body,
         .studio-files-mobile-sheet .cursor-explorer-panel {
@@ -12118,10 +12122,12 @@ export function StudioShell({
         */
         .studio-polish .studio-files-mobile-sheet .studio-folder-pathbar,
         .studio-polish .studio-files-mobile-sheet .studio-files-search-row,
+        .studio-polish .studio-files-mobile-sheet .cursor-panel-search,
         .studio-polish .studio-files-mobile-sheet .cursor-explorer-body,
         .studio-polish .studio-files-mobile-sheet .cursor-explorer-panel,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .studio-folder-pathbar,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .studio-files-search-row,
+        [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-panel-search,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-explorer-body,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-explorer-panel {
           background: transparent !important;
@@ -12716,16 +12722,15 @@ export function StudioShell({
           border-left-color: var(--mos-plate, #ececf0) !important;
         }
         [data-appearance="light"] .studio-polish .studio-folder-pathbar,
+        [data-appearance="light"] .studio-polish .cursor-panel-search,
         [data-appearance="light"] .studio-polish .studio-files-search-row,
         [data-appearance="light"] .studio-polish .studio-files-source-toggle,
         [data-appearance="light"] .studio-polish .studio-files-chrome {
           background: var(--mos-panel, #f5f5f7) !important;
         }
-        [data-appearance="light"] .studio-polish .cursor-panel-search {
-          background: var(--mos-plate, #ececf0) !important;
-        }
         [data-appearance="light"] .studio-polish .cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-source-toggle,
-        [data-appearance="light"] .studio-polish .cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-search-row {
+        [data-appearance="light"] .studio-polish .cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-search-row,
+        [data-appearance="light"] .studio-polish .studio-files-search-row > .cursor-panel-search {
           background: transparent !important;
         }
         [data-appearance="light"] .studio-polish aside .cursor-panel-head,
@@ -17427,21 +17432,22 @@ export function StudioShell({
         .studio-polish .cursor-panel-search {
           min-height: 32px;
           height: 32px;
-          margin: 0;
           padding: 0 8px 0 10px;
-          border: 0;
-          border-radius: 0;
-          background: var(--mos-plate, var(--mos-panel, #ececf0));
+          border-top: 1px solid var(--studio-chrome-divider);
+          border-bottom: 1px solid var(--studio-chrome-divider);
+          background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
         }
+        /* Messages rail (Feed / My offers / My jobs): brand head already divides —
+           keep a single hairline, not a double top border on the search strip. */
+        .studio-polish .studio-dm-sidebar .cursor-panel-search {
+          border-top: none;
+        }
+        /* Files chrome owns the bottom hairline — search has no own borders. */
         .studio-polish .studio-files-search-row .cursor-panel-search,
         .studio-polish .studio-files-chrome .cursor-panel-search {
-          width: auto;
-          min-width: 0;
-          height: 100%;
-          min-height: 0;
-          max-height: none;
-          margin: 0;
-          background: var(--mos-plate, var(--mos-panel, #ececf0));
+          border-top: none !important;
+          border-bottom: none !important;
+          background: transparent !important;
         }
         .studio-polish .studio-files-search-row,
         .studio-polish .studio-files-source-toggle,
@@ -24106,12 +24112,16 @@ export function StudioShell({
         }
         .studio-history-chrome {
           flex: 0 0 auto;
-          border: 0;
+          border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
         }
         .studio-history-chrome .cursor-panel-search {
           margin: 0;
           border: 0;
           border-radius: 0;
+          min-height: 32px;
+          height: 32px;
+          background: transparent;
         }
         .studio-history-chrome .desk-explorer-type-filter {
           flex-shrink: 0;

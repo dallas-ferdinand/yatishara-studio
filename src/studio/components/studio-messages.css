@@ -3019,7 +3019,8 @@
   height: var(--studio-dm-chrome-glyph, 14px) !important;
 }
 
-/* Head already divides the rail — no extra top hairline on the search strip. */
+/* Brand head already draws the divider above — don't stack a second top border.
+   Beat `.studio-polish .cursor-panel-search` (same 0,2,0) which re-adds border-top. */
 .studio-polish .studio-dm-sidebar .cursor-panel-search,
 .studio-dm-sidebar .cursor-panel-search {
   border-top: none;
