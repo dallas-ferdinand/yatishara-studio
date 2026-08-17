@@ -12121,6 +12121,13 @@ export function StudioShell({
         aside.is-asset-picking .desk-file-list-row {
           touch-action: pan-y !important;
         }
+        /* Pickers hide Your files / Asset library, so search is the first chrome — needs a top hairline. */
+        .studio-files-dock.is-picking .studio-files-search-row,
+        .studio-files-mobile-sheet.is-picking .studio-files-search-row,
+        aside.is-asset-picking .studio-files-search-row,
+        .cursor-explorer-body.is-picking .studio-files-search-row {
+          border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+        }
         .studio-files-dock .studio-asset-pick-chrome,
         .studio-files-mobile-sheet .studio-asset-pick-chrome {
           flex: 0 0 auto;
@@ -36397,7 +36404,7 @@ function StudioFilesExplorerBody({
 
   return (
     <div
-      className={`cursor-explorer-body studio-files-drop-zone flex flex-col flex-1 min-h-0 overflow-hidden${dropOver ? " is-drop-target" : ""}${isNetworkMode ? " is-network-store" : ""}${chromeLayout === "workspace" ? " is-workspace-chrome" : " is-sidebar-chrome"}`}
+      className={`cursor-explorer-body studio-files-drop-zone flex flex-col flex-1 min-h-0 overflow-hidden${dropOver ? " is-drop-target" : ""}${isNetworkMode ? " is-network-store" : ""}${chromeLayout === "workspace" ? " is-workspace-chrome" : " is-sidebar-chrome"}${picking ? " is-picking" : ""}`}
       onDragOver={(event) => {
         if (isNetworkMode || !onDropFiles || !Array.from(event.dataTransfer.types).includes("Files")) return;
         event.preventDefault();
