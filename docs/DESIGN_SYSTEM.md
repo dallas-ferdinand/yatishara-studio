@@ -257,6 +257,7 @@ Do **not** invent one-off heights. Match siblings on the same surface.
 
 Rules:
 - On a public profile hero, Follow must match Hire Me / website chips (28×12), never a taller accent pill.
+- Feed watch caption Follow (next to the name) is the same 28px labeled chip — not a plus overlay on the avatar.
 - Prefer shared classes (`.public-profile-links a`, `.public-profile-follow`) over inline sizes.
 - Header bars stay exactly `--cursor-head-h` (32px); nest 24–28px chips inside, don’t grow the bar.
 - **In-rail / inline panel heads** (DM New/Edit label, assign sheets, secondary pane titles) use the

@@ -1019,6 +1019,13 @@
   filter: drop-shadow(0 1px 2px rgba(15, 18, 24, 0.18));
 }
 
+@media (max-width: 899px) {
+  .profile-post-watch-frame.is-portrait {
+    --post-max-h: min(48dvh, calc(100dvh - 18rem));
+    width: min(100%, calc(var(--post-max-h) * var(--post-aw) / var(--post-ah)));
+  }
+}
+
   .profile-post-slide.is-watch .profile-post-slide-media {
     position: absolute;
     inset: 0;
@@ -1056,7 +1063,6 @@
     flex: 0 0 auto;
     display: grid;
     justify-items: center;
-    padding-bottom: 6px;
   }
 
   .profile-post-caption-avatar.studio-profile-avatar {
@@ -1064,14 +1070,44 @@
     height: 36px;
   }
 
-  .profile-post-caption-avatar-wrap .profile-post-rail-follow {
-    width: 16px;
-    height: 16px;
+  .profile-post-follow-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    gap: 5px;
+    height: 28px;
+    min-height: 28px;
+    margin: 0;
+    padding: 0 10px;
+    border: 1px solid var(--mos-border, var(--color-cursor-border));
+    border-radius: 999px;
+    background: var(--mos-plate, var(--color-cursor-sidebar));
+    color: var(--color-cursor-text-bright, var(--mos-text));
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    cursor: pointer;
   }
 
-  .profile-post-caption-avatar-wrap .profile-post-rail-follow svg {
-    width: 10px;
-    height: 10px;
+  .profile-post-follow-icon {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    stroke-width: 2.25;
+  }
+
+  .profile-post-follow-btn.is-primary {
+    background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 20%, var(--mos-plate, var(--color-cursor-sidebar)));
+    border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 48%, var(--mos-border, var(--color-cursor-border)));
+  }
+
+  .profile-post-follow-btn.is-following {
+    background: var(--mos-plate, var(--color-cursor-sidebar));
+    border-color: var(--mos-border, var(--color-cursor-border));
   }
 
   .profile-post-caption.is-page .profile-post-caption-user,
@@ -1085,7 +1121,10 @@
 
   .profile-post-caption.is-page .profile-post-caption-user {
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 18px;
     font-weight: 750;
     letter-spacing: -0.02em;

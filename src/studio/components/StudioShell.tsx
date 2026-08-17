@@ -10522,7 +10522,7 @@ export function StudioShell({
         @media (hover: hover) {
           /* Feed like/save/share keep their own ink; bright hover must not
              override liked red / saved gold while the pointer stays down. */
-          .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover):not(.profile-post-rail-btn):not(.profile-post-rail-follow):not(.profile-post-book-btn):not(.profile-post-caption-user):not(.profile-comments-post-action):not(.profile-comment-like) :where(svg, .icon-inline) {
+          .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover):not(.profile-post-rail-btn):not(.profile-post-rail-follow):not(.profile-post-follow-btn):not(.profile-post-book-btn):not(.profile-post-caption-user):not(.profile-comments-post-action):not(.profile-comment-like) :where(svg, .icon-inline) {
             color: var(--color-cursor-text-bright) !important;
           }
         }
@@ -32886,6 +32886,7 @@ const STUDIO_TAP_SFX_SELECTOR = [
   ".studio-dm-row",
   ".profile-post-rail-btn",
   ".profile-post-rail-follow",
+  ".profile-post-follow-btn",
   ".profile-post-book-btn",
   ".profile-post-caption-user",
   ".profile-comments-post-action",

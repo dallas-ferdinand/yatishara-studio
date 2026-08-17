@@ -15,6 +15,8 @@ import {
   Play,
   Plus,
   Send,
+  UserMinus,
+  UserPlus,
 } from "lucide-react";
 import {
   useCallback,
@@ -637,6 +639,7 @@ function FeedMedia({
     if (!(frame instanceof HTMLElement)) return;
     frame.style.setProperty("--post-aw", String(aspectW));
     frame.style.setProperty("--post-ah", String(aspectH));
+    frame.classList.toggle("is-portrait", aspectH > aspectW);
   }, [aspectW, aspectH]);
 
   return (
@@ -885,33 +888,6 @@ function FeedCaption({
               onClick={() => onOpenProfile?.(username)}
               aria-label={`Open @${username}`}
             />
-            {showFollow ? (
-              <span
-                className={`profile-post-rail-follow${isFollowing ? " is-following" : ""}`}
-                role="button"
-                tabIndex={0}
-                data-studio-sfx="follow"
-                aria-label={
-                  isFollowing ? `Unfollow @${username}` : `Follow @${username}`
-                }
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleFollow?.();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onToggleFollow?.();
-                }}
-              >
-                {isFollowing ? (
-                  <Check aria-hidden="true" strokeWidth={3} />
-                ) : (
-                  <Plus aria-hidden="true" strokeWidth={3} />
-                )}
-              </span>
-            ) : null}
           </span>
           <button
             type="button"
@@ -920,6 +896,27 @@ function FeedCaption({
           >
             {authorDisplayName || username}
           </button>
+          {showFollow ? (
+            <button
+              type="button"
+              className={`profile-post-follow-btn${isFollowing ? " is-following" : " is-primary"}`}
+              data-studio-sfx="follow"
+              aria-label={
+                isFollowing ? `Unfollow @${username}` : `Follow @${username}`
+              }
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleFollow?.();
+              }}
+            >
+              {isFollowing ? (
+                <UserMinus className="profile-post-follow-icon" aria-hidden="true" />
+              ) : (
+                <UserPlus className="profile-post-follow-icon" aria-hidden="true" />
+              )}
+              <span>{isFollowing ? "Unfollow" : "Follow"}</span>
+            </button>
+          ) : null}
         </div>
       ) : username ? (
         <span className="profile-post-caption-user">
@@ -2169,7 +2166,13 @@ export function ProfilePostViewer({
               >
                 <div className="profile-post-watch-player">
                     <div
-                      className="profile-post-watch-frame"
+                      className={`profile-post-watch-frame${
+                        post.width &&
+                        post.height &&
+                        post.height > post.width
+                          ? " is-portrait"
+                          : ""
+                      }`}
                       style={postAspectVars(post)}
                     >
                       <FeedMedia
