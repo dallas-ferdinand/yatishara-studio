@@ -1827,6 +1827,37 @@ button.studio-cn-card-btn.public-offers-card {
   min-height: 0;
 }
 
+.studio-cn-book-sheet.is-academy-comments .studio-cn-book-sheet-body,
+.studio-cn-book-sheet.is-profile-comments .studio-cn-book-sheet-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.studio-cn-book-sheet.is-academy-comments .profile-comments-sheet-fill,
+.studio-cn-book-sheet.is-profile-comments .profile-comments-sheet-fill {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-cn-book-sheet.is-academy-comments .profile-comments-list,
+.studio-cn-book-sheet.is-profile-comments .profile-comments-list {
+  flex: 1 1 auto;
+}
+
+.studio-cn-book-sheet.is-academy-comments .profile-comments-composer,
+.studio-cn-book-sheet.is-profile-comments .profile-comments-composer,
+.studio-cn-book-sheet.is-academy-comments .profile-comments-composer.is-sheet-composer,
+.studio-cn-book-sheet.is-profile-comments .profile-comments-composer.is-sheet-composer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
 .studio-academy-lessons-sheet-btn {
   display: inline-flex;
   align-items: center;

@@ -9594,7 +9594,7 @@ export function StudioShell({
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-cn-book-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -10497,7 +10497,7 @@ export function StudioShell({
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-cn-book-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -11626,7 +11626,8 @@ export function StudioShell({
         .studio-files-dock-handle,
         .studio-files-nav-mobile-sheet-handle,
         .studio-explorer-context-sheet .studio-mobile-app-menu-sheet-handle,
-        .profile-comments-sheet .studio-mobile-app-menu-sheet-handle {
+        .profile-comments-sheet .studio-mobile-app-menu-sheet-handle,
+        .studio-cn-book-sheet-handle {
           background: var(--mos-plate, var(--mos-panel, #ececf0)) !important;
           border: 0 !important;
           box-shadow: none !important;

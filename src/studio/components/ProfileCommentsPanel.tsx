@@ -28,6 +28,7 @@ import { playUiSound } from "@/mos-app/sounds.js";
 import { formatPostWhen } from "@/studio/lib/formatPostWhen";
 import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
+import { StudioCnBookSheet } from "@/studio/components/StudioCnBookSheet";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { useStudioComposerResize } from "@/studio/lib/composerHeight";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
@@ -1671,8 +1672,8 @@ export function ProfileCommentsPanel({
       lessonId={lessonId}
       commentCount={commentCount}
       onCommentCountChange={onCommentCountChange}
-      showRootHeader={isMobile}
-      showClose={isMobile}
+      showRootHeader={isMobile && !courseId}
+      showClose={false}
       onClose={onClose}
       variant={isMobile ? "sheet" : "dock"}
       postAuthor={useSidebarChrome ? undefined : postAuthor}
@@ -1755,22 +1756,17 @@ export function ProfileCommentsPanel({
   if (!open || !portalRoot) return null;
 
   return createPortal(
-    <div
-      className="profile-comments-sheet"
-      role="dialog"
-      aria-modal="true"
-      aria-label={showingDescription ? "Description" : "Comments"}
+    <StudioCnBookSheet
+      open={open}
+      onClose={dismissSheet}
+      ariaLabel={showingDescription ? "Description" : "Comments"}
+      className={courseId ? "is-academy-comments" : "is-profile-comments"}
+      backLayerId={courseId ? "academy-comments-sheet" : "profile-comments-sheet"}
     >
-      <button
-        type="button"
-        className="profile-comments-dismiss"
-        aria-label={showingDescription ? "Back to comments" : "Close comments"}
-        onClick={dismissSheet}
-      />
-      <aside className="profile-comments-panel is-sheet">
+      <div className="profile-comments-sheet-fill">
         {descriptionPanel ?? commentsBody}
-      </aside>
-    </div>,
+      </div>
+    </StudioCnBookSheet>,
     portalRoot,
   );
 }
