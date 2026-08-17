@@ -1714,20 +1714,16 @@
 
 .profile-comments-head-meta {
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   margin-left: auto;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1;
+  pointer-events: none;
 }
 
-.profile-comments-head-meta svg {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
+.profile-comments-head .profile-comments-head-meta .profile-post-book-label {
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.profile-comments-head .profile-comments-head-meta .profile-post-book-count {
+  color: var(--color-cursor-muted, var(--mos-muted));
 }
 
 .profile-comments-post-actions {
@@ -3326,6 +3322,10 @@ button.post-compose-inline-chip.profile-description-chip {
 
 [data-appearance="light"] .profile-comments-head span {
   color: var(--color-cursor-muted, color-mix(in srgb, #0f172a 55%, transparent));
+}
+
+[data-appearance="light"] .profile-comments-head .profile-comments-head-meta .profile-post-book-label {
+  color: var(--color-cursor-text-bright, #0f172a);
 }
 
 [data-appearance="light"] .profile-comments-inputline {

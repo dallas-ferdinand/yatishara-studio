@@ -1323,7 +1323,6 @@ function FeedActions({
             <>
               {saveBtn}
               {shareBtn}
-              {contributeBtn}
               {boostBtn}
             </>
           )}

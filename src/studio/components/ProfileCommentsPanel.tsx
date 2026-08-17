@@ -1439,11 +1439,12 @@ function CommentsBody({
           )}
           {!inThread && variant === "dock" ? (
             <span
-              className="profile-comments-head-meta"
+              className="profile-post-book-btn is-labeled profile-comments-head-meta"
               aria-label={`${formatCount(commentCount)} comments`}
             >
               <Feather aria-hidden="true" strokeWidth={2} />
-              <span>{formatCount(commentCount)}</span>
+              <span className="profile-post-book-label">Contribute</span>
+              <span className="profile-post-book-count">{formatCount(commentCount)}</span>
             </span>
           ) : !inThread && postActions ? (
             <div className="profile-comments-post-actions">

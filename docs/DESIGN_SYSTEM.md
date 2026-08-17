@@ -257,7 +257,7 @@ Do **not** invent one-off heights. Match siblings on the same surface.
 
 Rules:
 - On a public profile hero, Follow must match Hire Me / website chips (28×12), never a taller accent pill.
-- Feed watch caption Follow is a 28px idle bordered pill on the **right** of the name/time stack — not accent/`is-primary`, not a plus on the avatar. Boost and Contribute live in the book bar (desktop top header, mobile bottom). Desktop book bar: labeled Save, Share, Contribute on the left; labeled Boost on the right. Mobile keeps Boost, Contribute, then icon Save/Share. Book bar pad matches other 32px heads (`0 8px 0 10px`), not the player’s 20px. Time under the name uses the same `ago · date` stamp as comments. Owner Pencil edits the caption inline on the page (desktop and mobile; not in the comments sidebar). Overflowing watch descriptions click-to-scroll internally (same as prompt Copy fences); hover/idle wheel still drives the feed. Description fills to the bottom edge with Academy-style 36px fades under the video, at the top of the scrollable copy, and at the bottom.
+- Feed watch caption Follow is a 28px idle bordered pill on the **right** of the name/time stack — not accent/`is-primary`, not a plus on the avatar. Boost lives in the book bar (desktop top header, mobile bottom). Desktop book bar: labeled Save and Share on the left; labeled Boost on the right. Contribute is not in the desktop bar — it stays in the comments sidebar head as a 28px labeled pill (Feather + Contribute + count). Mobile keeps Boost, Contribute, then icon Save/Share. Book bar pad matches other 32px heads (`0 8px 0 10px`), not the player’s 20px. Time under the name uses the same `ago · date` stamp as comments. Owner Pencil edits the caption inline on the page (desktop and mobile; not in the comments sidebar). Overflowing watch descriptions click-to-scroll internally (same as prompt Copy fences); hover/idle wheel still drives the feed. Description fills to the bottom edge with Academy-style 36px fades under the video, at the top of the scrollable copy, and at the bottom.
 - Prefer shared classes (`.public-profile-links a`, `.public-profile-follow`) over inline sizes.
 - Header bars stay exactly `--cursor-head-h` (32px); nest 24–28px chips inside, don’t grow the bar.
 - **In-rail / inline panel heads** (DM New/Edit label, assign sheets, secondary pane titles) use the
@@ -619,12 +619,13 @@ Memory: **727**.
 
 **Desktop post + comments** (`ProfilePostViewer` / `profile-post-viewer.css`): same
 watch layout as mobile — native-ratio player, avatar in the title — except the
-Boost / Contribute book bar sits at the **top** of the feed column as a 32px
+Boost book bar sits at the **top** of the feed column as a 32px
 secondary header (`--cursor-head-h`, `padding: 0 8px 0 10px`, bottom hairline).
-Mobile keeps that bar at the bottom with the same inset. Overflowing watch
+Desktop left: labeled Save + Share; right: labeled Boost. Contribute is the
+comments sidebar head pill, not a bar button. Mobile keeps that bar at the bottom with the same inset. Overflowing watch
 descriptions use click-to-scroll (`.is-scroll-active`) like `.md` Copy fences,
-flush to the bottom edge with Academy under-video + bottom fades. Desktop comments head matches Academy: 20px avatar, name, Feather contribute
-count — not Boost/Save/time (those stay on the watch card / book bar). Head is
+flush to the bottom edge with Academy under-video + bottom fades. Desktop comments head: 20px avatar, name, and a 28px Contribute pill
+(Feather + label + count) — not Boost/Save/time. Head is
 `--cursor-head-h` with a bottom hairline; Search comments keeps its bottom
 hairline (no extra top line under the head). Comments rail is a flat `--mos-panel` column with a left
 hairline (like other Studio sidebars). Light mode: post stage L1 `--mos-page`
