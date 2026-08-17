@@ -213,7 +213,21 @@ function isWatchFeedGestureTarget(target: EventTarget | null): boolean {
   ) {
     return false;
   }
+  // Armed description scrolls internally (prompt Copy fence pattern).
+  if (
+    target.closest(
+      ".profile-post-caption.is-page.is-scroll-active .profile-post-caption-text",
+    )
+  ) {
+    return false;
+  }
   return Boolean(target.closest(".profile-post-watch-stack"));
+}
+
+function captionScrollSurface(caption: HTMLElement): HTMLElement {
+  return (
+    caption.querySelector<HTMLElement>(".profile-post-caption-text") ?? caption
+  );
 }
 
 /** Collect up to `count` unique neighbors in one direction, wrapping the list. */
@@ -871,11 +885,68 @@ function FeedCaption({
   };
 }) {
   const updateCaption = useMutation(api.profiles.updatePostCaption);
+  const captionRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(caption ?? "");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const trimmed = caption?.trim();
+
+  useLayoutEffect(() => {
+    if (placement !== "page" || editing) return undefined;
+    const host = captionRef.current;
+    if (!host) return undefined;
+
+    const syncClip = () => {
+      const surface = captionScrollSurface(host);
+      const clipped = surface.scrollHeight > surface.clientHeight + 1;
+      host.classList.toggle("is-clipped", clipped);
+      if (!clipped) host.classList.remove("is-scroll-active");
+    };
+    syncClip();
+    const ro = new ResizeObserver(syncClip);
+    ro.observe(host);
+    const surface = captionScrollSurface(host);
+    if (surface !== host) ro.observe(surface);
+
+    const setActive = () => {
+      const next = captionScrollSurface(host);
+      if (next.scrollHeight <= next.clientHeight + 1) return;
+      host.classList.add("is-scroll-active");
+      if (!host.hasAttribute("tabindex")) host.setAttribute("tabindex", "-1");
+    };
+    const clearActive = () => host.classList.remove("is-scroll-active");
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("button, a, textarea, input, [contenteditable='true']")) {
+        return;
+      }
+      if (!target.closest(".profile-post-caption-text")) return;
+      setActive();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") clearActive();
+    };
+    const onDocPointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (host.contains(event.target)) return;
+      clearActive();
+    };
+
+    host.addEventListener("pointerdown", onPointerDown);
+    host.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    return () => {
+      ro.disconnect();
+      host.removeEventListener("pointerdown", onPointerDown);
+      host.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onDocPointerDown, true);
+      host.classList.remove("is-scroll-active", "is-clipped");
+    };
+  }, [placement, editing, trimmed]);
 
   useEffect(() => {
     if (!editing) setDraft(caption ?? "");
@@ -910,6 +981,7 @@ function FeedCaption({
 
   return (
     <div
+      ref={placement === "page" ? captionRef : undefined}
       className={`profile-post-caption${
         placement === "page" ? " is-page" : ""
       }${editing ? " is-editing" : ""}${onOpenDescription ? " is-tappable" : ""}${feedShare && !editing ? " is-draggable" : ""}`}
@@ -1843,11 +1915,16 @@ export function ProfilePostViewer({
         return;
       }
       if (Math.abs(deltaY) < 8) return;
-      if (captionEl && captionEl.scrollHeight > captionEl.clientHeight + 1) {
-        const atTop = captionEl.scrollTop <= 0;
-        const atBottom =
-          captionEl.scrollTop + captionEl.clientHeight >= captionEl.scrollHeight - 1;
-        if ((deltaY < 0 && !atTop) || (deltaY > 0 && !atBottom)) return;
+      if (
+        captionEl?.classList.contains("is-scroll-active")
+      ) {
+        const surface = captionScrollSurface(captionEl);
+        if (surface.scrollHeight > surface.clientHeight + 1) {
+          const atTop = surface.scrollTop <= 0;
+          const atBottom =
+            surface.scrollTop + surface.clientHeight >= surface.scrollHeight - 1;
+          if ((deltaY < 0 && !atTop) || (deltaY > 0 && !atBottom)) return;
+        }
       }
       event.preventDefault();
       event.stopPropagation();

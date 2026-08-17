@@ -1041,8 +1041,7 @@
     min-height: 0;
     max-width: none;
     width: 100%;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
     touch-action: none;
     padding: 16px 16px 16px;
     gap: 10px;
@@ -1183,15 +1182,30 @@
 
   .profile-post-caption.is-page .profile-post-caption-text {
     display: block;
+    flex: 1 1 auto;
+    min-height: 0;
     font-size: 14px;
     line-height: 1.45;
     white-space: pre-wrap;
     -webkit-line-clamp: unset;
     line-clamp: unset;
     max-height: none;
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: hidden;
     text-overflow: unset;
     pointer-events: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .profile-post-caption.is-page.is-clipped:not(.is-scroll-active) .profile-post-caption-text {
+    mask-image: linear-gradient(to bottom, #000 0%, #000 78%, transparent 100%);
+  }
+
+  .profile-post-caption.is-page.is-scroll-active .profile-post-caption-text {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    mask-image: none;
   }
 
   .profile-post-slide.is-watch .profile-post-caption.is-page.is-editing {
@@ -1233,7 +1247,7 @@
     height: var(--studio-mobile-nav-height, 38px);
     min-height: var(--studio-mobile-nav-height, 38px);
     max-height: var(--studio-mobile-nav-height, 38px);
-    padding: 0 10px;
+    padding: 0 8px 0 10px;
     border: 0;
     border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
     background: var(--mos-page, var(--mos-panel, var(--color-cursor-bg)));
@@ -1360,7 +1374,7 @@
     height: var(--cursor-head-h, 32px);
     min-height: var(--cursor-head-h, 32px);
     max-height: var(--cursor-head-h, 32px);
-    padding: 0 20px;
+    padding: 0 8px 0 10px;
     border-top: 0;
     border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
   }
