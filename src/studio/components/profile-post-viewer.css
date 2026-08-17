@@ -1905,6 +1905,16 @@ button.post-compose-inline-chip.profile-description-chip {
   font-size: 13px;
 }
 
+.profile-comments-empty.is-first {
+  gap: 10px;
+}
+
+.profile-comments-empty-avatar.studio-profile-avatar {
+  --spa-size: 48px;
+  --spa-font: 16px;
+  margin-bottom: 2px;
+}
+
 .profile-comments-empty-icon {
   width: 28px;
   height: 28px;

@@ -1228,6 +1228,13 @@ export function StudioAcademyPane({
       ),
     [discussionPreviewRows, videoTick, videoHeard, previewSeed],
   );
+  const myProfile = useQuery(
+    api.profiles.getMine,
+    isMobile && owned && detail?._id
+      ? { expiresUnix: previewExpiresUnix }
+      : "skip",
+  );
+  const discussionEmpty = owned && !discussionPreview && commentCount === 0;
   const commentsSidebarTitle =
     commentsLessonId && selectedLesson
       ? selectedLesson.title
@@ -1992,11 +1999,15 @@ export function StudioAcademyPane({
           ) : (
             <button
               type="button"
-              className={`studio-cn-book-bar-price is-discussion${discussionPreview ? " has-preview" : ""}`}
+              className={`studio-cn-book-bar-price is-discussion${
+                discussionPreview || discussionEmpty ? " has-preview" : ""
+              }`}
               aria-label={
                 discussionPreview
                   ? `${discussionPreview.displayName}: ${discussionPreviewText(discussionPreview)}`
-                  : "Open comments"
+                  : discussionEmpty
+                    ? "Be the first to comment"
+                    : "Open comments"
               }
               onClick={() => setCommentsOpen(true)}
             >
@@ -2023,25 +2034,46 @@ export function StudioAcademyPane({
                     <span>{discussionPreviewText(discussionPreview)}</span>
                   </span>
                 </>
+              ) : discussionEmpty ? (
+                <>
+                  <StudioProfileAvatar
+                    className="studio-cn-book-bar-preview-avatar"
+                    size="sm"
+                    src={myProfile?.avatarUrl}
+                    initials={profileNameInitials({
+                      displayName: myProfile?.displayName,
+                      name: myProfile?.username,
+                    })}
+                    displayName={myProfile?.displayName}
+                    name={myProfile?.username}
+                  />
+                  <span className="studio-cn-book-bar-preview-copy">
+                    <strong>
+                      {myProfile?.displayName ||
+                        (myProfile?.username
+                          ? `@${myProfile.username}`
+                          : "You")}
+                    </strong>
+                    <span>Be the first to comment</span>
+                  </span>
+                </>
               ) : (
                 <span>Discussion</span>
               )}
             </button>
           )}
           <div className="studio-cn-book-bar-actions">
-            <button
-              type="button"
-              className="studio-cn-book-bar-msg is-with-count"
-              aria-label={
-                commentCount
-                  ? `Comments, ${commentCount}`
-                  : "Open comments"
-              }
-              onClick={() => setCommentsOpen(true)}
-            >
-              <MessageCircle aria-hidden="true" strokeWidth={2} />
-              <span>{commentCount}</span>
-            </button>
+            {commentCount > 0 ? (
+              <button
+                type="button"
+                className="studio-cn-book-bar-msg is-with-count"
+                aria-label={`Comments, ${commentCount}`}
+                onClick={() => setCommentsOpen(true)}
+              >
+                <MessageCircle aria-hidden="true" strokeWidth={2} />
+                <span>{commentCount}</span>
+              </button>
+            ) : null}
             {!owned ? (
               <button
                 type="button"

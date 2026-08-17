@@ -611,6 +611,7 @@ function CommentsBody({
   showClose,
   onClose,
   variant,
+  open = true,
   postAuthor,
   postActions,
   onEditDescription,
@@ -627,6 +628,8 @@ function CommentsBody({
   showClose: boolean;
   onClose?: () => void;
   variant: "sheet" | "dock";
+  /** Mobile sheet open — used to focus the composer when the thread is empty. */
+  open?: boolean;
   postAuthor?: PostAuthorInfo;
   postActions?: PostActionsInfo;
   onEditDescription?: () => void;
@@ -663,6 +666,11 @@ function CommentsBody({
     Record<string, { liked: boolean; likeCount: number }>
   >({});
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const myProfile = useQuery(
+    api.profiles.getMine,
+    auth.isAuthenticated ? { expiresUnix } : "skip",
+  );
   const [recState, setRecState] = useState<
     "idle" | "recording" | "paused" | "sending"
   >("idle");
@@ -1311,6 +1319,26 @@ function CommentsBody({
 
   const repliesLoading = comments === undefined;
   const repliesEmpty = comments !== undefined && comments.length === 0;
+  const showFirstCommentPrompt =
+    repliesEmpty && !searching && !locked && !inThread;
+  const showFirstReplyPrompt = repliesEmpty && !searching && !locked && inThread;
+
+  useEffect(() => {
+    if (variant !== "sheet" || !open) return;
+    if (!showFirstCommentPrompt || !auth.isAuthenticated) return;
+    const node = composerTextareaRef.current;
+    if (!node) return;
+    const timer = window.setTimeout(() => {
+      node.focus({ preventScroll: true });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [
+    auth.isAuthenticated,
+    open,
+    showFirstCommentPrompt,
+    variant,
+  ]);
+
   const listClass = [
     "profile-comments-list",
     inThread && parent ? " has-parent" : "",
@@ -1485,26 +1513,38 @@ function CommentsBody({
               <Loader2 className="profile-comments-empty-spin" aria-hidden="true" />
             </div>
           ) : repliesEmpty ? (
-            <div className="profile-comments-empty">
-              <MessageCircle className="profile-comments-empty-icon" aria-hidden="true" />
+            <div
+              className={`profile-comments-empty${
+                showFirstCommentPrompt || showFirstReplyPrompt ? " is-first" : ""
+              }`}
+            >
+              {showFirstCommentPrompt || showFirstReplyPrompt ? (
+                <StudioProfileAvatar
+                  className="profile-comments-empty-avatar"
+                  size="lg"
+                  src={myProfile?.avatarUrl}
+                  displayName={myProfile?.displayName}
+                  name={myProfile?.username}
+                />
+              ) : (
+                <MessageCircle className="profile-comments-empty-icon" aria-hidden="true" />
+              )}
               <p>
                 {searching
                   ? "No matching comments"
                   : inThread
-                    ? "No replies yet"
-                    : locked
-                      ? "No comments yet"
-                      : "No comments yet"}
-              </p>
-              <span>
-                {searching
-                  ? "Try another name or phrase"
-                  : inThread
                     ? "Be the first to reply"
                     : locked
-                      ? "Unlock the course to join the discussion"
-                      : "Be the first to say something"}
-              </span>
+                      ? "No comments yet"
+                      : "Be the first to comment"}
+              </p>
+              {searching || locked ? (
+                <span>
+                  {searching
+                    ? "Try another name or phrase"
+                    : "Unlock the course to join the discussion"}
+                </span>
+              ) : null}
             </div>
           ) : commentSort === "newest" ? (
             buildNewestCommentItems(comments).map((item) =>
@@ -1630,6 +1670,7 @@ function CommentsBody({
               </>
             ) : (
               <textarea
+                ref={composerTextareaRef}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
@@ -2266,6 +2307,7 @@ export function ProfileCommentsPanel({
       showClose={false}
       onClose={onClose}
       variant={isMobile ? "sheet" : "dock"}
+      open={open}
       postAuthor={useSidebarChrome ? undefined : postAuthor}
       postActions={postId ? postActions : undefined}
       onEditDescription={
