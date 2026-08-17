@@ -427,6 +427,22 @@ function ProfileCommentBubble({
                 </div>
               </div>
               <div className="profile-comment-bubble-copy">
+              {typeof comment.videoTimeSec === "number" &&
+              Number.isFinite(comment.videoTimeSec) ? (
+                <button
+                  type="button"
+                  className="profile-comment-video-time"
+                  aria-label={`Jump to ${formatVideoTimecode(comment.videoTimeSec)} in video`}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSeekVideo?.(comment.videoTimeSec!);
+                  }}
+                  disabled={!onSeekVideo}
+                >
+                  {formatVideoTimecode(comment.videoTimeSec)}
+                </button>
+              ) : null}
               {comment.body ? <p>{comment.body}</p> : null}
               {comment.imageUrl ? (
                 <button
@@ -472,18 +488,6 @@ function ProfileCommentBubble({
                     ) : null}
                   </button>
                 )}
-                {typeof comment.videoTimeSec === "number" &&
-                Number.isFinite(comment.videoTimeSec) ? (
-                  <button
-                    type="button"
-                    className="profile-comment-video-time"
-                    aria-label={`Jump to ${formatVideoTimecode(comment.videoTimeSec)} in video`}
-                    onClick={() => onSeekVideo?.(comment.videoTimeSec!)}
-                    disabled={!onSeekVideo}
-                  >
-                    {formatVideoTimecode(comment.videoTimeSec)}
-                  </button>
-                ) : null}
                 {!locked ? (
                   <button
                     type="button"
