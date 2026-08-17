@@ -1830,17 +1830,16 @@ button.studio-cn-card-btn.public-offers-card {
 .studio-academy-lessons-sheet-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: var(--studio-mobile-chrome-control, 34px);
+  justify-content: center;
+  width: var(--studio-mobile-chrome-control, 34px);
+  min-width: var(--studio-mobile-chrome-control, 34px);
   height: var(--studio-mobile-chrome-control, 34px);
-  padding: 0 12px;
+  min-height: var(--studio-mobile-chrome-control, 34px);
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
   border-radius: 999px;
   background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
   color: var(--color-cursor-text-bright, var(--mos-text));
-  font: inherit;
-  font-size: 12px;
-  font-weight: 650;
   cursor: pointer;
 }
 

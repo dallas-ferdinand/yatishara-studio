@@ -1340,7 +1340,7 @@ export function StudioAcademyPane({
       >
         <button
           type="button"
-          className={`studio-cn-head-tab${academy.listTab === "catalog" && !detailOpen ? " is-active" : ""}`}
+          className={`studio-cn-head-tab${academy.listTab === "catalog" || detailOpen ? " is-active" : ""}`}
           onClick={() => {
             if (detailOpen) {
               academy.backToCatalog();
@@ -1354,19 +1354,21 @@ export function StudioAcademyPane({
           ) : (
             <GraduationCap aria-hidden="true" />
           )}
-          {detailOpen ? "Back to Academy" : "Courses"}
+          {detailOpen ? "Back" : "Courses"}
         </button>
-        <button
-          type="button"
-          className={`studio-cn-head-tab${academy.listTab === "mine" && !detailOpen ? " is-active" : ""}`}
-          onClick={() => {
-            academy.setListTab("mine");
-            academy.backToCatalog();
-          }}
-        >
-          <Library aria-hidden="true" />
-          My courses
-        </button>
+        {detailOpen ? null : (
+          <button
+            type="button"
+            className={`studio-cn-head-tab${academy.listTab === "mine" ? " is-active" : ""}`}
+            onClick={() => {
+              academy.setListTab("mine");
+              academy.backToCatalog();
+            }}
+          >
+            <Library aria-hidden="true" />
+            My courses
+          </button>
+        )}
       </nav>
       {isMobile && detailOpen && academy.courseId ? (
         <div className="studio-cn-head-action">
@@ -1378,7 +1380,6 @@ export function StudioAcademyPane({
             onClick={() => setLessonsSheetOpen(true)}
           >
             <ListVideo aria-hidden="true" />
-            <span>Lessons</span>
           </button>
         </div>
       ) : null}
