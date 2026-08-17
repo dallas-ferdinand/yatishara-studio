@@ -151,6 +151,15 @@ function commentClock(ts: number): string {
   });
 }
 
+function commentPostedAt(ts: number): string {
+  const date = new Date(ts);
+  const day = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `${day}, ${commentClock(ts)}`;
+}
+
 function formatPostStamp(publishedAt: number, editedAt?: number): string {
   const when = formatPostWhen(publishedAt);
   return editedAt ? `${when} · edited` : when;
@@ -427,6 +436,9 @@ function ProfileCommentBubble({
             <div className="profile-comment-bubble">
               <div className="profile-comment-meta">
                 <strong>{label}</strong>
+                <time dateTime={new Date(comment.createdAt).toISOString()}>
+                  {commentPostedAt(comment.createdAt)}
+                </time>
               </div>
               <div className="profile-comment-bubble-copy">
               {comment.body ? <p>{comment.body}</p> : null}
@@ -485,14 +497,7 @@ function ProfileCommentBubble({
                   >
                     {formatVideoTimecode(comment.videoTimeSec)}
                   </button>
-                ) : (
-                  <time
-                    className="profile-comment-stamp"
-                    dateTime={new Date(comment.createdAt).toISOString()}
-                  >
-                    {commentClock(comment.createdAt)}
-                  </time>
-                )}
+                ) : null}
                 {!locked ? (
                   <button
                     type="button"

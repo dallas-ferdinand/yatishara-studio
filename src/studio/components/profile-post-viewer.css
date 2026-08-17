@@ -2051,9 +2051,17 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comment-meta {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   gap: 6px;
   min-width: 0;
+}
+
+.profile-comment-meta time {
+  color: var(--color-cursor-muted, color-mix(in srgb, currentColor 48%, transparent));
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .profile-comment-bubble-copy {
@@ -2103,14 +2111,11 @@ button.post-compose-inline-chip.profile-description-chip {
   font-weight: 650;
 }
 
-.profile-comment-bubble-actions .profile-comment-like svg {
+.profile-comment-bubble-actions .profile-comment-like svg,
+.profile-comment-bubble-actions .profile-comment-reply svg {
   width: 20px;
   height: 20px;
-}
-
-.profile-comment-bubble-actions .profile-comment-reply svg {
-  width: 16px;
-  height: 16px;
+  stroke-width: 2;
 }
 
 .profile-comment-bubble-actions .profile-comment-like:hover,
@@ -2198,13 +2203,6 @@ button.post-compose-inline-chip.profile-description-chip {
 .profile-comment-meta strong {
   font-size: 13px;
   font-weight: 700;
-  line-height: 1.2;
-}
-
-.profile-comment-meta time {
-  color: var(--color-cursor-muted, color-mix(in srgb, currentColor 48%, transparent));
-  font-size: 12px;
-  font-weight: 500;
   line-height: 1.2;
 }
 
