@@ -1872,10 +1872,10 @@ button.studio-cn-card-btn.public-offers-card {
   height: var(--studio-mobile-chrome-control, 34px);
   min-height: var(--studio-mobile-chrome-control, 34px);
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
-  color: var(--color-cursor-text-bright, var(--mos-text));
+  background: transparent;
+  color: var(--color-cursor-muted);
   cursor: pointer;
 }
 
@@ -1886,7 +1886,14 @@ button.studio-cn-card-btn.public-offers-card {
 }
 
 .studio-academy-lessons-sheet-btn:hover {
-  background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  background: var(--color-cursor-hover);
+}
+
+.studio-academy-lessons-sheet-btn.is-active {
+  border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
+  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-plate));
+  color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
 @keyframes studio-cn-book-sheet-in {

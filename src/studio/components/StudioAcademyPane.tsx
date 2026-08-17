@@ -1340,7 +1340,7 @@ export function StudioAcademyPane({
       >
         <button
           type="button"
-          className={`studio-cn-head-tab${academy.listTab === "catalog" || detailOpen ? " is-active" : ""}`}
+          className={`studio-cn-head-tab${academy.listTab === "catalog" && !detailOpen ? " is-active" : ""}`}
           onClick={() => {
             if (detailOpen) {
               academy.backToCatalog();
@@ -1374,9 +1374,10 @@ export function StudioAcademyPane({
         <div className="studio-cn-head-action">
           <button
             type="button"
-            className="studio-academy-lessons-sheet-btn"
+            className={`studio-academy-lessons-sheet-btn${lessonsSheetOpen ? " is-active" : ""}`}
             aria-label="Lessons"
             aria-expanded={lessonsSheetOpen}
+            aria-pressed={lessonsSheetOpen}
             onClick={() => setLessonsSheetOpen(true)}
           >
             <ListVideo aria-hidden="true" />
