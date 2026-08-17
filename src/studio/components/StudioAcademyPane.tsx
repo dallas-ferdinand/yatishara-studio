@@ -1340,7 +1340,13 @@ export function StudioAcademyPane({
       >
         <button
           type="button"
-          className={`studio-cn-head-tab${academy.listTab === "catalog" && !detailOpen ? " is-active" : ""}`}
+          className={`studio-cn-head-tab${
+            academy.listTab === "catalog" && !detailOpen
+              ? " is-active"
+              : detailOpen
+                ? " is-chrome-pill"
+                : ""
+          }`}
           onClick={() => {
             if (detailOpen) {
               academy.backToCatalog();
