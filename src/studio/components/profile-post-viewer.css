@@ -2016,11 +2016,11 @@ button.post-compose-inline-chip.profile-description-chip {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: 2px;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding: 7px 10px 8px;
+  padding: 7px 10px 4px;
   box-sizing: border-box;
   border-radius: 8px 18px 18px 18px;
   background: var(--mos-plate, var(--mos-panel));
@@ -2075,7 +2075,7 @@ button.post-compose-inline-chip.profile-description-chip {
   justify-content: flex-end;
   gap: 6px;
   width: 100%;
-  margin: 6px 0 0;
+  margin: 0;
 }
 
 .profile-comment-bubble-actions .profile-comment-like,
