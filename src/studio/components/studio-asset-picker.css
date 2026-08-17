@@ -321,14 +321,20 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   background: var(--mos-page, var(--mos-panel, #f5f5f7));
 }
 
 .studio-asset-picker-files.cursor-file-grid {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
   padding: 4px 4px 12px;
   background: transparent;
+}
+
+.studio-asset-picker-sheet .desk-file-grid-item {
+  touch-action: pan-y !important;
 }
 
 .studio-asset-picker-tile {

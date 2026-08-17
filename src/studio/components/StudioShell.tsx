@@ -1982,6 +1982,7 @@ export function StudioShell({
     }
     setAssetPickSelected([]);
     setAssetPickShareOpen(false);
+    setFilesBrowseMode("yours");
     setAssetPickRequest({
       kinds: request.kinds ?? ["image"],
       pickAnyStudio: Boolean(request.pickAnyStudio),
@@ -12101,6 +12102,25 @@ export function StudioShell({
           flex: 1 1 auto;
           min-height: 0;
         }
+        .studio-files-dock .desk-file-tree-scroll,
+        .studio-files-mobile-sheet .desk-file-tree-scroll,
+        aside.is-asset-picking .desk-file-tree-scroll {
+          flex: 1 1 0;
+          min-height: 0;
+          overflow-x: hidden;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          touch-action: pan-y;
+          -webkit-overflow-scrolling: touch;
+        }
+        .studio-files-dock.is-picking .desk-file-grid-item,
+        .studio-files-dock.is-picking .desk-file-list-row,
+        .studio-files-mobile-sheet.is-picking .desk-file-grid-item,
+        .studio-files-mobile-sheet.is-picking .desk-file-list-row,
+        aside.is-asset-picking .desk-file-grid-item,
+        aside.is-asset-picking .desk-file-list-row {
+          touch-action: pan-y !important;
+        }
         .studio-files-dock .studio-asset-pick-chrome,
         .studio-files-mobile-sheet .studio-asset-pick-chrome {
           flex: 0 0 auto;
@@ -12157,6 +12177,7 @@ export function StudioShell({
           overflow: hidden;
         }
         .studio-files-mobile-sheet .cursor-explorer-panel,
+        .studio-files-mobile-sheet .desk-file-tree-scroll,
         .studio-files-mobile-sheet .desk-file-grid,
         .studio-files-mobile-sheet .desk-file-list {
           flex: 1 1 0%;
@@ -26337,6 +26358,7 @@ export function StudioShell({
         ) : (
           <>
           <StudioFilesExplorerBody
+            picking={pickingFromFiles}
             search={search}
             setSearch={setSearch}
             typeFilter={typeFilter}
@@ -36296,6 +36318,7 @@ function StudioFilesExplorerBody({
   onCancelCopy,
   filesBrowseMode = "yours",
   onFilesBrowseModeChange,
+  picking = false,
   assetUrlExpiresUnix,
   onOpenPurchasedAsset,
   onNeedTopUp,
@@ -36309,7 +36332,8 @@ function StudioFilesExplorerBody({
   onOpenReactionPicker,
 }) {
   const filterActive = typeFilter !== "all";
-  const isNetworkMode = filesBrowseMode === "network";
+  const isNetworkMode = !picking && filesBrowseMode === "network";
+  const showSourceToggle = Boolean(onFilesBrowseModeChange) && !picking;
   const [networkAudioFilter, setNetworkAudioFilter] = useState("all");
   const [dropOver, setDropOver] = useState(false);
   const tree = isNetworkMode ? null : (
@@ -36364,9 +36388,9 @@ function StudioFilesExplorerBody({
         searchTruncated={searchState.truncated}
         onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
         onBlankContextMenu={(x, y) => setContextMenu({ entry: { type: "blank", path: activeFolder?.name ?? "" }, x, y })}
-        enableLongPress={isMobile}
-        /* Short hold = drag pickup; longer hold = context sheet. */
-        pickupDelay={isMobile ? 220 : undefined}
+        enableLongPress={isMobile && !picking}
+        /* Short hold = drag pickup; longer hold = context sheet. Off while picking so the list can scroll. */
+        pickupDelay={isMobile && !picking ? 220 : undefined}
         longPressDelay={isMobile ? 650 : 450}
         onEntryLongPress={(entry, coords) =>
           setContextMenu({
@@ -36376,7 +36400,7 @@ function StudioFilesExplorerBody({
           })
         }
         onEntryDrop={onEntryDrop}
-        onTouchDrop={onMobileAttach}
+        onTouchDrop={picking ? undefined : onMobileAttach}
         emptyHint={filterActive ? "No matching files" : undefined}
         renamingStudioId={renamingStudioId}
         onInlineRenameCommit={onInlineRenameCommit}
@@ -36404,15 +36428,15 @@ function StudioFilesExplorerBody({
         void onDropFiles(event.dataTransfer.files, activeFolder?._id);
       }}
     >
-      {onFilesBrowseModeChange || showSearch ? (
+      {showSourceToggle || showSearch ? (
         <div
           className={
-            chromeLayout === "workspace" && onFilesBrowseModeChange
+            chromeLayout === "workspace" && showSourceToggle
               ? "studio-files-chrome"
               : undefined
           }
         >
-          {onFilesBrowseModeChange ? (
+          {showSourceToggle ? (
             <div className="studio-files-source-toggle" role="tablist" aria-label="Files source">
               <button
                 type="button"
@@ -36851,6 +36875,7 @@ function StudioFilesMobileSheet({
           <>
             <StudioFilesExplorerBody
               {...explorerProps}
+              picking={picking}
               search={search}
               setSearch={setSearch}
               typeFilter={typeFilter}
