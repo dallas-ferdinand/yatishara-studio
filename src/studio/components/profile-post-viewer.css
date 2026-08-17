@@ -2394,7 +2394,8 @@ button.post-compose-inline-chip.profile-description-chip {
   -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(170%) blur(18px));
   box-shadow: var(
     --studio-composer-glass-shadow,
-    0 20px 48px rgba(0, 0, 0, 0.38),
+    0 1px 2px rgba(0, 0, 0, 0.22),
+    0 4px 10px rgba(0, 0, 0, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.08)
   );
   transition: box-shadow 280ms cubic-bezier(0.45, 0, 0.2, 1);
@@ -2756,9 +2757,12 @@ button.post-compose-inline-chip.profile-description-chip {
     --studio-composer-glass,
     color-mix(in srgb, var(--mos-panel, #f5f5f7) 92%, transparent)
   );
-  box-shadow:
-    0 12px 28px color-mix(in srgb, #000 10%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent);
+  box-shadow: var(
+    --studio-composer-glass-shadow,
+    0 1px 2px color-mix(in srgb, #000 7%, transparent),
+    0 3px 8px color-mix(in srgb, #000 5%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.48)
+  );
 }
 
 [data-appearance="light"] .profile-comments-dock .profile-comments-head,
