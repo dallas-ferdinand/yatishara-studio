@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  CircleCheck,
   Crown,
   Feather,
   Pause,
@@ -927,7 +928,7 @@ function FeedCaption({
               }}
             >
               {isFollowing ? (
-                <Check className="profile-post-follow-icon" aria-hidden="true" strokeWidth={2.5} />
+                <CircleCheck className="profile-post-follow-icon" aria-hidden="true" strokeWidth={2.25} />
               ) : (
                 <UserPlus className="profile-post-follow-icon" aria-hidden="true" />
               )}
