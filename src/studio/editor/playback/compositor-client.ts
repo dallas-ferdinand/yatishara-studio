@@ -16,6 +16,12 @@ export class CompositorClient {
   private ensuredFonts = new Set<string>();
   /** Play-path: drop overlapping paints instead of queuing. */
   private paintBusy = false;
+  /**
+   * Still keys the worker could not bind — it evicted them, or never received
+   * pixels for them. Senders that cache "already uploaded" must forget these
+   * or the lane stays invisible for the rest of the session.
+   */
+  onTextureMiss: ((textureKeys: string[]) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, width: number, height: number) {
     if (!("transferControlToOffscreen" in canvas)) {
@@ -45,6 +51,8 @@ export class CompositorClient {
         }
         const requestId = event.data?.requestId;
         if (typeof requestId !== "number") return;
+        const missing = event.data?.missingTextures;
+        if (Array.isArray(missing) && missing.length) this.onTextureMiss?.(missing);
         const pending = this.pending.get(requestId);
         if (!pending) return;
         this.pending.delete(requestId);

@@ -934,6 +934,22 @@ function render(message: RenderMessage): void {
   const effect = transitionShaderIdFor(message.transition);
   const canStack =
     stack.length > 0 && (message.transition === "none" || effect === TRANSITION_SHADER_IDS.none);
+  // Senders reuse a bare `image:` key once they believe the still is resident.
+  // This texture cache is the only authority on that: it evicts, and it never
+  // held anything if the first send raced image decode. Report every key we
+  // could not bind so the sender re-attaches pixels instead of losing the lane.
+  const missingTextures: string[] = [];
+  const uploadLane = (
+    texture: WebGLTexture,
+    unit: number,
+    frame?: VideoFrame,
+    cacheKey?: string,
+    slot: "a" | "b" = "a",
+  ): boolean => {
+    const ok = upload(gl!, texture, unit, frame, cacheKey, slot);
+    if (!ok && cacheKey?.startsWith("image:")) missingTextures.push(cacheKey);
+    return ok;
+  };
   try {
     lastTextsUnder = message.textsUnder;
     lastTextsOver = message.textsOver;
@@ -941,7 +957,7 @@ function render(message: RenderMessage): void {
     uploadTextLayerIfChanged(textureTextOver, gl.TEXTURE3, lastTextsOver, "over");
 
     if (canStack) {
-      const hasBottom = upload(gl, textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
+      const hasBottom = uploadLane(textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
       applyLayerUniforms({
         hasA: false,
         hasB: hasBottom,
@@ -957,7 +973,7 @@ function render(message: RenderMessage): void {
       });
       copyCanvasToB();
       for (const layer of stack) {
-        const hasLayer = upload(gl, textureA, gl.TEXTURE0, layer.frame, layer.textureKey, "a");
+        const hasLayer = uploadLane(textureA, gl.TEXTURE0, layer.frame, layer.textureKey, "a");
         if (!hasLayer) continue;
         if (layer.width && layer.height) lastASize = [layer.width, layer.height];
         applyLayerUniforms({
@@ -975,7 +991,7 @@ function render(message: RenderMessage): void {
         });
         copyCanvasToB();
       }
-      const hasFinish = upload(gl, textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
+      const hasFinish = uploadLane(textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
       applyLayerUniforms({
         hasA: hasFinish,
         hasB: true,
@@ -992,8 +1008,8 @@ function render(message: RenderMessage): void {
       gl.flush();
     } else if (stack.length > 0) {
       // Transition A/B first, then source-over remaining picture lanes on top.
-      const hasA = upload(gl, textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
-      const hasB = upload(gl, textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
+      const hasA = uploadLane(textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
+      const hasB = uploadLane(textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
       applyLayerUniforms({
         hasA,
         hasB,
@@ -1009,7 +1025,7 @@ function render(message: RenderMessage): void {
       });
       copyCanvasToB();
       for (const layer of stack) {
-        const hasLayer = upload(gl, textureA, gl.TEXTURE0, layer.frame, layer.textureKey, "a");
+        const hasLayer = uploadLane(textureA, gl.TEXTURE0, layer.frame, layer.textureKey, "a");
         if (!hasLayer) continue;
         if (layer.width && layer.height) lastASize = [layer.width, layer.height];
         applyLayerUniforms({
@@ -1042,8 +1058,8 @@ function render(message: RenderMessage): void {
       });
       gl.flush();
     } else {
-    const hasA = upload(gl, textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
-    const hasB = upload(gl, textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
+    const hasA = uploadLane(textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
+    const hasB = uploadLane(textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
     applyLayerUniforms({
       hasA,
       hasB,
@@ -1064,7 +1080,11 @@ function render(message: RenderMessage): void {
     b?.close();
     for (const layer of stack) layer.frame?.close();
   }
-  self.postMessage({ type: "rendered", requestId: message.requestId });
+  self.postMessage({
+    type: "rendered",
+    requestId: message.requestId,
+    missingTextures: missingTextures.length ? missingTextures : undefined,
+  });
 }
 
 function redrawCompositor(): void {

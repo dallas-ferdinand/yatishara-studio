@@ -30,6 +30,7 @@ import {
 import { previewTransitionWhilePlaying } from "./preview-transition-play";
 import { setEditorPlaybackBusy } from "../filmstripGate";
 import { PlayBus, playBusLayersByClipId } from "./play-bus";
+import { StillResidency } from "./still-residency";
 
 /**
  * Spinner only after a lasting cold-buffer on PlayBus (element waiting before
@@ -203,7 +204,7 @@ class EngineConsumer implements FrameConsumer {
   private prepared: Prepared | null = null;
   private readonly imageFrames = new Map<string, VideoFrame>();
   private readonly imageLoads = new Map<string, Promise<VideoFrame>>();
-  private readonly warmedStills = new Set<string>();
+  private readonly stills = new StillResidency();
   private transitionKey: string | null = null;
   private transitionStartedAt = 0;
 
@@ -229,6 +230,9 @@ class EngineConsumer implements FrameConsumer {
     this.playingRef = args.playingRef;
     this.onAudioReady = args.onAudioReady;
     this.onSourceSize = args.onSourceSize;
+    this.compositor.onTextureMiss = (keys) => {
+      this.stills.forget(keys);
+    };
   }
 
   setPlayBus(playBus: PlayBus | null): void {
@@ -269,6 +273,11 @@ class EngineConsumer implements FrameConsumer {
       return clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local);
     };
 
+    // Play never awaits image decode, so a still can be requested before its
+    // bitmap exists. Only the lanes that actually carry pixels below may be
+    // recorded as resident — claiming residency for a key we sent bare leaves
+    // the worker with nothing to bind and the lane invisible for good.
+    const sentStills = new Set<string>();
     const stillForSample = (
       sample: (typeof slice.video)[number] | undefined,
     ): { frame?: VideoFrame; textureKey: string } | null => {
@@ -281,8 +290,9 @@ class EngineConsumer implements FrameConsumer {
       const cacheKey = `${sample.clip.assetId}@${previewImageMaxEdge(this.previewLoadQualityRef.current)}:${url}`;
       const cached = this.imageFrames.get(cacheKey);
       void this.imageFrame(sample.clip.assetId, url, this.previewLoadQualityRef.current);
-      if (!this.warmedStills.has(key) && cached) {
-        return { frame: cached.clone(), textureKey: key };
+      if (this.stills.needsPixels(key, Boolean(cached))) {
+        sentStills.add(key);
+        return { frame: cached!.clone(), textureKey: key };
       }
       return { textureKey: key };
     };
@@ -390,17 +400,7 @@ class EngineConsumer implements FrameConsumer {
       textsUnder,
       textsOver,
     });
-    if (painted && textureKeyA?.startsWith("image:")) {
-      this.warmedStills.add(textureKeyA);
-    }
-    if (painted && textureKeyB?.startsWith("image:")) {
-      this.warmedStills.add(textureKeyB);
-    }
-    if (painted) {
-      for (const layer of stack) {
-        if (layer.textureKey?.startsWith("image:")) this.warmedStills.add(layer.textureKey);
-      }
-    }
+    if (painted) this.stills.markSent(sentStills);
 
     if (slice.transition && this.transitionStartedAt > 0 && painted) {
       reportPerfMetric(
@@ -460,13 +460,13 @@ class EngineConsumer implements FrameConsumer {
           this.previewLoadQualityRef.current,
         );
         const textureKey = `image:${assetId}`;
-        const warmed = this.warmedStills.has(textureKey);
+        const sendPixels = this.stills.needsPixels(textureKey, true);
         return {
           assetId,
           sourceTime: sample.sourceTime,
           generation,
           textureKey,
-          frame: warmed ? undefined : frame.clone(),
+          frame: sendPixels ? frame.clone() : undefined,
           width: frame.displayWidth,
           height: frame.displayHeight,
           sample,
@@ -624,12 +624,15 @@ class EngineConsumer implements FrameConsumer {
       textsUnder,
       textsOver,
     });
-    const warm = (key?: string) => {
-      if (key?.startsWith("image:")) this.warmedStills.add(key);
+    // Residency follows the pixels, never the key alone.
+    const sent: string[] = [];
+    const collect = (key?: string, frame?: VideoFrame) => {
+      if (frame && key?.startsWith("image:")) sent.push(key);
     };
-    warm(prepared.textureKeyA);
-    warm(prepared.textureKeyB);
-    for (const layer of prepared.stack ?? []) warm(layer.textureKey);
+    collect(prepared.textureKeyA, prepared.frameA);
+    collect(prepared.textureKeyB, prepared.frameB);
+    for (const layer of prepared.stack ?? []) collect(layer.textureKey, layer.frame);
+    this.stills.markSent(sent);
     if (slice.transition && this.transitionStartedAt > 0) {
       reportPerfMetric(
         "editor-transition-start",
@@ -660,7 +663,7 @@ class EngineConsumer implements FrameConsumer {
     for (const frame of this.imageFrames.values()) frame.close();
     this.imageFrames.clear();
     this.imageLoads.clear();
-    this.warmedStills.clear();
+    this.stills.clear();
   }
 
   private imageFrame(
