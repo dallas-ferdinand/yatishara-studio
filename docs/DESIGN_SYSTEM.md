@@ -616,16 +616,16 @@ My jobs (`StudioMessagesSidebar` / `StudioMessagesPane` `embeddedInRail`) — no
 global People directory search. Mobile Social sheet matches (Messages, not People).
 Memory: **727**.
 
-**Desktop post + comments** (`ProfilePostViewer` / `profile-post-viewer.css`): edge-flush,
-full-height, square — no inset padding, no 18px floating cards. Post media fills the
-main pane; comments rail is a flat `--mos-panel` column with a left hairline (like other
-Studio sidebars). Light mode: post stage L1 `--mos-page` (never hardcoded black);
-comments rail solid `--mos-panel` (excluded from StudioShell transparent/`aside`
-!important). Divider between post ↔ comments (and between swipe posts) = L2
-`--mos-plate`. Memory: **775**. Caption, mentions, tags, and action-rail ink
-follow Studio appearance (`[data-appearance="light"|"dark"]` +
-`--color-cursor-text-bright`) — do **not** sample video/letterbox luminance.
-Comments/description dock stays theme ink.
+**Desktop post + comments** (`ProfilePostViewer` / `profile-post-viewer.css`): same
+watch layout as mobile — native-ratio player, avatar in the title, Reward /
+Contribute book bar. Comments rail is a flat `--mos-panel` column with a left
+hairline (like other Studio sidebars). Light mode: post stage L1 `--mos-page`
+(never hardcoded black); comments rail solid `--mos-panel` (excluded from
+StudioShell transparent/`aside` !important). Divider between post ↔ comments
+(and between swipe posts) = L2 `--mos-plate`. Memory: **775** / **1454**.
+Caption, mentions, tags, and bar ink follow Studio appearance
+(`[data-appearance="light"|"dark"]` + `--color-cursor-text-bright`) — do **not**
+sample video/letterbox luminance. Comments/description dock stays theme ink.
 Mobile comments stay a bottom glass sheet.
 Post timestamps always show relative ago · short date
 (`formatPostWhen`, e.g. `12d ago · Jul 14`); caption edits set `editedAt` and

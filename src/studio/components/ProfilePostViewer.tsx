@@ -1582,7 +1582,7 @@ export function ProfilePostViewer({
       // Comments dock keeps native scroll.
       if (
         !(target instanceof Element) ||
-        !target.closest(".profile-post-viewer")
+        !target.closest(".profile-post-watch-player")
       ) {
         return;
       }
@@ -1621,7 +1621,6 @@ export function ProfilePostViewer({
       return;
     }
     if (
-      isMobile &&
       !(event.target as HTMLElement | null)?.closest?.(".profile-post-watch-player")
     ) {
       return;
@@ -2034,12 +2033,13 @@ export function ProfilePostViewer({
 
   return (
     <div
-      className={`profile-post-viewer-layout${isMobile ? " is-mobile-watch" : ""}`}
+      className="profile-post-viewer-layout is-watch-layout"
       ref={layoutRef}
     >
+      <div className="profile-post-watch-stack">
       <div
         ref={rootRef}
-        className={`profile-post-viewer is-feed${isMobile ? " is-mobile-watch" : ""}`}
+        className="profile-post-viewer is-feed is-watch-layout"
         aria-label="Studio feed"
         onPointerDown={tabActive ? onPointerDown : undefined}
         onPointerMove={tabActive ? onPointerMove : undefined}
@@ -2051,10 +2051,6 @@ export function ProfilePostViewer({
           {slidePool.map(({ key, post, role }) => {
             const isInteractiveSlide = tabActive && role === "current";
             const postUsername = post.username || authorUsername;
-            const postComments = localComments[post._id] ?? post.commentCount ?? 0;
-            const postSaves =
-              localSaves[post._id]?.saveCount ?? post.saveCount ?? 0;
-            const postShares = localShares[post._id] ?? post.shareCount ?? 0;
             const captionOverride = localCaptions[post._id];
             const slideCaption = captionOverride
               ? captionOverride.caption
@@ -2062,15 +2058,11 @@ export function ProfilePostViewer({
             return (
               <article
                 key={key}
-                className={`profile-post-slide is-${role} is-${axis}${isMobile ? " is-watch" : ""}`}
+                className={`profile-post-slide is-${role} is-${axis} is-watch`}
                 aria-hidden={!isInteractiveSlide}
                 inert={!isInteractiveSlide}
               >
-                {isMobile ? null : (
-                  <div className="profile-post-slide-glass" aria-hidden="true" />
-                )}
-                {isMobile ? (
-                  <div className="profile-post-watch-player">
+                <div className="profile-post-watch-player">
                     <div className="profile-post-watch-frame">
                       <FeedMedia
                         post={post}
@@ -2084,13 +2076,6 @@ export function ProfilePostViewer({
                       ) : null}
                     </div>
                   </div>
-                ) : (
-                  <FeedMedia
-                    post={post}
-                    active={tabActive && role === "current"}
-                    preload={tabActive}
-                  />
-                )}
                 <FeedCaption
                   username={postUsername}
                   caption={slideCaption}
@@ -2107,7 +2092,7 @@ export function ProfilePostViewer({
                       : post.isFollowing,
                   )}
                   active={isInteractiveSlide}
-                  placement={isMobile ? "page" : "overlay"}
+                  placement="page"
                   onOpenProfile={onOpenProfile}
                   onToggleFollow={() => void handleFollowToggle(post)}
                   feedShare={
@@ -2130,41 +2115,6 @@ export function ProfilePostViewer({
                       : undefined
                   }
                 />
-                {isMobile ? null : (
-                  <FeedActions
-                    post={post}
-                    username={postUsername}
-                    avatarUrl={post.avatarUrl}
-                    displayName={post.displayName}
-                    firstName={post.firstName}
-                    lastName={post.lastName}
-                    showFollow={Boolean(post.profileId) && !post.isOwner}
-                    isFollowing={Boolean(
-                      post.profileId
-                        ? (localFollows[post.profileId] ?? post.isFollowing)
-                        : post.isFollowing,
-                    )}
-                    localComments={postComments}
-                    localSaves={postSaves}
-                    localShares={postShares}
-                    active={isInteractiveSlide}
-                    onLike={() => void handleLike(post)}
-                    onSave={() => void handleSave(post)}
-                    onShare={() => void handleShare(post)}
-                    onOpenComments={() => {
-                      if (role !== "current") return;
-                      setSidePanelMode("comments");
-                      setCommentsOpen(true);
-                    }}
-                    onOpenProfile={onOpenProfile}
-                    onToggleFollow={() => void handleFollowToggle(post)}
-                  />
-                )}
-                {!isMobile && role === "current" && likeBurst ? (
-                  <div className="profile-post-like-burst" aria-hidden="true">
-                    <Crown fill="currentColor" strokeWidth={0} />
-                  </div>
-                ) : null}
               </article>
             );
           })}
@@ -2220,7 +2170,7 @@ export function ProfilePostViewer({
         ) : null}
       </div>
 
-      {isMobile && tabActive ? (
+      {tabActive ? (
         <FeedActions
           variant="bar"
           post={activeSlidePost}
@@ -2254,6 +2204,7 @@ export function ProfilePostViewer({
           onToggleFollow={() => void handleFollowToggle(activeSlidePost)}
         />
       ) : null}
+      </div>
 
       <ProfileCommentsPanel
         postId={activePost._id}
