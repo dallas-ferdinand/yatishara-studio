@@ -20398,6 +20398,29 @@ export function StudioShell({
         .studio-composer-options-head .studio-audio-type-switcher {
           justify-self: start;
         }
+        .studio-audio-type-switcher.has-labels {
+          height: auto;
+          min-height: 34px;
+          gap: 3px;
+          padding: 3px !important;
+        }
+        .studio-audio-type-switcher.has-labels .studio-mode-row {
+          width: auto !important;
+          min-width: 0 !important;
+          flex: 0 0 auto !important;
+          aspect-ratio: auto;
+          height: 28px;
+          min-height: 28px;
+          padding: 0 8px;
+          gap: 5px;
+        }
+        .studio-audio-type-switcher.has-labels .studio-mode-row span {
+          display: inline;
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: -0.01em;
+          line-height: 1;
+        }
         .studio-composer-audio-type-tabs {
           display: flex;
           align-items: center;
@@ -20607,6 +20630,153 @@ export function StudioShell({
           border-color: color-mix(in srgb, var(--cursor-accent) 46%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
           color: var(--color-cursor-text-bright);
+        }
+        .studio-sfx-card {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          min-width: 0;
+          padding: 12px;
+          border-radius: 14px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
+          background: color-mix(in srgb, var(--mos-plate, var(--mos-surface)) 88%, transparent);
+        }
+        .studio-sfx-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .studio-sfx-row-copy {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+        .studio-sfx-row-copy strong {
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1.2;
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-sfx-row-copy span {
+          font-size: 11px;
+          font-weight: 550;
+          line-height: 1.3;
+          color: var(--color-cursor-muted);
+        }
+        .studio-sfx-switch {
+          position: relative;
+          flex: 0 0 auto;
+          width: 42px;
+          height: 24px;
+          padding: 0;
+          border: 0;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--color-cursor-fg, #fff) 16%, transparent);
+          cursor: pointer;
+          transition: background 180ms ease;
+        }
+        .studio-sfx-switch::after {
+          content: "";
+          position: absolute;
+          top: 3px;
+          left: 3px;
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          background: #fff;
+          box-shadow: 0 1px 3px color-mix(in srgb, #000 28%, transparent);
+          transition: transform 180ms ease;
+        }
+        .studio-sfx-switch.is-on {
+          background: var(--cursor-accent, var(--mos-accent));
+        }
+        .studio-sfx-switch.is-on::after {
+          transform: translateX(18px);
+        }
+        .studio-sfx-switch:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--cursor-accent) 55%, transparent);
+          outline-offset: 2px;
+        }
+        .studio-sfx-slider {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-width: 0;
+        }
+        .studio-sfx-slider-head {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .studio-sfx-slider-head span {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-sfx-slider-head em {
+          font-style: normal;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          color: var(--cursor-accent, var(--mos-accent));
+        }
+        .studio-sfx-range {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 100%;
+          height: 6px;
+          margin: 0;
+          border-radius: 999px;
+          background: linear-gradient(
+            90deg,
+            var(--cursor-accent, var(--mos-accent)) 0 var(--studio-sfx-fill, 30%),
+            color-mix(in srgb, var(--color-cursor-fg, #fff) 14%, transparent) var(--studio-sfx-fill, 30%) 100%
+          );
+          cursor: pointer;
+        }
+        .studio-sfx-range::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          border: 2px solid var(--cursor-accent, var(--mos-accent));
+          background: #fff;
+          box-shadow: 0 1px 4px color-mix(in srgb, #000 22%, transparent);
+        }
+        .studio-sfx-range::-moz-range-thumb {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          border: 2px solid var(--cursor-accent, var(--mos-accent));
+          background: #fff;
+          box-shadow: 0 1px 4px color-mix(in srgb, #000 22%, transparent);
+        }
+        .studio-sfx-range:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--cursor-accent) 55%, transparent);
+          outline-offset: 3px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .studio-sfx-switch,
+          .studio-sfx-switch::after {
+            transition: none;
+          }
+        }
+        [data-appearance="light"] .studio-sfx-switch {
+          background: color-mix(in srgb, #000 12%, transparent);
+        }
+        [data-appearance="light"] .studio-sfx-switch.is-on {
+          background: var(--cursor-accent, var(--mos-accent));
+        }
+        [data-appearance="light"] .studio-sfx-range {
+          background: linear-gradient(
+            90deg,
+            var(--cursor-accent, var(--mos-accent)) 0 var(--studio-sfx-fill, 30%),
+            color-mix(in srgb, #000 10%, transparent) var(--studio-sfx-fill, 30%) 100%
+          );
         }
         .studio-composer-options-back {
           display: inline-flex;
@@ -29905,24 +30075,33 @@ function StudioComposerControlStrip({
               </section>
             ) : null}
             {audioType === "sfx" ? (
-              <section className="studio-composer-options-section" aria-label="SFX">
-                <span className="studio-composer-options-section-label">SFX</span>
-                <div className="studio-audio-sfx-controls">
-                <label className="studio-voice-picker-check">
-                  <input
-                    type="checkbox"
-                    checked={sfxLoop}
-                    onChange={(event) => setSfxLoop?.(event.target.checked)}
-                  />
-                  <span>Loop</span>
-                </label>
-                <label>
-                  <span>Duration</span>
-                  <select
-                    className="studio-voice-picker-select"
+              <section className="studio-composer-options-section studio-sfx-settings" aria-label="SFX">
+                <div className="studio-sfx-card">
+                  <div className="studio-sfx-row">
+                    <div className="studio-sfx-row-copy">
+                      <strong>Loop</strong>
+                      <span>Repeat the sound</span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      className={`studio-sfx-switch${sfxLoop ? " is-on" : ""}`}
+                      aria-checked={sfxLoop}
+                      aria-label="Loop"
+                      onClick={() => setSfxLoop?.(!sfxLoop)}
+                    />
+                  </div>
+                  <StudioMusicTagGroup
+                    label="Duration"
                     value={sfxDurationAuto ? "auto" : String(sfxDurationSeconds)}
-                    onChange={(event) => {
-                      const value = event.target.value;
+                    items={[
+                      { value: "auto", label: "Auto" },
+                      ...[0.5, 1, 2, 3, 5, 8, 10, 15, 20, 30].map((seconds) => ({
+                        value: String(seconds),
+                        label: `${seconds}s`,
+                      })),
+                    ]}
+                    onChange={(value) => {
                       if (value === "auto") {
                         setSfxDurationAuto?.(true);
                         return;
@@ -29930,28 +30109,28 @@ function StudioComposerControlStrip({
                       setSfxDurationAuto?.(false);
                       setSfxDurationSeconds?.(Number(value));
                     }}
-                  >
-                    <option value="auto">Auto</option>
-                    {[0.5, 1, 2, 3, 5, 8, 10, 15, 20, 30].map((seconds) => (
-                      <option key={seconds} value={String(seconds)}>
-                        {seconds}s
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Prompt influence {Math.round(sfxPromptInfluence * 100)}%</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={Math.round(sfxPromptInfluence * 100)}
-                    onChange={(event) =>
-                      setSfxPromptInfluence?.(Number(event.target.value) / 100)
-                    }
                   />
-                </label>
-              </div>
+                  <div className="studio-sfx-slider">
+                    <div className="studio-sfx-slider-head">
+                      <span>Prompt influence</span>
+                      <em>{Math.round(sfxPromptInfluence * 100)}%</em>
+                    </div>
+                    <input
+                      type="range"
+                      className="studio-sfx-range"
+                      min={0}
+                      max={100}
+                      value={Math.round(sfxPromptInfluence * 100)}
+                      aria-label="Prompt influence"
+                      style={{
+                        "--studio-sfx-fill": `${Math.round(sfxPromptInfluence * 100)}%`,
+                      }}
+                      onChange={(event) =>
+                        setSfxPromptInfluence?.(Number(event.target.value) / 100)
+                      }
+                    />
+                  </div>
+                </div>
               </section>
             ) : null}
             {audioType === "music" ? (
@@ -30309,7 +30488,7 @@ function StudioModeSwitcher({ mode, setMode }) {
 function StudioAudioTypeSwitcher({ audioType, setAudioType }) {
   return (
     <div
-      className="studio-mode-switcher studio-audio-type-switcher"
+      className="studio-mode-switcher studio-audio-type-switcher has-labels"
       role="tablist"
       aria-label="Audio type"
     >
@@ -30328,6 +30507,7 @@ function StudioAudioTypeSwitcher({ audioType, setAudioType }) {
             onClick={() => setAudioType?.(item.value)}
           >
             <Icon aria-hidden="true" />
+            <span>{item.tabLabel}</span>
           </button>
         );
       })}
