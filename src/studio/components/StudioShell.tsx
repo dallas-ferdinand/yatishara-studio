@@ -28002,20 +28002,6 @@ export function StudioShell({
           }
           tools={
             <>
-              <button
-                type="button"
-                className={`studio-settings-pill studio-settings-trigger${
-                  activeTab === "post:compose" ||
-                  String(activeTab || "").startsWith("post:compose:")
-                    ? " is-active"
-                    : ""
-                }`}
-                aria-label="Create post"
-                title="Create post"
-                onClick={openCreatePost}
-              >
-                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
               <StudioProfileMenu
                 currentUser={currentUser}
                 profile={myPublicProfile}
