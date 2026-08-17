@@ -786,6 +786,29 @@ export async function ensurePublicAssetsFolder(
   });
 }
 
+/** Convex workspace home is the folder named Studio. Never pick a stray sibling like "folder 2". */
+export function pickWorkspaceRootFolder<T extends {
+  deletedAt?: number;
+  systemKind?: string;
+  name: string;
+}>(folders: T[]): T | undefined {
+  const live = folders.filter((folder) => !folder.deletedAt);
+  const namedStudio = live.find(
+    (folder) =>
+      !folder.systemKind &&
+      typeof folder.name === "string" &&
+      folder.name.toLowerCase() === "studio",
+  );
+  if (namedStudio) return namedStudio;
+  return live.find(
+    (folder) =>
+      folder.systemKind !== "messages" &&
+      folder.systemKind !== "purchased_assets" &&
+      folder.systemKind !== "public_assets" &&
+      folder.systemKind !== "shared_with_me",
+  );
+}
+
 async function workspaceRootForUser(
   ctx: MutationCtx,
   userId: Id<"users">,
@@ -796,15 +819,7 @@ async function workspaceRootForUser(
       q.eq("ownerId", userId).eq("parentId", undefined),
     )
     .collect();
-  const root = topFolders.find(
-    (folder) =>
-      !folder.deletedAt &&
-      folder.systemKind !== "messages" &&
-      folder.systemKind !== "purchased_assets" &&
-      folder.systemKind !== "public_assets" &&
-      folder.systemKind !== "shared_with_me",
-  );
-  return root?._id;
+  return pickWorkspaceRootFolder(topFolders)?._id;
 }
 
 const SHARED_WITH_ME_FOLDER_NAME = "Shared with me";

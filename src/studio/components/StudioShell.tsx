@@ -1975,7 +1975,7 @@ export function StudioShell({
   );
 
   function startAssetPick(request) {
-    const rootFolder = topFolders?.[0];
+    const rootFolder = workspaceRootFromList(topFolders);
     if (rootFolder) {
       setActiveFolderId(rootFolder._id);
       setNavTrail([{ id: rootFolder._id, name: "Files" }]);
@@ -2396,6 +2396,10 @@ export function StudioShell({
     // Boot without CDN signing — signing every root peek was timing out the 1s query budget.
     hasCurrentUser ? {} : "skip",
   );
+  const workspaceRoot = useMemo(
+    () => workspaceRootFromList(topFolders),
+    [topFolders],
+  );
   const isTrashView = activeFolderId === TRASH_FOLDER_ID;
   const isRecentsView = activeFolderId === RECENTS_FOLDER_ID;
   const isTrashNav = navTrail.some((crumb) => crumb.id === TRASH_FOLDER_ID);
@@ -2424,7 +2428,7 @@ export function StudioShell({
             trashedFolders?.find((folder) => folder._id === activeFolderId) ??
             topFolders?.find((folder) => folder._id === activeFolderId) ??
             null)
-      : (topFolders?.[0] ?? null);
+      : (workspaceRoot ?? null);
 
   useEffect(() => {
     if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
@@ -2469,9 +2473,9 @@ export function StudioShell({
         } else if (activeFolderId === missingFolderId && trail.length > 1) {
           nextTrail = trail.slice(0, -1);
         } else if (activeFolderId === missingFolderId) {
-          const root = topFolders?.[0];
+          const root = workspaceRootFromList(topFolders);
           if (root?._id) {
-            nextTrail = [{ id: root._id, name: root.name || "Home" }];
+            nextTrail = [{ id: root._id, name: "Files" }];
           }
         }
         const parent = nextTrail[nextTrail.length - 1];
@@ -2858,7 +2862,7 @@ export function StudioShell({
         ? readStudioLive(folderChildrenCacheKey(activeFolder._id)) ?? undefined
         : undefined;
   /** Children of the workspace root — Feeds Places/Folders in the Files rail (not the root row itself). */
-  const filesNavHomeRootId = navTrail[0]?.id ?? topFolders?.[0]?._id ?? null;
+  const filesNavHomeRootId = navTrail[0]?.id ?? workspaceRoot?._id ?? null;
   const filesNavHomeFolders = useQuery(
     api.folders.listWithPeeks,
     hasCurrentUser && filesNavHomeRootId
@@ -4139,15 +4143,15 @@ export function StudioShell({
   }, [hasCurrentUser, ensureSharedWithMeFolderForMe]);
 
   useEffect(() => {
-    if (!activeFolderId && topFolders?.[0]) {
-      setActiveFolderId(topFolders[0]._id);
-      setNavTrail([{ id: topFolders[0]._id, name: "Files" }]);
+    if (!activeFolderId && workspaceRoot) {
+      setActiveFolderId(workspaceRoot._id);
+      setNavTrail([{ id: workspaceRoot._id, name: "Files" }]);
     }
-  }, [activeFolderId, topFolders]);
+  }, [activeFolderId, workspaceRoot]);
 
   // Never show DB name "Studio" as the Files workspace root crumb.
   useEffect(() => {
-    const rootId = topFolders?.[0]?._id;
+    const rootId = workspaceRoot?._id;
     if (!rootId) return;
     setNavTrail((trail) => {
       if (!trail.length) return trail;
@@ -4163,7 +4167,7 @@ export function StudioShell({
       }
       return trail;
     });
-  }, [topFolders]);
+  }, [workspaceRoot]);
 
   useEffect(() => {
     for (const folder of [...(topFolders ?? []), ...(childFolders ?? []), ...(trashedFolders ?? [])]) {
@@ -4748,7 +4752,7 @@ export function StudioShell({
     [pinnedFolders],
   );
 
-  const filesNavWorkspaceRootId = navTrail[0]?.id ?? topFolders?.[0]?._id ?? null;
+  const filesNavWorkspaceRootId = navTrail[0]?.id ?? workspaceRoot?._id ?? null;
 
   // Track folder opens for Recents / Frequent (client-local, per user).
   useEffect(() => {
@@ -5324,7 +5328,7 @@ export function StudioShell({
         (isCreateParentId(activeFolderId) && activeFolderId) ||
         (isCreateParentId(navTrail[navTrail.length - 1]?.id) &&
           navTrail[navTrail.length - 1].id) ||
-        topFolders?.[0]?._id ||
+        workspaceRoot?._id ||
         null;
       if (!candidateId) {
         if (topFolders === undefined || selectedFolder === undefined) {
@@ -5341,7 +5345,7 @@ export function StudioShell({
           _id: candidateId,
           name:
             navTrail.find((crumb) => crumb.id === candidateId)?.name ||
-            topFolders?.[0]?.name ||
+            workspaceRoot?.name ||
             "Files",
         };
     }
@@ -6637,7 +6641,7 @@ export function StudioShell({
 
   function handleBreadcrumbNavigate(path) {
     if (!path) {
-      const root = navTrail[0] ?? (topFolders?.[0] ? { id: topFolders[0]._id, name: "Files" } : null);
+      const root = navTrail[0] ?? (workspaceRoot ? { id: workspaceRoot._id, name: "Files" } : null);
       if (!root) return;
       setActiveFolderId(root.id);
       setNavTrail([root]);
@@ -6924,7 +6928,7 @@ export function StudioShell({
         (isCreateParentId(activeFolderId) && activeFolderId) ||
         (isCreateParentId(navTrail[navTrail.length - 1]?.id) &&
           navTrail[navTrail.length - 1].id) ||
-        topFolders?.[0]?._id ||
+        workspaceRoot?._id ||
         null;
       if (!candidateId) {
         if (topFolders === undefined || selectedFolder === undefined) {
@@ -6941,7 +6945,7 @@ export function StudioShell({
           _id: candidateId,
           name:
             navTrail.find((crumb) => crumb.id === candidateId)?.name ||
-            topFolders?.[0]?.name ||
+            workspaceRoot?.name ||
             "Files",
         };
     }
@@ -27279,7 +27283,7 @@ export function StudioShell({
                 openFiles();
                 setActiveFolderId(item.itemId);
                 setNavTrail(() => {
-                  const root = topFolders?.[0];
+                  const root = workspaceRootFromList(topFolders);
                   const shared = (topFolders ?? []).find(
                     (folder) => folder.systemKind === "shared_with_me",
                   );
@@ -39195,6 +39199,28 @@ function isListedNetworkAsset(entry) {
 
 function isLockedNetworkAsset(entry) {
   return isPurchasedNetworkAsset(entry) || isListedNetworkAsset(entry);
+}
+
+/** Files home is the Convex folder named Studio, not the first parentless row (folder 2). */
+function workspaceRootFromList(folders) {
+  if (!Array.isArray(folders) || folders.length === 0) return null;
+  const live = folders.filter((folder) => !folder.deletedAt);
+  const namedStudio = live.find(
+    (folder) =>
+      !folder.systemKind &&
+      typeof folder.name === "string" &&
+      folder.name.toLowerCase() === "studio",
+  );
+  if (namedStudio) return namedStudio;
+  return (
+    live.find(
+      (folder) =>
+        folder.systemKind !== "messages" &&
+        folder.systemKind !== "purchased_assets" &&
+        folder.systemKind !== "public_assets" &&
+        folder.systemKind !== "shared_with_me",
+    ) ?? null
+  );
 }
 
 function systemFolderDisplayName(folder) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Check, ChevronLeft, X } from "lucide-react";
 import {
   useEffect,
@@ -388,19 +388,52 @@ export function StudioAssetPickerSheet({
 }: StudioAssetPickerSheetProps) {
   const { isMobile } = useMobileLayout();
   const [portalRoot, setPortalRoot] = useState<Element | null>(null);
-  const [stack, setStack] = useState<FolderCrumb[]>([
-    { id: null, name: "Files" },
-  ]);
+  const ensureDefaults = useMutation(api.users.ensureStudioDefaults);
+  const [stack, setStack] = useState<FolderCrumb[]>([]);
   const current = stack[stack.length - 1];
   const kindSet = useMemo(() => new Set(kinds), [kinds]);
   const showFoot = multi || stayOpen;
   const selectedCount = selectedIds.length;
+  const rootCandidates = useQuery(api.folders.listWithPeeks, {});
+  const studioHome = useMemo(() => {
+    if (rootCandidates === undefined) return undefined;
+    return (
+      rootCandidates.find(
+        (folder) =>
+          !folder.systemKind &&
+          typeof folder.name === "string" &&
+          folder.name.toLowerCase() === "studio",
+      ) ?? null
+    );
+  }, [rootCandidates]);
 
   useMobileBackLayer("asset-picker-sheet", true, onClose);
 
   useEffect(() => {
     setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
   }, []);
+
+  useEffect(() => {
+    if (studioHome?._id) {
+      setStack((prev) => {
+        if (prev[0]?.id) return prev;
+        return [{ id: studioHome._id, name: "Files" }];
+      });
+      return;
+    }
+    if (studioHome !== null) return;
+    let cancelled = false;
+    void ensureDefaults().then((defaults) => {
+      if (cancelled) return;
+      setStack((prev) => {
+        if (prev[0]?.id) return prev;
+        return [{ id: defaults.rootFolderId, name: "Files" }];
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [studioHome, ensureDefaults]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -410,31 +443,40 @@ export function StudioAssetPickerSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const folders = useQuery(api.folders.listWithPeeks, {
-    parentId: current.id,
-    expiresUnix,
-  });
+  const folders = useQuery(
+    api.folders.listWithPeeks,
+    current?.id ? { parentId: current.id, expiresUnix } : "skip",
+  );
   const shareableFolders = useMemo(
-    () => (folders ?? []).filter((folder) => !folder.systemKind),
+    () =>
+      (folders ?? []).filter(
+        (folder) =>
+          !folder.systemKind &&
+          !(
+            folder.parentId == null &&
+            typeof folder.name === "string" &&
+            folder.name.toLowerCase() === "studio"
+          ),
+      ),
     [folders],
   );
   const folderAssets = useQuery(
     api.assets.listByFolder,
-    current.id ? { folderId: current.id, expiresUnix } : "skip",
+    current?.id ? { folderId: current.id, expiresUnix } : "skip",
   );
   const documents = useQuery(
     api.documents.listByFolder,
-    pickAnyStudio && current.id ? { folderId: current.id } : "skip",
+    pickAnyStudio && current?.id ? { folderId: current.id } : "skip",
   );
   const videoEdits = useQuery(
     api.videoEdits.listByFolder,
-    pickAnyStudio && current.id
+    pickAnyStudio && current?.id
       ? { folderId: current.id, expiresUnix }
       : "skip",
   );
   const elements = useQuery(
     api.elements.list,
-    pickAnyStudio && current.id ? { folderId: current.id } : "skip",
+    pickAnyStudio && current?.id ? { folderId: current.id } : "skip",
   );
 
   const assets = useMemo(() => {
@@ -444,10 +486,10 @@ export function StudioAssetPickerSheet({
   }, [folderAssets, kindSet, pickAnyStudio]);
 
   const loading =
+    !current?.id ||
     folders === undefined ||
-    (current.id !== null && folderAssets === undefined) ||
+    folderAssets === undefined ||
     (pickAnyStudio &&
-      current.id !== null &&
       (documents === undefined ||
         videoEdits === undefined ||
         elements === undefined));
@@ -485,7 +527,7 @@ export function StudioAssetPickerSheet({
           {stack[stack.length - 2].name}
         </button>
       ) : null}
-      <span className="studio-asset-picker-here">{current.name}</span>
+      <span className="studio-asset-picker-here">{current?.name ?? "Files"}</span>
       {countLabel ? (
         <span className="studio-asset-picker-count">{countLabel}</span>
       ) : null}
@@ -498,7 +540,7 @@ export function StudioAssetPickerSheet({
         <p className="studio-settings-empty">Loading…</p>
       ) : empty ? (
         <p className="studio-settings-empty">
-          {current.id === null
+          {stack.length <= 1
             ? "No folders yet — upload media in Files first."
             : "Nothing usable in this folder."}
         </p>

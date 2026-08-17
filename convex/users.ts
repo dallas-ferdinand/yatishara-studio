@@ -5,6 +5,7 @@ import {
   ensureMessagesFolder,
   ensurePurchasedAssetsFolder,
   ensureSharedWithMeFolder,
+  pickWorkspaceRootFolder,
 } from "./folders";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import { ensureProfileForUser } from "./lib/profileEnsure";
@@ -325,15 +326,8 @@ export const ensureStudioDefaults = authedMutation({
         q.eq("ownerId", ctx.user._id).eq("parentId", undefined),
       )
       .take(64);
-    // Prefer a normal workspace root — never treat system folders as the Studio root.
-    const existingRoot = topFolders.find(
-      (folder) =>
-        !folder.deletedAt &&
-        folder.systemKind !== "messages" &&
-        folder.systemKind !== "purchased_assets" &&
-        folder.systemKind !== "public_assets" &&
-        folder.systemKind !== "shared_with_me",
-    );
+    // Prefer the folder named Studio — a stray parentless "folder 2" is not home.
+    const existingRoot = pickWorkspaceRootFolder(topFolders);
 
     const rootFolderId =
       existingRoot?._id ??
