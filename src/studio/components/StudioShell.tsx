@@ -23891,13 +23891,20 @@ export function StudioShell({
           justify-content: flex-start;
           gap: 8px;
           min-width: 0;
+          height: var(--cursor-head-h, 32px);
+          min-height: var(--cursor-head-h, 32px);
+          max-height: var(--cursor-head-h, 32px);
+          overflow: hidden;
+          box-sizing: border-box;
+          line-height: 1;
         }
         .studio-academy-comments-avatar {
           flex: 0 0 auto;
           width: 20px;
           height: 20px;
-          border-radius: 999px;
+          max-height: 20px;
           overflow: hidden;
+          border-radius: 999px;
           display: grid;
           place-items: center;
           background: color-mix(in srgb, var(--mos-plate-strong, var(--cursor-surface-2)) 88%, transparent);
@@ -23929,6 +23936,7 @@ export function StudioShell({
           white-space: nowrap;
           font-size: 12px;
           font-weight: 650;
+          line-height: 1;
         }
         .studio-academy-comments-meta {
           flex: 0 0 auto;
