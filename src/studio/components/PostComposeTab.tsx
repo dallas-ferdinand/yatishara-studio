@@ -6,7 +6,7 @@ import {
   Crown,
   Forward,
   Loader2,
-  MessageCircle,
+  Feather,
 } from "lucide-react";
 import {
   useEffect,
@@ -871,7 +871,7 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
                 <span>0</span>
               </div>
               <div className="profile-post-rail-btn">
-                <MessageCircle aria-hidden="true" fill="currentColor" strokeWidth={0} />
+                <Feather aria-hidden="true" fill="currentColor" strokeWidth={0} />
                 <span>0</span>
               </div>
               <div className="profile-post-rail-btn">

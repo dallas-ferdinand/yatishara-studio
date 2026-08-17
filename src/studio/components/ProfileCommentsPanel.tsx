@@ -13,7 +13,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Lock,
-  MessageCircle,
+  Feather,
   Mic,
   Pause,
   Pencil,
@@ -324,7 +324,7 @@ function ProfileCommentBubble({
     menuItems.push({
       key: "replies",
       label: `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`,
-      icon: <MessageCircle aria-hidden="true" />,
+      icon: <Feather aria-hidden="true" />,
       onSelect: () => onReply(comment),
     });
   }
@@ -525,7 +525,7 @@ function ProfileCommentBubble({
                     }
                     onClick={goReply}
                   >
-                    <MessageCircle aria-hidden="true" strokeWidth={2} />
+                    <Feather aria-hidden="true" strokeWidth={2} />
                     {replyCount > 0 ? <span>{replyCount}</span> : null}
                   </button>
                 ) : replyCount > 0 ? (
@@ -533,7 +533,7 @@ function ProfileCommentBubble({
                     className="profile-comment-reply is-static"
                     aria-label={`${replyCount} replies`}
                   >
-                    <MessageCircle aria-hidden="true" strokeWidth={2} />
+                    <Feather aria-hidden="true" strokeWidth={2} />
                     <span>{replyCount}</span>
                   </span>
                 ) : null}
@@ -1527,7 +1527,7 @@ function CommentsBody({
                   name={myProfile?.username}
                 />
               ) : (
-                <MessageCircle className="profile-comments-empty-icon" aria-hidden="true" />
+                <Feather className="profile-comments-empty-icon" aria-hidden="true" />
               )}
               <p>
                 {searching
@@ -2365,7 +2365,7 @@ export function ProfileCommentsPanel({
               className="studio-academy-comments-meta"
               aria-label={`${formatCount(commentCount)} comments`}
             >
-              <MessageCircle aria-hidden="true" strokeWidth={2} />
+              <Feather aria-hidden="true" strokeWidth={2} />
               <span>{formatCount(commentCount)}</span>
             </span>
           </div>

@@ -11,7 +11,7 @@ import {
   ChevronUp,
   Crown,
   Forward,
-  MessageCircle,
+  Feather,
   Pause,
   Play,
   Plus,
@@ -968,7 +968,7 @@ function FeedActions({
         onPointerDown={(event) => event.stopPropagation()}
         aria-label="Comments"
       >
-        <MessageCircle aria-hidden="true" fill="currentColor" strokeWidth={0} />
+        <Feather aria-hidden="true" fill="currentColor" strokeWidth={0} />
         <span>{formatCount(localComments)}</span>
       </button>
       <button

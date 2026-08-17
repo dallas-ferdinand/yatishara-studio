@@ -9,6 +9,7 @@ import {
   ListVideo,
   Loader2,
   Lock,
+  Feather,
   MessageCircle,
   SmilePlus,
   Tag,
@@ -2317,7 +2318,7 @@ export function StudioAcademyPane({
                   setCommentsOpen(true);
                 }}
               >
-                <MessageCircle aria-hidden="true" strokeWidth={2} />
+                <Feather aria-hidden="true" strokeWidth={2} />
                 <span>{commentCount}</span>
               </button>
             ) : null}
