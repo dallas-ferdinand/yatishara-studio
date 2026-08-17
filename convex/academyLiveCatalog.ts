@@ -3,7 +3,7 @@
  *   npx convex run academy:internalSeedLiveCourses
  *
  * Prices are TTD → credits at TT$0.50 / credit.
- * Ad Side Hustle: TT$1500 list / TT$750 sale until 2026-09-01 00:00 AST.
+ * Ad Side Hustle: TT$1500 list / TT$500 sale until 2026-09-01 00:00 AST.
  * Short films: TT$2500 coming soon.
  * Cinematic: TT$4000 coming soon.
  */
@@ -23,9 +23,9 @@ export const LIVE_COURSES = [
     sortOrder: 10,
     status: "published" as const,
     /** Charge while sale active; also base fallback. */
-    priceCredits: ttdToCredits(750),
+    priceCredits: ttdToCredits(500),
     listPriceCredits: ttdToCredits(1500),
-    salePriceCredits: ttdToCredits(750),
+    salePriceCredits: ttdToCredits(500),
     saleEndsAt: AD_SIDE_HUSTLE_SALE_ENDS_AT,
     descriptionMarkdown: `Learn how to make AI ads in Yatishara Studio and turn that into a real side hustle.
 
@@ -39,7 +39,7 @@ You build the creative in Studio (flyer, video, music, voiceover, edit), film a 
 - A clean quote and deposit close
 
 ### Sale
-**TT$750** until **1 September 2026**, then **TT$1,500**. Lifetime access once unlocked.
+**TT$500** until **1 September 2026**, then **TT$1,500**. Lifetime access once unlocked.
 `,
   },
   {
