@@ -189,10 +189,44 @@ const publicProfileReturn = v.union(
   }),
 );
 
+const MAX_POST_MEDIA_ITEMS = 6;
+const postMediaKind = v.union(
+  v.literal("image"),
+  v.literal("video"),
+  v.literal("audio"),
+);
+const postMediaItemReturn = v.object({
+  assetId: v.id("assets"),
+  kind: postMediaKind,
+  name: v.string(),
+  thumbnailUrl: v.optional(v.string()),
+  mediaUrl: v.optional(v.string()),
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+});
+
+function isPostMediaKind(
+  kind: string,
+): kind is "image" | "video" | "audio" {
+  return kind === "image" || kind === "video" || kind === "audio";
+}
+
+function uniquePostAssetIds(post: Doc<"profilePosts">): Id<"assets">[] {
+  const ids: Id<"assets">[] = [];
+  const seen = new Set<string>();
+  for (const id of [post.assetId, ...(post.assetIds ?? [])]) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    if (ids.length >= MAX_POST_MEDIA_ITEMS) break;
+  }
+  return ids;
+}
+
 const publicPostReturn = v.object({
   _id: v.id("profilePosts"),
   assetId: v.id("assets"),
-  kind: v.union(v.literal("image"), v.literal("video")),
+  kind: postMediaKind,
   name: v.string(),
   caption: v.optional(v.string()),
   keywords: v.optional(v.array(v.string())),
@@ -209,6 +243,7 @@ const publicPostReturn = v.object({
   mediaUrl: v.optional(v.string()),
   width: v.optional(v.number()),
   height: v.optional(v.number()),
+  items: v.optional(v.array(postMediaItemReturn)),
   likedByViewer: v.boolean(),
   savedByViewer: v.boolean(),
   username: v.string(),
@@ -218,7 +253,7 @@ const feedPostReturn = v.object({
   _id: v.id("profilePosts"),
   assetId: v.id("assets"),
   profileId: v.id("profiles"),
-  kind: v.union(v.literal("image"), v.literal("video")),
+  kind: postMediaKind,
   name: v.string(),
   caption: v.optional(v.string()),
   keywords: v.optional(v.array(v.string())),
@@ -235,6 +270,7 @@ const feedPostReturn = v.object({
   mediaUrl: v.optional(v.string()),
   width: v.optional(v.number()),
   height: v.optional(v.number()),
+  items: v.optional(v.array(postMediaItemReturn)),
   likedByViewer: v.boolean(),
   savedByViewer: v.boolean(),
   username: v.string(),
@@ -248,10 +284,20 @@ const feedPostReturn = v.object({
   score: v.number(),
 });
 
+type HydratedPostMediaItem = {
+  assetId: Id<"assets">;
+  kind: "image" | "video" | "audio";
+  name: string;
+  thumbnailUrl?: string;
+  mediaUrl?: string;
+  width?: number;
+  height?: number;
+};
+
 type HydratedPublicPost = {
   _id: Id<"profilePosts">;
   assetId: Id<"assets">;
-  kind: "image" | "video";
+  kind: "image" | "video" | "audio";
   name: string;
   caption?: string;
   keywords?: string[];
@@ -273,6 +319,7 @@ type HydratedPublicPost = {
   mediaUrl?: string;
   width?: number;
   height?: number;
+  items?: HydratedPostMediaItem[];
   likedByViewer: boolean;
   savedByViewer: boolean;
   username: string;
@@ -293,6 +340,57 @@ async function viewerBoostedOrLiked(
   return Boolean(like);
 }
 
+async function hydratePostItemLists(
+  ctx: QueryCtx,
+  posts: Doc<"profilePosts">[],
+  expiresUnix: number,
+): Promise<HydratedPostMediaItem[][]> {
+  const idLists = posts.map(uniquePostAssetIds);
+  const allIds = [...new Set(idLists.flat())];
+  if (allIds.length === 0) return posts.map(() => []);
+  const docs = await Promise.all(allIds.map((id) => ctx.db.get("assets", id)));
+  const byId = new Map<string, Doc<"assets"> | null>();
+  for (let i = 0; i < allIds.length; i++) {
+    byId.set(allIds[i]!, docs[i] ?? null);
+  }
+  const thumbPaths = docs.map((asset) =>
+    asset && !asset.deletedAt && isPostMediaKind(asset.kind)
+      ? assetThumbnailPath(asset)
+      : undefined,
+  );
+  const videoPreviewPaths = docs.map((asset) => {
+    if (!asset || asset.deletedAt || asset.kind !== "video" || !asset.bunnyPath) {
+      return undefined;
+    }
+    if (assetThumbnailPath(asset)) return undefined;
+    return asset.bunnyPath;
+  });
+  const [thumbs, videoUrls] = await Promise.all([
+    signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM),
+    signBunnyCdnUrls(videoPreviewPaths, expiresUnix),
+  ]);
+  return idLists.map((ids) => {
+    const items: HydratedPostMediaItem[] = [];
+    for (const id of ids) {
+      const asset = byId.get(id);
+      if (!asset || asset.deletedAt || !isPostMediaKind(asset.kind)) continue;
+      const idx = allIds.indexOf(id);
+      const thumbPath = idx >= 0 ? thumbPaths[idx] : undefined;
+      const videoPath = idx >= 0 ? videoPreviewPaths[idx] : undefined;
+      items.push({
+        assetId: asset._id,
+        kind: asset.kind,
+        name: asset.name,
+        thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
+        mediaUrl: videoPath ? videoUrls.get(videoPath) : undefined,
+        width: asset.width,
+        height: asset.height,
+      });
+    }
+    return items;
+  });
+}
+
 async function hydratePublicPosts(
   ctx: QueryCtx,
   posts: Doc<"profilePosts">[],
@@ -300,17 +398,8 @@ async function hydratePublicPosts(
   viewerId: Id<"users"> | null,
 ): Promise<HydratedPublicPost[]> {
   if (posts.length === 0) return [];
-  const assets = await Promise.all(posts.map((post) => ctx.db.get("assets", post.assetId)));
   const profiles = await Promise.all(posts.map((post) => ctx.db.get("profiles", post.profileId)));
-  const thumbPaths = assets.map((asset) => (asset ? assetThumbnailPath(asset) : undefined));
-  /** Videos without a poster image still need a signed URL for grid <video> thumbs. */
-  const videoPreviewPaths = assets.map((asset) => {
-    if (!asset || asset.deletedAt || asset.kind !== "video" || !asset.bunnyPath) {
-      return undefined;
-    }
-    if (assetThumbnailPath(asset)) return undefined;
-    return asset.bunnyPath;
-  });
+  const itemLists = await hydratePostItemLists(ctx, posts, expiresUnix);
   const likedFlags = viewerId
     ? await Promise.all(
         posts.map((post) => viewerBoostedOrLiked(ctx, viewerId, post._id)),
@@ -329,23 +418,18 @@ async function hydratePublicPosts(
         }),
       )
     : posts.map(() => false);
-  const [thumbs, videoUrls, hashtagRefs, mentionRefs] = await Promise.all([
-    signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM),
-    signBunnyCdnUrls(videoPreviewPaths, expiresUnix),
+  const [hashtagRefs, mentionRefs] = await Promise.all([
     Promise.all(posts.map((post) => loadPostHashtagRefs(ctx, post._id))),
     Promise.all(posts.map((post) => loadPostMentionRefs(ctx, post._id))),
   ]);
   const results: HydratedPublicPost[] = [];
   for (let i = 0; i < posts.length; i++) {
     const post = posts[i]!;
-    const asset = assets[i];
     const author = profiles[i];
-    if (!asset || asset.deletedAt || (asset.kind !== "image" && asset.kind !== "video")) {
-      continue;
-    }
+    const items = itemLists[i] ?? [];
+    const primary = items[0];
+    if (!primary) continue;
     if (!author?.username) continue;
-    const thumbPath = thumbPaths[i];
-    const videoPath = videoPreviewPaths[i];
     const tags = hashtagRefs[i] ?? [];
     const mentions = await hydrateMentionChips(
       ctx,
@@ -354,9 +438,9 @@ async function hydratePublicPosts(
     );
     results.push({
       _id: post._id,
-      assetId: post.assetId,
-      kind: asset.kind,
-      name: asset.name,
+      assetId: primary.assetId,
+      kind: primary.kind,
+      name: primary.name,
       caption: post.caption,
       keywords: post.keywords?.length ? post.keywords : undefined,
       hashtags: tags.map((t) => ({ tag: t.tag, displayTag: t.displayTag })),
@@ -368,10 +452,11 @@ async function hydratePublicPosts(
       shareCount: post.shareCount ?? 0,
       publishedAt: post.publishedAt,
       editedAt: post.editedAt,
-      thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
-      mediaUrl: videoPath ? videoUrls.get(videoPath) : undefined,
-      width: asset.width,
-      height: asset.height,
+      thumbnailUrl: primary.thumbnailUrl,
+      mediaUrl: primary.mediaUrl,
+      width: primary.width,
+      height: primary.height,
+      items,
       likedByViewer: likedFlags[i] ?? false,
       savedByViewer: savedFlags[i] ?? false,
       username: author.username,
@@ -511,8 +596,8 @@ async function requireOwnedAsset(
   if (!asset || asset.ownerId !== userId || asset.deletedAt) {
     throw new Error("Asset not found");
   }
-  if (asset.kind !== "image" && asset.kind !== "video") {
-    throw new Error("Only images and videos can be shared to your profile");
+  if (!isPostMediaKind(asset.kind)) {
+    throw new Error("Only images, videos, and audio can be shared to your profile");
   }
   if (!asset.bunnyPath) {
     throw new Error("Asset is not ready to share yet");
@@ -949,7 +1034,8 @@ export const listMySharedAssetIds = authedQuery({
 
 export const shareAsset = authedMutation({
   args: {
-    assetId: v.id("assets"),
+    assetId: v.optional(v.id("assets")),
+    assetIds: v.optional(v.array(v.id("assets"))),
     caption: v.optional(v.string()),
     hashtags: v.optional(v.array(v.string())),
     keywords: v.optional(v.array(v.string())),
@@ -966,10 +1052,33 @@ export const shareAsset = authedMutation({
     if (!profile.isPublic) {
       throw new Error("Turn on your public profile before sharing");
     }
-    await requireOwnedAsset(ctx, ctx.user._id, args.assetId);
+    const mediaIds: Id<"assets">[] = [];
+    const seen = new Set<string>();
+    for (const id of [args.assetId, ...(args.assetIds ?? [])]) {
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      mediaIds.push(id);
+      if (mediaIds.length >= MAX_POST_MEDIA_ITEMS) break;
+    }
+    if (mediaIds.length === 0) {
+      throw new Error("Add at least one photo, video, or audio");
+    }
+    for (const id of mediaIds) {
+      await requireOwnedAsset(ctx, ctx.user._id, id);
+    }
+    const primaryId = mediaIds[0]!;
+    for (const extraId of mediaIds.slice(1)) {
+      const extraPost = await ctx.db
+        .query("profilePosts")
+        .withIndex("by_asset", (q) => q.eq("assetId", extraId))
+        .unique();
+      if (extraPost && !extraPost.unpublishedAt) {
+        throw new Error("One of these files is already posted on its own");
+      }
+    }
     const existing = await ctx.db
       .query("profilePosts")
-      .withIndex("by_asset", (q) => q.eq("assetId", args.assetId))
+      .withIndex("by_asset", (q) => q.eq("assetId", primaryId))
       .unique();
     const caption = args.caption?.trim() || undefined;
     const fromCaptionTags = extractHashtagsFromCaption(caption);
@@ -1006,6 +1115,7 @@ export const shareAsset = authedMutation({
         await ctx.db.patch(existing._id, {
           caption,
           keywords: keywords.length ? keywords : undefined,
+          assetIds: mediaIds,
           publishedAt: now,
           unpublishedAt: undefined,
         });
@@ -1022,6 +1132,7 @@ export const shareAsset = authedMutation({
         profileId: profile._id,
         caption,
         keywords: keywords.length ? keywords : undefined,
+        assetIds: mediaIds,
         publishedAt: now,
         unpublishedAt: undefined,
       });
@@ -1042,7 +1153,8 @@ export const shareAsset = authedMutation({
     const postId = await ctx.db.insert("profilePosts", {
       profileId: profile._id,
       ownerId: ctx.user._id,
-      assetId: args.assetId,
+      assetId: primaryId,
+      assetIds: mediaIds,
       caption,
       keywords: keywords.length ? keywords : undefined,
       likeCount: 0,
@@ -1557,6 +1669,11 @@ async function listFeedImpl(
     const assets = await Promise.all(
       ordered.map((item) => ctx.db.get("assets", item.post.assetId)),
     );
+    const itemLists = await hydratePostItemLists(
+      ctx,
+      ordered.map((item) => item.post),
+      expiresUnix,
+    );
     const thumbPaths = assets.map((asset) => (asset ? assetThumbnailPath(asset) : undefined));
     const videoPreviewPaths = assets.map((asset) => {
       if (!asset || asset.deletedAt || asset.kind !== "video" || !asset.bunnyPath) {
@@ -1616,7 +1733,7 @@ async function listFeedImpl(
       _id: Id<"profilePosts">;
       assetId: Id<"assets">;
       profileId: Id<"profiles">;
-      kind: "image" | "video";
+      kind: "image" | "video" | "audio";
       name: string;
       caption?: string;
       keywords?: string[];
@@ -1638,6 +1755,7 @@ async function listFeedImpl(
       mediaUrl?: string;
       width?: number;
       height?: number;
+      items?: HydratedPostMediaItem[];
       likedByViewer: boolean;
       savedByViewer: boolean;
       username: string;
@@ -1660,8 +1778,10 @@ async function listFeedImpl(
 
     for (let i = 0; i < ordered.length; i++) {
       const item = ordered[i]!;
+      const mediaItems = itemLists[i] ?? [];
+      const primary = mediaItems[0];
       const asset = assets[i];
-      if (!asset || asset.deletedAt || (asset.kind !== "image" && asset.kind !== "video")) {
+      if (!primary || !asset || asset.deletedAt || !isPostMediaKind(asset.kind)) {
         continue;
       }
       const thumbPath = thumbPaths[i];
@@ -1680,10 +1800,10 @@ async function listFeedImpl(
       });
       results.push({
         _id: item.post._id,
-        assetId: item.post.assetId,
+        assetId: primary.assetId,
         profileId: item.profile._id,
-        kind: asset.kind,
-        name: asset.name,
+        kind: primary.kind,
+        name: primary.name,
         caption: item.post.caption,
         keywords: item.post.keywords?.length ? item.post.keywords : undefined,
         hashtags: item.hashtags.map((t) => ({ tag: t.tag, displayTag: t.displayTag })),
@@ -1695,10 +1815,11 @@ async function listFeedImpl(
         shareCount: item.post.shareCount ?? 0,
         publishedAt: item.post.publishedAt,
         editedAt: item.post.editedAt,
-        thumbnailUrl: thumbPath ? signed.get(thumbPath) : undefined,
-        mediaUrl: videoPath ? videoUrls.get(videoPath) : undefined,
-        width: asset.width,
-        height: asset.height,
+        thumbnailUrl: primary.thumbnailUrl ?? (thumbPath ? signed.get(thumbPath) : undefined),
+        mediaUrl: primary.mediaUrl ?? (videoPath ? videoUrls.get(videoPath) : undefined),
+        width: primary.width,
+        height: primary.height,
+        items: mediaItems,
         likedByViewer: likedFlags[i] ?? false,
         savedByViewer: savedFlags[i] ?? false,
         username: item.profile.username,
@@ -1740,6 +1861,66 @@ export const listFeed = query({
 });
 
 
+async function signFullPostMedia(
+  ctx: QueryCtx,
+  post: Doc<"profilePosts">,
+  expiresUnix: number,
+): Promise<{
+  postId: Id<"profilePosts">;
+  kind: "image" | "video" | "audio";
+  thumbnailUrl?: string;
+  mediaUrl?: string;
+  width?: number;
+  height?: number;
+  items: HydratedPostMediaItem[];
+} | null> {
+  const ids = uniquePostAssetIds(post);
+  const docs = await Promise.all(ids.map((id) => ctx.db.get("assets", id)));
+  const playable: Doc<"assets">[] = [];
+  for (const asset of docs) {
+    if (!asset || asset.deletedAt || !isPostMediaKind(asset.kind) || !asset.bunnyPath) {
+      continue;
+    }
+    playable.push(asset);
+  }
+  if (playable.length === 0) return null;
+  const thumbPaths = playable.map((asset) => assetThumbnailPath(asset));
+  const thumbs = await signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM);
+  const mediaUrls = await Promise.all(
+    playable.map((asset) =>
+      asset.bunnyPath
+        ? signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind)
+        : Promise.resolve(undefined),
+    ),
+  );
+  const items: HydratedPostMediaItem[] = playable.map((asset, i) => {
+    const thumbPath = thumbPaths[i];
+    const kind = asset.kind;
+    if (!isPostMediaKind(kind)) {
+      throw new Error("unreachable");
+    }
+    return {
+      assetId: asset._id,
+      kind,
+      name: asset.name,
+      thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
+      mediaUrl: mediaUrls[i],
+      width: asset.width,
+      height: asset.height,
+    };
+  });
+  const primary = items[0]!;
+  return {
+    postId: post._id,
+    kind: primary.kind,
+    thumbnailUrl: primary.thumbnailUrl,
+    mediaUrl: primary.mediaUrl,
+    width: primary.width,
+    height: primary.height,
+    items,
+  };
+}
+
 export const getPublicPostMedia = query({
   args: {
     postId: v.id("profilePosts"),
@@ -1749,11 +1930,12 @@ export const getPublicPostMedia = query({
     v.null(),
     v.object({
       postId: v.id("profilePosts"),
-      kind: v.union(v.literal("image"), v.literal("video")),
+      kind: postMediaKind,
       thumbnailUrl: v.optional(v.string()),
       mediaUrl: v.optional(v.string()),
       width: v.optional(v.number()),
       height: v.optional(v.number()),
+      items: v.optional(v.array(postMediaItemReturn)),
     }),
   ),
   handler: async (ctx, args) => {
@@ -1761,32 +1943,9 @@ export const getPublicPostMedia = query({
     if (!post || post.unpublishedAt) return null;
     const profile = await ctx.db.get("profiles", post.profileId);
     if (!profile || !profile.isPublic) return null;
-
-    const asset = await ctx.db.get("assets", post.assetId);
-    if (!asset || asset.deletedAt || (asset.kind !== "image" && asset.kind !== "video")) {
-      return null;
-    }
-
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
-    const thumbPath = assetThumbnailPath(asset);
-    const [thumbs, mediaUrl] = await Promise.all([
-      thumbPath
-        ? signBunnyCdnUrls([thumbPath], expiresUnix, THUMB_TRANSFORM)
-        : Promise.resolve(new Map<string, string>()),
-      asset.bunnyPath
-        ? signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind)
-        : Promise.resolve(undefined),
-    ]);
-
-    return {
-      postId: post._id,
-      kind: asset.kind,
-      thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
-      mediaUrl,
-      width: asset.width,
-      height: asset.height,
-    };
+    return await signFullPostMedia(ctx, post, expiresUnix);
   },
 });
 
@@ -3316,6 +3475,7 @@ export const shareAssetForApi = internalMutation({
       profileId: profile._id,
       ownerId: user._id,
       assetId: args.assetId,
+      assetIds: [args.assetId],
       caption,
       keywords: keywords.length ? keywords : undefined,
       likeCount: 0,
@@ -3495,9 +3655,10 @@ export const getPublicPostMediaForApi = internalQuery({
     v.null(),
     v.object({
       postId: v.id("profilePosts"),
-      kind: v.union(v.literal("image"), v.literal("video")),
+      kind: postMediaKind,
       thumbnailUrl: v.optional(v.string()),
       mediaUrl: v.optional(v.string()),
+      items: v.optional(v.array(postMediaItemReturn)),
     }),
   ),
   handler: async (ctx, args) => {
@@ -3506,26 +3667,16 @@ export const getPublicPostMediaForApi = internalQuery({
     if (!post || post.unpublishedAt) return null;
     const profile = await ctx.db.get("profiles", post.profileId);
     if (!profile || !profile.isPublic) return null;
-    const asset = await ctx.db.get("assets", post.assetId);
-    if (!asset || asset.deletedAt || (asset.kind !== "image" && asset.kind !== "video")) {
-      return null;
-    }
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
-    const thumbPath = assetThumbnailPath(asset);
-    const [thumbs, mediaUrl] = await Promise.all([
-      thumbPath
-        ? signBunnyCdnUrls([thumbPath], expiresUnix, THUMB_TRANSFORM)
-        : Promise.resolve(new Map<string, string>()),
-      asset.bunnyPath
-        ? signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind)
-        : Promise.resolve(undefined),
-    ]);
+    const signed = await signFullPostMedia(ctx, post, expiresUnix);
+    if (!signed) return null;
     return {
-      postId: post._id,
-      kind: asset.kind,
-      thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
-      mediaUrl,
+      postId: signed.postId,
+      kind: signed.kind,
+      thumbnailUrl: signed.thumbnailUrl,
+      mediaUrl: signed.mediaUrl,
+      items: signed.items,
     };
   },
 });

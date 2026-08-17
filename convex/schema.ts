@@ -1203,6 +1203,8 @@ export default defineSchema({
     profileId: v.id("profiles"),
     ownerId: v.id("users"),
     assetId: v.id("assets"),
+    /** Extra media after `assetId`. Max 6 including primary. Mixed image/video/audio. */
+    assetIds: v.optional(v.array(v.id("assets"))),
     caption: v.optional(v.string()),
     /** Normalized discovery keywords (not shown as #hashtags). */
     keywords: v.optional(v.array(v.string())),
