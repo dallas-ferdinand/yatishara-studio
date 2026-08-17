@@ -2,13 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { reportPerfMetric } from "@/lib/performance";
-import {
-  normalizeClipTransform,
-  type ClipTransform,
-} from "../clipTransform";
+import { type ClipTransform } from "../clipTransform";
 import { normalizeTextTransform } from "../textLayout";
 import { clipOpacityAtLocalTime, textClipAnimationStyle } from "../editorEffects";
-import type { ClipEffects, EditorMediaItem, EditorProject } from "../types";
+import type { EditorMediaItem, EditorProject } from "../types";
 import { AudioMixer } from "./audio-mixer";
 import { CompositorClient } from "./compositor-client";
 import {
@@ -16,7 +13,7 @@ import {
   MediaDecoderClient,
 } from "./media-decoder-client";
 import { FrameScheduler, type FrameConsumer, type SchedulerMetrics } from "./frame-scheduler";
-import { compileTimeline, pictureStackPlan, playbackSignature, sliceAt } from "./timeline-compiler";
+import { compileTimeline, playbackSignature, sliceAt } from "./timeline-compiler";
 import type { PlaybackPlan, RenderSlice } from "./timeline-compiler";
 import { TransportClock } from "./transport-clock";
 import { isLegacySystemFont, loadGoogleFont } from "../loadGoogleFont";
@@ -30,6 +27,7 @@ import {
 import { previewTransitionWhilePlaying } from "./preview-transition-play";
 import { setEditorPlaybackBusy } from "../filmstripGate";
 import { PlayBus, playBusLayersByClipId } from "./play-bus";
+import { pictureLayersBottomToTop, type PictureLayer } from "./picture-layers";
 import { StillResidency } from "./still-residency";
 
 /**
@@ -74,13 +72,6 @@ function warmPlayheadVideos(
     if (!media || media.kind !== "video" || !url) continue;
     decoder.warm(assetId, url, sample.sourceTime, generation);
   }
-}
-
-function transformTuple(
-  effects: ClipEffects | undefined,
-): [number, number, number, number] {
-  const transform = normalizeClipTransform(effects);
-  return [transform.scale, transform.x, transform.y, transform.rotation];
 }
 
 function mapTextItems(
@@ -173,18 +164,7 @@ type EngineRuntime = {
 type Prepared = {
   slice: RenderSlice;
   generation: number;
-  frameA?: VideoFrame;
-  frameB?: VideoFrame;
-  textureKeyA?: string;
-  textureKeyB?: string;
-  stack?: Array<{
-    frame?: VideoFrame;
-    textureKey?: string;
-    transform: [number, number, number, number];
-    opacity: number;
-    width?: number;
-    height?: number;
-  }>;
+  layers: PictureLayer[];
 };
 
 class EngineConsumer implements FrameConsumer {
@@ -265,13 +245,6 @@ class EngineConsumer implements FrameConsumer {
     bus.syncSlice(slice, this.mediaRef.current);
     const captured = bus.captureFrames();
     const byClipId = playBusLayersByClipId(captured);
-    const roles = pictureStackPlan(slice);
-    const opacityFor = (sample: RenderSlice["video"][number] | undefined) => {
-      if (!sample) return 1;
-      const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
-      const local = slice.timelineTime - sample.clip.timelineStart;
-      return clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local);
-    };
 
     // Play never awaits image decode, so a still can be requested before its
     // bitmap exists. Only the lanes that actually carry pixels below may be
@@ -280,7 +253,7 @@ class EngineConsumer implements FrameConsumer {
     const sentStills = new Set<string>();
     const stillForSample = (
       sample: (typeof slice.video)[number] | undefined,
-    ): { frame?: VideoFrame; textureKey: string } | null => {
+    ): { frame?: VideoFrame; textureKey: string; width?: number; height?: number } | null => {
       if (!sample?.clip.assetId) return null;
       const media = this.mediaRef.current.get(sample.clip.assetId);
       if (media?.kind !== "image") return null;
@@ -292,65 +265,44 @@ class EngineConsumer implements FrameConsumer {
       void this.imageFrame(sample.clip.assetId, url, this.previewLoadQualityRef.current);
       if (this.stills.needsPixels(key, Boolean(cached))) {
         sentStills.add(key);
-        return { frame: cached!.clone(), textureKey: key };
+        return {
+          frame: cached!.clone(),
+          textureKey: key,
+          width: cached!.displayWidth,
+          height: cached!.displayHeight,
+        };
       }
-      return { textureKey: key };
+      return {
+        textureKey: key,
+        width: cached?.displayWidth,
+        height: cached?.displayHeight,
+      };
     };
 
     const usedBusFrames = new Set<VideoFrame>();
-    const resolveLane = (index: number) => {
-      const sample = slice.video[index];
-      if (!sample) return null;
+    const resolved = slice.video.map((sample) => {
       const still = stillForSample(sample);
       if (still) {
         return {
-          sample,
+          clipId: sample.clip.clipId,
           frame: still.frame,
           textureKey: still.textureKey,
-          width: still.frame?.displayWidth,
-          height: still.frame?.displayHeight,
+          width: still.width,
+          height: still.height,
         };
       }
-      // Slot rebinding is asynchronous. A lane start/end changes every later
-      // sample index immediately, so indexes can point at the wrong movie for
-      // several paints. Clip identity remains stable across that boundary.
       const fromBus = byClipId.get(sample.clip.clipId);
       if (fromBus?.frame) usedBusFrames.add(fromBus.frame);
-      if (!fromBus) return { sample, frame: undefined, textureKey: undefined };
+      if (!fromBus) return { clipId: sample.clip.clipId };
       return {
-        sample,
+        clipId: sample.clip.clipId,
         frame: fromBus.frame,
         textureKey: fromBus.textureKey,
         width: fromBus.width,
         height: fromBus.height,
       };
-    };
-
-    const top = roles.topIndex >= 0 ? resolveLane(roles.topIndex) : null;
-    const bottom =
-      roles.bottomIndex >= 0 && roles.bottomIndex !== roles.topIndex
-        ? resolveLane(roles.bottomIndex)
-        : null;
-    const stack: Array<{
-      frame?: VideoFrame;
-      textureKey?: string;
-      transform: [number, number, number, number];
-      opacity: number;
-      width?: number;
-      height?: number;
-    }> = [];
-    for (let i = roles.middleIndexes.length - 1; i >= 0; i -= 1) {
-      const layer = resolveLane(roles.middleIndexes[i]!);
-      if (!layer || (!layer.frame && !layer.textureKey)) continue;
-      stack.push({
-        frame: layer.frame,
-        textureKey: layer.textureKey,
-        transform: transformTuple(layer.sample.clip.clip.effects),
-        opacity: opacityFor(layer.sample),
-        width: layer.width,
-        height: layer.height,
-      });
-    }
+    });
+    const layers = pictureLayersBottomToTop(resolved, slice);
     for (const layer of captured.layers ?? captured.stack ?? []) {
       if (layer.frame && !usedBusFrames.has(layer.frame)) {
         try {
@@ -361,40 +313,23 @@ class EngineConsumer implements FrameConsumer {
       }
     }
 
-    const sampleA = top?.sample;
-    const sampleB = bottom?.sample;
-    const frameA = top?.frame;
-    const frameB = bottom?.frame;
-    const textureKeyA = top?.textureKey;
-    const textureKeyB = bottom?.textureKey;
-
-    if (sampleA?.clip.assetId && top?.width && top.height) {
-      this.onSourceSize({
-        assetId: sampleA.clip.assetId,
-        width: top.width,
-        height: top.height,
-      });
-    } else if (sampleB?.clip.assetId && bottom?.width && bottom.height) {
-      this.onSourceSize({
-        assetId: sampleB.clip.assetId,
-        width: bottom.width,
-        height: bottom.height,
-      });
+    const top = layers[layers.length - 1];
+    if (top?.width && top.height) {
+      const sample = slice.video.find((item) => item.clip.clipId === top.clipId);
+      if (sample?.clip.assetId) {
+        this.onSourceSize({
+          assetId: sample.clip.assetId,
+          width: top.width,
+          height: top.height,
+        });
+      }
     }
 
     const textsUnder = mapTextItems(slice.textUnder, slice.timelineTime);
     const textsOver = mapTextItems(slice.textOver, slice.timelineTime);
 
     const painted = this.compositor.paint({
-      frameA,
-      frameB,
-      textureKeyA,
-      textureKeyB,
-      transformA: transformTuple(sampleA?.clip.clip.effects),
-      transformB: transformTuple(sampleB?.clip.clip.effects),
-      opacityA: opacityFor(sampleA),
-      opacityB: opacityFor(sampleB),
-      stack: stack.length ? stack : undefined,
+      layers,
       transition: previewTransitionWhilePlaying(slice.transition?.type, true),
       progress: slice.transition?.progress,
       textsUnder,
@@ -454,23 +389,33 @@ class EngineConsumer implements FrameConsumer {
       const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
       if (!media || !url) return null;
       if (media.kind === "image") {
-        const frame = await this.imageFrame(
-          assetId,
-          url,
-          this.previewLoadQualityRef.current,
-        );
-        const textureKey = `image:${assetId}`;
-        const sendPixels = this.stills.needsPixels(textureKey, true);
-        return {
-          assetId,
-          sourceTime: sample.sourceTime,
-          generation,
-          textureKey,
-          frame: sendPixels ? frame.clone() : undefined,
-          width: frame.displayWidth,
-          height: frame.displayHeight,
-          sample,
-        };
+        try {
+          const frame = await this.imageFrame(
+            assetId,
+            url,
+            this.previewLoadQualityRef.current,
+          );
+          const textureKey = `image:${assetId}`;
+          const sendPixels = this.stills.needsPixels(textureKey, true);
+          return {
+            assetId,
+            sourceTime: sample.sourceTime,
+            generation,
+            textureKey,
+            frame: sendPixels ? frame.clone() : undefined,
+            width: frame.displayWidth,
+            height: frame.displayHeight,
+            sample,
+          };
+        } catch {
+          return {
+            assetId,
+            sourceTime: sample.sourceTime,
+            generation,
+            textureKey: `image:${assetId}`,
+            sample,
+          };
+        }
       }
       try {
         const decoded = await this.decoder!.requestFrame(
@@ -504,53 +449,35 @@ class EngineConsumer implements FrameConsumer {
       return false;
     }
     this.onAudioReady();
-    const roles = pictureStackPlan(slice);
-    const top = roles.topIndex >= 0 ? decoded[roles.topIndex] ?? undefined : undefined;
-    const bottom =
-      roles.bottomIndex >= 0 && roles.bottomIndex !== roles.topIndex
-        ? decoded[roles.bottomIndex] ?? undefined
-        : undefined;
-    const middles = roles.middleIndexes
-      .map((index) => decoded[index])
-      .filter((item): item is NonNullable<typeof item> => item != null)
-      .reverse();
-    const primary = top ?? bottom ?? valid[0];
+    const resolved = decoded.map((item, index) => {
+      const sample = slice.video[index];
+      if (!item || !sample) return { clipId: sample?.clip.clipId ?? "" };
+      return {
+        clipId: sample.clip.clipId,
+        frame: item.frame,
+        textureKey: item.textureKey,
+        width: item.width ?? item.frame?.displayWidth,
+        height: item.height ?? item.frame?.displayHeight,
+      };
+    });
+    const layers = pictureLayersBottomToTop(resolved, slice);
+    const top = layers[layers.length - 1];
+    const topDecoded = top
+      ? valid.find((item) => item.sample.clip.clipId === top.clipId)
+      : valid[0];
     this.onSourceSize(
-      primary
+      topDecoded
         ? {
-            assetId: primary.assetId,
-            width: primary.width ?? primary.frame?.displayWidth ?? 0,
-            height: primary.height ?? primary.frame?.displayHeight ?? 0,
+            assetId: topDecoded.assetId,
+            width: topDecoded.width ?? topDecoded.frame?.displayWidth ?? 0,
+            height: topDecoded.height ?? topDecoded.frame?.displayHeight ?? 0,
           }
         : null,
     );
-    // Match compositor lanes to slice.video indexes so a failed middle decode
-    // cannot steal top/bottom (or hide videos under an image overlay).
-    const frameA = top?.frame;
-    let frameB = bottom?.frame;
-    if (frameA && frameB && frameA === frameB) {
-      frameB = frameA.clone();
-    }
     this.prepared = {
       slice,
       generation,
-      frameA,
-      frameB,
-      textureKeyA: top?.textureKey,
-      textureKeyB: bottom?.textureKey,
-      stack: middles.map((item) => {
-        const sample = item.sample;
-        const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
-        const local = slice.timelineTime - sample.clip.timelineStart;
-        return {
-          frame: item.frame,
-          textureKey: item.textureKey,
-          transform: transformTuple(sample.clip.clip.effects),
-          opacity: clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local),
-          width: item.width ?? item.frame?.displayWidth,
-          height: item.height ?? item.frame?.displayHeight,
-        };
-      }),
+      layers,
     };
 
     for (const sample of [...slice.video, ...slice.preload]) {
@@ -591,31 +518,8 @@ class EngineConsumer implements FrameConsumer {
     // Document + worker FontFace sets are separate — load both before paint.
     await Promise.all(families.map((family) => loadGoogleFont(family)));
     await this.compositor.ensureFonts(families);
-    const videos = prepared.slice.video;
-    const roles = pictureStackPlan(prepared.slice);
-    const sampleA = roles.topIndex >= 0 ? videos[roles.topIndex] : undefined;
-    const sampleB =
-      roles.bottomIndex >= 0 && roles.bottomIndex !== roles.topIndex
-        ? videos[roles.bottomIndex]
-        : undefined;
-    const opacityFor = (sample: typeof sampleA | undefined) => {
-      if (!sample) return 1;
-      const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
-      const local = slice.timelineTime - sample.clip.timelineStart;
-      return clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local);
-    };
     await this.compositor.render({
-      frameA: prepared.frameA,
-      frameB: prepared.frameB,
-      textureKeyA: prepared.textureKeyA,
-      textureKeyB: prepared.textureKeyB,
-      transformA: transformTuple(sampleA?.clip.clip.effects),
-      transformB: transformTuple(sampleB?.clip.clip.effects),
-      opacityA: opacityFor(sampleA),
-      opacityB: opacityFor(sampleB),
-      // Overlay lanes stay painted through a transition window; dropping the stack
-      // here made every extra media row vanish while paused or scrubbing over one.
-      stack: prepared.stack?.length ? prepared.stack : undefined,
+      layers: prepared.layers,
       transition: previewTransitionWhilePlaying(
         slice.transition?.type,
         this.playingRef.current,
@@ -624,15 +528,11 @@ class EngineConsumer implements FrameConsumer {
       textsUnder,
       textsOver,
     });
-    // Residency follows the pixels, never the key alone.
-    const sent: string[] = [];
-    const collect = (key?: string, frame?: VideoFrame) => {
-      if (frame && key?.startsWith("image:")) sent.push(key);
-    };
-    collect(prepared.textureKeyA, prepared.frameA);
-    collect(prepared.textureKeyB, prepared.frameB);
-    for (const layer of prepared.stack ?? []) collect(layer.textureKey, layer.frame);
-    this.stills.markSent(sent);
+    this.stills.markSent(
+      prepared.layers
+        .filter((layer) => layer.frame && layer.textureKey?.startsWith("image:"))
+        .map((layer) => layer.textureKey!),
+    );
     if (slice.transition && this.transitionStartedAt > 0) {
       reportPerfMetric(
         "editor-transition-start",
@@ -721,9 +621,13 @@ class EngineConsumer implements FrameConsumer {
   }
 
   private closePrepared(): void {
-    this.prepared?.frameA?.close();
-    this.prepared?.frameB?.close();
-    for (const layer of this.prepared?.stack ?? []) layer.frame?.close();
+    for (const layer of this.prepared?.layers ?? []) {
+      try {
+        layer.frame?.close();
+      } catch {
+        /* already closed */
+      }
+    }
     this.prepared = null;
   }
 }

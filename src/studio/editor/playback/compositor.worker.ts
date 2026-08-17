@@ -82,6 +82,15 @@ type RenderMessage = {
     width?: number;
     height?: number;
   }>;
+  /** Bottom → top. When present, this is the picture stack — not A/B/middle. */
+  layers?: Array<{
+    frame?: VideoFrame;
+    textureKey?: string;
+    transform?: TransformTuple;
+    opacity?: number;
+    width?: number;
+    height?: number;
+  }>;
   transition: TransitionName;
   progress: number;
   background: [number, number, number, number];
@@ -857,6 +866,15 @@ function uploadTextLayer(
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
 }
 
+function closeFrame(frame?: VideoFrame): void {
+  if (!frame) return;
+  try {
+    frame.close();
+  } catch {
+    /* already closed */
+  }
+}
+
 function copyCanvasToB(): void {
   if (!gl || !canvas || !textureB) return;
   gl.activeTexture(gl.TEXTURE1);
@@ -923,17 +941,36 @@ function render(message: RenderMessage): void {
   ) {
     throw new Error("Compositor is not initialized.");
   }
-  const a = message.frameA;
-  const b = message.frameB;
-  const stack = message.stack ?? [];
-  const transformA = message.transformA ?? [1, 0, 0, 0];
-  const transformB = message.transformB ?? [1, 0, 0, 0];
   const identity: TransformTuple = [1, 0, 0, 0];
-  const opacityA = Number.isFinite(message.opacityA) ? Number(message.opacityA) : 1;
-  const opacityB = Number.isFinite(message.opacityB) ? Number(message.opacityB) : 1;
   const effect = transitionShaderIdFor(message.transition);
-  const canStack =
-    stack.length > 0 && (message.transition === "none" || effect === TRANSITION_SHADER_IDS.none);
+  const layers =
+    message.layers?.length
+      ? message.layers
+      : (() => {
+          const out: NonNullable<RenderMessage["layers"]> = [];
+          if (message.frameB || message.textureKeyB) {
+            out.push({
+              frame: message.frameB,
+              textureKey: message.textureKeyB,
+              transform: message.transformB ?? identity,
+              opacity: Number.isFinite(message.opacityB) ? Number(message.opacityB) : 1,
+            });
+          }
+          for (const layer of message.stack ?? []) out.push(layer);
+          if (message.frameA || message.textureKeyA) {
+            out.push({
+              frame: message.frameA,
+              textureKey: message.textureKeyA,
+              transform: message.transformA ?? identity,
+              opacity: Number.isFinite(message.opacityA) ? Number(message.opacityA) : 1,
+            });
+          }
+          return out;
+        })();
+  const transitioning =
+    layers.length === 2 &&
+    message.transition !== "none" &&
+    effect !== TRANSITION_SHADER_IDS.none;
   // Senders reuse a bare `image:` key once they believe the still is resident.
   // This texture cache is the only authority on that: it evicts, and it never
   // held anything if the first send raced image decode. Report every key we
@@ -956,15 +993,44 @@ function render(message: RenderMessage): void {
     uploadTextLayerIfChanged(textureTextUnder, gl.TEXTURE2, lastTextsUnder, "under");
     uploadTextLayerIfChanged(textureTextOver, gl.TEXTURE3, lastTextsOver, "over");
 
-    if (canStack) {
-      const hasBottom = uploadLane(textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
+    if (transitioning) {
+      const top = layers[1]!;
+      const bottom = layers[0]!;
+      const hasA = uploadLane(textureA, gl.TEXTURE0, top.frame, top.textureKey, "a");
+      const hasB = uploadLane(textureB, gl.TEXTURE1, bottom.frame, bottom.textureKey, "b");
+      if (top.width && top.height) lastASize = [top.width, top.height];
+      if (bottom.width && bottom.height) lastBSize = [bottom.width, bottom.height];
+      applyLayerUniforms({
+        hasA,
+        hasB,
+        transformA: top.transform ?? identity,
+        transformB: bottom.transform ?? identity,
+        opacityA: Number.isFinite(top.opacity) ? Number(top.opacity) : 1,
+        opacityB: Number.isFinite(bottom.opacity) ? Number(bottom.opacity) : 1,
+        pass: 0,
+        bIsCanvas: false,
+        effect,
+        progress: message.progress,
+        background: message.background,
+      });
+      gl.flush();
+    } else if (layers.length >= 2) {
+      const bottom = layers[0]!;
+      const hasBottom = uploadLane(
+        textureB,
+        gl.TEXTURE1,
+        bottom.frame,
+        bottom.textureKey,
+        "b",
+      );
+      if (bottom.width && bottom.height) lastBSize = [bottom.width, bottom.height];
       applyLayerUniforms({
         hasA: false,
         hasB: hasBottom,
-        transformA,
-        transformB,
-        opacityA,
-        opacityB,
+        transformA: identity,
+        transformB: bottom.transform ?? identity,
+        opacityA: 1,
+        opacityB: Number.isFinite(bottom.opacity) ? Number(bottom.opacity) : 1,
         pass: 1,
         bIsCanvas: false,
         effect: TRANSITION_SHADER_IDS.none,
@@ -972,10 +1038,13 @@ function render(message: RenderMessage): void {
         background: message.background,
       });
       copyCanvasToB();
-      for (const layer of stack) {
+      let finished = false;
+      for (let index = 1; index < layers.length; index += 1) {
+        const layer = layers[index]!;
         const hasLayer = uploadLane(textureA, gl.TEXTURE0, layer.frame, layer.textureKey, "a");
         if (!hasLayer) continue;
         if (layer.width && layer.height) lastASize = [layer.width, layer.height];
+        const last = index === layers.length - 1;
         applyLayerUniforms({
           hasA: true,
           hasB: true,
@@ -983,102 +1052,57 @@ function render(message: RenderMessage): void {
           transformB: identity,
           opacityA: Number.isFinite(layer.opacity) ? Number(layer.opacity) : 1,
           opacityB: 1,
-          pass: 2,
+          pass: last ? 3 : 2,
           bIsCanvas: true,
           effect: TRANSITION_SHADER_IDS.none,
           progress: 0,
           background: message.background,
         });
-        copyCanvasToB();
+        if (last) finished = true;
+        else copyCanvasToB();
       }
-      const hasFinish = uploadLane(textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
-      applyLayerUniforms({
-        hasA: hasFinish,
-        hasB: true,
-        transformA,
-        transformB: identity,
-        opacityA,
-        opacityB: 1,
-        pass: 3,
-        bIsCanvas: true,
-        effect: TRANSITION_SHADER_IDS.none,
-        progress: 0,
-        background: message.background,
-      });
-      gl.flush();
-    } else if (stack.length > 0) {
-      // Transition A/B first, then source-over remaining picture lanes on top.
-      const hasA = uploadLane(textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
-      const hasB = uploadLane(textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
-      applyLayerUniforms({
-        hasA,
-        hasB,
-        transformA,
-        transformB,
-        opacityA,
-        opacityB,
-        pass: 0,
-        bIsCanvas: false,
-        effect,
-        progress: message.progress,
-        background: message.background,
-      });
-      copyCanvasToB();
-      for (const layer of stack) {
-        const hasLayer = uploadLane(textureA, gl.TEXTURE0, layer.frame, layer.textureKey, "a");
-        if (!hasLayer) continue;
-        if (layer.width && layer.height) lastASize = [layer.width, layer.height];
+      if (!finished) {
         applyLayerUniforms({
-          hasA: true,
+          hasA: false,
           hasB: true,
-          transformA: layer.transform ?? identity,
+          transformA: identity,
           transformB: identity,
-          opacityA: Number.isFinite(layer.opacity) ? Number(layer.opacity) : 1,
+          opacityA: 1,
           opacityB: 1,
-          pass: 2,
+          pass: 3,
           bIsCanvas: true,
           effect: TRANSITION_SHADER_IDS.none,
           progress: 0,
           background: message.background,
         });
-        copyCanvasToB();
       }
-      applyLayerUniforms({
-        hasA: false,
-        hasB: true,
-        transformA: identity,
-        transformB: identity,
-        opacityA: 1,
-        opacityB: 1,
-        pass: 3,
-        bIsCanvas: true,
-        effect: TRANSITION_SHADER_IDS.none,
-        progress: 0,
-        background: message.background,
-      });
       gl.flush();
     } else {
-    const hasA = uploadLane(textureA, gl.TEXTURE0, a, message.textureKeyA, "a");
-    const hasB = uploadLane(textureB, gl.TEXTURE1, b, message.textureKeyB, "b");
-    applyLayerUniforms({
-      hasA,
-      hasB,
-      transformA,
-      transformB,
-      opacityA,
-      opacityB,
-      pass: 0,
-      bIsCanvas: false,
-      effect,
-      progress: message.progress,
-      background: message.background,
-    });
-    gl.flush();
+      const only = layers[0];
+      const hasA = only
+        ? uploadLane(textureA, gl.TEXTURE0, only.frame, only.textureKey, "a")
+        : false;
+      if (only?.width && only.height) lastASize = [only.width, only.height];
+      applyLayerUniforms({
+        hasA,
+        hasB: false,
+        transformA: only?.transform ?? identity,
+        transformB: identity,
+        opacityA: Number.isFinite(only?.opacity) ? Number(only?.opacity) : 1,
+        opacityB: 1,
+        pass: 0,
+        bIsCanvas: false,
+        effect: TRANSITION_SHADER_IDS.none,
+        progress: 0,
+        background: message.background,
+      });
+      gl.flush();
     }
   } finally {
-    a?.close();
-    b?.close();
-    for (const layer of stack) layer.frame?.close();
+    closeFrame(message.frameA);
+    closeFrame(message.frameB);
+    for (const layer of message.stack ?? []) closeFrame(layer.frame);
+    for (const layer of message.layers ?? []) closeFrame(layer.frame);
   }
   self.postMessage({
     type: "rendered",
@@ -1174,8 +1198,10 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     }
   } catch (error) {
     if (message.type === "render") {
-      message.frameA?.close();
-      message.frameB?.close();
+      closeFrame(message.frameA);
+      closeFrame(message.frameB);
+      for (const layer of message.stack ?? []) closeFrame(layer.frame);
+      for (const layer of message.layers ?? []) closeFrame(layer.frame);
     }
     self.postMessage({
       type: "error",

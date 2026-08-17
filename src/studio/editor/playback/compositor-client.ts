@@ -4,6 +4,44 @@ export type CompositorFrame = {
   frame?: VideoFrame;
 };
 
+type CompositorLayer = {
+  frame?: VideoFrame;
+  textureKey?: string;
+  transform?: [number, number, number, number];
+  opacity?: number;
+  width?: number;
+  height?: number;
+};
+
+function closeLayerFrames(layers: CompositorLayer[] | undefined): void {
+  for (const layer of layers ?? []) {
+    try {
+      layer.frame?.close();
+    } catch {
+      /* already closed */
+    }
+  }
+}
+
+/** postMessage cannot transfer the same VideoFrame twice. */
+function uniqueLayerFrames(layers: CompositorLayer[]): {
+  layers: CompositorLayer[];
+  transfer: Transferable[];
+} {
+  const seen = new Set<VideoFrame>();
+  const transfer: Transferable[] = [];
+  const unique = layers.map((layer) => {
+    let frame = layer.frame;
+    if (frame && seen.has(frame)) frame = frame.clone();
+    if (frame) {
+      seen.add(frame);
+      transfer.push(frame);
+    }
+    return { ...layer, frame };
+  });
+  return { layers: unique, transfer };
+}
+
 export class CompositorClient {
   private readonly worker: Worker;
   private requestId = 0;
@@ -173,23 +211,33 @@ export class CompositorClient {
       width?: number;
       height?: number;
     }>;
+    /** Bottom → top picture stack. Preferred over frameA/frameB/stack. */
+    layers?: Array<{
+      frame?: VideoFrame;
+      textureKey?: string;
+      transform?: [number, number, number, number];
+      opacity?: number;
+      width?: number;
+      height?: number;
+    }>;
   }): Promise<void> {
     if (this.disposed) {
       args.frameA?.close();
       args.frameB?.close();
-      for (const layer of args.stack ?? []) layer.frame?.close();
+      closeLayerFrames(args.stack);
+      closeLayerFrames(args.layers);
       return;
     }
     await this.ready;
     const requestId = ++this.requestId;
+    const packed = uniqueLayerFrames(args.layers ?? []);
     const frameA = args.frameA;
     let frameB = args.frameB;
     const stack = args.stack ?? [];
-    // postMessage transfer list cannot contain the same VideoFrame twice.
     if (frameA && frameB && frameA === frameB) {
       frameB = frameA.clone();
     }
-    const transfer: Transferable[] = [];
+    const transfer: Transferable[] = [...packed.transfer];
     if (frameA) transfer.push(frameA);
     if (frameB) transfer.push(frameB);
     for (const layer of stack) {
@@ -210,6 +258,7 @@ export class CompositorClient {
           opacityA: args.opacityA ?? 1,
           opacityB: args.opacityB ?? 1,
           stack,
+          layers: packed.layers,
           transition: args.transition ?? "none",
           progress: args.progress ?? 0,
           background: args.background ?? [0, 0, 0, 1],
@@ -232,24 +281,27 @@ export class CompositorClient {
     if (this.disposed) {
       args.frameA?.close();
       args.frameB?.close();
-      for (const layer of args.stack ?? []) layer.frame?.close();
+      closeLayerFrames(args.stack);
+      closeLayerFrames(args.layers);
       return false;
     }
     if (this.paintBusy) {
       args.frameA?.close();
       args.frameB?.close();
-      for (const layer of args.stack ?? []) layer.frame?.close();
+      closeLayerFrames(args.stack);
+      closeLayerFrames(args.layers);
       return false;
     }
     this.paintBusy = true;
     const requestId = ++this.requestId;
+    const packed = uniqueLayerFrames(args.layers ?? []);
     const frameA = args.frameA;
     let frameB = args.frameB;
     const stack = args.stack ?? [];
     if (frameA && frameB && frameA === frameB) {
       frameB = frameA.clone();
     }
-    const transfer: Transferable[] = [];
+    const transfer: Transferable[] = [...packed.transfer];
     if (frameA) transfer.push(frameA);
     if (frameB) transfer.push(frameB);
     for (const layer of stack) {
@@ -263,7 +315,8 @@ export class CompositorClient {
         if (this.disposed) {
           frameA?.close();
           frameB?.close();
-          for (const layer of stack) layer.frame?.close();
+          closeLayerFrames(stack);
+          closeLayerFrames(packed.layers);
           finish();
           return;
         }
@@ -291,6 +344,7 @@ export class CompositorClient {
               opacityA: args.opacityA ?? 1,
               opacityB: args.opacityB ?? 1,
               stack,
+              layers: packed.layers,
               transition: args.transition ?? "none",
               progress: args.progress ?? 0,
               background: args.background ?? [0, 0, 0, 1],
