@@ -2,12 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-/** Desktop Create/profile masonry is always 3 columns; mobile stays 2 (or 1 when very narrow). */
-export function columnCountForWidth(width: number, isMobile?: boolean): number {
-  if (isMobile) {
-    if (width >= 420) return 2;
-    return 1;
-  }
+/** Desktop Create/profile masonry is always 3 columns; mobile is always 2. */
+export function columnCountForWidth(_width: number, isMobile?: boolean): number {
+  if (isMobile) return 2;
   return 3;
 }
 
