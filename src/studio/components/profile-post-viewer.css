@@ -1115,6 +1115,9 @@
   .profile-post-caption-avatar.studio-profile-avatar {
     width: 36px;
     height: 36px;
+    box-shadow:
+      0 1px 2px rgba(15, 18, 24, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
 
   .profile-post-caption-identity {
@@ -1236,7 +1239,6 @@
     top: 0;
     display: block;
     height: 36px;
-    margin-bottom: -36px;
     z-index: 4;
     pointer-events: none;
     background: linear-gradient(
@@ -1490,6 +1492,9 @@
   .profile-comments-dock .profile-comments-thread-avatar.studio-profile-avatar {
     width: 20px;
     height: 20px;
+    box-shadow:
+      0 1px 2px rgba(15, 18, 24, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
 
   .profile-comments-dock .profile-comments-thread-preview strong {
@@ -1854,6 +1859,9 @@
   flex-shrink: 0;
   width: 32px;
   height: 32px;
+  box-shadow:
+    0 1px 2px rgba(15, 18, 24, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .profile-comments-thread-preview {
