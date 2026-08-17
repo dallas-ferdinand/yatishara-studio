@@ -466,7 +466,9 @@ export function StudioAssetPickerSheet({
   );
   const documents = useQuery(
     api.documents.listByFolder,
-    pickAnyStudio && current?.id ? { folderId: current.id } : "skip",
+    pickAnyStudio && current?.id
+      ? { folderId: current.id, expiresUnix }
+      : "skip",
   );
   const videoEdits = useQuery(
     api.videoEdits.listByFolder,

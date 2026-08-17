@@ -14,6 +14,7 @@ import {
   requireShareEdit,
   viewerCanAccessSharedItem,
 } from "./lib/studioShareAccess";
+import { parsePostDraftMediaIds } from "./lib/postDraft";
 
 const folderReturn = v.object({
   _id: v.id("folders"),
@@ -67,7 +68,7 @@ const folderWithPeeksReturn = v.object({
   peekItems: v.array(folderPeekItem),
 });
 
-const PEEK_LIMIT = 3;
+const PEEK_LIMIT = 4;
 /** Max folders visited per peek (BFS) — finds nested media without deep recursion. */
 const MAX_PEEK_FOLDER_VISITS = 8;
 /**
@@ -214,6 +215,32 @@ async function collectDirectFolderPeekCandidates(
   ).filter((doc) => !doc.deletedAt);
 
   for (const doc of documents) {
+    if (doc.kind === "post") {
+      let thumbnailAsset: Doc<"assets"> | undefined;
+      const firstId = parsePostDraftMediaIds(doc.contentMarkdown)[0];
+      if (firstId) {
+        const assetId = ctx.db.normalizeId("assets", firstId);
+        if (assetId) {
+          const asset = await ctx.db.get("assets", assetId);
+          if (asset && !asset.deletedAt && assetThumbnailPath(asset)) {
+            thumbnailAsset = asset;
+          }
+        }
+      }
+      candidates.push({
+        kind: thumbnailAsset
+          ? thumbnailAsset.kind === "video"
+            ? "video"
+            : "image"
+          : "document",
+        priority: thumbnailAsset ? 102 : 62,
+        updatedAt: doc.updatedAt,
+        thumbnailAsset,
+        label: doc.title,
+        icon: "post",
+      });
+      continue;
+    }
     candidates.push({
       kind: "document",
       priority: 60,

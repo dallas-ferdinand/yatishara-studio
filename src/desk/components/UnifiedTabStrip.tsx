@@ -94,6 +94,7 @@ function tabPreviewOverlayIcon(tab) {
   if (tab.studioKind === "profile" || tab.studioKind === "profilePost") return null;
   // Match file-manager video-edit badge (clapperboard / theater slate).
   if (isVideoEditTab(tab)) return "studioProject";
+  if (tab.documentKind === "post" || tab.ext === ".post") return "post";
   if (tab.previewKind === "video" || tab.kind === "video") return "play";
   if (tab.previewKind === "image" || tab.kind === "image") return "image";
   return null;
@@ -118,6 +119,8 @@ function stripTabsEqual(prev, next) {
       a[i].previewKind !== b[i].previewKind ||
       a[i].previewOrbSeed !== b[i].previewOrbSeed ||
       a[i].studioKind !== b[i].studioKind ||
+      a[i].documentKind !== b[i].documentKind ||
+      a[i].ext !== b[i].ext ||
       a[i].previewInitials !== b[i].previewInitials ||
       a[i].previewAvatarStyle?.background !== b[i].previewAvatarStyle?.background ||
       a[i].previewAvatarStyle?.color !== b[i].previewAvatarStyle?.color ||

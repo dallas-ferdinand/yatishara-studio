@@ -2994,7 +2994,11 @@ export function StudioShell({
       !isRecentsView &&
       !useSharedListing &&
       needsExplorerFolderContents
-      ? { folderId: activeFolder._id, includeDeleted: isTrashBrowse }
+      ? {
+          folderId: activeFolder._id,
+          includeDeleted: isTrashBrowse,
+          expiresUnix: assetUrlExpiresUnix,
+        }
       : "skip",
   );
   useEffect(() => {
@@ -3022,7 +3026,8 @@ export function StudioShell({
     // Metadata only — full markdown stays in the Convex query + editor, not shell tabs.
     setTabEntrySnapshots((snapshots) => {
       const prev = snapshots[key];
-      const nextName = documentToEntry(activeDocumentDoc).name;
+      const next = documentToEntry(activeDocumentDoc);
+      const nextName = next.name;
       if (
         prev?.bodyHydrated &&
         prev.name === nextName &&
@@ -3035,8 +3040,12 @@ export function StudioShell({
         ...snapshots,
         [key]: {
           ...(prev ?? {}),
-          ...documentToEntry(activeDocumentDoc),
+          ...next,
           name: nextName,
+          thumbnailUrl: next.thumbnailUrl || prev?.thumbnailUrl,
+          thumbnailLqipUrl: next.thumbnailLqipUrl || prev?.thumbnailLqipUrl,
+          previewItems:
+            next.previewItems?.length > 0 ? next.previewItems : prev?.previewItems,
           bodyHydrated: true,
         },
       };
@@ -4580,7 +4589,7 @@ export function StudioShell({
     for (const entry of entries) {
       warmThumbUrl(entry.thumbnailLqipUrl);
       warmThumbUrl(entry.thumbnailUrl);
-      for (const peek of (entry.peekItems ?? []).slice(0, 3)) {
+      for (const peek of (entry.peekItems ?? []).slice(0, 4)) {
         warmThumbUrl(peek.thumbnailLqipUrl);
         warmThumbUrl(peek.thumbnailUrl);
       }
@@ -39483,6 +39492,8 @@ function sharedListItemToEntry(item) {
 function documentToEntry(doc) {
   const isPost = isPostDocument(doc);
   const ext = isPost ? POST_FILE_EXT : ".md";
+  const previewItems = Array.isArray(doc.previewItems) ? doc.previewItems : undefined;
+  const firstThumb = previewItems?.find((item) => item?.thumbnailUrl)?.thumbnailUrl;
   return {
     type: "file",
     name: `${doc.title}${ext}`,
@@ -39496,6 +39507,9 @@ function documentToEntry(doc) {
     folderId: doc.folderId,
     documentKind: isPost ? "post" : "script",
     kindLabel: isPost ? "Post" : "Script",
+    previewItems,
+    thumbnailUrl: firstThumb,
+    thumbnailLqipUrl: previewItems?.find((item) => item?.thumbnailLqipUrl)?.thumbnailLqipUrl,
     // Never stash full Script bodies on explorer/tab entries — opening an MD
     // used to dump 10–100KB into StudioShell state and wall the app.
     description: undefined,
@@ -40107,10 +40121,15 @@ function tabDescriptor({
       displayPath: entry.displayPath ?? displayWorkspacePath(entry.path),
       ext: entry.ext,
       studioKind: entry.studioKind,
+      documentKind: entry.documentKind,
       elementType: entry.elementType,
       previewUrl,
       previewKind:
-        entry.studioKind === "videoEdit"
+        entry.documentKind === "post" || entry.ext === ".post"
+          ? previewUrl
+            ? "image"
+            : undefined
+          : entry.studioKind === "videoEdit"
           ? entry.previewKind === "video"
             ? "video"
             : previewUrl

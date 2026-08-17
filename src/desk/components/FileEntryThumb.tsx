@@ -34,7 +34,10 @@ function entryKind(entry) {
   if (entry?.type === "dir" || entry?.type === "parent") {
     return entry.type === "parent" ? "parent" : "dir";
   }
-  if (entry?.studioKind === "document") return "markdown";
+  if (entry?.studioKind === "document") {
+    if (entry.documentKind === "post" || entry.ext === ".post") return "post";
+    return "markdown";
+  }
   if (entry?.studioKind === "videoEdit") return "videoEdit";
   if (entry?.kind === "image" || entry?.kind === "video" || entry?.kind === "audio") {
     return entry.kind;
@@ -348,8 +351,46 @@ function VideoThumb({ src, className = "", fallbackIcon = "play" }) {
   );
 }
 
+function PostMediaMosaic({ items, size = "grid" }) {
+  const cards = (items ?? []).slice(0, 4);
+  if (!cards.length) return null;
+  const eager = size === "grid";
+  return (
+    <div className="desk-file-thumb-post-mosaic" data-count={cards.length} aria-hidden="true">
+      {cards.map((item, index) => (
+        <div
+          key={`${item.kind ?? "cell"}-${index}`}
+          className={`desk-file-thumb-post-cell desk-file-thumb-post-cell--${index}`}
+        >
+          {item.kind === "audio" && !item.thumbnailUrl ? (
+            <AudioWaveThumb
+              seedKey={`post-audio-${index}`}
+              barCount={size === "preview" ? 18 : 12}
+              className="desk-file-thumb-audio--peek"
+            />
+          ) : item.thumbnailUrl && !isVideoFileUrl(item.thumbnailUrl) ? (
+            <ProgressiveThumb
+              src={item.thumbnailUrl}
+              lqipSrc={item.thumbnailLqipUrl}
+              eager={eager && index === 0}
+            />
+          ) : (
+            <span className="desk-folder-peek-icon">
+              <Icon
+                name={item.kind === "video" ? "play" : item.kind === "audio" ? "music" : "post"}
+                size={size === "preview" ? 16 : 13}
+                className="text-cursor-muted"
+              />
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FolderPeekStack({ items, size = "grid" }) {
-  const cards = (items ?? []).slice(0, 3);
+  const cards = (items ?? []).slice(0, 4);
   if (!cards.length) return null;
   const iconSize = size === "preview" ? 16 : 13;
   const eager = size === "grid";
@@ -731,14 +772,35 @@ export function FileEntryThumb({
   } else {
     const isImage = kind === "image";
     const isVideo = kind === "video";
-    const isScript = kind === "markdown" || entry?.studioKind === "document";
+    const isPost = kind === "post" || entry?.documentKind === "post" || entry?.ext === ".post";
+    const isScript = !isPost && (kind === "markdown" || entry?.studioKind === "document");
     const isVideoEdit = kind === "videoEdit" || entry?.studioKind === "videoEdit";
     const videoPosterUrl =
       isVideo && thumbUrl && thumbUrl !== mediaUrl && !isVideoFileUrl(thumbUrl)
         ? thumbUrl
         : undefined;
 
-    if (isImage && (thumbUrl || mediaUrl)) {
+    if (isPost) {
+      const previewItems = Array.isArray(entry?.previewItems) ? entry.previewItems : [];
+      visual = (
+        <ThumbWithPeek name={label} badge="post"
+          wrapMod="desk-file-thumb-peek-wrap--post"
+          renaming={renaming}
+          renameInitialName={renameInitialName}
+          onRenameCommit={onRenameCommit}
+          onRenameDismiss={onRenameDismiss}
+          onDoubleClickRename={onLabelDoubleClick}>
+          {previewItems.length > 0 ? (
+            <PostMediaMosaic items={previewItems} size={size} />
+          ) : (
+            <div className="desk-file-thumb-fallback">
+              <Icon name="post" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+            </div>
+          )}
+        </ThumbWithPeek>
+      );
+      inlinePeekLabel = true;
+    } else if (isImage && (thumbUrl || mediaUrl)) {
       visual = (
         <ThumbWithPeek name={label} badge="image"
           renaming={renaming}

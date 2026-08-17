@@ -5,12 +5,19 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { sanitizeScriptMarkdown } from "./lib/scriptMarkdown";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
+import { previewItemsByPostId } from "./lib/postDraft";
 import {
   requireFolderOwnerOrEditShare,
   requireFolderOwnerOrShare,
   requireShareEdit,
   viewerCanAccessSharedItem,
 } from "./lib/studioShareAccess";
+
+const postPreviewItem = v.object({
+  kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
+  thumbnailUrl: v.optional(v.string()),
+  thumbnailLqipUrl: v.optional(v.string()),
+});
 
 const documentReturn = v.object({
   _id: v.id("documents"),
@@ -25,10 +32,15 @@ const documentReturn = v.object({
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
+  previewItems: v.optional(v.array(postPreviewItem)),
 });
 
 export const listByFolder = authedQuery({
-  args: { folderId: v.id("folders"), includeDeleted: v.optional(v.boolean()) },
+  args: {
+    folderId: v.id("folders"),
+    includeDeleted: v.optional(v.boolean()),
+    expiresUnix: v.optional(v.number()),
+  },
   returns: v.array(documentReturn),
   handler: async (ctx, args) => {
     await requireFolderOwnerOrShare(ctx, args.folderId, {
@@ -39,10 +51,14 @@ export const listByFolder = authedQuery({
       .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
       .collect();
     const visible = args.includeDeleted ? docs : docs.filter((doc) => !doc.deletedAt);
+    const previews = await previewItemsByPostId(ctx, visible, args.expiresUnix);
     // List rows omit body — open/edit loads full markdown via documents.get.
     return visible.map((doc) => ({
       ...doc,
       contentMarkdown: "",
+      ...(previews.get(doc._id)?.length
+        ? { previewItems: previews.get(doc._id) }
+        : {}),
     }));
   },
 });

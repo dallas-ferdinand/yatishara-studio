@@ -67,7 +67,7 @@ export function fileIconName(nameOrPath, { isDir = false } = {}) {
   if (kind === "image") return "image";
   if (kind === "video") return "play";
   if (kind === "videoEdit") return "studioProject";
-  if (kind === "post") return "share";
+  if (kind === "post") return "post";
   if (kind === "audio") return "music";
   if (kind === "pdf") return "filePdf";
   if (kind === "csv") return "table";
@@ -109,7 +109,7 @@ export function explorerEntryIcon(entry) {
   }
   if (entry?.type === "dir" || entry?.type === "parent") return entry?.type === "parent" ? "chevL" : "folder";
   if (entry?.studioKind === "videoEdit") return "studioProject";
-  if (entry?.documentKind === "post" || entry?.ext === ".post") return "share";
+  if (entry?.documentKind === "post" || entry?.ext === ".post") return "post";
   if (entry?.studioKind === "element") {
     if (entry.elementType === "character") return "user";
     if (entry.elementType === "prop") return "package";
@@ -193,6 +193,7 @@ export function workspaceTabIcon(tab) {
     if (tab.elementType === "location") return "mapPin";
     return "fileText";
   }
+  if (tab.documentKind === "post" || tab.ext === ".post") return "post";
   if (tab.studioKind === "document") return "fileText";
   if (tab.studioKind === "folder") return "folder";
   if (tab.kind === "video") return "play";
