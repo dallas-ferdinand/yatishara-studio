@@ -1238,17 +1238,13 @@
 }
 
 .profile-comments-search .cursor-panel-search {
-  width: 100%;
-  /* Comments head already has the top divider.
-     Beat `.studio-polish .cursor-panel-search` which re-adds border-top. */
-  border-top: none;
+  width: auto;
 }
 
 .studio-polish .profile-comments-search .cursor-panel-search,
 .profile-comments-panel .profile-comments-search .cursor-panel-search,
 .profile-comments-dock .profile-comments-search .cursor-panel-search {
-  border-top: none;
-  width: 100%;
+  width: auto;
 }
 
 .profile-comments-search .desk-explorer-type-filter {

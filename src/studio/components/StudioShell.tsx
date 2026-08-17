@@ -9900,8 +9900,7 @@ export function StudioShell({
           .studio-polish.is-studio-mobile :where(
             .cursor-workspace-head,
             .cursor-panel-head,
-            .cursor-sidebar-head,
-            .cursor-panel-search
+            .cursor-sidebar-head
           ) {
             min-height: var(--studio-mobile-nav-height, 44px) !important;
             height: var(--studio-mobile-nav-height, 44px) !important;
@@ -9939,6 +9938,7 @@ export function StudioShell({
           .studio-polish.is-studio-mobile .cursor-panel-search {
             min-height: var(--studio-mobile-chrome-control, 34px);
             height: var(--studio-mobile-chrome-control, 34px);
+            margin: 4px 8px;
           }
           .studio-polish.is-studio-mobile .desk-explorer-type-filter-trigger {
             font-size: 13px;
@@ -12099,16 +12099,14 @@ export function StudioShell({
         .studio-files-dock .cursor-panel-search,
         .studio-files-mobile-sheet .cursor-panel-search {
           flex: 0 0 auto;
-          width: 100%;
-          border-top: none;
+          width: auto;
         }
         .studio-files-dock .studio-files-search-row .cursor-panel-search,
         .studio-files-mobile-sheet .studio-files-search-row .cursor-panel-search {
-          border-top: none !important;
-          border-bottom: none !important;
           width: auto;
           flex: 1 1 auto;
           min-width: 0;
+          align-self: center;
           background: transparent !important;
         }
         .studio-files-mobile-sheet .cursor-explorer-body,
@@ -17430,24 +17428,36 @@ export function StudioShell({
           background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
         }
         .studio-polish .cursor-panel-search {
-          min-height: 32px;
-          height: 32px;
+          box-sizing: border-box;
+          min-height: calc(var(--cursor-head-h, 32px) - 6px);
+          height: calc(var(--cursor-head-h, 32px) - 6px);
+          margin: 3px 8px;
           padding: 0 8px 0 10px;
-          border-top: 1px solid var(--studio-chrome-divider);
-          border-bottom: 1px solid var(--studio-chrome-divider);
+          border: 1px solid color-mix(
+            in srgb,
+            var(--color-cursor-text) 18%,
+            var(--studio-chrome-divider, var(--color-cursor-border-soft))
+          );
+          border-radius: 8px;
           background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
         }
-        /* Messages rail (Feed / My offers / My jobs): brand head already divides —
-           keep a single hairline, not a double top border on the search strip. */
-        .studio-polish .studio-dm-sidebar .cursor-panel-search {
-          border-top: none;
+        .studio-polish .cursor-panel-search:focus-within {
+          border-color: color-mix(
+            in srgb,
+            var(--color-cursor-text) 28%,
+            var(--studio-chrome-divider, var(--color-cursor-border-soft))
+          );
         }
-        /* Files chrome owns the bottom hairline — search has no own borders. */
         .studio-polish .studio-files-search-row .cursor-panel-search,
         .studio-polish .studio-files-chrome .cursor-panel-search {
-          border-top: none !important;
-          border-bottom: none !important;
-          background: transparent !important;
+          align-self: center;
+          width: auto;
+          min-width: 0;
+          height: calc(100% - 6px);
+          min-height: 0;
+          max-height: none;
+          margin: 3px 8px;
+          background: transparent;
         }
         .studio-polish .studio-files-search-row,
         .studio-polish .studio-files-source-toggle,
@@ -17533,8 +17543,9 @@ export function StudioShell({
         }
         @media (max-width: 899px) {
           .studio-polish.is-studio-mobile .cursor-panel-search {
-            min-height: var(--studio-mobile-nav-height, 44px) !important;
-            height: var(--studio-mobile-nav-height, 44px) !important;
+            min-height: var(--studio-mobile-chrome-control, 34px) !important;
+            height: var(--studio-mobile-chrome-control, 34px) !important;
+            margin: 4px 8px;
           }
           .studio-polish.is-studio-mobile .desk-file-breadcrumbs,
           .studio-polish.is-studio-mobile .studio-folder-pathbar {
@@ -24084,15 +24095,9 @@ export function StudioShell({
         }
         .studio-history-chrome {
           flex: 0 0 auto;
-          border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
-          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
+          border: 0;
         }
         .studio-history-chrome .cursor-panel-search {
-          margin: 0;
-          border: 0;
-          border-radius: 0;
-          min-height: 32px;
-          height: 32px;
           background: transparent;
         }
         .studio-history-chrome .desk-explorer-type-filter {
