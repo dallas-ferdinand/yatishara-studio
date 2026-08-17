@@ -38,6 +38,11 @@ BUNNY_STREAM_LIBRARY_ID=
 BUNNY_STREAM_ACCESS_KEY=
 # Public Studio wallpapers on Bunny (unsigned). Rebuild after changing.
 NEXT_PUBLIC_STUDIO_BG_CDN=https://yatishara-studio-assets.b-cdn.net/studio/wallpapers/v1
+# Sophie Ops WA avatars/media (Next /api/studio-ops/*). Runtime only.
+# From the Coolify network this is the host gateway, never 127.0.0.1.
+STUDIO_CS_OPS_URL=http://10.0.1.1:8795
+STUDIO_CS_OPS_TOKEN=
+MERCURYOS_STUDIO_CS_OPS_TOKEN=
 WEB_PUSH_VAPID_PUBLIC_KEY=
 WEB_PUSH_VAPID_PRIVATE_KEY=
 NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY=

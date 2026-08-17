@@ -221,6 +221,32 @@ mv "${ENV_FILE}.tmp" "$ENV_FILE"
 printf 'NEXT_PUBLIC_DESK_BUILD=%s\n' "$NEXT_PUBLIC_DESK_BUILD" >>"$ENV_FILE"
 printf 'SOURCE_COMMIT=%s\n' "fast-${SHA}" >>"$ENV_FILE"
 
+# Sophie Ops avatar/media/SSE proxies run in this Next container. Preview has
+# STUDIO_CS_OPS_* in .env.local; Coolify live often does not. Without them the
+# route falls back to 127.0.0.1:8795 inside Docker and WA avatars 502 → initials.
+ensure_env_key() {
+  local key="$1"
+  local cur=""
+  if grep -qE "^${key}=" "$ENV_FILE"; then
+    cur="$(awk -F= -v k="$key" '$1==k {print substr($0, index($0,"=")+1); exit}' "$ENV_FILE")"
+    if [[ -n "$cur" ]]; then
+      return
+    fi
+    grep -vE "^${key}=" "$ENV_FILE" >"${ENV_FILE}.tmp" || true
+    mv "${ENV_FILE}.tmp" "$ENV_FILE"
+  fi
+  local v
+  v="$(read_env_file "$key" "$ROOT/.env.local")"
+  if [[ -n "$v" ]]; then
+    printf '%s=%s\n' "$key" "$v" >>"$ENV_FILE"
+    log "added ${key} to green env (missing on live)"
+  fi
+}
+ensure_env_key STUDIO_CS_OPS_URL
+ensure_env_key MERCURYOS_STUDIO_CS_URL
+ensure_env_key STUDIO_CS_OPS_TOKEN
+ensure_env_key MERCURYOS_STUDIO_CS_OPS_TOKEN
+
 # Blue/green: unique Traefik router/service names so BOTH containers can serve
 # Host(studio.yatishara.com) until we cut the old one.
 GREEN_NAME="${LIVE_NAME}-green-${STARTED_AT}"
