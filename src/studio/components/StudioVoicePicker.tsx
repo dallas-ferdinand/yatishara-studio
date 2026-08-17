@@ -471,57 +471,30 @@ function StudioVoicePickerInner({
   return (
     <div className={`studio-voice-picker${embedded ? " is-embedded" : ""}`}>
       <div className="studio-voice-picker-controls" ref={toolbarRef}>
-      {embedded ? (
-        <div className="studio-voice-picker-chrome">
-          <nav
-            className="studio-admin-head-tabs studio-voice-picker-head-tabs"
-            role="tablist"
-            aria-label="Voice library"
-          >
+        <div className="studio-voice-picker-search-bar">
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search voices…"
+            aria-label="Search voices"
+          />
+          {search ? (
             <button
               type="button"
-              role="tab"
-              aria-selected={tab === "explore"}
-              className={`studio-admin-head-tab${tab === "explore" ? " is-active" : ""}`}
-              onClick={() => setTab("explore")}
+              className="studio-voice-picker-sidebar-search-clear"
+              aria-label="Clear search"
+              onClick={() => setSearch("")}
             >
-              Explore
+              <X size={12} aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "mine"}
-              className={`studio-admin-head-tab${tab === "mine" ? " is-active" : ""}`}
-              onClick={() => setTab("mine")}
-            >
-              My Voices
-            </button>
-          </nav>
-          <div className="studio-voice-picker-chrome-divider" aria-hidden="true" />
-          <label className="studio-voice-picker-sidebar-search">
-            <Search size={14} aria-hidden="true" />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search voices…"
-            />
-            {search ? (
-              <button
-                type="button"
-                className="studio-voice-picker-sidebar-search-clear"
-                aria-label="Clear search"
-                onClick={() => setSearch("")}
-              >
-                <X size={12} aria-hidden="true" />
-              </button>
-            ) : null}
-          </label>
+          ) : null}
           {tab === "explore" ? (
-            <div className="studio-voice-picker-menu-wrap">
+            <div className="studio-voice-picker-search-end">
               <button
                 type="button"
-                className={`studio-voice-picker-icon-square is-compact${openMenu === "sort" ? " is-open" : ""}`}
+                className={`studio-voice-picker-bar-btn${openMenu === "sort" ? " is-open" : ""}`}
                 title="Sort"
                 aria-label="Sort voices"
                 aria-expanded={openMenu === "sort"}
@@ -530,7 +503,7 @@ function StudioVoicePickerInner({
                 <ArrowDownWideNarrow size={14} aria-hidden="true" />
               </button>
               {openMenu === "sort" ? (
-                <div className="studio-voice-picker-menu" role="listbox" aria-label="Sort">
+                <div className="studio-voice-picker-menu is-end" role="listbox" aria-label="Sort">
                   {SORT_OPTIONS.map((option) => (
                     <button
                       key={option.value}
@@ -552,89 +525,35 @@ function StudioVoicePickerInner({
             </div>
           ) : null}
         </div>
-      ) : (
-        <>
-          <div className="studio-voice-picker-tabs" role="tablist" aria-label="Voice library">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "explore"}
-              className={`studio-voice-picker-tab${tab === "explore" ? " is-active" : ""}`}
-              onClick={() => setTab("explore")}
-            >
-              Explore
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "mine"}
-              className={`studio-voice-picker-tab${tab === "mine" ? " is-active" : ""}`}
-              onClick={() => setTab("mine")}
-            >
-              My Voices
-            </button>
-          </div>
-
-          <div className="studio-voice-picker-toolbar">
-            <div className="studio-voice-picker-search-row">
-              <label className="studio-voice-picker-search">
-                <Search size={15} aria-hidden="true" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Start typing to search..."
-                />
-                {search ? (
-                  <button type="button" aria-label="Clear search" onClick={() => setSearch("")}>
-                    <X size={13} aria-hidden="true" />
-                  </button>
-                ) : null}
-              </label>
-              {tab === "explore" ? (
-                <div className="studio-voice-picker-menu-wrap">
-                  <button
-                    type="button"
-                    className={`studio-voice-picker-icon-square${openMenu === "sort" ? " is-open" : ""}`}
-                    title="Sort"
-                    aria-label="Sort voices"
-                    aria-expanded={openMenu === "sort"}
-                    onClick={() => setOpenMenu((current) => (current === "sort" ? null : "sort"))}
-                  >
-                    <ArrowDownWideNarrow size={15} aria-hidden="true" />
-                  </button>
-                  {openMenu === "sort" ? (
-                    <div className="studio-voice-picker-menu" role="listbox" aria-label="Sort">
-                      {SORT_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          role="option"
-                          aria-selected={sort === option.value}
-                          className={`studio-voice-picker-menu-item${sort === option.value ? " is-active" : ""}`}
-                          onClick={() => {
-                            setSort(option.value);
-                            setPage(0);
-                            setOpenMenu(null);
-                          }}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </>
-      )}
+        <nav
+          className="studio-voice-picker-lib-bar"
+          role="tablist"
+          aria-label="Voice library"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "explore"}
+            className={`studio-voice-picker-lib-tab${tab === "explore" ? " is-active" : ""}`}
+            onClick={() => setTab("explore")}
+          >
+            Explore
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "mine"}
+            className={`studio-voice-picker-lib-tab${tab === "mine" ? " is-active" : ""}`}
+            onClick={() => setTab("mine")}
+          >
+            My Voices
+          </button>
+        </nav>
 
       {tab === "explore" ? (
         <div
-          className={`studio-voice-picker-toolbar is-filters-only${embedded ? " is-embedded-filters" : ""}`}
+          className={`studio-voice-picker-filter-slider${openMenu && openMenu !== "sort" ? " is-menu-open" : ""}`}
         >
-          <div className="studio-voice-picker-filter-row">
             {filters.map((filter) => {
               const active = Boolean(filter.value);
               const menuOpen = openMenu === filter.key;
@@ -713,7 +632,7 @@ function StudioVoicePickerInner({
             <div className="studio-voice-picker-menu-wrap">
               <button
                 type="button"
-                className={`studio-voice-picker-icon-square${embedded ? " is-compact" : ""}${openMenu === "advanced" ? " is-open" : ""}${advancedActive ? " is-active" : ""}`}
+                className={`studio-voice-picker-filter-chip is-icon${openMenu === "advanced" ? " is-open" : ""}${advancedActive ? " is-active" : ""}`}
                 title="More filters"
                 aria-label="More filters"
                 aria-expanded={openMenu === "advanced"}
@@ -721,7 +640,7 @@ function StudioVoicePickerInner({
                   setOpenMenu((current) => (current === "advanced" ? null : "advanced"))
                 }
               >
-                <SlidersHorizontal size={embedded ? 14 : 15} aria-hidden="true" />
+                <SlidersHorizontal size={14} aria-hidden="true" />
               </button>
               {openMenu === "advanced" ? (
                 <div className="studio-voice-picker-menu is-advanced" role="dialog" aria-label="More filters">
@@ -761,7 +680,6 @@ function StudioVoicePickerInner({
                 </div>
               ) : null}
             </div>
-          </div>
         </div>
       ) : null}
       </div>
