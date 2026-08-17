@@ -8,7 +8,7 @@ import {
   Globe,
   Forward,
   Award,
-  Heart,
+  Trophy,
   Image as ImageIcon,
   LayoutGrid,
   Link2,
@@ -73,7 +73,7 @@ function formatCount(value: number): string {
 const OWNER_TABS: Array<{ id: ProfileTab; label: string; icon: typeof LayoutGrid }> = [
   { id: "posts", label: "Posts", icon: LayoutGrid },
   { id: "saved", label: "Saved", icon: Bookmark },
-  { id: "liked", label: "Liked", icon: Heart },
+  { id: "liked", label: "Liked", icon: Trophy },
   { id: "shared", label: "Shared", icon: Forward },
 ];
 

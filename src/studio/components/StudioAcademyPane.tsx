@@ -27,6 +27,7 @@ import {
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
 import { REACTION_EMOJIS } from "@/studio/lib/itemReactions";
+import { StudioEmoji } from "@/studio/components/StudioEmoji";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -2150,7 +2151,7 @@ export function StudioAcademyPane({
                     aria-pressed={myReaction === emoji}
                     onClick={() => void pickVideoReaction(emoji)}
                   >
-                    {emoji}
+                    <StudioEmoji emoji={emoji} />
                   </button>
                 ))}
               </div>
@@ -2241,7 +2242,7 @@ export function StudioAcademyPane({
               >
                 {myReaction ? (
                   <span className="studio-cn-book-bar-react-emoji" aria-hidden="true">
-                    {myReaction}
+                    <StudioEmoji emoji={myReaction} />
                   </span>
                 ) : (
                   <SmilePlus aria-hidden="true" strokeWidth={2} />

@@ -1,4 +1,5 @@
-/** Client-side mirror of convex/lib/itemReactions (emoji allowlist for Files). */
+/** Client-side mirror of convex/lib/itemReactions (emoji allowlist for Files).
+ *  Picker/badge UI renders these via Twemoji (see StudioEmoji). */
 
 export const REACTION_EMOJIS = [
   "❤️",

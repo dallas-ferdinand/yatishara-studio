@@ -9,7 +9,7 @@ import {
   ChevronLeft,
   Clock,
   Copy,
-  Heart,
+  Trophy,
   Image as ImageIcon,
   Loader2,
   Lock,
@@ -312,7 +312,7 @@ function ProfileCommentBubble({
       key: "like",
       label: likeState.liked ? "Unlike" : "Like",
       icon: (
-        <Heart
+        <Trophy
           aria-hidden="true"
           fill={likeState.liked ? "currentColor" : "none"}
         />
@@ -485,7 +485,7 @@ function ProfileCommentBubble({
                     className={`profile-comment-like is-static${likeState.likeCount > 0 ? "" : " is-empty"}`}
                     aria-label={`${likeState.likeCount} likes`}
                   >
-                    <Heart
+                    <Trophy
                       aria-hidden="true"
                       fill={likeState.likeCount > 0 ? "currentColor" : "none"}
                       strokeWidth={likeState.likeCount > 0 ? 0 : 2}
@@ -502,7 +502,7 @@ function ProfileCommentBubble({
                     aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
                     onClick={() => onToggleLike(comment)}
                   >
-                    <Heart
+                    <Trophy
                       aria-hidden="true"
                       fill={likeState.liked ? "currentColor" : "none"}
                       strokeWidth={likeState.liked ? 0 : 2}
@@ -1282,7 +1282,7 @@ function CommentsBody({
               aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
               onClick={() => void toggleLike(comment)}
             >
-              <Heart
+              <Trophy
                 aria-hidden="true"
                 fill={likeState.liked ? "currentColor" : "none"}
                 strokeWidth={likeState.liked ? 0 : 2}
@@ -1442,7 +1442,7 @@ function CommentsBody({
                 aria-label={postActions.liked ? "Unlike" : "Like"}
                 onClick={postActions.onLike}
               >
-                <Heart aria-hidden="true" fill="currentColor" strokeWidth={0} />
+                <Trophy aria-hidden="true" fill="currentColor" strokeWidth={0} />
                 <span>{formatCount(postActions.likeCount)}</span>
               </button>
               <button

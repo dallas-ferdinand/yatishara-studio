@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { Icon } from "@/desk/components/Icons";
+import { StudioEmoji } from "@/studio/components/StudioEmoji";
 import { useAdminStudioOps } from "./AdminStudioOpsContext";
 import "./admin-studio-ops-thread.css";
 
@@ -576,7 +577,7 @@ function CsWaBubble({
                     onReact?.(msgId, active ? "" : emoji, Boolean(m.fromMe))
                   }
                 >
-                  {emoji}
+                  <StudioEmoji emoji={emoji} />
                 </button>
               );
             })}
@@ -602,7 +603,7 @@ function CsWaBubble({
                   key={`${r.emoji}-${i}`}
                   className={`cs-ops-bubble-reaction${r.fromMe ? " is-mine" : ""}`}
                 >
-                  {r.emoji}
+                  <StudioEmoji emoji={r.emoji} />
                 </span>
               ))}
             </div>

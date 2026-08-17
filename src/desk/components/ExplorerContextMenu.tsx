@@ -34,6 +34,7 @@ import {
   clampFloatingPosition,
 } from "@/desk/lib/context-menu-position.js";
 import { REACTION_EMOJIS } from "@/studio/lib/itemReactions";
+import { StudioEmoji } from "@/studio/components/StudioEmoji";
 
 const EXPLORER_MENU_ICONS = {
   open: FolderOpen,
@@ -756,7 +757,7 @@ export function ExplorerContextMenu({
                                   onClose();
                                 }}
                               >
-                                {child.label}
+                                <StudioEmoji emoji={child.label} />
                               </button>
                             ))}
                           {entry?.reactionEmoji ? (
@@ -927,7 +928,7 @@ export function ExplorerContextMenu({
                       runAction(child.id);
                     }}
                   >
-                    {child.label}
+                    <StudioEmoji emoji={child.label} />
                   </button>
                 ))}
               {entry?.reactionEmoji ? (

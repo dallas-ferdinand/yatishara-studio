@@ -10,6 +10,7 @@ import { displayEntryPath } from "@/desk/lib/display-path";
 import { externalPreviewUrl } from "@mos-app/preview.js";
 import { MediaLoadWave } from "@/studio/components/media-load-frame";
 import { mediaUrlPath } from "@/studio/lib/mediaUrls";
+import { StudioEmoji } from "@/studio/components/StudioEmoji";
 
 const TEXT_KINDS = new Set(["code", "markdown", "html", "csv", "text"]);
 
@@ -917,7 +918,7 @@ export function FileEntryThumb({
               event.stopPropagation();
             }}
           >
-            {entry.reactionEmoji}
+            <StudioEmoji emoji={entry.reactionEmoji} />
           </span>
         ) : null}
       </div>

@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { REACTION_EMOJIS } from "@/studio/lib/itemReactions";
+import { StudioEmoji } from "@/studio/components/StudioEmoji";
 import "./file-reaction-picker.css";
 
 type SheetDragState = {
@@ -229,7 +230,7 @@ export function FileReactionPicker({
           }`}
           onClick={() => pick(emoji)}
         >
-          {emoji}
+          <StudioEmoji emoji={emoji} />
         </button>
       ))}
     </div>

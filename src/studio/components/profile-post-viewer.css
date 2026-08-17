@@ -225,7 +225,7 @@
   display: grid;
   place-items: center;
   pointer-events: none;
-  color: #ff3b5c;
+  color: #f5c400;
   animation: profile-post-like-burst 700ms ease-out forwards;
 }
 
@@ -935,9 +935,9 @@
 
 .profile-post-rail-btn.is-liked svg,
 .profile-post-rail-btn.is-liked:hover svg {
-  color: #ff3b5c !important;
+  color: #f5c400 !important;
   filter:
-    drop-shadow(0 1px 0 #a01028)
+    drop-shadow(0 1px 0 #9a7200)
     drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
 }
 
@@ -985,7 +985,7 @@
 
 .profile-post-rail.is-on-dark .profile-post-rail-btn.is-liked svg,
 .profile-post-rail.is-on-dark .profile-post-rail-btn.is-liked:hover svg {
-  color: #ff3b5c !important;
+  color: #f5c400 !important;
 }
 
 .profile-post-rail.is-on-dark .profile-post-rail-btn.is-saved svg,
@@ -1020,7 +1020,7 @@
 
 .profile-post-rail.is-on-light .profile-post-rail-btn.is-liked svg,
 .profile-post-rail.is-on-light .profile-post-rail-btn.is-liked:hover svg {
-  color: #e11d48 !important;
+  color: #d97706 !important;
   filter: none;
 }
 
@@ -1354,7 +1354,7 @@
 
 .profile-comments-post-action.is-liked svg,
 .profile-comments-post-action.is-liked:hover svg {
-  color: #ff3b5c !important;
+  color: #f5c400 !important;
 }
 
 .profile-comments-post-action.is-saved {
@@ -2385,7 +2385,7 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comment-like.is-liked svg,
 .profile-comment-like.is-liked:hover svg {
-  color: #ff3b5c !important;
+  color: #f5c400 !important;
 }
 
 .profile-comment-like span {
@@ -2939,7 +2939,7 @@ button.post-compose-inline-chip.profile-description-chip {
 
 [data-appearance="light"] .profile-comment-like.is-liked svg,
 [data-appearance="light"] .profile-comment-like.is-liked:hover svg {
-  color: #e11d48 !important;
+  color: #d97706 !important;
 }
 
 [data-appearance="light"] .profile-comment-like span,
