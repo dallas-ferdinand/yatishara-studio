@@ -2211,6 +2211,8 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comment-video-time {
+  appearance: none;
+  -webkit-appearance: none;
   display: inline-flex;
   vertical-align: middle;
   align-items: center;
@@ -2225,6 +2227,7 @@ button.post-compose-inline-chip.profile-description-chip {
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
   color: var(--color-cursor-muted, var(--mos-muted));
+  font: inherit;
   font-size: 11px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
@@ -2237,12 +2240,16 @@ button.post-compose-inline-chip.profile-description-chip {
   display: block;
   width: 11px;
   height: 11px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
 .profile-comment-video-time span {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  height: 11px;
   line-height: 1;
+  transform: translateY(1px);
 }
 
 .profile-comment-video-time:hover:not(:disabled) {
