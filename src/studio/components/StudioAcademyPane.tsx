@@ -24,7 +24,6 @@ import {
   Fragment,
   type AnimationEvent,
   type CSSProperties,
-  type ReactNode,
 } from "react";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
@@ -237,8 +236,8 @@ function spawnReactionBalloon(emoji: string): ReactionBalloon {
   return {
     key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     emoji,
-    x: 14 + Math.random() * 72,
-    drift: (Math.random() - 0.5) * 52,
+    x: 50 + (Math.random() - 0.5) * 28,
+    drift: (Math.random() - 0.5) * 22,
   };
 }
 
@@ -1057,7 +1056,6 @@ function AcademyWatchPane({
   onPlay,
   onTimeUpdate,
   onSeekReady,
-  balloons,
 }: {
   role: "prev" | "current" | "next";
   title: string;
@@ -1072,7 +1070,6 @@ function AcademyWatchPane({
   onPlay: () => void;
   onTimeUpdate?: (seconds: number) => void;
   onSeekReady?: (seekTo: ((seconds: number) => void) | null) => void;
-  balloons?: ReactNode;
 }) {
   const active = role === "current";
   return (
@@ -1091,7 +1088,6 @@ function AcademyWatchPane({
           onTimeUpdate={active ? onTimeUpdate : undefined}
           onSeekReady={active ? onSeekReady : undefined}
         />
-        {active ? balloons : null}
       </div>
       <div className="public-offers-main-scroll">
         <main className="public-offers-body">
@@ -1989,16 +1985,6 @@ export function StudioAcademyPane({
             onPlay={slide.onPlay}
             onTimeUpdate={handleVideoTimeUpdate}
             onSeekReady={handleSeekReady}
-            balloons={
-              <ReactionBalloonLayer
-                balloons={reactionBalloons}
-                onDone={(key) =>
-                  setReactionBalloons((prev) =>
-                    prev.filter((row) => row.key !== key),
-                  )
-                }
-              />
-            }
           />
         ))}
       </div>
@@ -2336,28 +2322,38 @@ export function StudioAcademyPane({
               </button>
             ) : null}
             {owned ? (
-              <button
-                type="button"
-                className={`studio-cn-book-bar-msg is-with-count is-reaction${
-                  reactionBarOpen ? " is-open" : ""
-                }`}
-                aria-label={
-                  reactionCount
-                    ? `Reactions, ${reactionCount}`
-                    : "Open reactions"
-                }
-                aria-pressed={reactionBarOpen}
-                onClick={() => setReactionBarOpen((open) => !open)}
-              >
-                {myReaction ? (
-                  <span className="studio-cn-book-bar-react-emoji" aria-hidden="true">
-                    <StudioEmoji emoji={myReaction} />
-                  </span>
-                ) : (
-                  <SmilePlus aria-hidden="true" strokeWidth={2} />
-                )}
-                <span>{reactionCount}</span>
-              </button>
+              <div className="studio-cn-book-bar-react-wrap">
+                <ReactionBalloonLayer
+                  balloons={reactionBalloons}
+                  onDone={(key) =>
+                    setReactionBalloons((prev) =>
+                      prev.filter((row) => row.key !== key),
+                    )
+                  }
+                />
+                <button
+                  type="button"
+                  className={`studio-cn-book-bar-msg is-with-count is-reaction${
+                    reactionBarOpen ? " is-open" : ""
+                  }`}
+                  aria-label={
+                    reactionCount
+                      ? `Reactions, ${reactionCount}`
+                      : "Open reactions"
+                  }
+                  aria-pressed={reactionBarOpen}
+                  onClick={() => setReactionBarOpen((open) => !open)}
+                >
+                  {myReaction ? (
+                    <span className="studio-cn-book-bar-react-emoji" aria-hidden="true">
+                      <StudioEmoji emoji={myReaction} />
+                    </span>
+                  ) : (
+                    <SmilePlus aria-hidden="true" strokeWidth={2} />
+                  )}
+                  <span>{reactionCount}</span>
+                </button>
+              </div>
             ) : null}
             {!owned ? (
               <button

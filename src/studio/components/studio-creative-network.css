@@ -1189,7 +1189,6 @@
 }
 
 .studio-academy-watch-player {
-  position: relative;
   flex: 0 0 auto;
   width: 100%;
   box-sizing: border-box;
@@ -1198,60 +1197,6 @@
   overflow: visible;
   background: var(--mos-page, #f5f5f7);
   z-index: 2;
-}
-
-.studio-academy-reaction-balloons {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  top: 8px;
-  bottom: 6px;
-  z-index: 6;
-  overflow: hidden;
-  pointer-events: none;
-  border-radius: 12px;
-}
-
-.studio-academy-reaction-balloon {
-  position: absolute;
-  bottom: 4%;
-  left: var(--rx);
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  font-size: 24px;
-  line-height: 1;
-  will-change: transform, opacity;
-  animation: studio-academy-balloon 2.05s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
-  filter: drop-shadow(0 1px 2px rgba(15, 18, 24, 0.32));
-}
-
-.studio-academy-reaction-balloon .studio-emoji {
-  width: 24px;
-  height: 24px;
-}
-
-@keyframes studio-academy-balloon {
-  0% {
-    transform: translate3d(-50%, 10px, 0) scale(0.55);
-    opacity: 0;
-  }
-  12% {
-    opacity: 1;
-    transform: translate3d(-50%, 0, 0) scale(1.12);
-  }
-  100% {
-    opacity: 0;
-    transform: translate3d(calc(-50% + var(--drift, 0px)), -82%, 0) scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .studio-academy-reaction-balloon {
-    animation-duration: 0.7s;
-    animation-timing-function: linear;
-  }
 }
 
 .studio-cn-catalog.is-academy-watch .studio-academy-watch-slide > .public-offers-main-scroll {
@@ -1748,14 +1693,17 @@ button.studio-cn-card-btn.public-offers-card {
   background: var(--mos-page, var(--mos-panel, var(--color-cursor-bg)));
   box-shadow: none !important;
   box-sizing: border-box;
+  overflow: visible;
 }
 
 .studio-academy-pane .studio-cn-book-stack {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
   z-index: 40;
   min-width: 0;
+  overflow: visible;
   background: var(--mos-page, var(--mos-panel, var(--color-cursor-bg)));
 }
 
@@ -1998,6 +1946,68 @@ button.studio-cn-book-bar-price.is-discussion.has-preview {
   gap: 6px;
   flex: 0 0 auto;
   min-width: 0;
+  overflow: visible;
+}
+
+.studio-cn-book-bar-react-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: visible;
+  z-index: 2;
+}
+
+.studio-academy-reaction-balloons {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  width: 56px;
+  height: 132px;
+  transform: translateX(-50%);
+  z-index: 6;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.studio-academy-reaction-balloon {
+  position: absolute;
+  bottom: 0;
+  left: var(--rx);
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  font-size: 22px;
+  line-height: 1;
+  will-change: transform, opacity;
+  animation: studio-academy-balloon 1.85s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  filter: drop-shadow(0 1px 2px rgba(15, 18, 24, 0.28));
+}
+
+.studio-academy-reaction-balloon .studio-emoji {
+  width: 22px;
+  height: 22px;
+}
+
+@keyframes studio-academy-balloon {
+  0% {
+    transform: translate3d(-50%, 8px, 0) scale(0.55);
+    opacity: 0;
+  }
+  14% {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(-50% + var(--drift, 0px)), -118px, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-academy-reaction-balloon {
+    animation-duration: 0.65s;
+    animation-timing-function: linear;
+  }
 }
 
 /* Border-style chrome circles — outline icons, not flat fills. */
