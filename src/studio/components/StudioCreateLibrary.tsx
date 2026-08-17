@@ -94,6 +94,8 @@ export function StudioCreateLibrary({
   onGenerateVideo,
 }: StudioCreateLibraryProps) {
   const convex = useConvex();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [moreTiles, setMoreTiles] = useState<GenerationLibraryTile[]>([]);
   const [nextCursor, setNextCursor] = useState<number | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
@@ -181,6 +183,23 @@ export function StudioCreateLibrary({
       setLoadingMore(false);
     }
   }, [convex, expiresUnix, loadingMore, nextCursor]);
+
+  useEffect(() => {
+    if (!hasMore || loadingMore) return;
+    const sentinel = loadMoreRef.current;
+    const root = scrollRef.current;
+    if (!sentinel || !root) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        void loadMore();
+      },
+      { root, rootMargin: "160px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, loadMore, tiles.length]);
 
   const closePreview = useCallback(() => {
     onClosePreview?.();
@@ -281,7 +300,7 @@ export function StudioCreateLibrary({
 
   return (
     <div className={`studio-create-library${lightbox ? " is-previewing" : ""}`}>
-      <div className="studio-create-library-scroll">
+      <div ref={scrollRef} className="studio-create-library-scroll">
         {loading ? (
           <div className="studio-create-library-empty">
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
@@ -315,10 +334,15 @@ export function StudioCreateLibrary({
               ))}
             </div>
             {hasMore ? (
-              <div className="studio-create-library-more">
-                <button type="button" disabled={loadingMore} onClick={() => void loadMore()}>
-                  {loadingMore ? "Loading…" : "Load more"}
-                </button>
+              <div
+                ref={loadMoreRef}
+                className="studio-create-library-more-sentinel"
+                aria-hidden="true"
+              />
+            ) : null}
+            {loadingMore ? (
+              <div className="studio-create-library-more" role="status" aria-label="Loading more">
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
               </div>
             ) : null}
           </>

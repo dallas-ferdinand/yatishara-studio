@@ -652,26 +652,16 @@
   background: #fff;
 }
 
+.studio-create-library-more-sentinel {
+  height: 1px;
+  width: 100%;
+  pointer-events: none;
+}
+
 .studio-create-library-more {
   display: flex;
   justify-content: center;
   padding: 12px 0 4px;
-}
-
-.studio-create-library-more button {
-  border: 1px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 35%, transparent);
-  border-radius: 8px;
-  background: var(--studio-grid-tile-bg, var(--mos-plate, transparent));
-  color: var(--color-cursor-fg, var(--mos-fg, #e8e8e8));
-  font-size: 12px;
-  font-weight: 500;
-  padding: 8px 14px;
-  cursor: pointer;
-}
-
-.studio-create-library-more button:disabled {
-  opacity: 0.55;
-  cursor: default;
 }
 
 /* Detail sidebar — inspector rail (media lives in lightbox stage) */
