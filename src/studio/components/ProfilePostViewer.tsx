@@ -200,6 +200,19 @@ function wrapIndex(index: number, length: number) {
   return ((index % length) + length) % length;
 }
 
+function isWatchFeedGestureTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (target.closest(".profile-comments-dock")) return false;
+  if (
+    target.closest(
+      "button, a, input, textarea, select, [data-video-control], [contenteditable='true']",
+    )
+  ) {
+    return false;
+  }
+  return Boolean(target.closest(".profile-post-watch-stack"));
+}
+
 /** Collect up to `count` unique neighbors in one direction, wrapping the list. */
 function collectAxisNeighbors<T extends { _id: string }>(
   posts: T[],
@@ -876,7 +889,6 @@ function FeedCaption({
             }
           : undefined
       }
-      onPointerDown={(event) => event.stopPropagation()}
       onClick={
         onOpenDescription
           ? (event) => {
@@ -898,7 +910,6 @@ function FeedCaption({
       {username && placement === "page" ? (
         <div
           className="profile-post-caption-head"
-          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
           <span className="profile-post-caption-avatar-wrap">
@@ -1695,14 +1706,17 @@ export function ProfilePostViewer({
     function onWheel(event: WheelEvent) {
       const target = event.target;
       if (!(target instanceof Node) || !layout.contains(target)) return;
-      // Drive the feed only when the cursor is over the post card (incl. <video>).
+      // Drive the feed from the whole watch card (player + caption + bar).
       // Comments dock keeps native scroll.
       if (
         !(target instanceof Element) ||
-        !target.closest(".profile-post-watch-player")
+        !target.closest(".profile-post-watch-stack") ||
+        target.closest(".profile-comments-dock")
       ) {
         return;
       }
+      const caption = target.closest(".profile-post-caption.is-page");
+      const captionEl = caption instanceof HTMLElement ? caption : null;
       // Shift+wheel → horizontal author axis (desktop trackpads may already
       // emit deltaX; treat shift as an explicit horizontal intent).
       const deltaX = normalizedWheelDelta(event.deltaX, event.deltaMode);
@@ -1720,6 +1734,12 @@ export function ProfilePostViewer({
         return;
       }
       if (Math.abs(deltaY) < 8) return;
+      if (captionEl && captionEl.scrollHeight > captionEl.clientHeight + 1) {
+        const atTop = captionEl.scrollTop <= 0;
+        const atBottom =
+          captionEl.scrollTop + captionEl.clientHeight >= captionEl.scrollHeight - 1;
+        if ((deltaY < 0 && !atTop) || (deltaY > 0 && !atBottom)) return;
+      }
       event.preventDefault();
       event.stopPropagation();
       if (animatingRef.current || Date.now() < wheelLockUntil) return;
@@ -1737,11 +1757,7 @@ export function ProfilePostViewer({
     if ((event.target as HTMLElement | null)?.closest?.("[data-video-control]")) {
       return;
     }
-    if (
-      !(event.target as HTMLElement | null)?.closest?.(".profile-post-watch-player")
-    ) {
-      return;
-    }
+    if (!isWatchFeedGestureTarget(event.target)) return;
     pointerRef.current = {
       id: event.pointerId,
       x: event.clientX,
@@ -2170,15 +2186,17 @@ export function ProfilePostViewer({
       className="profile-post-viewer-layout is-watch-layout"
       ref={layoutRef}
     >
-      <div className="profile-post-watch-stack">
       <div
-        ref={rootRef}
-        className="profile-post-viewer is-feed is-watch-layout"
-        aria-label="Studio feed"
+        className="profile-post-watch-stack"
         onPointerDown={tabActive ? onPointerDown : undefined}
         onPointerMove={tabActive ? onPointerMove : undefined}
         onPointerUp={tabActive ? finishPointer : undefined}
         onPointerCancel={tabActive ? cancelPointer : undefined}
+      >
+      <div
+        ref={rootRef}
+        className="profile-post-viewer is-feed is-watch-layout"
+        aria-label="Studio feed"
       >
         <div className="profile-post-viewer-blur" aria-hidden="true" />
         <div className="profile-post-track" ref={trackRef}>
