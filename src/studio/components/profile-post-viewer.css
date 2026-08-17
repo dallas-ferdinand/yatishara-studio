@@ -1985,16 +1985,21 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comment-row.is-mine .profile-comment-body {
   align-items: flex-end;
-  max-width: min(88%, calc(100% - 44px));
+  max-width: calc(100% - 44px);
+  width: 100%;
+  flex: 1 1 auto;
 }
 
 .profile-comment-row:not(.is-mine) .profile-comment-body {
-  max-width: min(88%, calc(100% - 44px));
+  max-width: calc(100% - 44px);
+  width: 100%;
+  flex: 1 1 auto;
 }
 
 .studio-polish.is-studio-mobile .profile-comment-row:not(.is-mine) .profile-comment-body,
 .studio-polish.is-studio-mobile .profile-comment-row.is-mine .profile-comment-body {
-  max-width: min(88%, calc(100% - 44px));
+  max-width: calc(100% - 44px);
+  width: 100%;
 }
 
 .profile-comment-row:active {
@@ -2017,7 +2022,8 @@ button.post-compose-inline-chip.profile-description-chip {
   align-items: flex-start;
   gap: 2px;
   min-width: 0;
-  width: fit-content;
+  width: 100%;
+  flex: 1 1 auto;
 }
 
 .profile-comment-bubble {
@@ -2025,8 +2031,8 @@ button.post-compose-inline-chip.profile-description-chip {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  min-width: min(16rem, 100%);
-  width: fit-content;
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
   padding: 7px 10px 8px;
   box-sizing: border-box;
@@ -2095,7 +2101,7 @@ button.post-compose-inline-chip.profile-description-chip {
   padding: 0;
   gap: 5px;
   border-radius: 999px;
-  border: 0;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
   font-size: 12px;
@@ -2123,7 +2129,7 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comment-bubble-actions .profile-comment-like:hover,
 .profile-comment-bubble-actions .profile-comment-reply:hover {
-  background: transparent;
+  background: color-mix(in srgb, currentColor 8%, transparent);
   color: var(--color-cursor-text, var(--mos-text));
 }
 
