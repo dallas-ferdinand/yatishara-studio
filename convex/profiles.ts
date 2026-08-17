@@ -202,6 +202,8 @@ const publicPostReturn = v.object({
   editedAt: v.optional(v.number()),
   thumbnailUrl: v.optional(v.string()),
   mediaUrl: v.optional(v.string()),
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
   likedByViewer: v.boolean(),
   savedByViewer: v.boolean(),
   username: v.string(),
@@ -226,6 +228,8 @@ const feedPostReturn = v.object({
   editedAt: v.optional(v.number()),
   thumbnailUrl: v.optional(v.string()),
   mediaUrl: v.optional(v.string()),
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
   likedByViewer: v.boolean(),
   savedByViewer: v.boolean(),
   username: v.string(),
@@ -262,6 +266,8 @@ type HydratedPublicPost = {
   editedAt?: number;
   thumbnailUrl?: string;
   mediaUrl?: string;
+  width?: number;
+  height?: number;
   likedByViewer: boolean;
   savedByViewer: boolean;
   username: string;
@@ -352,6 +358,8 @@ async function hydratePublicPosts(
       editedAt: post.editedAt,
       thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
       mediaUrl: videoPath ? videoUrls.get(videoPath) : undefined,
+      width: asset.width,
+      height: asset.height,
       likedByViewer: likedFlags[i] ?? false,
       savedByViewer: savedFlags[i] ?? false,
       username: author.username,
@@ -1606,6 +1614,8 @@ async function listFeedImpl(
       editedAt?: number;
       thumbnailUrl?: string;
       mediaUrl?: string;
+      width?: number;
+      height?: number;
       likedByViewer: boolean;
       savedByViewer: boolean;
       username: string;
@@ -1665,6 +1675,8 @@ async function listFeedImpl(
         editedAt: item.post.editedAt,
         thumbnailUrl: thumbPath ? signed.get(thumbPath) : undefined,
         mediaUrl: videoPath ? videoUrls.get(videoPath) : undefined,
+        width: asset.width,
+        height: asset.height,
         likedByViewer: likedFlags[i] ?? false,
         savedByViewer: savedFlags[i] ?? false,
         username: item.profile.username,

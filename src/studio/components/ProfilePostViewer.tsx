@@ -81,6 +81,8 @@ type FeedPost = {
   editedAt?: number;
   thumbnailUrl?: string;
   mediaUrl?: string;
+  width?: number;
+  height?: number;
   likedByViewer: boolean;
   savedByViewer?: boolean;
   username: string;
@@ -112,6 +114,8 @@ type AuthorPost = {
   editedAt?: number;
   thumbnailUrl?: string;
   mediaUrl?: string;
+  width?: number;
+  height?: number;
   likedByViewer: boolean;
   savedByViewer?: boolean;
 };
@@ -140,6 +144,14 @@ function formatCount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
   return String(value);
+}
+
+function postAspectVars(post: { width?: number; height?: number }): CSSProperties | undefined {
+  if (!(post.width && post.width > 0 && post.height && post.height > 0)) return undefined;
+  return {
+    ["--post-aw" as string]: String(post.width),
+    ["--post-ah" as string]: String(post.height),
+  };
 }
 
 function viewedKey(postId: string) {
@@ -340,6 +352,11 @@ function FeedMedia({
     if (typeof Image === "undefined") return;
     const img = new window.Image();
     img.decoding = "async";
+    img.onload = () => {
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        setMediaSize({ w: img.naturalWidth, h: img.naturalHeight });
+      }
+    };
     img.src = displaySrc;
   }, [shouldWarm, post.kind, displaySrc]);
 
@@ -573,15 +590,20 @@ function FeedMedia({
       ? mediaSize.w
       : media?.width && media.width > 0
         ? media.width
-        : 16;
+        : post.width && post.width > 0
+          ? post.width
+          : 0;
   const aspectH =
     mediaSize?.h && mediaSize.h > 0
       ? mediaSize.h
       : media?.height && media.height > 0
         ? media.height
-        : 9;
+        : post.height && post.height > 0
+          ? post.height
+          : 0;
 
   useLayoutEffect(() => {
+    if (!(aspectW > 0 && aspectH > 0)) return;
     const frame = mediaRootRef.current?.closest(".profile-post-watch-frame");
     if (!(frame instanceof HTMLElement)) return;
     frame.style.setProperty("--post-aw", String(aspectW));
@@ -2063,7 +2085,10 @@ export function ProfilePostViewer({
                 inert={!isInteractiveSlide}
               >
                 <div className="profile-post-watch-player">
-                    <div className="profile-post-watch-frame">
+                    <div
+                      className="profile-post-watch-frame"
+                      style={postAspectVars(post)}
+                    >
                       <FeedMedia
                         post={post}
                         active={tabActive && role === "current"}
