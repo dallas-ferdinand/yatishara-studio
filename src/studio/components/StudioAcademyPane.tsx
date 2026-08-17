@@ -662,6 +662,10 @@ function BannerStage({
   const [posterReady, setPosterReady] = useState(!bannerUrl);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const togglePlayRef = useRef<(() => void) | null>(null);
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  const onSeekReadyRef = useRef(onSeekReady);
+  onTimeUpdateRef.current = onTimeUpdate;
+  onSeekReadyRef.current = onSeekReady;
 
   useEffect(() => {
     setPosterReady(!bannerUrl);
@@ -671,22 +675,24 @@ function BannerStage({
     const iframe = iframeRef.current;
     if (!embedUrl || !iframe) {
       togglePlayRef.current = null;
-      onSeekReady?.(null);
+      onSeekReadyRef.current?.(null);
       return;
     }
     const { dispose, seekTo, togglePlay } = attachBunnyStreamPlayer(
       iframe,
-      onTimeUpdate ?? (() => {}),
+      (seconds) => {
+        onTimeUpdateRef.current?.(seconds);
+      },
       { autoplay: true },
     );
     togglePlayRef.current = togglePlay;
-    onSeekReady?.(seekTo);
+    onSeekReadyRef.current?.(seekTo);
     return () => {
       togglePlayRef.current = null;
       dispose();
-      onSeekReady?.(null);
+      onSeekReadyRef.current?.(null);
     };
-  }, [embedUrl, onSeekReady, onTimeUpdate]);
+  }, [embedUrl]);
 
   return (
     <div className="studio-academy-player-shell">

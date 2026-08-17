@@ -102,6 +102,8 @@ export function attachBunnyStreamPlayer(
 } {
   let disposed = false;
   let player: PlayerJsPlayer | null = null;
+  let pausedByUser = false;
+  let kickedAutoplay = false;
 
   const seekTo = (seconds: number) => {
     if (!player || !Number.isFinite(seconds)) return;
@@ -112,18 +114,36 @@ export function attachBunnyStreamPlayer(
     }
   };
 
+  const resumePlay = () => {
+    pausedByUser = false;
+    if (player) kickAudiblePlayback(player);
+  };
+
+  const pauseNow = () => {
+    pausedByUser = true;
+    try {
+      player?.pause?.();
+    } catch {
+      /* ignore */
+    }
+  };
+
   const togglePlay = () => {
     if (!player) return;
     try {
+      if (pausedByUser) {
+        resumePlay();
+        return;
+      }
       if (typeof player.getPaused === "function") {
         player.getPaused((paused) => {
           if (disposed || !player) return;
-          if (paused) kickAudiblePlayback(player);
-          else player.pause?.();
+          if (paused || pausedByUser) resumePlay();
+          else pauseNow();
         });
         return;
       }
-      kickAudiblePlayback(player);
+      pauseNow();
     } catch {
       /* ignore */
     }
@@ -143,7 +163,9 @@ export function attachBunnyStreamPlayer(
           const sec = readSeconds(value);
           if (sec != null) onTime(sec);
         });
-        if (opts?.autoplay !== false) kickAudiblePlayback(player);
+        if (opts?.autoplay === false || pausedByUser || kickedAutoplay) return;
+        kickedAutoplay = true;
+        kickAudiblePlayback(player);
       });
     } catch {
       player = null;

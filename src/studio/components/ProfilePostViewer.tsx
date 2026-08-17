@@ -306,6 +306,7 @@ function FeedMedia({
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [policyMuted, setPolicyMuted] = useState(false);
   const policyMutedRef = useRef(false);
+  const userPausedRef = useRef(false);
 
   if (postIdRef.current !== post._id) {
     postIdRef.current = post._id;
@@ -314,6 +315,7 @@ function FeedMedia({
     resumeAtRef.current = 0;
     wasPlayingRef.current = false;
     pointerSeekingRef.current = false;
+    userPausedRef.current = false;
   }
 
   const mediaUrl = media?.mediaUrl ?? post.mediaUrl;
@@ -450,10 +452,11 @@ function FeedMedia({
 
     video.volume = 1;
     wasPlayingRef.current = true;
+    userPausedRef.current = false;
 
     let cancelled = false;
     const tryPlay = () => {
-      if (cancelled) return;
+      if (cancelled || userPausedRef.current) return;
       video.volume = 1;
       const wantSound = soundEnabled && !policyMutedRef.current;
       video.muted = !wantSound;
@@ -539,7 +542,7 @@ function FeedMedia({
         setSoundEnabled(true);
         video.volume = 1;
         video.muted = false;
-        if (video.paused) void video.play().catch(() => {});
+        if (video.paused && !userPausedRef.current) void video.play().catch(() => {});
       }
       if (chromeVisibleRef.current) hideChrome();
       else showChrome();
@@ -557,7 +560,7 @@ function FeedMedia({
       setSoundEnabled(true);
       video.volume = 1;
       video.muted = false;
-      void video.play().catch(() => {});
+      if (!userPausedRef.current) void video.play().catch(() => {});
     }
     window.addEventListener("ys-feed-sound-unlock", onUnlock);
     return () => window.removeEventListener("ys-feed-sound-unlock", onUnlock);
@@ -571,6 +574,7 @@ function FeedMedia({
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
+      userPausedRef.current = false;
       policyMutedRef.current = false;
       setPolicyMuted(false);
       setSoundEnabled(true);
@@ -584,6 +588,7 @@ function FeedMedia({
       video.volume = 1;
       video.muted = false;
     } else {
+      userPausedRef.current = true;
       video.pause();
     }
     showChrome();
