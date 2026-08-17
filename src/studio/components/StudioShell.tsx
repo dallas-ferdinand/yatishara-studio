@@ -29144,9 +29144,9 @@ function StudioComposer({
             }
           >
             <div
-              className={`studio-composer-options-head${isAudioMode ? " is-audio-tabs" : ""}`}
+              className={`studio-composer-options-head${isAudioMode && !isMobile ? " is-audio-tabs" : ""}`}
             >
-              {isAudioMode ? (
+              {isAudioMode && !isMobile ? (
                 <nav
                   className="studio-composer-audio-type-tabs"
                   role="tablist"
@@ -29612,7 +29612,16 @@ function StudioComposer({
         <div className="studio-composer-toolbar-left">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
           {!isAudioMode ? <StudioUploadButton inputRef={uploadInputRef} /> : null}
-          {isAudioMode ? (
+          {isAudioMode && isMobile ? (
+            <StudioAudioTypeSwitcher
+              audioType={audioType}
+              setAudioType={(value) => {
+                setAudioType?.(value);
+                setVoicePickerOpen(false);
+              }}
+            />
+          ) : null}
+          {isAudioMode && !isMobile ? (
             <button
               type="button"
               className={`studio-inline-setting-trigger studio-composer-audio-settings-btn${composerOptionsOpen ? " is-open" : ""}`}
@@ -30282,6 +30291,35 @@ function StudioModeSwitcher({ mode, setMode }) {
             aria-label={item.label}
             title={item.label}
             onClick={() => setMode(item.value)}
+          >
+            <Icon aria-hidden="true" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StudioAudioTypeSwitcher({ audioType, setAudioType }) {
+  return (
+    <div
+      className="studio-mode-switcher studio-audio-type-switcher"
+      role="tablist"
+      aria-label="Audio type"
+    >
+      {AUDIO_TYPE_OPTIONS.map((item) => {
+        const Icon = item.icon;
+        const active = audioType === item.value;
+        return (
+          <button
+            key={item.value}
+            type="button"
+            className={`studio-mode-row${active ? " is-active" : ""}`}
+            role="tab"
+            aria-selected={active}
+            aria-label={item.label}
+            title={item.label}
+            onClick={() => setAudioType?.(item.value)}
           >
             <Icon aria-hidden="true" />
           </button>
