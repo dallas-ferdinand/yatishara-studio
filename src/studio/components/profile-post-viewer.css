@@ -1193,7 +1193,7 @@
 }
 
 .profile-comments-panel.is-sheet .profile-comments-composer {
-  padding: 0;
+  padding: 8px 10px 10px;
   border-top: none;
 }
 
@@ -2191,7 +2191,7 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comments-composer.is-sheet-composer {
-  padding: 0;
+  padding: 8px 10px 10px;
   gap: 0;
   border-top: none;
 }

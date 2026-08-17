@@ -1879,6 +1879,7 @@ button.studio-cn-card-btn.public-offers-card {
 .studio-cn-book-sheet.is-profile-comments .profile-comments-composer.is-sheet-composer {
   flex: 0 0 auto;
   border-top: none;
+  padding: 8px 10px 10px;
 }
 
 .studio-cn-book-sidebar-body.is-comments-fill .profile-comments-composer {
