@@ -7,6 +7,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { CN_CARD_TRANSFORM, signBunnyThumbUrl } from "./lib/bunny";
 import {
   compareAtCoursePriceCredits,
+  creditsToTtd,
   effectiveCoursePriceCredits,
   isCourseSaleActive,
 } from "./lib/academyPricing";
@@ -311,6 +312,17 @@ export const internalFindUserByPhone = internalQuery({
       firstName: v.optional(v.string()),
       lastName: v.optional(v.string()),
       name: v.optional(v.string()),
+      /** Ledger credits (Sophie should speak TTD via walletTtd). */
+      creditBalance: v.number(),
+      /** Wallet in TTD (TT$0.50 / credit). */
+      walletTtd: v.number(),
+      ownedCourses: v.array(
+        v.object({
+          courseId: v.id("academyCourses"),
+          title: v.string(),
+          slug: v.string(),
+        }),
+      ),
     }),
     v.null(),
   ),
@@ -318,15 +330,43 @@ export const internalFindUserByPhone = internalQuery({
     const phone = normalizePhone(args.phone);
     if (phone.length < 8) return null;
 
-    const mapUser = (user: Doc<"users">, resolvedPhone: string) => ({
-      userId: user._id,
-      phone: resolvedPhone,
-      email: user.email,
-      emailVerified: user.emailVerified,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      name: user.name,
-    });
+    const mapUser = async (user: Doc<"users">, resolvedPhone: string) => {
+      const billing = await ctx.db
+        .query("billingAccounts")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .unique();
+      const creditBalance = Number(billing?.creditBalance ?? 0);
+      const purchases = await ctx.db
+        .query("academyPurchases")
+        .withIndex("by_user_and_purchased", (q) => q.eq("userId", user._id))
+        .collect();
+      const ownedCourses: Array<{
+        courseId: Id<"academyCourses">;
+        title: string;
+        slug: string;
+      }> = [];
+      for (const row of purchases) {
+        const course = await ctx.db.get(row.courseId);
+        if (!course) continue;
+        ownedCourses.push({
+          courseId: course._id,
+          title: course.title,
+          slug: course.slug,
+        });
+      }
+      return {
+        userId: user._id,
+        phone: resolvedPhone,
+        email: user.email,
+        emailVerified: user.emailVerified,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        name: user.name,
+        creditBalance,
+        walletTtd: creditsToTtd(creditBalance),
+        ownedCourses,
+      };
+    };
 
     const isCsStaffOrProtected = (user: Doc<"users">) =>
       isStaffRole(user.role) ||
@@ -339,7 +379,7 @@ export const internalFindUserByPhone = internalQuery({
         .withIndex("by_phone", (q) => q.eq("phone", `9${phone}`))
         .unique();
       if (alt && !isCsStaffOrProtected(alt)) {
-        return mapUser(alt, `9${phone}`);
+        return await mapUser(alt, `9${phone}`);
       }
     }
 
@@ -350,7 +390,7 @@ export const internalFindUserByPhone = internalQuery({
     if (!user) return null;
     // Never treat Dallas/Shara staff accounts as Sophie CS customers.
     if (isCsStaffOrProtected(user)) return null;
-    return mapUser(user, phone);
+    return await mapUser(user, phone);
   },
 });
 
