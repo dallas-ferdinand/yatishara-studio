@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { deriveBaseHandle, slugifyHandle } from "./profileEnsure";
+import {
+  deriveBaseHandle,
+  isPlaceholderHandle,
+  slugifyHandle,
+} from "./profileEnsure";
 import { isReservedUsername, validateUsername } from "./profileIdentity";
+
+describe("isPlaceholderHandle", () => {
+  it("flags phone and creator fallbacks", () => {
+    expect(isPlaceholderHandle("user1212")).toBe(true);
+    expect(isPlaceholderHandle("creator")).toBe(true);
+    expect(isPlaceholderHandle("creator2")).toBe(true);
+    expect(isPlaceholderHandle("dallasferdinand")).toBe(false);
+    expect(isPlaceholderHandle("dallasferdinand2")).toBe(false);
+  });
+});
 
 describe("slugifyHandle", () => {
   it("produces clean letter-leading handles", () => {

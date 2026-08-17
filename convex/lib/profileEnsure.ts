@@ -122,13 +122,21 @@ function withNumericSuffix(base: string, n: number): string {
   return `${truncated}${suffix}`;
 }
 
+/** Phone/email fallbacks assigned before first+last exist — safe to rewrite. */
+export function isPlaceholderHandle(username: string): boolean {
+  const handle = username.trim().toLowerCase();
+  return /^user\d{4}$/.test(handle) || /^creator\d*$/.test(handle);
+}
+
 /**
  * Allocate an unused username: base, base2…base50, then base + short id chars.
+ * `exceptUserId` ignores the caller's existing profile so a rename is not treated as taken.
  */
 export async function allocateUniqueUsername(
   ctx: MutationCtx,
   baseRaw: string,
   salt?: string,
+  exceptUserId?: Id<"users">,
 ): Promise<string> {
   const base = slugifyHandle(baseRaw) ?? "creator";
 
@@ -145,7 +153,7 @@ export async function allocateUniqueUsername(
       .query("profiles")
       .withIndex("by_username", (q) => q.eq("username", validated))
       .unique();
-    if (!taken) return validated;
+    if (!taken || taken.userId === exceptUserId) return validated;
   }
 
   const idPart = (salt ?? "x")
@@ -162,7 +170,7 @@ export async function allocateUniqueUsername(
         .query("profiles")
         .withIndex("by_username", (q) => q.eq("username", validated))
         .unique();
-      if (!taken) return validated;
+      if (!taken || taken.userId === exceptUserId) return validated;
     } catch {
       continue;
     }
@@ -171,31 +179,68 @@ export async function allocateUniqueUsername(
   return validateUsername(`u${Date.now().toString(36)}`);
 }
 
+async function refreshAutoUsernameIfNeeded(
+  ctx: MutationCtx,
+  profile: Doc<"profiles">,
+  user: Doc<"users">,
+): Promise<Doc<"profiles">> {
+  if (profile.usernameAutoAssigned === false) return profile;
+  const hasName = Boolean(user.firstName?.trim() && user.lastName?.trim());
+  if (!hasName) return profile;
+  const shouldRefresh =
+    profile.usernameAutoAssigned === true ||
+    isPlaceholderHandle(profile.username);
+  if (!shouldRefresh) return profile;
+
+  const next = await allocateUniqueUsername(
+    ctx,
+    deriveBaseHandle(user),
+    String(user._id),
+    user._id,
+  );
+  const now = Date.now();
+  if (next === profile.username && profile.usernameAutoAssigned === true) {
+    return profile;
+  }
+  await ctx.db.patch(profile._id, {
+    username: next,
+    usernameAutoAssigned: true,
+    updatedAt: now,
+  });
+  const updated = await ctx.db.get("profiles", profile._id);
+  if (!updated) throw new Error("Failed to update profile");
+  return updated;
+}
+
 /** Idempotent: return existing profile or create one with a unique auto username. */
 export async function ensureProfileForUser(
   ctx: MutationCtx,
   userId: Id<"users">,
 ): Promise<Doc<"profiles">> {
+  const user = await ctx.db.get("users", userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
   const existing = await ctx.db
     .query("profiles")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .unique();
-  if (existing) return existing;
-
-  const user = await ctx.db.get("users", userId);
-  if (!user) {
-    throw new Error("User not found");
+  if (existing) {
+    return await refreshAutoUsernameIfNeeded(ctx, existing, user);
   }
 
   const username = await allocateUniqueUsername(
     ctx,
     deriveBaseHandle(user),
     String(userId),
+    userId,
   );
   const now = Date.now();
   const profileId = await ctx.db.insert("profiles", {
     userId,
     username,
+    usernameAutoAssigned: true,
     // Public name is resolved live from users / seller — do not store freeform displayName.
     bio: undefined,
     avatarAssetId: undefined,

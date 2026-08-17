@@ -1161,6 +1161,11 @@ export default defineSchema({
     userId: v.id("users"),
     /** Unique browser-friendly handle, stored lowercase. */
     username: v.string(),
+    /**
+     * True when Studio picked the handle from the account name / fallback.
+     * False after they claim or change it — never auto-overwrite a custom handle.
+     */
+    usernameAutoAssigned: v.optional(v.boolean()),
     /** @deprecated Legacy freeform label — public reads ignore this. */
     displayName: v.optional(v.string()),
     /**

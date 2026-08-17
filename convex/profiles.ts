@@ -759,6 +759,7 @@ export const claimUsername = authedMutation({
     if (existing) {
       await ctx.db.patch(existing._id, {
         username,
+        usernameAutoAssigned: false,
         updatedAt: now,
       });
       return {
@@ -771,6 +772,7 @@ export const claimUsername = authedMutation({
     const profileId = await ctx.db.insert("profiles", {
       userId: ctx.user._id,
       username,
+      usernameAutoAssigned: false,
       bio: undefined,
       avatarAssetId: undefined,
       contactLinks: [],
@@ -880,6 +882,7 @@ export const changeUsername = authedMutation({
     }
     await ctx.db.patch(profile._id, {
       username,
+      usernameAutoAssigned: false,
       updatedAt: Date.now(),
     });
     return {
@@ -3014,6 +3017,7 @@ export const claimUsernameForApi = internalMutation({
     if (existing) {
       await ctx.db.patch(existing._id, {
         username,
+        usernameAutoAssigned: false,
         updatedAt: now,
       });
       return {
@@ -3025,6 +3029,7 @@ export const claimUsernameForApi = internalMutation({
     const profileId = await ctx.db.insert("profiles", {
       userId: user._id,
       username,
+      usernameAutoAssigned: false,
       bio: undefined,
       avatarAssetId: undefined,
       contactLinks: [],
@@ -3076,6 +3081,7 @@ export const changeUsernameForApi = internalMutation({
     }
     await ctx.db.patch(profile._id, {
       username,
+      usernameAutoAssigned: false,
       updatedAt: Date.now(),
     });
     return {

@@ -21,6 +21,7 @@ import {
   targetTotalCredits,
 } from "./lib/academyPaymentPlan";
 import { hashMagicToken, MAGIC_LINK_TTL_MS } from "./magicLoginAuth";
+import { ensureProfileForUser } from "./lib/profileEnsure";
 
 const COVER_URL_TTL_SEC = 60 * 60 * 6;
 
@@ -492,6 +493,7 @@ export const internalCreateUserFromWa = internalMutation({
         updatedAt: Date.now(),
       });
       await ensureBillingAccount(ctx, existing._id);
+      await ensureProfileForUser(ctx, existing._id);
       return { userId: existing._id, phone, created: false };
     }
     const byEmail = await ctx.db
@@ -521,6 +523,7 @@ export const internalCreateUserFromWa = internalMutation({
         updatedAt: now,
       });
       await ensureBillingAccount(ctx, byEmail._id);
+      await ensureProfileForUser(ctx, byEmail._id);
       return { userId: byEmail._id, phone: linkPhone, created: false };
     }
     // Staff owns this WA digits — create test customer on a non-colliding digit key.
@@ -543,6 +546,7 @@ export const internalCreateUserFromWa = internalMutation({
       updatedAt: now,
     });
     await ensureBillingAccount(ctx, userId);
+    await ensureProfileForUser(ctx, userId);
     return { userId, phone: insertPhone, created: true };
   },
 });
@@ -736,6 +740,7 @@ export const internalCompleteProfile = internalMutation({
       name: `${firstName} ${lastName}`.trim(),
       updatedAt: Date.now(),
     });
+    await ensureProfileForUser(ctx, user._id);
     return { userId: user._id };
   },
 });
