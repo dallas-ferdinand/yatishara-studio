@@ -2016,11 +2016,11 @@ button.post-compose-inline-chip.profile-description-chip {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: 0;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding: 7px 10px 4px;
+  padding: 7px 10px 3px;
   box-sizing: border-box;
   border-radius: 8px 18px 18px 18px;
   background: var(--mos-plate, var(--mos-panel));
@@ -2073,24 +2073,24 @@ button.post-compose-inline-chip.profile-description-chip {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
-  margin: 0;
+  margin: 1px 0 0;
 }
 
 .profile-comment-bubble-actions .profile-comment-like,
 .profile-comment-bubble-actions .profile-comment-reply {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  min-height: 28px;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
   padding: 0;
-  gap: 5px;
+  gap: 3px;
   border-radius: 999px;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
   box-shadow: none;
 }
@@ -2098,13 +2098,13 @@ button.post-compose-inline-chip.profile-description-chip {
 .profile-comment-bubble-actions .profile-comment-like:has(span),
 .profile-comment-bubble-actions .profile-comment-reply:has(span) {
   width: auto;
-  padding: 0 10px;
+  padding: 0 6px;
 }
 
 .profile-comment-bubble-actions .profile-comment-like svg,
 .profile-comment-bubble-actions .profile-comment-reply svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   stroke-width: 2;
   fill: none;
 }
