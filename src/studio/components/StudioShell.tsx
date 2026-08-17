@@ -23443,15 +23443,16 @@ export function StudioShell({
           margin: 0;
           padding: 0;
           border: 0;
-          border-radius: 0;
+          border-radius: 12px;
           background: transparent;
           box-shadow: none;
           position: relative;
           z-index: 0;
+          overflow: hidden;
         }
         .studio-polish.is-studio-mobile .studio-academy-player {
           border: 0;
-          border-radius: 0;
+          border-radius: 12px;
           box-shadow: none;
           overflow: hidden;
           position: relative;
