@@ -1230,7 +1230,8 @@ function CommentsBody({
   }
 
   const inThread = parentId !== null;
-  const showHeader = showRootHeader || inThread || Boolean(postAuthor);
+  const showHeader =
+    showRootHeader || inThread || (Boolean(postAuthor) && variant !== "sheet");
   const parent = frame.parentPreview;
   const parentName = parent ? commentLabel(parent) : "";
   const parentInitials = parent
@@ -1426,39 +1427,6 @@ function CommentsBody({
                 <time dateTime={new Date(postAuthor.publishedAt).toISOString()}>
                   {formatPostStamp(postAuthor.publishedAt, postAuthor.editedAt)}
                 </time>
-                {!inThread && postActions ? (
-                  postAuthor.isOwner ? (
-                    <span
-                      className="profile-comments-post-action is-under-name is-static"
-                      aria-label={`${formatCount(postActions.likeCount)} boosts`}
-                    >
-                      <Crown aria-hidden="true" fill="currentColor" strokeWidth={0} />
-                      <span>{formatCount(postActions.likeCount)}</span>
-                    </span>
-                  ) : (
-                  <button
-                    type="button"
-                    className={`profile-comments-post-action is-under-name${postActions.liked || (postActions.undoLeft ?? 0) > 0 ? " is-liked" : ""}`}
-                    data-studio-sfx="like"
-                    aria-pressed={postActions.liked || (postActions.undoLeft ?? 0) > 0}
-                    aria-label={
-                      (postActions.undoLeft ?? 0) > 0
-                        ? `Undo boost, ${postActions.undoLeft} seconds left`
-                        : postActions.liked
-                          ? "Boosted"
-                          : "Boost"
-                    }
-                    onClick={postActions.onLike}
-                  >
-                    <Crown aria-hidden="true" fill="currentColor" strokeWidth={0} />
-                    <span>
-                      {(postActions.undoLeft ?? 0) > 0
-                        ? postActions.undoLeft
-                        : formatCount(postActions.likeCount)}
-                    </span>
-                  </button>
-                  )
-                ) : null}
               </div>
             </div>
           ) : (
@@ -1469,6 +1437,37 @@ function CommentsBody({
           )}
           {!inThread && postActions ? (
             <div className="profile-comments-post-actions">
+              {postAuthor?.isOwner ? (
+                <span
+                  className="profile-comments-post-action is-static"
+                  aria-label={`${formatCount(postActions.likeCount)} boosts`}
+                >
+                  <Crown aria-hidden="true" fill="currentColor" strokeWidth={0} />
+                  <span>{formatCount(postActions.likeCount)}</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className={`profile-comments-post-action${postActions.liked || (postActions.undoLeft ?? 0) > 0 ? " is-liked" : ""}`}
+                  data-studio-sfx="like"
+                  aria-pressed={postActions.liked || (postActions.undoLeft ?? 0) > 0}
+                  aria-label={
+                    (postActions.undoLeft ?? 0) > 0
+                      ? `Undo boost, ${postActions.undoLeft} seconds left`
+                      : postActions.liked
+                        ? "Boosted"
+                        : "Boost"
+                  }
+                  onClick={postActions.onLike}
+                >
+                  <Crown aria-hidden="true" fill="currentColor" strokeWidth={0} />
+                  <span>
+                    {(postActions.undoLeft ?? 0) > 0
+                      ? postActions.undoLeft
+                      : formatCount(postActions.likeCount)}
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 className={`profile-comments-post-action${postActions.saved ? " is-saved" : ""}`}
@@ -2341,13 +2340,13 @@ export function ProfileCommentsPanel({
       lessonId={lessonId}
       commentCount={commentCount}
       onCommentCountChange={onCommentCountChange}
-      showRootHeader={isMobile && !courseId}
+      showRootHeader={false}
       showClose={false}
       onClose={onClose}
       variant={isMobile ? "sheet" : "dock"}
       open={open}
       postAuthor={useSidebarChrome ? undefined : postAuthor}
-      postActions={postId ? postActions : undefined}
+      postActions={!isMobile && postId ? postActions : undefined}
       onEditDescription={
         postId && postAuthor?.isOwner && description
           ? openDescriptionEditor
@@ -2433,6 +2432,7 @@ export function ProfileCommentsPanel({
       ariaLabel={showingDescription ? "Description" : "Comments"}
       className={courseId ? "is-academy-comments" : "is-profile-comments"}
       backLayerId={courseId ? "academy-comments-sheet" : "profile-comments-sheet"}
+      openToClearance={!courseId}
     >
       <div className="profile-comments-sheet-fill">
         {descriptionPanel ?? commentsBody}

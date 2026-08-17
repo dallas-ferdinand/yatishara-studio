@@ -1059,6 +1059,20 @@
     pointer-events: auto;
   }
 
+  .profile-post-caption-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .profile-post-caption-actions .profile-post-book-btn {
+    background: transparent;
+    color: var(--color-cursor-text-bright, var(--mos-text));
+  }
+
   .profile-post-caption-avatar-wrap {
     position: relative;
     flex: 0 0 auto;
@@ -1086,7 +1100,7 @@
     gap: 5px;
     height: 28px;
     min-height: 28px;
-    margin: 0 0 0 auto;
+    margin: 0;
     padding: 0 10px;
     border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
     border-radius: 999px;
@@ -1119,7 +1133,7 @@
     flex: 0 0 auto;
     width: 28px;
     height: 28px;
-    margin: 0 0 0 auto;
+    margin: 0;
     padding: 0;
     border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
     border-radius: 999px;
@@ -1471,7 +1485,7 @@
 
 .profile-comments-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   min-height: var(--cursor-head-h, 32px);
@@ -1676,7 +1690,7 @@
 
 .profile-comments-thread-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   min-width: 0;
   flex: 1;
@@ -1718,15 +1732,6 @@
   flex: 1;
   padding: 0;
   overflow: hidden;
-}
-
-.profile-comments-thread-preview .profile-comments-post-action.is-under-name {
-  justify-self: start;
-  margin-top: 4px;
-  height: 22px;
-  min-height: 22px;
-  padding: 0;
-  gap: 4px;
 }
 
 .profile-comments-post-action.is-static,

@@ -824,12 +824,19 @@ function FeedCaption({
   showFollow = false,
   isFollowing = false,
   showEdit = false,
+  isOwner = false,
+  liked = false,
+  likeCount = 0,
+  commentCount = 0,
+  boostUndoLeft = 0,
   active = false,
   placement = "overlay",
   onOpenProfile,
   onOpenDescription,
   onToggleFollow,
   onEdit,
+  onBoost,
+  onOpenComments,
   feedShare,
 }: {
   username?: string;
@@ -850,12 +857,19 @@ function FeedCaption({
   showFollow?: boolean;
   isFollowing?: boolean;
   showEdit?: boolean;
+  isOwner?: boolean;
+  liked?: boolean;
+  likeCount?: number;
+  commentCount?: number;
+  boostUndoLeft?: number;
   /** Interactive current post — kept for callers. */
   active?: boolean;
   placement?: "overlay" | "page";
   onOpenProfile?: (username: string) => void;
   onToggleFollow?: () => void;
   onEdit?: () => void;
+  onBoost?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onOpenComments?: () => void;
   onOpenDescription?: () => void;
   /** Drag this caption into a Messages chat row to share the post. */
   feedShare?: {
@@ -944,6 +958,7 @@ function FeedCaption({
               </time>
             ) : null}
           </div>
+          <div className="profile-post-caption-actions">
           {showFollow ? (
             <button
               type="button"
@@ -977,6 +992,70 @@ function FeedCaption({
               <Pencil aria-hidden="true" strokeWidth={2.25} />
             </button>
           ) : null}
+          {placement === "page" && onOpenComments ? (
+            <>
+              {isOwner ? (
+                <span
+                  className={`profile-post-book-btn is-labeled${liked ? " is-liked" : ""}`}
+                  aria-label={`${formatCount(likeCount)} boosts`}
+                >
+                  <Crown
+                    aria-hidden="true"
+                    fill={liked ? "currentColor" : "none"}
+                    strokeWidth={liked ? 1.75 : 2}
+                  />
+                  <span className="profile-post-book-label">Boost</span>
+                  <span className="profile-post-book-count">{formatCount(likeCount)}</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className={`profile-post-book-btn is-labeled${liked || boostUndoLeft > 0 ? " is-liked" : ""}`}
+                  data-studio-sfx="like"
+                  aria-pressed={liked || boostUndoLeft > 0}
+                  aria-label={
+                    boostUndoLeft > 0
+                      ? `Undo boost, ${boostUndoLeft} seconds left`
+                      : liked
+                        ? "Boosted"
+                        : "Boost"
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onBoost?.(event);
+                  }}
+                >
+                  <Crown
+                    aria-hidden="true"
+                    fill={liked || boostUndoLeft > 0 ? "currentColor" : "none"}
+                    strokeWidth={liked || boostUndoLeft > 0 ? 1.75 : 2}
+                  />
+                  <span className="profile-post-book-label">
+                    {boostUndoLeft > 0 ? "Undo" : "Boost"}
+                  </span>
+                  <span className="profile-post-book-count">
+                    {boostUndoLeft > 0 ? boostUndoLeft : formatCount(likeCount)}
+                  </span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="profile-post-book-btn is-labeled"
+                data-studio-sfx="sheet"
+                aria-label="Contribute"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  playUiSound("sheet");
+                  onOpenComments();
+                }}
+              >
+                <Feather aria-hidden="true" fill="none" strokeWidth={2} />
+                <span className="profile-post-book-label">Contribute</span>
+                <span className="profile-post-book-count">{formatCount(commentCount)}</span>
+              </button>
+            </>
+          ) : null}
+          </div>
         </div>
       ) : username ? (
         <span className="profile-post-caption-user">
@@ -1064,51 +1143,6 @@ function FeedActions({
     return (
       <nav className="profile-post-book-bar" aria-label="Post actions">
         <div className="profile-post-book-actions">
-          {post.isOwner ? (
-            <span
-              className={`profile-post-book-btn is-labeled${liked ? " is-liked" : ""}`}
-              aria-label={`${formatCount(post.likeCount)} boosts`}
-            >
-              {likeIcon}
-              <span className="profile-post-book-label">Boost</span>
-              <span className="profile-post-book-count">{formatCount(post.likeCount)}</span>
-            </span>
-          ) : (
-          <button
-            type="button"
-            className={`profile-post-book-btn is-labeled${liked || undoing ? " is-liked" : ""}`}
-            data-studio-sfx="like"
-            aria-pressed={liked || undoing}
-            aria-label={
-              undoing
-                ? `Undo boost, ${boostUndoLeft} seconds left`
-                : liked
-                  ? "Boosted"
-                  : "Boost"
-            }
-            onClick={onBoost}
-          >
-            {likeIcon}
-            <span className="profile-post-book-label">{undoing ? "Undo" : "Boost"}</span>
-            <span className="profile-post-book-count">
-              {undoing ? boostUndoLeft : formatCount(post.likeCount)}
-            </span>
-          </button>
-          )}
-          <button
-            type="button"
-            className="profile-post-book-btn is-labeled"
-            data-studio-sfx="sheet"
-            aria-label="Contribute"
-            onClick={() => {
-              playUiSound("sheet");
-              onOpenComments();
-            }}
-          >
-            {commentIcon}
-            <span className="profile-post-book-label">Contribute</span>
-            <span className="profile-post-book-count">{formatCount(localComments)}</span>
-          </button>
           <button
             type="button"
             className={`profile-post-book-btn is-end${saved ? " is-saved" : ""}`}
@@ -2269,6 +2303,23 @@ export function ProfilePostViewer({
                       : post.isFollowing,
                   )}
                   showEdit={isMobile && Boolean(post.isOwner)}
+                  isOwner={Boolean(post.isOwner)}
+                  liked={Boolean(
+                    localLikes[post._id]?.liked ?? post.likedByViewer,
+                  )}
+                  likeCount={
+                    localLikes[post._id]?.likeCount ?? post.likeCount ?? 0
+                  }
+                  commentCount={
+                    localComments[post._id] ?? post.commentCount ?? 0
+                  }
+                  boostUndoLeft={
+                    pendingUndo &&
+                    pendingUndo.postId === post._id &&
+                    nowTick < pendingUndo.undoUntil
+                      ? Math.max(1, Math.ceil((pendingUndo.undoUntil - nowTick) / 1000))
+                      : 0
+                  }
                   active={isInteractiveSlide}
                   placement="page"
                   onOpenProfile={onOpenProfile}
@@ -2276,6 +2327,14 @@ export function ProfilePostViewer({
                   onEdit={() => {
                     setStartCaptionEdit(true);
                     setSidePanelMode("description");
+                    setCommentsOpen(true);
+                  }}
+                  onBoost={(event) =>
+                    void handleBoostClick(post, event.currentTarget)
+                  }
+                  onOpenComments={() => {
+                    setStartCaptionEdit(false);
+                    setSidePanelMode("comments");
                     setCommentsOpen(true);
                   }}
                   feedShare={

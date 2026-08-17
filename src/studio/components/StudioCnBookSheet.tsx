@@ -26,15 +26,16 @@ const SHEET_VIDEO_GAP_PX = 8;
 
 function measureVideoClearance(): number | null {
   const video =
+    document.querySelector(".profile-post-slide.is-current .profile-post-watch-frame") ??
     document.querySelector(".studio-academy-player-shell") ??
     document.querySelector(".studio-academy-watch-player") ??
-    document.querySelector(".profile-post-slide-media.is-video");
+    document.querySelector(".profile-post-slide.is-current .profile-post-slide-media");
   if (!(video instanceof HTMLElement)) return null;
   const bottom = video.getBoundingClientRect().bottom;
   if (!Number.isFinite(bottom) || bottom <= 0) return null;
   const room = Math.floor(window.innerHeight - bottom - SHEET_VIDEO_GAP_PX);
-  // Full-bleed feed video leaves no useful band — keep the token cap.
-  if (room < 160) return null;
+  // Full-bleed overlay video leaves no useful band — keep the token cap.
+  if (room < 120) return null;
   return room;
 }
 
@@ -52,6 +53,11 @@ type StudioCnBookSheetProps = {
    * Used for Academy PayWise so the receipt/CTA is not clipped.
    */
   fitContent?: boolean;
+  /**
+   * Open at the measured video clearance (8px under the player) instead of the
+   * peek token. Feed comments use this so the sheet meets the watch frame.
+   */
+  openToClearance?: boolean;
   /** Fires after the close slide finishes (parent can unmount). */
   onExited?: () => void;
 };
@@ -68,6 +74,7 @@ export function StudioCnBookSheet({
   children,
   backLayerId = "cn-book-sheet",
   fitContent = false,
+  openToClearance = false,
   onExited,
 }: StudioCnBookSheetProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -229,7 +236,7 @@ export function StudioCnBookSheet({
     const applyOpenHeight = () => {
       if (cancelled) return;
       const { peek, full } = refreshMetrics();
-      let openH = peek;
+      let openH = openToClearance ? full : peek;
       if (fitContent) {
         const contentH = measureContentHeight(full);
         if (contentH != null) {
@@ -272,7 +279,7 @@ export function StudioCnBookSheet({
       window.removeEventListener("resize", onResize);
       window.visualViewport?.removeEventListener("resize", onResize);
     };
-  }, [open, fitContent]);
+  }, [open, fitContent, openToClearance]);
 
   if (!shown) return null;
 
