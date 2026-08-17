@@ -1140,6 +1140,18 @@
   touch-action: pan-y;
 }
 
+.studio-academy-player-swipe {
+  display: none;
+}
+
+.studio-polish.is-studio-mobile .studio-academy-player-swipe {
+  display: block;
+  position: absolute;
+  inset: 0 0 52px 0;
+  z-index: 3;
+  touch-action: pan-y;
+}
+
 .studio-academy-watch-player {
   flex: 0 0 auto;
   width: 100%;

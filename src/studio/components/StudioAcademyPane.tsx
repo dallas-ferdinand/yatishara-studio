@@ -14,7 +14,6 @@ import {
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -448,58 +447,140 @@ function CheckoutDock({
 }
 
 const LESSON_SWIPE_MIN_PX = 56;
+const LESSON_SWIPE_IGNORE =
+  "a[href], input, textarea, select, [role='dialog'], .studio-cn-head, .studio-cn-book-bar, .studio-cn-book-sheet";
 
 function useAcademyLessonSwipe(
   enabled: boolean,
   onSwipe: (dir: "next" | "prev") => void,
 ) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
   const startRef = useRef<{
     x: number;
     y: number;
     axis: "h" | "v" | null;
   } | null>(null);
   const onSwipeRef = useRef(onSwipe);
+  const enabledRef = useRef(enabled);
   onSwipeRef.current = onSwipe;
+  enabledRef.current = enabled;
 
-  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!enabled || event.pointerType === "mouse") return;
-    const target = event.target as HTMLElement | null;
-    if (
-      target?.closest(
-        "iframe, video, button, a, input, textarea, [role='dialog']",
-      )
-    ) {
-      return;
-    }
-    startRef.current = { x: event.clientX, y: event.clientY, axis: null };
-  };
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el || !enabled) return;
 
-  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const start = startRef.current;
-    if (!start || start.axis) return;
-    const dx = event.clientX - start.x;
-    const dy = event.clientY - start.y;
-    if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
-    start.axis = Math.abs(dx) > Math.abs(dy) * 1.15 ? "h" : "v";
-  };
+    const ignoreTarget = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return true;
+      return Boolean(target.closest(LESSON_SWIPE_IGNORE));
+    };
 
-  const finish = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const start = startRef.current;
-    startRef.current = null;
-    if (!enabled || !start || start.axis !== "h") return;
-    const dx = event.clientX - start.x;
-    if (Math.abs(dx) < LESSON_SWIPE_MIN_PX) return;
-    onSwipeRef.current(dx < 0 ? "next" : "prev");
-  };
+    const begin = (x: number, y: number, target: EventTarget | null) => {
+      if (!enabledRef.current || ignoreTarget(target)) {
+        startRef.current = null;
+        return;
+      }
+      startRef.current = { x, y, axis: null };
+    };
 
-  return {
-    onPointerDown,
-    onPointerMove,
-    onPointerUp: finish,
-    onPointerCancel: () => {
+    const move = (x: number, y: number, event: Event) => {
+      const start = startRef.current;
+      if (!start) return;
+      const dx = x - start.x;
+      const dy = y - start.y;
+      if (!start.axis) {
+        if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+        start.axis = Math.abs(dx) >= Math.abs(dy) ? "h" : "v";
+        if (start.axis === "v") {
+          startRef.current = null;
+          return;
+        }
+      }
+      if (start.axis === "h" && event.cancelable) event.preventDefault();
+    };
+
+    const end = (x: number) => {
+      const start = startRef.current;
       startRef.current = null;
-    },
-  };
+      if (!start || start.axis !== "h") return;
+      const dx = x - start.x;
+      if (Math.abs(dx) < LESSON_SWIPE_MIN_PX) return;
+      onSwipeRef.current(dx < 0 ? "next" : "prev");
+      const blockClick = (event: Event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      el.addEventListener("click", blockClick, { capture: true, once: true });
+      window.setTimeout(
+        () => el.removeEventListener("click", blockClick, true),
+        400,
+      );
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) {
+        startRef.current = null;
+        return;
+      }
+      const touch = event.touches[0];
+      begin(touch.clientX, touch.clientY, event.target);
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      move(touch.clientX, touch.clientY, event);
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      const touch = event.changedTouches[0];
+      if (!touch) {
+        startRef.current = null;
+        return;
+      }
+      end(touch.clientX);
+    };
+    const onTouchCancel = () => {
+      startRef.current = null;
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      begin(event.clientX, event.clientY, event.target);
+      if (startRef.current && event.target instanceof Element) {
+        event.target.setPointerCapture?.(event.pointerId);
+      }
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      move(event.clientX, event.clientY, event);
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      end(event.clientX);
+    };
+    const onPointerCancel = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      startRef.current = null;
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.addEventListener("touchcancel", onTouchCancel, { passive: true });
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerCancel);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchCancel);
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      el.removeEventListener("pointerup", onPointerUp);
+      el.removeEventListener("pointercancel", onPointerCancel);
+    };
+  }, [enabled]);
+
+  return hostRef;
 }
 
 function BannerStage({
@@ -524,6 +605,7 @@ function BannerStage({
 }) {
   const [posterReady, setPosterReady] = useState(!bannerUrl);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const togglePlayRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     setPosterReady(!bannerUrl);
@@ -532,12 +614,18 @@ function BannerStage({
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!embedUrl || !iframe || !onTimeUpdate) {
+      togglePlayRef.current = null;
       onSeekReady?.(null);
       return;
     }
-    const { dispose, seekTo } = attachBunnyStreamPlayer(iframe, onTimeUpdate);
+    const { dispose, seekTo, togglePlay } = attachBunnyStreamPlayer(
+      iframe,
+      onTimeUpdate,
+    );
+    togglePlayRef.current = togglePlay;
     onSeekReady?.(seekTo);
     return () => {
+      togglePlayRef.current = null;
       dispose();
       onSeekReady?.(null);
     };
@@ -547,13 +635,20 @@ function BannerStage({
     <div className="studio-academy-player-shell">
       <div className="studio-academy-player">
         {embedUrl ? (
-          <iframe
-            ref={iframeRef}
-            src={embedUrl}
-            title={playLabel}
-            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-            allowFullScreen
-          />
+          <>
+            <iframe
+              ref={iframeRef}
+              src={embedUrl}
+              title={playLabel}
+              allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+              allowFullScreen
+            />
+            <div
+              className="studio-academy-player-swipe"
+              aria-hidden="true"
+              onClick={() => togglePlayRef.current?.()}
+            />
+          </>
         ) : (
           <>
             {bannerUrl ? (
@@ -1212,7 +1307,7 @@ export function StudioAcademyPane({
       className={`public-offers-main studio-cn-catalog${
         isMobile ? " is-academy-watch" : ""
       }`}
-      {...lessonSwipe}
+      ref={lessonSwipe}
     >
       {isMobile ? (
         <div className="studio-academy-watch-player">
@@ -1306,7 +1401,7 @@ export function StudioAcademyPane({
       className={`public-offers-main studio-cn-catalog${
         isMobile ? " is-academy-watch" : ""
       }`}
-      {...lessonSwipe}
+      ref={lessonSwipe}
     >
       {isMobile ? (
         <div className="studio-academy-watch-player">

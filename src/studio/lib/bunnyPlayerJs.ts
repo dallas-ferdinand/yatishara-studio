@@ -8,6 +8,9 @@ type PlayerJsPlayer = {
   off?: (event: string, cb: (...args: unknown[]) => void) => void;
   getCurrentTime: (cb: (value: number) => void) => void;
   setCurrentTime: (seconds: number) => void;
+  play?: () => void;
+  pause?: () => void;
+  getPaused?: (cb: (paused: boolean) => void) => void;
 };
 
 type PlayerJsGlobal = {
@@ -65,7 +68,11 @@ function readSeconds(data: unknown): number | null {
 export function attachBunnyStreamPlayer(
   iframe: HTMLIFrameElement,
   onTime: (seconds: number) => void,
-): { dispose: () => void; seekTo: (seconds: number) => void } {
+): {
+  dispose: () => void;
+  seekTo: (seconds: number) => void;
+  togglePlay: () => void;
+} {
   let disposed = false;
   let player: PlayerJsPlayer | null = null;
 
@@ -73,6 +80,23 @@ export function attachBunnyStreamPlayer(
     if (!player || !Number.isFinite(seconds)) return;
     try {
       player.setCurrentTime(Math.max(0, seconds));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const togglePlay = () => {
+    if (!player) return;
+    try {
+      if (typeof player.getPaused === "function") {
+        player.getPaused((paused) => {
+          if (disposed || !player) return;
+          if (paused) player.play?.();
+          else player.pause?.();
+        });
+        return;
+      }
+      player.play?.();
     } catch {
       /* ignore */
     }
@@ -104,6 +128,7 @@ export function attachBunnyStreamPlayer(
       player = null;
     },
     seekTo,
+    togglePlay,
   };
 }
 
