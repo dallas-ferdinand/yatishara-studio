@@ -11517,9 +11517,7 @@ export function StudioShell({
         .studio-polish .cursor-unified-tab-preview-overlay svg {
           color: #fff !important;
           stroke-width: 2.75 !important;
-          filter:
-            drop-shadow(0 0 1.25px rgb(0 0 0 / 0.95))
-            drop-shadow(0 1px 2px rgb(0 0 0 / 0.75)) !important;
+          filter: drop-shadow(0 0 0.35px rgb(0 0 0 / 0.9)) !important;
         }
         .studio-polish .cursor-unified-tab-preview.is-initials {
           display: inline-grid;
@@ -12686,9 +12684,7 @@ export function StudioShell({
           color: #fff !important;
         }
         .studio-polish .cursor-unified-tab.is-active .cursor-unified-tab-preview-overlay svg {
-          filter:
-            drop-shadow(0 0 1.25px rgb(0 0 0 / 0.95))
-            drop-shadow(0 1px 2px rgb(0 0 0 / 0.75)) !important;
+          filter: drop-shadow(0 0 0.35px rgb(0 0 0 / 0.9)) !important;
           stroke-width: 2.75 !important;
         }
         .studio-polish .cursor-unified-tab .cursor-tab-close {
