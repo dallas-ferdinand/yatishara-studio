@@ -30,52 +30,6 @@ import { PlayBus, playBusLayersByClipId } from "./play-bus";
 import { pictureLayersBottomToTop, type PictureLayer } from "./picture-layers";
 import { StillResidency } from "./still-residency";
 
-// #region agent log
-const AGENT_DEBUG_INGEST =
-  "http://localhost:7783/ingest/94ebaafc-d725-476e-b382-9cc88f168e9c";
-let agentDebugLast = 0;
-function agentDebugLog(
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-): void {
-  const payload = {
-    sessionId: "e220af",
-    runId: "fit-probe",
-    hypothesisId,
-    location,
-    message,
-    data,
-    timestamp: Date.now(),
-  };
-  fetch(AGENT_DEBUG_INGEST, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "e220af",
-    },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-  fetch("/api/_debug/ingest", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-}
-function agentDebugStack(
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-): void {
-  const now = Date.now();
-  if (now - agentDebugLast < 400) return;
-  agentDebugLast = now;
-  agentDebugLog(hypothesisId, location, message, data);
-}
-// #endregion
-
 /**
  * Spinner only after a lasting cold-buffer on PlayBus (element waiting before
  * first paint). Clock never holds.
@@ -295,7 +249,7 @@ class EngineConsumer implements FrameConsumer {
     // Play never awaits image decode, so a still can be requested before its
     // bitmap exists. Only the lanes that actually carry pixels below may be
     // recorded as resident — claiming residency for a key we sent bare leaves
-    // the worker with nothing to bind and the lane invisible for good.
+    // the compositor with nothing to draw and the lane invisible for good.
     const sentStills = new Set<string>();
     const stillForSample = (
       sample: (typeof slice.video)[number] | undefined,
@@ -349,34 +303,6 @@ class EngineConsumer implements FrameConsumer {
       };
     });
     const layers = pictureLayersBottomToTop(resolved, slice);
-    // #region agent log
-    if (slice.video.length >= 2) {
-      agentDebugStack("A", "use-playback-engine.ts:paintPlay", "stacked paintPlay", {
-        path: "play",
-        time: slice.timelineTime,
-        slice: slice.video.map((sample) => ({
-          clipId: sample.clip.clipId,
-          kind: sample.clip.kind,
-          trackIndex: sample.clip.trackIndex,
-          assetId: sample.clip.assetId ?? null,
-        })),
-        resolved: resolved.map((lane) => ({
-          clipId: lane.clipId,
-          hasFrame: Boolean(lane.frame),
-          textureKey: lane.textureKey ?? null,
-          w: lane.width ?? null,
-          h: lane.height ?? null,
-        })),
-        layers: layers.map((layer) => ({
-          clipId: layer.clipId,
-          hasFrame: Boolean(layer.frame),
-          textureKey: layer.textureKey ?? null,
-          opacity: layer.opacity,
-          transform: layer.transform,
-        })),
-      });
-    }
-    // #endregion
     for (const layer of captured.layers ?? captured.stack ?? []) {
       if (layer.frame && !usedBusFrames.has(layer.frame)) {
         try {
@@ -535,37 +461,6 @@ class EngineConsumer implements FrameConsumer {
       };
     });
     const layers = pictureLayersBottomToTop(resolved, slice);
-    // #region agent log
-    if (slice.video.length >= 2) {
-      agentDebugLog("B", "use-playback-engine.ts:prepare", "stacked prepare", {
-        path: "scrub",
-        time: slice.timelineTime,
-        slice: slice.video.map((sample) => ({
-          clipId: sample.clip.clipId,
-          kind: sample.clip.kind,
-          trackIndex: sample.clip.trackIndex,
-          assetId: sample.clip.assetId ?? null,
-        })),
-        resolved: resolved.map((lane) => ({
-          clipId: lane.clipId,
-          hasFrame: Boolean(lane.frame),
-          textureKey: lane.textureKey ?? null,
-          w: lane.width ?? null,
-          h: lane.height ?? null,
-        })),
-        layers: layers.map((layer) => ({
-          clipId: layer.clipId,
-          hasFrame: Boolean(layer.frame),
-          textureKey: layer.textureKey ?? null,
-          opacity: layer.opacity,
-          transform: layer.transform,
-        })),
-        decodedNulls: decoded.map((item, index) =>
-          item ? null : slice.video[index]?.clip.clipId ?? index,
-        ),
-      });
-    }
-    // #endregion
     const top = layers[layers.length - 1];
     const topDecoded = top
       ? valid.find((item) => item.sample.clip.clipId === top.clipId)
@@ -620,7 +515,7 @@ class EngineConsumer implements FrameConsumer {
       ...textsUnder.map((item) => item.fontFamily),
       ...textsOver.map((item) => item.fontFamily),
     ].filter((family) => family && !isLegacySystemFont(family));
-    // Document + worker FontFace sets are separate — load both before paint.
+    // Document fonts are enough — Canvas2D preview paints on the main thread.
     await Promise.all(families.map((family) => loadGoogleFont(family)));
     await this.compositor.ensureFonts(families);
     await this.compositor.render({
@@ -689,7 +584,7 @@ class EngineConsumer implements FrameConsumer {
       })
       .then((blob) =>
         createImageBitmap(blob, {
-          // Decode straight; upload path premultiplies for GPU filter + over.
+          // Decode straight; upload path keeps PNG alpha for Canvas2D over.
           premultiplyAlpha: "none",
           colorSpaceConversion: "default",
         }).then(async (full) => {
@@ -849,8 +744,8 @@ export function usePlaybackEngine(args: {
       window.clearTimeout(disposeTimerRef.current);
       disposeTimerRef.current = null;
     }
-    // React Strict Mode replays this effect. Reuse the first transferred canvas
-    // and worker graph instead of attempting transferControlToOffscreen twice.
+    // React Strict Mode replays this effect. Reuse the first canvas compositor
+    // instead of calling getContext("2d") on a disposed runtime.
     if (runtimeRef.current) {
       return () => {
         disposeTimerRef.current = window.setTimeout(disposeRuntime, 0);
@@ -1040,7 +935,7 @@ export function usePlaybackEngine(args: {
     return () => {
       disposeTimerRef.current = window.setTimeout(disposeRuntime, 0);
     };
-    // Canvas owns one OffscreenCanvas transfer for its lifetime.
+    // Canvas owns one 2D context for its lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvas, disposeRuntime]);
 
@@ -1098,7 +993,7 @@ export function usePlaybackEngine(args: {
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    // Resizing an OffscreenCanvas clears its buffer — always repaint or the
+    // Resizing the preview canvas clears its buffer — always repaint or the
     // preview stays blank after aspect-ratio changes (including while playing).
     runtime.compositor.resize(width, height);
     if (playingRef.current) return;

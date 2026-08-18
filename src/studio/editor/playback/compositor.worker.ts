@@ -1,6 +1,13 @@
 /// <reference lib="webworker" />
 
 /**
+ * @deprecated Preview compositing is Canvas2D in compositor-2d.ts.
+ * This WebGL worker is unused. Do not load it from CompositorClient.
+ * Kept so the inlined transition-id test map can be retired without a
+ * same-turn rollback hole.
+ */
+
+/**
  * Keep this map inlined (no external imports) so Turbopack emits a single
  * classic worker chunk. Importing shared modules creates `otherChunks` that
  * load via `importScripts` and can NetworkError under Turbopack/dev proxies.

@@ -2150,6 +2150,7 @@
   image-rendering: auto;
   pointer-events: none;
   background: #000;
+  object-fit: fill;
 }
 
 .studio-editor-preview-poster {

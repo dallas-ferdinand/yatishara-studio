@@ -35,7 +35,7 @@ import {
   formatTimecodeFull,
   timelineViewDuration,
 } from "./editorState";
-import { normalizeClipTransform, clampClipOpacity, contentRectForTransform } from "./clipTransform";
+import { normalizeClipTransform, clampClipOpacity } from "./clipTransform";
 import type { EditorClip, EditorMediaItem, EditorProject } from "./types";
 import { MIN_CLIP_SEC } from "./projectContract";
 import {
@@ -178,79 +178,6 @@ export function EditorPreview({
     activeClip?.assetId && engine.sourceSize?.assetId === activeClip.assetId
       ? engine.sourceSize
       : null;
-
-  // #region agent log
-  useEffect(() => {
-    const pictureCount = project.tracks.reduce((count, track) => {
-      if (track.kind !== "video") return count;
-      const clip = clipAtPlayhead(project, track.id, playhead);
-      if (!clip || (clip.kind !== "video" && clip.kind !== "image")) return count;
-      return count + 1;
-    }, 0);
-    if (pictureCount < 2) return;
-    const canvas = rootRef.current?.querySelector(
-      "canvas.studio-editor-preview-canvas",
-    ) as HTMLCanvasElement | null;
-    const frameEl = rootRef.current?.querySelector(
-      ".studio-editor-preview-frame",
-    ) as HTMLElement | null;
-    if (!canvas || !frameEl) return;
-    const canvasCss = getComputedStyle(canvas);
-    const frameCss = getComputedStyle(frameEl);
-    const sourceW = decodedSize?.width || activeMedia?.width || frame.width;
-    const sourceH = decodedSize?.height || activeMedia?.height || frame.height;
-    const overlayRect = activeClip
-      ? contentRectForTransform(
-          posterTransform,
-          frame.width,
-          frame.height,
-          sourceW,
-          sourceH,
-        )
-      : null;
-    const payload = {
-      sessionId: "e220af",
-      runId: "fit-probe",
-      hypothesisId: "A",
-      location: "EditorPreview.tsx:css",
-      message: "preview canvas css vs overlay",
-      data: {
-        pictureCount,
-        showPoster,
-        frameRatio: project.frameRatio ?? "16:9",
-        frameSize: [frame.width, frame.height],
-        canvasAttr: [canvas.width, canvas.height],
-        canvasClient: [canvas.clientWidth, canvas.clientHeight],
-        frameClient: [frameEl.clientWidth, frameEl.clientHeight],
-        objectFit: canvasCss.objectFit,
-        objectPosition: canvasCss.objectPosition,
-        canvasCssSize: [canvasCss.width, canvasCss.height],
-        frameAspect: frameCss.aspectRatio,
-        activeKind: activeMedia?.kind ?? null,
-        activeAsset: activeClip?.assetId ?? null,
-        sourceSize: [sourceW, sourceH],
-        engineSource: engine.sourceSize ?? null,
-        overlayRect,
-        posterUrl: Boolean(posterUrl),
-      },
-      timestamp: Date.now(),
-    };
-    fetch("http://localhost:7783/ingest/94ebaafc-d725-476e-b382-9cc88f168e9c", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "e220af",
-      },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-    fetch("/api/_debug/ingest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- debug probe
-  }, [playhead, showPoster, selectedClipId, engine.sourceSize]);
-  // #endregion
 
   const transformTarget = useMemo((): "a" | "b" => {
     if (!activeClip) return "a";
