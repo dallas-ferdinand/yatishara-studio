@@ -2156,6 +2156,10 @@ export function StudioShell({
   const editorRef = useRef(null);
   const attachEntryRef = useRef(null);
   const elementMediaDropRef = useRef(null);
+  const postComposeDropRef = useRef(null);
+  const bindPostComposeDrop = useCallback((handler) => {
+    postComposeDropRef.current = typeof handler === "function" ? handler : null;
+  }, []);
   /** Mobile: restore keyboard when Files closes if composer had focus/keyboard before. */
   const composerWantedKeyboardRef = useRef(false);
   /** Mobile: reopen Generate Files dock after keyboard dismiss if it was open on composer focus. */
@@ -9486,6 +9490,7 @@ export function StudioShell({
       window.requestAnimationFrame(() => {
         window.setTimeout(() => {
           if (elementMediaDropRef.current?.(snapshot)) return;
+          if (postComposeDropRef.current?.(snapshot, clientX, clientY)) return;
           attachEntryRef.current?.(snapshot);
         }, 0);
       });
@@ -9507,6 +9512,7 @@ export function StudioShell({
       const y = Number(event.detail?.clientY) || 0;
       const attach = () => {
         if (elementMediaDropRef.current?.(snapshot)) return;
+        if (postComposeDropRef.current?.(snapshot, x, y)) return;
         attachEntryRef.current?.(snapshot);
       };
       queueMicrotask(attach);
@@ -27415,6 +27421,7 @@ export function StudioShell({
               startAssetPick(request);
             }}
             onBindElementMediaDrop={bindElementMediaDrop}
+            onBindPostComposeDrop={bindPostComposeDrop}
             onOpenStudioShareItem={(item) => {
               if (!item?.itemId || !item?.itemKind) return;
               if (item.itemKind === "folder") {
@@ -27861,6 +27868,7 @@ export function StudioShell({
                 const editor = editorRef.current;
                 const range = editor ? rangeFromPointInEditor(editor, x, y) : null;
                 if (elementMediaDropRef.current?.(snapshot)) return;
+                if (postComposeDropRef.current?.(snapshot, x, y)) return;
                 attachEntryRef.current?.(snapshot, range);
               }, 0);
             });
@@ -34376,6 +34384,7 @@ function ActivePane({
   showDmChatListWhenEmpty = false,
   onRequestPickAsset,
   onBindElementMediaDrop,
+  onBindPostComposeDrop,
   onOpenStudioShareItem,
   onOpenCreate,
   onOpenAgentSettings,
@@ -34689,6 +34698,7 @@ function ActivePane({
       <PostComposeTab
         assetId={composeAssetId}
         onRequestPickAsset={onRequestPickAsset}
+        onBindDrop={onBindPostComposeDrop}
         onCancel={() => onCloseTab(activeTab)}
         onPublished={({ handle, postId }) => {
           onCloseTab(activeTab);
@@ -34785,6 +34795,7 @@ function ActivePane({
       <PostComposeTab
         draftDocumentId={String(activeEntry.studioId ?? "")}
         onRequestPickAsset={onRequestPickAsset}
+        onBindDrop={onBindPostComposeDrop}
         onCancel={() => onCloseTab(activeTab)}
         onPublished={({ handle, postId }) => {
           onCloseTab(activeTab);

@@ -179,8 +179,31 @@ function findComposerShell() {
   );
 }
 
+function findPostComposeDropTargetAt(x, y, pad = 16) {
+  if (typeof document === "undefined") return null;
+  const el = document.querySelector('.post-compose[data-drop-target="composer"]');
+  if (!(el instanceof HTMLElement) || !el.isConnected) return null;
+  if (pointInRect(x, y, el.getBoundingClientRect(), pad)) return el;
+  return null;
+}
+
 /** Last-resort fly land when caret snapshot is unavailable — end of editor text. */
 function resolveComposerDropLandingPoint(targetEl) {
+  const postRoot =
+    targetEl instanceof HTMLElement ? targetEl.closest(".post-compose") : null;
+  if (postRoot instanceof HTMLElement) {
+    const mock =
+      postRoot.querySelector(".post-compose-mock") instanceof HTMLElement
+        ? postRoot.querySelector(".post-compose-mock")
+        : postRoot;
+    const rect = mock.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      return {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      };
+    }
+  }
   const shell =
     (targetEl instanceof HTMLElement
       ? targetEl.closest(".cursor-composer-shell") ||
@@ -256,6 +279,8 @@ function projectComposerDropPoint(clientX, clientY) {
 
 /** Geometry composer hit — does not depend on pointer-events. */
 function findComposerDropTargetAt(x, y, pad = 16) {
+  const post = findPostComposeDropTargetAt(x, y, pad);
+  if (post) return post;
   const shell = findComposerShell();
   if (shell instanceof HTMLElement && pointInRect(x, y, shell.getBoundingClientRect(), pad)) {
     return shell;
@@ -338,6 +363,12 @@ function highlightDropTarget(el) {
       const box = el.querySelector(".cursor-composer-box");
       if (box instanceof HTMLElement) {
         box.classList.add("is-touch-drop-hover", "is-drop-target");
+      }
+    }
+    if (el.classList.contains("post-compose")) {
+      const mock = el.querySelector(".post-compose-mock");
+      if (mock instanceof HTMLElement) {
+        mock.classList.add("is-touch-drop-hover", "is-drop-target");
       }
     }
   }

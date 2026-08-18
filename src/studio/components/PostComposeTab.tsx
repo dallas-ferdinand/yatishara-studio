@@ -27,6 +27,7 @@ import {
   useCallback,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type DragEvent as ReactDragEvent,
 } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
@@ -49,6 +50,12 @@ import { mentionFallbackAvatarStyle } from "@/studio/lib/profileAvatar";
 import { StudioAssetPickerSheet } from "./StudioAssetPickerSheet";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { MicrophoneWaveform } from "@/components/ui/waveform";
+import {
+  EXPLORER_DND_TYPE,
+  inferMediaKind,
+  peekActiveExplorerDrag,
+  readExplorerDragData,
+} from "@/desk/lib/explorer-dnd";
 
 type PostComposeTabProps = {
   assetId?: string;
@@ -70,6 +77,10 @@ type PostComposeTabProps = {
       }>,
     ) => void;
   }) => void;
+  /** Files tree → post well (desktop HTML5 + mobile touch). Return true if consumed. */
+  onBindDrop?: (
+    handler: ((entry: unknown, clientX?: number, clientY?: number) => boolean) | null,
+  ) => void;
 };
 
 const MAX_CAPTION = 2200;
@@ -452,6 +463,7 @@ export function PostComposeTab({
   onCancel,
   onPublished,
   onRequestPickAsset,
+  onBindDrop,
 }: PostComposeTabProps) {
   const captionId = useId();
   const shareAsset = useMutation(api.profiles.shareAsset);
@@ -506,6 +518,9 @@ export function PostComposeTab({
   } | null>(null);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistBusyRef = useRef(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const dragCountRef = useRef(0);
+  const [dragOver, setDragOver] = useState(false);
 
   const [caption, setCaption] = useState("");
   const [caret, setCaret] = useState(0);
@@ -1289,6 +1304,115 @@ export function PostComposeTab({
     setChoiceOpen(false);
   }
 
+  function addDroppedEntry(entry: {
+    type?: string;
+    studioKind?: string;
+    studioId?: string;
+    _id?: string;
+    name?: string;
+    thumbnailUrl?: string;
+    signedThumbnailUrl?: string;
+  } | null | undefined): boolean {
+    if (!entry || entry.type === "dir" || entry.type === "parent") return false;
+    const kind = inferMediaKind(entry);
+    const id =
+      entry.studioKind === "asset"
+        ? String(entry.studioId ?? entry._id ?? "")
+        : "";
+    if (!kind || !id) {
+      toast.message("Drop a photo, video, or audio");
+      return true;
+    }
+    if (slotsRef.current.length >= MAX_POST_MEDIA) {
+      toast.message(`You can pick up to ${MAX_POST_MEDIA} files`);
+      return true;
+    }
+    addPickedAsset({
+      _id: id,
+      name: entry.name || "Media",
+      kind,
+      signedThumbnailUrl: entry.signedThumbnailUrl || entry.thumbnailUrl,
+    });
+    return true;
+  }
+
+  const addDroppedEntryRef = useRef(addDroppedEntry);
+  addDroppedEntryRef.current = addDroppedEntry;
+
+  function pointInPostCompose(clientX?: number, clientY?: number) {
+    const root = rootRef.current;
+    if (!root) return false;
+    if (clientX == null || clientY == null) return true;
+    if (!clientX && !clientY) return true;
+    const rect = root.getBoundingClientRect();
+    const pad = 16;
+    return (
+      clientX >= rect.left - pad &&
+      clientX <= rect.right + pad &&
+      clientY >= rect.top - pad &&
+      clientY <= rect.bottom + pad
+    );
+  }
+
+  useEffect(() => {
+    if (!onBindDrop) return undefined;
+    onBindDrop((entry, clientX, clientY) => {
+      if (!pointInPostCompose(clientX, clientY)) return false;
+      return addDroppedEntryRef.current(
+        entry as Parameters<typeof addDroppedEntry>[0],
+      );
+    });
+    return () => onBindDrop(null);
+  }, [onBindDrop]);
+
+  function dropOffersPostMedia(event: { dataTransfer?: DataTransfer | null }) {
+    const types = Array.from(event.dataTransfer?.types ?? []);
+    if (types.includes("Files")) return true;
+    if (types.includes(EXPLORER_DND_TYPE) || peekActiveExplorerDrag()) {
+      const entry = peekActiveExplorerDrag();
+      if (!entry) return true;
+      return Boolean(inferMediaKind(entry));
+    }
+    return false;
+  }
+
+  function handleDragEnter(event: ReactDragEvent) {
+    if (!dropOffersPostMedia(event)) return;
+    event.preventDefault();
+    dragCountRef.current += 1;
+    setDragOver(true);
+  }
+
+  function handleDragOver(event: ReactDragEvent) {
+    if (!dropOffersPostMedia(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDragOver(true);
+  }
+
+  function handleDragLeave(event: ReactDragEvent) {
+    if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+    dragCountRef.current = 0;
+    setDragOver(false);
+  }
+
+  function handleDrop(event: ReactDragEvent) {
+    if (!dropOffersPostMedia(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragCountRef.current = 0;
+    setDragOver(false);
+    const entry =
+      readExplorerDragData(event.dataTransfer) ?? peekActiveExplorerDrag();
+    if (entry) {
+      addDroppedEntry(entry);
+      return;
+    }
+    if (event.dataTransfer?.files?.length) {
+      addFiles(event.dataTransfer.files);
+    }
+  }
+
   function removeSlot(key: string) {
     setSlots((prev) => {
       const hit = prev.find((slot) => slot.key === key);
@@ -1325,7 +1449,16 @@ export function PostComposeTab({
   ]);
 
   return (
-    <div className="post-compose">
+    <div
+      ref={rootRef}
+      className={`post-compose${dragOver ? " is-drop-target" : ""}`}
+      data-drop-target="composer"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onDropCapture={handleDrop}
+    >
       <div className="post-compose-toolbar">
         <h2 className="post-compose-toolbar-title">Create post</h2>
         <div className="post-compose-toolbar-actions">
@@ -1393,7 +1526,7 @@ export function PostComposeTab({
                 >
                   <span className="post-compose-media-empty-title">Add to this post</span>
                   <span className="post-compose-media-empty-copy">
-                    Click anywhere to upload or choose up to {MAX_POST_MEDIA} photos, videos, or audio
+                    Click anywhere or drop from Files — up to {MAX_POST_MEDIA} photos, videos, or audio
                   </span>
                 </button>
                 )
