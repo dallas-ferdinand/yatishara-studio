@@ -768,16 +768,15 @@ body.is-touch-file-drag .post-compose.is-touch-drop-hover .post-compose-mock {
 }
 
 .post-compose-media-thumb.is-audio {
-  border-radius: 999px;
-  background: transparent;
   display: grid;
   place-items: center;
+  padding: 5px;
 }
 
 .post-compose-media-thumb.is-audio .post-compose-audio-orb.studio-orb-play,
 .post-compose-media-thumb.is-audio .studio-orb-play {
-  width: 44px;
-  height: 44px;
+  width: 100%;
+  height: 100%;
 }
 
 .post-compose-media-thumb.is-audio .studio-orb-frame {
@@ -794,6 +793,7 @@ body.is-touch-file-drag .post-compose.is-touch-drop-hover .post-compose-mock {
   position: absolute;
   top: 2px;
   right: 2px;
+  z-index: 2;
   display: grid;
   place-items: center;
   width: 16px;
