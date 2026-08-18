@@ -63,6 +63,23 @@ import "./post-compose-tab.css";
 
 const BOOST_COLORS = ["#f5c400", "#fb7185", "#38bdf8", "#a78bfa", "#34d399", "#fb923c"];
 const MAX_POST_CAPTION = 2200;
+const FEED_CAPTION_PCT_KEY = "studio-feed-caption-pct";
+const FEED_CAPTION_PCT_MIN = 20;
+const FEED_CAPTION_PCT_MAX = 58;
+const FEED_CAPTION_PCT_DEFAULT = 32;
+
+function readFeedCaptionPct() {
+  if (typeof window === "undefined") return FEED_CAPTION_PCT_DEFAULT;
+  try {
+    const n = Number(window.localStorage.getItem(FEED_CAPTION_PCT_KEY));
+    if (Number.isFinite(n)) {
+      return Math.min(FEED_CAPTION_PCT_MAX, Math.max(FEED_CAPTION_PCT_MIN, n));
+    }
+  } catch {
+    /* ignore */
+  }
+  return FEED_CAPTION_PCT_DEFAULT;
+}
 
 function burstBoostConfetti(origin: HTMLElement) {
   const rect = origin.getBoundingClientRect();
@@ -1059,7 +1076,7 @@ function FeedCaption({
     }
   }
 
-  if (!trimmed && !(hashtags?.length) && !username && !editing) return null;
+  if (!trimmed && !(hashtags?.length) && !username && !editing && !voiceUrl) return null;
 
   const node = (
     <div
@@ -1230,6 +1247,22 @@ function FeedCaption({
         </div>
       ) : (
         <>
+          {voiceUrl ? (
+            <div
+              className="profile-post-caption-voice"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <StudioChatAudioPlayer
+                src={voiceUrl}
+                title="Voice note"
+                variant="pane"
+                compact
+                durationHint={voiceDurationSec}
+                orbSeed={orbSeedForVoice(String(postId ?? "voice"), "voice-note")}
+              />
+            </div>
+          ) : null}
           {trimmed ? (
             <p className="profile-post-caption-text">
               <CaptionChipText
@@ -1246,20 +1279,6 @@ function FeedCaption({
                 }
               />
             </p>
-          ) : null}
-          {voiceUrl ? (
-            <div
-              className="profile-post-caption-voice"
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <StudioChatAudioPlayer
-                src={voiceUrl}
-                title="Voice note"
-                durationHint={voiceDurationSec}
-                compact
-              />
-            </div>
           ) : null}
         </>
       )}
@@ -1668,6 +1687,58 @@ export function ProfilePostViewer({
     undoUntil: number;
   } | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [captionPct, setCaptionPct] = useState(FEED_CAPTION_PCT_DEFAULT);
+  const captionPctRef = useRef(captionPct);
+  captionPctRef.current = captionPct;
+
+  useEffect(() => {
+    setCaptionPct(readFeedCaptionPct());
+  }, []);
+
+  const onCaptionResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const slide = event.currentTarget.closest(".profile-post-slide");
+    const height = slide instanceof HTMLElement ? slide.clientHeight : 0;
+    if (height < 8) return;
+    const startY = event.clientY;
+    const startPct = captionPctRef.current;
+    const handle = event.currentTarget;
+    const pointerId = event.pointerId;
+    handle.setPointerCapture(pointerId);
+    document.body.classList.add("is-feed-caption-resize");
+
+    function onMove(ev: PointerEvent) {
+      const next = Math.min(
+        FEED_CAPTION_PCT_MAX,
+        Math.max(
+          FEED_CAPTION_PCT_MIN,
+          startPct + ((startY - ev.clientY) / height) * 100,
+        ),
+      );
+      captionPctRef.current = next;
+      setCaptionPct(next);
+    }
+    function onUp() {
+      handle.releasePointerCapture(pointerId);
+      document.body.classList.remove("is-feed-caption-resize");
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+      try {
+        window.localStorage.setItem(
+          FEED_CAPTION_PCT_KEY,
+          String(captionPctRef.current),
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  }, []);
   const pointerRef = useRef<{
     id: number;
     x: number;
@@ -2472,6 +2543,7 @@ export function ProfilePostViewer({
         ref={rootRef}
         className="profile-post-viewer is-feed is-watch-layout"
         aria-label="Studio feed"
+        style={{ ["--feed-caption-h" as string]: `${captionPct}%` } as CSSProperties}
       >
         <div className="profile-post-viewer-blur" aria-hidden="true" />
         <div className="profile-post-track" ref={trackRef}>
@@ -2496,6 +2568,14 @@ export function ProfilePostViewer({
                         preload={tabActive}
                       />
                   </div>
+                {isMobile ? null : (
+                  <button
+                    type="button"
+                    className="profile-post-feed-resize"
+                    aria-label="Resize description"
+                    onPointerDown={onCaptionResizePointerDown}
+                  />
+                )}
                 <FeedCaption
                   postId={post._id}
                   username={postUsername}
