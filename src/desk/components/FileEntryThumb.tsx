@@ -404,6 +404,11 @@ function PostMediaMosaic({ items, size = "grid" }) {
 
 function FolderPeekStack({ items, size = "grid" }) {
   const cards = (items ?? []).slice(0, 2);
+  if (!cards.length) return null;
+  const iconSize = size === "preview" ? 16 : 13;
+  const eager = size === "grid";
+  return (
+    <div className="desk-folder-peek-stack" data-count={cards.length} aria-hidden="true">
       {cards.map((item, index) => (
         <div
           key={`${item.label}-${index}`}
