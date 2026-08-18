@@ -68,7 +68,7 @@ const folderWithPeeksReturn = v.object({
   peekItems: v.array(folderPeekItem),
 });
 
-const PEEK_LIMIT = 4;
+const PEEK_LIMIT = 2;
 /** Max folders visited per peek (BFS) — finds nested media without deep recursion. */
 const MAX_PEEK_FOLDER_VISITS = 8;
 /**

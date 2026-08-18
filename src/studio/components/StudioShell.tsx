@@ -4593,7 +4593,7 @@ export function StudioShell({
     for (const entry of entries) {
       warmThumbUrl(entry.thumbnailLqipUrl);
       warmThumbUrl(entry.thumbnailUrl);
-      for (const peek of (entry.peekItems ?? []).slice(0, 4)) {
+      for (const peek of (entry.peekItems ?? []).slice(0, 2)) {
         warmThumbUrl(peek.thumbnailLqipUrl);
         warmThumbUrl(peek.thumbnailUrl);
       }
