@@ -1497,7 +1497,7 @@ export function PostComposeTab({
           <div
             className={`post-compose-mock-slide${!current ? " is-empty" : ""}${isAudio ? " is-audio" : ""}`}
             style={
-              previewSize
+              !isAudio && previewSize
                 ? ({
                     ["--pc-aw" as string]: String(previewSize.w),
                     ["--pc-ah" as string]: String(previewSize.h),

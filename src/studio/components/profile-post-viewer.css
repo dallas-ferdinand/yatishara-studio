@@ -397,8 +397,9 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 100%;
-  padding: 20px 24px;
+  height: auto;
+  min-height: 13.75rem;
+  padding: 0;
   box-sizing: border-box;
   pointer-events: auto;
 }
@@ -1333,6 +1334,44 @@
   max-height: calc(100cqh - 56px);
 }
 
+/* VN / post audio: no letterbox. Orb + wave sit on the page and keep their size. */
+.profile-post-watch-player .profile-post-watch-frame.is-audio,
+.profile-post-watch-player:has(.profile-post-media-strip) .profile-post-watch-frame.is-audio {
+  aspect-ratio: auto;
+  width: min(100%, 13.5rem);
+  max-width: 13.5rem;
+  height: auto;
+  max-height: none;
+  min-height: 13.75rem;
+  overflow: visible;
+  background: transparent;
+  border-radius: 0;
+  filter: none;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.profile-post-watch-frame.is-audio .profile-post-slide-media,
+.profile-post-slide.is-watch .profile-post-watch-frame.is-audio .profile-post-slide-media {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: auto;
+  min-height: 13.75rem;
+  overflow: visible;
+  background: transparent;
+}
+
+.profile-post-media-panel:has(.profile-post-audio-stage),
+.profile-post-watch-player:has(.profile-post-audio-stage) {
+  min-height: 13.75rem;
+}
+
+.profile-post-media-panel:has(.profile-post-media-strip):has(.profile-post-audio-stage),
+.profile-post-watch-player:has(.profile-post-media-strip):has(.profile-post-audio-stage) {
+  min-height: 17.5rem;
+}
+
 @media (max-width: 899px) {
   .profile-post-watch-frame.is-portrait {
     max-height: min(100cqh, 52dvh);
@@ -1724,11 +1763,11 @@
     padding: 16px 20px 8px;
   }
 
-  .profile-post-watch-frame {
+  .profile-post-watch-frame:not(.is-audio) {
     width: min(100cqi, calc(100cqh * var(--post-aw) / var(--post-ah)));
   }
 
-  .profile-post-watch-player:has(.profile-post-media-strip) .profile-post-watch-frame {
+  .profile-post-watch-player:has(.profile-post-media-strip) .profile-post-watch-frame:not(.is-audio) {
     width: min(100cqi, calc((100cqh - 56px) * var(--post-aw) / var(--post-ah)));
   }
 

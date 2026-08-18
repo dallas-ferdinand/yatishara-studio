@@ -119,6 +119,10 @@
   container-type: size;
 }
 
+.post-compose-mock:has(.post-compose-mock-slide.is-audio) {
+  min-height: 17.5rem;
+}
+
 /* Full-bleed preview panel — fills available width like the feed stage */
 .post-compose-mock-slide {
   --pc-aw: 16;
@@ -138,6 +142,28 @@
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: var(--pc-shadow);
+}
+
+.post-compose-mock-slide.is-audio {
+  aspect-ratio: auto;
+  width: min(100%, 13.5rem);
+  max-width: 13.5rem;
+  height: auto;
+  max-height: none;
+  min-height: 13.75rem;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  align-self: center;
+}
+
+.post-compose-mock-slide.is-audio .post-compose-mock-media {
+  position: relative;
+  inset: auto;
+  height: auto;
+  min-height: 13.75rem;
 }
 
 .post-compose-mock-slide.is-empty {
@@ -699,8 +725,9 @@ body.is-touch-file-drag .post-compose.is-touch-drop-hover .post-compose-mock {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 100%;
-  padding: 20px 24px;
+  height: auto;
+  min-height: 13.75rem;
+  padding: 0;
   box-sizing: border-box;
 }
 
