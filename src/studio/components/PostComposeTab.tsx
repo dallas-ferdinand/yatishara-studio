@@ -9,7 +9,6 @@ import {
   Image as ImageIcon,
   Loader2,
   Mic,
-  Music2,
   Pause,
   Play,
   Plus,
@@ -50,6 +49,10 @@ import { mentionFallbackAvatarStyle } from "@/studio/lib/profileAvatar";
 import { StudioAssetPickerSheet } from "./StudioAssetPickerSheet";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { MicrophoneWaveform } from "@/components/ui/waveform";
+import {
+  StudioOrbAvatar,
+  orbSeedForVoice,
+} from "./StudioOrbPlayButton";
 import {
   EXPLORER_DND_TYPE,
   inferMediaKind,
@@ -1636,12 +1639,15 @@ export function PostComposeTab({
                 <button
                   key={slot.key}
                   type="button"
-                  className={`post-compose-media-thumb${index === slotIndex ? " is-current" : ""}`}
+                  className={`post-compose-media-thumb${index === slotIndex ? " is-current" : ""}${slot.kind === "audio" ? " is-audio" : ""}`}
                   aria-label={slot.name}
                   onClick={() => setSlotIndex(index)}
                 >
                   {slot.kind === "audio" ? (
-                    <Music2 aria-hidden="true" />
+                    <StudioOrbAvatar
+                      seed={orbSeedForVoice(String(slot.assetId ?? slot.key), slot.name)}
+                      className="post-compose-audio-orb"
+                    />
                   ) : slot.kind === "video" && slot.previewUrl ? (
                     <video src={slot.previewUrl} muted playsInline />
                   ) : slot.previewUrl ? (
