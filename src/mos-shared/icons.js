@@ -92,20 +92,8 @@ export const icons = {
       '<path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     ].join(""),
   ),
-  /**
-   * .post draft — polaroid / feed card (not share-arrow; Shared with me keeps `share`).
-   * Reads at 14px: rounded frame, photo window, two caption lines.
-   */
-  post: S(
-    [
-      '<rect width="14" height="18" x="5" y="3" rx="2"/>',
-      '<rect width="10" height="8" x="7" y="5.5" rx="1"/>',
-      '<circle cx="9.2" cy="7.7" r="0.9"/>',
-      '<path d="m17 12.2-2.4-2.4a1.2 1.2 0 0 0-1.7 0L10.2 12.5"/>',
-      '<path d="M8 16h8"/>',
-      '<path d="M8 18.5h5"/>',
-    ].join(""),
-  ),
+  /** .post draft — Lucide CirclePlus (not share-arrow; Shared with me keeps `share`). */
+  post: S('<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>'),
   scissors: S('<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>'),
   package: S('<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7"/><path d="m7.5 4.27 9 5.15"/>'),
   /** Purchased / Creative Network digital goods folder */
