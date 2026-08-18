@@ -8617,8 +8617,7 @@ textarea.cursor-input {
   stroke-width: 2.6;
   color: #fff;
   filter:
-    drop-shadow(0 0 1.25px rgb(0 0 0 / 0.95))
-    drop-shadow(0 1px 2px rgb(0 0 0 / 0.7));
+    drop-shadow(0 0 0.35px rgb(0 0 0 / 0.9));
 }
 .cursor-unified-tab-preview-overlay svg:has(> polygon:only-child) {
   stroke-width: 2.95;
