@@ -403,7 +403,7 @@ function PostMediaMosaic({ items, size = "grid" }) {
 }
 
 function FolderPeekStack({ items, size = "grid" }) {
-  const cards = (items ?? []).slice(0, 2);
+  const cards = (items ?? []).slice(0, 3);
   if (!cards.length) return null;
   const iconSize = size === "preview" ? 16 : 13;
   const eager = size === "grid";
@@ -433,9 +433,6 @@ function FolderPeekStack({ items, size = "grid" }) {
               </span>
             )}
           </div>
-          <span className="desk-folder-peek-label" title={item.label}>
-            {peekDisplayName(item.label)}
-          </span>
         </div>
       ))}
     </div>
