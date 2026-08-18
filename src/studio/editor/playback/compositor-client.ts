@@ -231,6 +231,38 @@ export class CompositorClient {
     await this.ready;
     const requestId = ++this.requestId;
     const packed = uniqueLayerFrames(args.layers ?? []);
+    // #region agent log
+    if ((args.layers?.length ?? 0) >= 2) {
+      const payload = {
+        sessionId: "e220af",
+        runId: "fit-probe",
+        hypothesisId: "D",
+        location: "compositor-client.ts:render",
+        message: "compositor render post",
+        data: {
+          sent: packed.layers.length,
+          keys: packed.layers.map((layer) => layer.textureKey ?? null),
+          hasFrames: packed.layers.map((layer) => Boolean(layer.frame)),
+          sizes: packed.layers.map((layer) => [layer.width ?? null, layer.height ?? null]),
+          transition: args.transition ?? "none",
+        },
+        timestamp: Date.now(),
+      };
+      fetch("http://localhost:7783/ingest/94ebaafc-d725-476e-b382-9cc88f168e9c", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "e220af",
+        },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+      fetch("/api/_debug/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    }
+    // #endregion
     const frameA = args.frameA;
     let frameB = args.frameB;
     const stack = args.stack ?? [];

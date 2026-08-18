@@ -884,6 +884,42 @@ function copyCanvasToB(): void {
   lastBSize = [canvas.width, canvas.height];
 }
 
+function containedObjectSize(
+  sourceW: number,
+  sourceH: number,
+  canvasW: number,
+  canvasH: number,
+): [number, number] {
+  const sourceAspect = sourceW / Math.max(1, sourceH);
+  const canvasAspect = canvasW / Math.max(1, canvasH);
+  if (sourceAspect > canvasAspect) return [1, canvasAspect / sourceAspect];
+  return [sourceAspect / canvasAspect, 1];
+}
+
+function readRgba(x: number, y: number): [number, number, number, number] {
+  const buf = new Uint8Array(4);
+  gl?.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+  return [buf[0] ?? 0, buf[1] ?? 0, buf[2] ?? 0, buf[3] ?? 0];
+}
+
+function sampleFramebuffer(label: string): Record<string, unknown> {
+  if (!gl || !canvas) return { label };
+  gl.flush();
+  const w = canvas.width;
+  const h = canvas.height;
+  const cx = Math.max(0, Math.floor(w / 2));
+  const cy = Math.max(0, Math.floor(h / 2));
+  return {
+    label,
+    // WebGL y=0 is the bottom of the drawing buffer.
+    center: readRgba(cx, cy),
+    visualTop: readRgba(cx, Math.max(0, Math.floor(h * 0.92))),
+    visualBottom: readRgba(cx, Math.max(0, Math.floor(h * 0.08))),
+    left: readRgba(Math.max(0, Math.floor(w * 0.08)), cy),
+    right: readRgba(Math.min(w - 1, Math.floor(w * 0.92)), cy),
+  };
+}
+
 function applyLayerUniforms(args: {
   hasA: boolean;
   hasB: boolean;
@@ -971,6 +1007,13 @@ function render(message: RenderMessage): void {
     layers.length === 2 &&
     message.transition !== "none" &&
     effect !== TRANSITION_SHADER_IDS.none;
+  const layerUploads: Array<{
+    i: number;
+    key: string | null;
+    hasFrame: boolean;
+    hasLayer?: boolean;
+  }> = [];
+  const pixelProbes: Record<string, unknown>[] = [];
   // Senders reuse a bare `image:` key once they believe the still is resident.
   // This texture cache is the only authority on that: it evicts, and it never
   // held anything if the first send raced image decode. Report every key we
@@ -1023,6 +1066,12 @@ function render(message: RenderMessage): void {
         bottom.textureKey,
         "b",
       );
+      layerUploads.push({
+        i: 0,
+        key: bottom.textureKey ?? null,
+        hasFrame: Boolean(bottom.frame),
+        hasLayer: hasBottom,
+      });
       if (bottom.width && bottom.height) lastBSize = [bottom.width, bottom.height];
       applyLayerUniforms({
         hasA: false,
@@ -1037,11 +1086,20 @@ function render(message: RenderMessage): void {
         progress: 0,
         background: message.background,
       });
+      // #region agent log
+      pixelProbes.push(sampleFramebuffer("after-bottom"));
+      // #endregion
       copyCanvasToB();
       let finished = false;
       for (let index = 1; index < layers.length; index += 1) {
         const layer = layers[index]!;
         const hasLayer = uploadLane(textureA, gl.TEXTURE0, layer.frame, layer.textureKey, "a");
+        layerUploads.push({
+          i: index,
+          key: layer.textureKey ?? null,
+          hasFrame: Boolean(layer.frame),
+          hasLayer,
+        });
         if (!hasLayer) continue;
         if (layer.width && layer.height) lastASize = [layer.width, layer.height];
         const last = index === layers.length - 1;
@@ -1058,6 +1116,9 @@ function render(message: RenderMessage): void {
           progress: 0,
           background: message.background,
         });
+        // #region agent log
+        pixelProbes.push(sampleFramebuffer(`after-layer-${index}`));
+        // #endregion
         if (last) finished = true;
         else copyCanvasToB();
       }
@@ -1104,6 +1165,51 @@ function render(message: RenderMessage): void {
     for (const layer of message.stack ?? []) closeFrame(layer.frame);
     for (const layer of message.layers ?? []) closeFrame(layer.frame);
   }
+  // #region agent log
+  if (layers.length >= 2) {
+    const cw = canvas?.width ?? 0;
+    const ch = canvas?.height ?? 0;
+    const payload = {
+      sessionId: "e220af",
+      runId: "fit-probe",
+      hypothesisId: "B",
+      location: "compositor.worker.ts:render",
+      message: "stacked compositor render",
+      data: {
+        path: transitioning ? "transition" : layers.length >= 2 ? "stack" : "single",
+        layerCount: layers.length,
+        usedMessageLayers: Boolean(message.layers?.length),
+        transition: message.transition,
+        missingTextures,
+        uploads: layerUploads,
+        canvasSize: [cw, ch],
+        lastASize,
+        lastBSize,
+        layerSizes: layers.map((layer) => [layer.width ?? null, layer.height ?? null]),
+        contain: layers.map((layer) =>
+          containedObjectSize(layer.width ?? 1, layer.height ?? 1, cw, ch),
+        ),
+        opacities: layers.map((layer) => layer.opacity ?? 1),
+        transforms: layers.map((layer) => layer.transform ?? null),
+        pixels: pixelProbes,
+      },
+      timestamp: Date.now(),
+    };
+    fetch("http://localhost:7783/ingest/94ebaafc-d725-476e-b382-9cc88f168e9c", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "e220af",
+      },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+    fetch("/api/_debug/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }
+  // #endregion
   self.postMessage({
     type: "rendered",
     requestId: message.requestId,

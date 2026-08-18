@@ -30,6 +30,52 @@ import { PlayBus, playBusLayersByClipId } from "./play-bus";
 import { pictureLayersBottomToTop, type PictureLayer } from "./picture-layers";
 import { StillResidency } from "./still-residency";
 
+// #region agent log
+const AGENT_DEBUG_INGEST =
+  "http://localhost:7783/ingest/94ebaafc-d725-476e-b382-9cc88f168e9c";
+let agentDebugLast = 0;
+function agentDebugLog(
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown>,
+): void {
+  const payload = {
+    sessionId: "e220af",
+    runId: "fit-probe",
+    hypothesisId,
+    location,
+    message,
+    data,
+    timestamp: Date.now(),
+  };
+  fetch(AGENT_DEBUG_INGEST, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "e220af",
+    },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+  fetch("/api/_debug/ingest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+function agentDebugStack(
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown>,
+): void {
+  const now = Date.now();
+  if (now - agentDebugLast < 400) return;
+  agentDebugLast = now;
+  agentDebugLog(hypothesisId, location, message, data);
+}
+// #endregion
+
 /**
  * Spinner only after a lasting cold-buffer on PlayBus (element waiting before
  * first paint). Clock never holds.
@@ -303,6 +349,34 @@ class EngineConsumer implements FrameConsumer {
       };
     });
     const layers = pictureLayersBottomToTop(resolved, slice);
+    // #region agent log
+    if (slice.video.length >= 2) {
+      agentDebugStack("A", "use-playback-engine.ts:paintPlay", "stacked paintPlay", {
+        path: "play",
+        time: slice.timelineTime,
+        slice: slice.video.map((sample) => ({
+          clipId: sample.clip.clipId,
+          kind: sample.clip.kind,
+          trackIndex: sample.clip.trackIndex,
+          assetId: sample.clip.assetId ?? null,
+        })),
+        resolved: resolved.map((lane) => ({
+          clipId: lane.clipId,
+          hasFrame: Boolean(lane.frame),
+          textureKey: lane.textureKey ?? null,
+          w: lane.width ?? null,
+          h: lane.height ?? null,
+        })),
+        layers: layers.map((layer) => ({
+          clipId: layer.clipId,
+          hasFrame: Boolean(layer.frame),
+          textureKey: layer.textureKey ?? null,
+          opacity: layer.opacity,
+          transform: layer.transform,
+        })),
+      });
+    }
+    // #endregion
     for (const layer of captured.layers ?? captured.stack ?? []) {
       if (layer.frame && !usedBusFrames.has(layer.frame)) {
         try {
@@ -461,6 +535,37 @@ class EngineConsumer implements FrameConsumer {
       };
     });
     const layers = pictureLayersBottomToTop(resolved, slice);
+    // #region agent log
+    if (slice.video.length >= 2) {
+      agentDebugLog("B", "use-playback-engine.ts:prepare", "stacked prepare", {
+        path: "scrub",
+        time: slice.timelineTime,
+        slice: slice.video.map((sample) => ({
+          clipId: sample.clip.clipId,
+          kind: sample.clip.kind,
+          trackIndex: sample.clip.trackIndex,
+          assetId: sample.clip.assetId ?? null,
+        })),
+        resolved: resolved.map((lane) => ({
+          clipId: lane.clipId,
+          hasFrame: Boolean(lane.frame),
+          textureKey: lane.textureKey ?? null,
+          w: lane.width ?? null,
+          h: lane.height ?? null,
+        })),
+        layers: layers.map((layer) => ({
+          clipId: layer.clipId,
+          hasFrame: Boolean(layer.frame),
+          textureKey: layer.textureKey ?? null,
+          opacity: layer.opacity,
+          transform: layer.transform,
+        })),
+        decodedNulls: decoded.map((item, index) =>
+          item ? null : slice.video[index]?.clip.clipId ?? index,
+        ),
+      });
+    }
+    // #endregion
     const top = layers[layers.length - 1];
     const topDecoded = top
       ? valid.find((item) => item.sample.clip.clipId === top.clipId)
