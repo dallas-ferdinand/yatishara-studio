@@ -771,6 +771,9 @@ function FeedMedia({
           <StudioChatAudioPlayer
             src={playSrc}
             title={item.name || post.name}
+            variant="pane"
+            compact
+            orbSeed={orbSeedForVoice(String(item.assetId), item.name || post.name)}
           />
         </div>
       ) : isVideo && playSrc ? (
@@ -1256,10 +1259,8 @@ function FeedCaption({
               <StudioChatAudioPlayer
                 src={voiceUrl}
                 title="Voice note"
-                variant="pane"
-                compact
                 durationHint={voiceDurationSec}
-                orbSeed={orbSeedForVoice(String(postId ?? "voice"), "voice-note")}
+                compact
               />
             </div>
           ) : null}

@@ -1536,7 +1536,13 @@ export function PostComposeTab({
                 )
               ) : isAudio && previewUrl ? (
                 <div className="post-compose-audio-stage">
-                  <StudioChatAudioPlayer src={previewUrl} title={current.name} />
+                  <StudioChatAudioPlayer
+                    src={previewUrl}
+                    title={current.name}
+                    variant="pane"
+                    compact
+                    orbSeed={orbSeedForVoice(String(current.assetId ?? current.key), current.name)}
+                  />
                 </div>
               ) : isVideo && previewUrl ? (
                 <MediaLoadFrame
