@@ -12,7 +12,6 @@ import {
   Feather,
   Image as ImageIcon,
   Loader2,
-  Music2,
   Pause,
   Pencil,
   Play,
@@ -49,6 +48,7 @@ import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
 import { CaptionChipText } from "./CaptionChipText";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
+import { StudioOrbAvatar, orbSeedForVoice } from "./StudioOrbPlayButton";
 import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
 import {
   feedCacheKey,
@@ -317,6 +317,7 @@ function FeedMedia({
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [policyMuted, setPolicyMuted] = useState(false);
   const [mediaSize, setMediaSize] = useState<{ w: number; h: number } | null>(null);
+  const lastVisualAspectRef = useRef<{ w: number; h: number } | null>(null);
   const [itemIndex, setItemIndex] = useState(0);
   const policyMutedRef = useRef(false);
   const userPausedRef = useRef(false);
@@ -329,6 +330,7 @@ function FeedMedia({
     wasPlayingRef.current = false;
     pointerSeekingRef.current = false;
     userPausedRef.current = false;
+    lastVisualAspectRef.current = null;
   }
 
   const items: PostMediaItem[] =
@@ -703,6 +705,13 @@ function FeedMedia({
           : items.length === 1 && post.height && post.height > 0
             ? post.height
             : 0;
+  if (!isAudio && aspectW > 0 && aspectH > 0) {
+    lastVisualAspectRef.current = { w: aspectW, h: aspectH };
+  }
+  const frameW =
+    !isAudio && aspectW > 0 ? aspectW : lastVisualAspectRef.current?.w || 16;
+  const frameH =
+    !isAudio && aspectH > 0 ? aspectH : lastVisualAspectRef.current?.h || 9;
 
   useEffect(() => {
     setMediaSize(null);
@@ -711,37 +720,29 @@ function FeedMedia({
   useLayoutEffect(() => {
     const frame = frameRef.current;
     if (!(frame instanceof HTMLElement)) return;
-    if (isAudio || !(aspectW > 0 && aspectH > 0)) {
-      frame.style.removeProperty("--post-aw");
-      frame.style.removeProperty("--post-ah");
-      frame.classList.toggle("is-portrait", false);
-      return;
-    }
-    const aw = String(aspectW);
-    const ah = String(aspectH);
+    const aw = String(frameW);
+    const ah = String(frameH);
     if (frame.style.getPropertyValue("--post-aw") !== aw) {
       frame.style.setProperty("--post-aw", aw);
     }
     if (frame.style.getPropertyValue("--post-ah") !== ah) {
       frame.style.setProperty("--post-ah", ah);
     }
-    frame.classList.toggle("is-portrait", aspectH > aspectW);
-  }, [aspectW, aspectH, isAudio]);
+    frame.classList.toggle("is-portrait", frameH > frameW);
+  }, [frameW, frameH]);
 
   return (
     <>
     <div
       ref={frameRef}
       className={`profile-post-watch-frame${isAudio ? " is-audio" : ""}${
-        !isAudio && aspectH > aspectW ? " is-portrait" : ""
+        frameH > frameW ? " is-portrait" : ""
       }`}
       style={
-        !isAudio && aspectW > 0 && aspectH > 0
-          ? ({
-              ["--post-aw" as string]: String(aspectW),
-              ["--post-ah" as string]: String(aspectH),
-            } as CSSProperties)
-          : undefined
+        {
+          ["--post-aw" as string]: String(frameW),
+          ["--post-ah" as string]: String(frameH),
+        } as CSSProperties
       }
     >
     <div
@@ -914,7 +915,7 @@ function FeedMedia({
             <button
               key={String(entry.assetId)}
               type="button"
-              className={`profile-post-media-thumb${index === safeIndex ? " is-current" : ""}`}
+              className={`profile-post-media-thumb${index === safeIndex ? " is-current" : ""}${entry.kind === "audio" ? " is-audio" : ""}`}
               aria-label={entry.name || `Item ${index + 1}`}
               aria-current={index === safeIndex ? "true" : undefined}
               onPointerDown={stopFeedGesture}
@@ -924,8 +925,11 @@ function FeedMedia({
               }}
             >
               {entry.kind === "audio" ? (
-                <Music2 aria-hidden="true" />
-              ) : entry.kind === "video" && entry.thumbnailUrl ? (
+                <StudioOrbAvatar
+                  seed={orbSeedForVoice(String(entry.assetId), entry.name)}
+                  className="profile-post-audio-orb"
+                />
+              ) : entry.kind === "video" && entry.thumbnailUrl && !/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(entry.thumbnailUrl) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={entry.thumbnailUrl} alt="" />
               ) : entry.kind === "video" && entry.mediaUrl ? (

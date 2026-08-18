@@ -902,8 +902,9 @@ export function PostComposeTab({
         (hydrateIds.length > 0 && seededAssets === undefined)));
 
   useEffect(() => {
+    if (current?.kind === "audio") return;
     setPreviewSize(null);
-  }, [current?.key]);
+  }, [current?.key, current?.kind]);
 
   const showHashSuggest = trigger?.kind === "hash" && (hashSuggestions?.length ?? 0) > 0;
   const showPeopleSuggest =
@@ -1496,7 +1497,7 @@ export function PostComposeTab({
           <div
             className={`post-compose-mock-slide${!current ? " is-empty" : ""}${isAudio ? " is-audio" : ""}`}
             style={
-              !isAudio && previewSize
+              previewSize
                 ? ({
                     ["--pc-aw" as string]: String(previewSize.w),
                     ["--pc-ah" as string]: String(previewSize.h),

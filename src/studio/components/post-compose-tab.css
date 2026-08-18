@@ -106,10 +106,10 @@
 }
 
 .post-compose-mock {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: center;
+  justify-items: center;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -142,6 +142,8 @@
 
 .post-compose-mock-slide.is-empty {
   flex: 1 1 auto;
+  align-self: stretch;
+  justify-self: stretch;
   width: 100%;
   height: 100%;
   max-height: none;
@@ -151,19 +153,8 @@
   box-shadow: none;
 }
 
-.post-compose-mock-slide.is-audio {
-  width: min(100%, 22rem);
-  max-height: none;
-  aspect-ratio: auto;
-  height: auto;
-  overflow: visible;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
 @supports not (aspect-ratio: 9 / 16) {
-  .post-compose-mock-slide:not(.is-empty):not(.is-audio) {
+  .post-compose-mock-slide:not(.is-empty) {
     width: 100%;
     height: auto;
   }
@@ -176,12 +167,6 @@
   display: grid;
   place-items: center;
   background: transparent;
-}
-
-.post-compose-mock-slide.is-audio .post-compose-mock-media {
-  position: relative;
-  inset: auto;
-  height: auto;
 }
 
 .post-compose-mock-media .media-load-frame,
@@ -713,6 +698,7 @@ body.is-touch-file-drag .post-compose.is-touch-drop-hover .post-compose-mock {
   display: grid;
   place-items: center;
   width: min(100%, 22rem);
+  height: 100%;
   padding: 24px;
 }
 
@@ -720,8 +706,10 @@ body.is-touch-file-drag .post-compose.is-touch-drop-hover .post-compose-mock {
   display: flex;
   align-items: center;
   justify-content: center;
+  grid-row: 2;
   flex-shrink: 0;
   gap: 10px;
+  width: 100%;
   min-height: 56px;
   padding: 0 2px 2px;
 }
