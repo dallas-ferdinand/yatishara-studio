@@ -4,6 +4,7 @@ import { internalMutation } from "./_generated/server";
 import {
   ensureMessagesFolder,
   ensurePurchasedAssetsFolder,
+  ensureScreenRecordingsFolder,
   ensureSharedWithMeFolder,
   pickWorkspaceRootFolder,
 } from "./folders";
@@ -345,6 +346,7 @@ export const ensureStudioDefaults = authedMutation({
     await ensureMessagesFolder(ctx, ctx.user._id, rootFolderId);
     await ensurePurchasedAssetsFolder(ctx, ctx.user._id, rootFolderId);
     await ensureSharedWithMeFolder(ctx, ctx.user._id, rootFolderId);
+    await ensureScreenRecordingsFolder(ctx, ctx.user._id, rootFolderId);
 
     const existingBilling = await ctx.db
       .query("billingAccounts")

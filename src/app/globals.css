@@ -190,15 +190,13 @@ body {
 }
 
 /* Mobile: kill leftover rubber-band so the browser cannot steal overscroll
-   (close-tab / chrome). Inner panes still scroll; bounce at the edge is swallowed. */
+   (close-tab / chrome). Keep this on html/body only.
+   Never set overscroll-behavior-y: none on * — overflow:hidden tiles/rows/bubbles
+   then become dead scrollports and will not chain the pan to the real scroller. */
 @media (pointer: coarse) {
   html,
   body {
     overscroll-behavior: none;
-  }
-  .studio-polish.is-studio-mobile,
-  .studio-polish.is-studio-mobile * {
-    overscroll-behavior-y: none;
   }
 }
 

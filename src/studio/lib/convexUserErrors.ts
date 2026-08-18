@@ -2,8 +2,8 @@
 
 const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
   {
-    match: /email already belongs to another account/i,
-    message: "That email is already used by another Studio account. Try a different email.",
+    match: /staging upload stalled|staging upload failed|staging upload interrupted|did not return a storage/i,
+    message: "Could not save the recording. Try again.",
   },
   {
     match: /phone already belongs to another account/i,

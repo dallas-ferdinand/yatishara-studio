@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   Clock,
   Copy,
-  Crown,
   Image as ImageIcon,
   Loader2,
   Lock,
@@ -76,12 +75,11 @@ function recordingTimeLabel(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-type CommentSort = "newest" | "oldest" | "liked" | "replies";
+type CommentSort = "newest" | "oldest" | "replies";
 
 const COMMENT_SORT_FILTERS = [
   { id: "newest", label: "Newest", icon: "arrowUp" },
   { id: "oldest", label: "Oldest", icon: "clock" },
-  { id: "liked", label: "Most liked", icon: "pin" },
   { id: "replies", label: "Most replies", icon: "chats" },
 ] as const;
 
@@ -239,8 +237,6 @@ function ProfileCommentBubble({
   canDrag,
   postId,
   postThumbnailUrl,
-  likeState,
-  onToggleLike,
   onReply,
   onOpenSearchHit,
   onDelete,
@@ -253,8 +249,6 @@ function ProfileCommentBubble({
   canDrag: boolean;
   postId?: Id<"profilePosts">;
   postThumbnailUrl?: string;
-  likeState: { liked: boolean; likeCount: number };
-  onToggleLike: (comment: CommentRow) => void;
   onReply: (comment: CommentRow) => void;
   onOpenSearchHit: (comment: CommentRow) => void;
   onDelete: (id: CommentRow["_id"]) => void;
@@ -314,19 +308,6 @@ function ProfileCommentBubble({
       onSelect: () => {
         void navigator.clipboard.writeText(comment.body).catch(() => {});
       },
-    });
-  }
-  if (!locked) {
-    menuItems.push({
-      key: "like",
-      label: likeState.liked ? "Unlike" : "Like",
-      icon: (
-        <Crown
-          aria-hidden="true"
-          fill={likeState.liked ? "currentColor" : "none"}
-        />
-      ),
-      onSelect: () => onToggleLike(comment),
     });
   }
   if (replyCount > 0 && !locked) {
@@ -489,38 +470,6 @@ function ProfileCommentBubble({
                   </time>
                 </div>
             <div className="profile-comment-bubble-actions">
-                {locked ? (
-                  <span
-                    className={`profile-comment-like is-static${likeState.likeCount > 0 ? "" : " is-empty"}`}
-                    aria-label={`${likeState.likeCount} likes`}
-                  >
-                    <Crown
-                      aria-hidden="true"
-                      fill={likeState.likeCount > 0 ? "currentColor" : "none"}
-                      strokeWidth={likeState.likeCount > 0 ? 0 : 2}
-                    />
-                    {likeState.likeCount > 0 ? (
-                      <span>{likeState.likeCount}</span>
-                    ) : null}
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className={`profile-comment-like${likeState.liked ? " is-liked" : ""}`}
-                    aria-pressed={likeState.liked}
-                    aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
-                    onClick={() => onToggleLike(comment)}
-                  >
-                    <Crown
-                      aria-hidden="true"
-                      fill={likeState.liked ? "currentColor" : "none"}
-                      strokeWidth={likeState.liked ? 0 : 2}
-                    />
-                    {likeState.likeCount > 0 ? (
-                      <span>{likeState.likeCount}</span>
-                    ) : null}
-                  </button>
-                )}
                 {!locked ? (
                   <button
                     type="button"
@@ -672,9 +621,6 @@ function CommentsBody({
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [pendingVoice, setPendingVoice] = useState<PendingVoice | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [likeLocal, setLikeLocal] = useState<
-    Record<string, { liked: boolean; likeCount: number }>
-  >({});
   const imageInputRef = useRef<HTMLInputElement>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
   const myProfile = useQuery(
@@ -780,10 +726,8 @@ function CommentsBody({
 
   const addPostComment = useMutation(api.profiles.addComment);
   const deletePostComment = useMutation(api.profiles.deleteComment);
-  const togglePostCommentLike = useMutation(api.profiles.toggleCommentLike);
   const addCourseComment = useMutation(api.academy.addComment);
   const deleteCourseComment = useMutation(api.academy.deleteComment);
-  const toggleCourseCommentLike = useMutation(api.academy.toggleCommentLike);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const ensureStudioDefaults = useMutation(api.users.ensureStudioDefaults);
@@ -817,7 +761,6 @@ function CommentsBody({
     clearPendingImage();
     clearPendingVoice();
     setImagePreviewUrl(null);
-    setLikeLocal({});
     setCommentSearch("");
     setStack([{ parentId: null, parentPreview: null, scrollTop: 0 }]);
   }, [postId, courseId, lessonId]);
@@ -1218,43 +1161,6 @@ function CommentsBody({
     }
   }
 
-  async function toggleLike(comment: CommentRow) {
-    if (!auth.isAuthenticated) {
-      window.location.href = `/?next=${encodeURIComponent("/")}`;
-      return;
-    }
-    const prev = likeLocal[comment._id] ?? {
-      liked: comment.likedByMe,
-      likeCount: comment.likeCount,
-    };
-    const nextLiked = !prev.liked;
-    playUiSound(nextLiked ? "like" : "unlike");
-    setLikeLocal((state) => ({
-      ...state,
-      [comment._id]: {
-        liked: nextLiked,
-        likeCount: Math.max(0, prev.likeCount + (nextLiked ? 1 : -1)),
-      },
-    }));
-    try {
-      const result = isCourse
-        ? await toggleCourseCommentLike({
-            commentId: comment._id as Id<"academyComments">,
-          })
-        : await togglePostCommentLike({
-            commentId: comment._id as Id<"profileComments">,
-          });
-      setLikeLocal((state) => ({
-        ...state,
-        [comment._id]: { liked: result.liked, likeCount: result.likeCount },
-      }));
-    } catch (err) {
-      setLikeLocal((state) => ({ ...state, [comment._id]: prev }));
-      playUiSound("error");
-      setError(friendlyConvexError(err, "Could not like comment"));
-    }
-  }
-
   const inThread = parentId !== null;
   const showHeader = showRootHeader || inThread || Boolean(postAuthor);
   const parent = frame.parentPreview;
@@ -1284,10 +1190,6 @@ function CommentsBody({
   ) {
     const isParent = Boolean(options.isParent);
     if (isParent) {
-      const likeState = likeLocal[comment._id] ?? {
-        liked: comment.likedByMe,
-        likeCount: comment.likeCount,
-      };
       return (
         <section key={`${comment._id}-parent`} className="profile-comment-parent-body">
           <div className="profile-comment-parent-content">
@@ -1303,28 +1205,10 @@ function CommentsBody({
                 <img className="profile-comment-image" src={comment.imageUrl} alt="" />
               </button>
             ) : null}
-            <button
-              type="button"
-              className={`profile-comment-like${likeState.liked ? " is-liked" : ""}`}
-              aria-pressed={likeState.liked}
-              aria-label={likeState.liked ? "Unlike comment" : "Like comment"}
-              onClick={() => void toggleLike(comment)}
-            >
-              <Crown
-                aria-hidden="true"
-                fill={likeState.liked ? "currentColor" : "none"}
-                strokeWidth={likeState.liked ? 0 : 2}
-              />
-              {likeState.likeCount > 0 ? <span>{likeState.likeCount}</span> : null}
-            </button>
           </div>
         </section>
       );
     }
-    const likeState = likeLocal[comment._id] ?? {
-      liked: comment.likedByMe,
-      likeCount: comment.likeCount,
-    };
     return (
       <ProfileCommentBubble
         key={comment._id}
@@ -1334,8 +1218,6 @@ function CommentsBody({
         canDrag={!isCourse && Boolean(postId)}
         postId={postId}
         postThumbnailUrl={postAuthor?.thumbnailUrl}
-        likeState={likeState}
-        onToggleLike={(row) => void toggleLike(row)}
         onReply={openReplies}
         onOpenSearchHit={openSearchHit}
         onDelete={(id) => void remove(id)}
@@ -1520,7 +1402,6 @@ function CommentsBody({
                   if (
                     next === "newest" ||
                     next === "oldest" ||
-                    next === "liked" ||
                     next === "replies"
                   ) {
                     setCommentSort(next);
@@ -1570,7 +1451,7 @@ function CommentsBody({
                 <span>
                   {searching
                     ? "Try another name or phrase"
-                    : "Unlock the course to join the discussion"}
+                    : "Unlock to join the discussion"}
                 </span>
               ) : null}
             </div>

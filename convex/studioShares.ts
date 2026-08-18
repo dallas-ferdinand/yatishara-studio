@@ -190,9 +190,10 @@ async function requireOwnedShareable(
     }
     if (
       asset.licenseKind === "purchased_network" ||
+      asset.licenseKind === "purchased_help_answer" ||
       asset.licenseKind === "listed_network"
     ) {
-      throw new Error("Creative Network catalog files cannot be shared this way");
+      throw new Error("Purchased or catalog files cannot be shared this way");
     }
     return { name: asset.name };
   }
@@ -1452,9 +1453,10 @@ export const copySharedItemToFolder = authedMutation({
     const source = await requireAssetOwnerOrShare(ctx, args.assetId);
     if (
       source.licenseKind === "purchased_network" ||
+      source.licenseKind === "purchased_help_answer" ||
       source.licenseKind === "listed_network"
     ) {
-      throw new Error("Creative Network catalog files cannot be copied this way");
+      throw new Error("Purchased or catalog files cannot be copied this way");
     }
     if (
       !source.bunnyPath ||

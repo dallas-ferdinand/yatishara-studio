@@ -90,9 +90,9 @@ from `--mos-plate`:
   divider. Stay on L2 plate fill — never bump folders to L3 for “more contrast.”
 - File-manager type chips (`.desk-file-thumb-badge` on peek wraps): **same white
   pill + ink glyph** for folders, images, and audio — never dark glass on media
-  only. **System folders** (Trash / Messages / Purchased / My Public): center glyph
-  only (`trash` / `message` / `shoppingBag` / `globe`) — **no** bottom-left type
-  chip.
+  only. **System folders** (Trash / Messages / Purchased / My Public / Screen
+  Recordings): center glyph only (`trash` / `message` / `shoppingBag` / `globe` /
+  `monitor`) — **no** bottom-left type chip.
 - File-manager **search strip** (`.cursor-panel-search`): always nested in
   `.studio-files-search-row` (or workspace `.studio-files-chrome`) so the bottom
   hairline belongs to that container — search itself has no top/bottom border.
@@ -257,7 +257,7 @@ Do **not** invent one-off heights. Match siblings on the same surface.
 
 Rules:
 - On a public profile hero, Follow must match Hire Me / website chips (28×12), never a taller accent pill.
-- Feed watch caption Follow is a 28px idle bordered pill on the **right** of the name/time stack — not accent/`is-primary`, not a plus on the avatar. Boost lives in the book bar (desktop top header, mobile bottom). Desktop book bar: labeled Save and Share on the left; centered prev/next chevrons; labeled Boost on the right. Contribute is not in the desktop bar — it stays in the comments sidebar head as a labeled pill (Feather + Contribute + count). Desktop 32px heads nest those pills at **24px**, same as `.cursor-icon-btn`. Mobile keeps Boost, Contribute, then icon Save/Share at 28px. Book bar pad matches other 32px heads (`0 8px 0 10px`), not the player’s 20px. Time under the name uses the same `ago · date` stamp as comments. Owner Pencil edits the caption inline on the page (desktop and mobile; not in the comments sidebar). Overflowing watch descriptions scroll in the bottom pane; wheel over the video goes to the next/prev post. 16px fades pin to the top and bottom of the caption pane; hairline under the video. Watch caption avatar shadow is 1px/2px, not the shared 8px/18px glass spread.
+- Feed watch caption Follow is a 28px idle bordered pill on the **right** of the name/time stack — not accent/`is-primary`, not a plus on the avatar. Boost lives in the book bar (desktop top header, mobile bottom). Desktop book bar: labeled Save and Share on the left; centered prev/next chevrons; labeled Boost on the right. Contribute is not in the desktop bar — it stays in the comments sidebar head as a labeled pill (Feather + Contribute + count). Comments (feed and Academy) have no like/boost/crown — reply only. Desktop 32px heads nest those pills at **24px**, same as `.cursor-icon-btn`. Mobile keeps Boost, Contribute, then icon Save/Share at 28px. Book bar pad matches other 32px heads (`0 8px 0 10px`), not the player’s 20px. Time under the name uses the same `ago · date` stamp as comments. Owner Pencil edits the caption inline on the page (desktop and mobile; not in the comments sidebar). Overflowing watch descriptions scroll in the bottom pane; wheel over the video goes to the next/prev post. 16px fades pin to the top and bottom of the caption pane; hairline under the video. Watch caption avatar shadow is 1px/2px, not the shared 8px/18px glass spread.
 - Prefer shared classes (`.public-profile-links a`, `.public-profile-follow`) over inline sizes.
 - Header bars stay exactly `--cursor-head-h` (32px); nest 24–28px chips inside, don’t grow the bar.
 - **In-rail / inline panel heads** (DM New/Edit label, assign sheets, secondary pane titles) use the
@@ -631,6 +631,26 @@ left/right through an author’s profile posts. Overflowing copy uses the
 caption scroller, not click-to-scroll. 16px fades pin to the top and bottom of
 the caption pane (they do not scroll with the copy). Hairline on the caption
 pane (flush under the video); title sits 8px below it.
+Question / Value is a compact plate chip beside the name; parent Value adds
+`· for @user` on the time line. Paid Value lock is an L2 `--mos-plate` card
+on the player (lock mark + price + accent Unlock) — never white text on a dim.
+
+**Create post** (`PostComposeTab`): type chips live in the 32px toolbar and
+match `.studio-admin-head-tab` (24px nested pills, Lucide leading icons, idle
+muted, active = accent wash). Description rail stays comments-flush (left
+hairline, `--mos-panel`, no card). **Value recording is on the stage**, not in
+the caption column. After a take, a WhatsApp-style free-preview timeline sits
+under the video and above the media gallery/arrows: filmstrip, play/pause,
+playhead, and draggable in/out handles. Gold handles sit outside the crop with
+rounded outer corners. Filmstrip corners stay square where a handle covers them
+(no bleed) and round when that end is uncovered. Grip line stays in the gold
+bars. Playhead stays inside the range.
+Show that trim only on screen recordings, not on extra photos or other media.
+The rail only shows price / errors / an optional “Value for @user”
+chip. After Stop, the stage (or the Rec pill if they left Create) must show
+Preparing → Saving n% → Putting it in Screen Recordings — never a silent wait.
+Do not put second-boxes or a settings form in the description.
+Memory: **1482**.
 Desktop comments head: 20px avatar, name, and a 24px Contribute pill
 (Feather + label + count) — not Boost/Save/time. Head is
 `--cursor-head-h` with a bottom hairline; Search comments keeps its bottom

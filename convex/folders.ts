@@ -31,6 +31,7 @@ const folderReturn = v.object({
       v.literal("purchased_assets"),
       v.literal("public_assets"),
       v.literal("shared_with_me"),
+      v.literal("screen_recordings"),
     ),
   ),
   reactionEmoji: v.optional(v.string()),
@@ -656,6 +657,11 @@ function assertSystemFolderMutable(folder: Doc<"folders">) {
       "Shared with me cannot be renamed, moved, or deleted",
     );
   }
+  if (folder.systemKind === "screen_recordings") {
+    throw new Error(
+      "Screen Recordings cannot be renamed, moved, or deleted",
+    );
+  }
 }
 
 /**
@@ -832,7 +838,8 @@ export function pickWorkspaceRootFolder<T extends {
       folder.systemKind !== "messages" &&
       folder.systemKind !== "purchased_assets" &&
       folder.systemKind !== "public_assets" &&
-      folder.systemKind !== "shared_with_me",
+      folder.systemKind !== "shared_with_me" &&
+      folder.systemKind !== "screen_recordings",
   );
 }
 
@@ -908,6 +915,62 @@ export async function ensureSharedWithMeFolder(
   });
 }
 
+const SCREEN_RECORDINGS_FOLDER_NAME = "Screen Recordings";
+
+/**
+ * Idempotent Screen Recordings folder for desktop screen-share takes.
+ * Generic explorer upload is blocked; the in-app recorder may reserve uploads.
+ */
+export async function ensureScreenRecordingsFolder(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  parentId?: Id<"folders">,
+): Promise<Id<"folders">> {
+  const existing = await ctx.db
+    .query("folders")
+    .withIndex("by_owner_and_system_kind", (q) =>
+      q.eq("ownerId", userId).eq("systemKind", "screen_recordings"),
+    )
+    .first();
+  if (existing && !existing.deletedAt) {
+    const nextParent = parentId && existing.parentId !== parentId ? parentId : undefined;
+    if (
+      nextParent ||
+      existing.sortOrder !== 4 ||
+      existing.name !== SCREEN_RECORDINGS_FOLDER_NAME
+    ) {
+      await ctx.db.patch(existing._id, {
+        ...(nextParent ? { parentId: nextParent } : {}),
+        name: SCREEN_RECORDINGS_FOLDER_NAME,
+        sortOrder: 4,
+        updatedAt: Date.now(),
+      });
+    }
+    return existing._id;
+  }
+  if (existing?.deletedAt) {
+    await ctx.db.patch(existing._id, {
+      deletedAt: undefined,
+      name: SCREEN_RECORDINGS_FOLDER_NAME,
+      sortOrder: 4,
+      ...(parentId ? { parentId } : {}),
+      updatedAt: Date.now(),
+    });
+    return existing._id;
+  }
+  const now = Date.now();
+  return await ctx.db.insert("folders", {
+    ownerId: userId,
+    ...(parentId ? { parentId } : {}),
+    name: SCREEN_RECORDINGS_FOLDER_NAME,
+    icon: "monitor",
+    sortOrder: 4,
+    systemKind: "screen_recordings",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 /** Public mutation so the DM client can reserve uploads into Messages. */
 export const ensureMessagesFolderForMe = authedMutation({
   args: {},
@@ -943,5 +1006,14 @@ export const ensureSharedWithMeFolderForMe = authedMutation({
   handler: async (ctx) => {
     const rootId = await workspaceRootForUser(ctx, ctx.user._id);
     return await ensureSharedWithMeFolder(ctx, ctx.user._id, rootId);
+  },
+});
+
+export const ensureScreenRecordingsFolderForMe = authedMutation({
+  args: {},
+  returns: v.id("folders"),
+  handler: async (ctx) => {
+    const rootId = await workspaceRootForUser(ctx, ctx.user._id);
+    return await ensureScreenRecordingsFolder(ctx, ctx.user._id, rootId);
   },
 });

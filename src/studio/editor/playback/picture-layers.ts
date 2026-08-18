@@ -1,4 +1,4 @@
-import { normalizeClipTransform } from "../clipTransform";
+import { normalizeClipTransform, resolveFitMode, type MediaFitMode } from "../clipTransform";
 import { clipOpacityAtLocalTime } from "../editorEffects";
 import type { RenderSlice } from "./timeline-compiler";
 
@@ -10,6 +10,8 @@ export type PictureLayer = {
   opacity: number;
   width?: number;
   height?: number;
+  role?: "single" | "outgoing" | "incoming";
+  fitMode?: MediaFitMode;
 };
 
 export type ResolvedPictureLane = {
@@ -48,6 +50,8 @@ export function pictureLayersBottomToTop(
       opacity: clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local),
       width: lane.width,
       height: lane.height,
+      role: sample.role,
+      fitMode: resolveFitMode(sample.clip.clip.effects, sample.clip.kind),
     });
   }
   return layers;

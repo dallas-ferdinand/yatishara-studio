@@ -11,6 +11,8 @@ import {
   Crown,
   Feather,
   Image as ImageIcon,
+  Lock,
+  LifeBuoy,
   Loader2,
   Pause,
   Pencil,
@@ -147,6 +149,18 @@ type FeedPost = {
   isFollowing: boolean;
   isOwner: boolean;
   score: number;
+  postKind?: "post" | "help_request" | "help_answer";
+  parentRequestPostId?: string;
+  parentRequestUsername?: string;
+  previewStartMs?: number;
+  previewEndMs?: number;
+  recordingDurationMs?: number;
+  unlockPriceCents?: number;
+  viewerUnlocked?: boolean;
+  helpLocked?: boolean;
+  viewerCanAnswer?: boolean;
+  viewerHasAnswered?: boolean;
+  salesClosed?: boolean;
 };
 
 type AuthorPost = {
@@ -192,6 +206,13 @@ type SlidePost = (AuthorPost | FeedPost) & {
   hashtags?: Array<{ tag: string; displayTag: string }>;
   keywords?: string[];
   mentions?: MentionChip[];
+  postKind?: "post" | "help_request" | "help_answer";
+  parentRequestUsername?: string;
+  unlockPriceCents?: number;
+  viewerUnlocked?: boolean;
+  helpLocked?: boolean;
+  viewerCanAnswer?: boolean;
+  viewerHasAnswered?: boolean;
 };
 
 type SlideRole = "prev" | "current" | "next" | "idle";
@@ -330,15 +351,32 @@ function roleRank(role: SlideRole): number {
   return 1;
 }
 
+function applyLocalHelpState(
+  post: SlidePost,
+  localUnlocks: Record<string, boolean>,
+): SlidePost {
+  if (post.postKind !== "help_answer") return post;
+  const local = localUnlocks[post._id];
+  if (local === true) {
+    return { ...post, helpLocked: false, viewerUnlocked: true };
+  }
+  if (local === false && !post.isOwner) {
+    return { ...post, helpLocked: true, viewerUnlocked: false };
+  }
+  return post;
+}
+
 function FeedMedia({
   post,
   active,
   preload = false,
+  onUnlock,
 }: {
   post: SlidePost;
   active: boolean;
   /** Neighbor slides (above/below/left/right) — fetch & buffer early. */
   preload?: boolean;
+  onUnlock?: () => void;
 }) {
   const [expiresUnix, setExpiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60,
@@ -374,6 +412,7 @@ function FeedMedia({
   const [itemIndex, setItemIndex] = useState(0);
   const policyMutedRef = useRef(false);
   const userPausedRef = useRef(false);
+  const [previewEnded, setPreviewEnded] = useState(false);
 
   if (postIdRef.current !== post._id) {
     postIdRef.current = post._id;
@@ -385,6 +424,15 @@ function FeedMedia({
     userPausedRef.current = false;
     lastVisualAspectRef.current = null;
   }
+
+  const helpLocked = Boolean(post.helpLocked ?? media?.helpLocked);
+  const unlockPriceCents = post.unlockPriceCents ?? media?.unlockPriceCents;
+  const prevLockedRef = useRef(helpLocked);
+  if (prevLockedRef.current && !helpLocked) {
+    lockedSrcRef.current = null;
+    loadedSrcRef.current = null;
+  }
+  prevLockedRef.current = helpLocked;
 
   const items: PostMediaItem[] =
     media?.items && media.items.length > 0
@@ -597,6 +645,15 @@ function FeedMedia({
         setCurrent(video.currentTime);
         setSeekValue(video.currentTime);
       }
+      if (
+        helpLocked &&
+        Number.isFinite(video.duration) &&
+        video.duration > 0 &&
+        video.currentTime >= video.duration - 0.12
+      ) {
+        video.pause();
+        setPreviewEnded(true);
+      }
     };
     const onMeta = () => {
       setDuration(Number.isFinite(video.duration) ? video.duration : 0);
@@ -637,7 +694,11 @@ function FeedMedia({
       video.removeEventListener("pause", onPause);
       video.removeEventListener("error", onError);
     };
-  }, [clearHideTimer, playSrc, itemKind, scheduleHide]);
+  }, [clearHideTimer, playSrc, itemKind, scheduleHide, helpLocked]);
+
+  useEffect(() => {
+    setPreviewEnded(false);
+  }, [post._id]);
 
   useEffect(() => {
     if (!active || itemKind !== "video") return undefined;
@@ -712,12 +773,16 @@ function FeedMedia({
 
   function onSeekChange(event: ChangeEvent<HTMLInputElement>) {
     const next = Number(event.target.value);
-    setSeekValue(next);
+    const video = videoRef.current;
+    const max = helpLocked && video && Number.isFinite(video.duration)
+      ? video.duration
+      : next;
+    const clamped = helpLocked ? Math.min(next, max) : next;
+    setSeekValue(clamped);
     if (!pointerSeekingRef.current) {
-      const video = videoRef.current;
-      if (video && Number.isFinite(next)) {
-        video.currentTime = next;
-        setCurrent(next);
+      if (video && Number.isFinite(clamped)) {
+        video.currentTime = clamped;
+        setCurrent(clamped);
       }
       setSeeking(false);
       if (video && !video.paused) scheduleHide();
@@ -829,7 +894,7 @@ function FeedMedia({
                 thumbUrl && !/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(thumbUrl) ? thumbUrl : undefined
               }
               playsInline
-              loop
+              loop={!helpLocked}
               autoPlay={active}
               muted={!soundEnabled || policyMuted}
               controls={false}
@@ -893,6 +958,33 @@ function FeedMedia({
           <MediaLoadWave />
         </div>
       )}
+
+      {helpLocked && (previewEnded || !playSrc) ? (
+        <div className="profile-post-help-lock">
+          <div className="profile-post-help-lock-card">
+            <span className="profile-post-help-lock-mark" aria-hidden="true">
+              <Lock strokeWidth={2} />
+            </span>
+            <p>Unlock this value</p>
+            <span className="profile-post-help-lock-meta">
+              {unlockPriceCents ? formatTtdCents(unlockPriceCents) : "Paid"} to keep watching
+            </span>
+            <button
+              type="button"
+              data-video-control
+              className="profile-post-help-lock-btn"
+              onPointerDown={stopFeedGesture}
+              onClick={(event) => {
+                stopFeedGesture(event);
+                onUnlock?.();
+              }}
+            >
+              Unlock
+              {unlockPriceCents ? ` ${formatTtdCents(unlockPriceCents)}` : ""}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {isVideo && playSrc ? (
         <div
@@ -1036,6 +1128,8 @@ function FeedCaption({
   showEdit = false,
   active = false,
   placement = "overlay",
+  postKind,
+  parentRequestUsername,
   onOpenProfile,
   onOpenDescription,
   onToggleFollow,
@@ -1066,6 +1160,8 @@ function FeedCaption({
   /** Interactive current post — kept for callers. */
   active?: boolean;
   placement?: "overlay" | "page";
+  postKind?: "post" | "help_request" | "help_answer";
+  parentRequestUsername?: string;
   onOpenProfile?: (username: string) => void;
   onToggleFollow?: () => void;
   onCaptionSaved?: (caption: string | undefined, editedAt: number) => void;
@@ -1178,16 +1274,26 @@ function FeedCaption({
             />
           </span>
           <div className="profile-post-caption-identity">
-            <button
-              type="button"
-              className="profile-post-caption-user"
-              onClick={() => onOpenProfile?.(username)}
-            >
-              {authorDisplayName || username}
-            </button>
+            <div className="profile-post-caption-name-row">
+              <button
+                type="button"
+                className="profile-post-caption-user"
+                onClick={() => onOpenProfile?.(username)}
+              >
+                {authorDisplayName || username}
+              </button>
+              {postKind === "help_request" ? (
+                <span className="profile-post-help-kind">Question</span>
+              ) : postKind === "help_answer" ? (
+                <span className="profile-post-help-kind">Value</span>
+              ) : null}
+            </div>
             {publishedAt ? (
               <time dateTime={new Date(publishedAt).toISOString()}>
                 {formatPostStamp(publishedAt, editedAt)}
+                {postKind === "help_answer" && parentRequestUsername
+                  ? ` · for @${parentRequestUsername}`
+                  : ""}
               </time>
             ) : null}
           </div>
@@ -1340,12 +1446,15 @@ function FeedActions({
   localShares,
   variant = "rail",
   boostUndoLeft = 0,
+  unlockUndoLeft = 0,
   onBoost,
   onSave,
   onShare,
   onOpenComments,
   onOpenProfile,
   onToggleFollow,
+  onAnswer,
+  onUnlock,
   feedNav,
 }: {
   post: SlidePost;
@@ -1362,12 +1471,15 @@ function FeedActions({
   active?: boolean;
   variant?: "rail" | "bar";
   boostUndoLeft?: number;
+  unlockUndoLeft?: number;
   onBoost: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onSave: () => void;
   onShare: () => void;
   onOpenComments: () => void;
   onOpenProfile?: (username: string) => void;
   onToggleFollow: () => void;
+  onAnswer?: () => void;
+  onUnlock?: () => void;
   feedNav?: {
     disabled: boolean;
     onPrev: () => void;
@@ -1378,6 +1490,13 @@ function FeedActions({
   const saved = Boolean(post.savedByViewer);
   const liked = Boolean(post.likedByViewer);
   const undoing = boostUndoLeft > 0;
+  const commentsLocked = Boolean(post.helpLocked);
+  const canAnswer = Boolean(post.viewerCanAnswer && onAnswer);
+  const showUnlock =
+    post.postKind === "help_answer" &&
+    !post.isOwner &&
+    Boolean(onUnlock) &&
+    (Boolean(post.helpLocked) || unlockUndoLeft > 0);
   const likeIcon = (
     <Crown
       aria-hidden="true"
@@ -1422,7 +1541,7 @@ function FeedActions({
         </span>
       </button>
     );
-    const contributeBtn = (
+    const contributeBtn = commentsLocked ? null : (
       <button
         type="button"
         className="profile-post-book-btn is-labeled"
@@ -1438,6 +1557,43 @@ function FeedActions({
         <span className="profile-post-book-count">{formatCount(localComments)}</span>
       </button>
     );
+    const answerBtn = canAnswer ? (
+      <button
+        type="button"
+        className="profile-post-book-btn is-labeled"
+        data-studio-sfx="sheet"
+        aria-label="Post value on this question"
+        onClick={onAnswer}
+      >
+        <LifeBuoy aria-hidden="true" strokeWidth={2} />
+        <span className="profile-post-book-label">Value</span>
+      </button>
+    ) : null;
+    const unlockBtn = showUnlock ? (
+      <button
+        type="button"
+        className={`profile-post-book-btn is-labeled${unlockUndoLeft > 0 ? " is-liked" : ""}`}
+        data-studio-sfx="like"
+        aria-label={
+          unlockUndoLeft > 0
+            ? `Undo unlock, ${unlockUndoLeft} seconds left`
+            : `Unlock ${post.unlockPriceCents ? formatTtdCents(post.unlockPriceCents) : ""}`
+        }
+        onClick={onUnlock}
+      >
+        <LifeBuoy aria-hidden="true" strokeWidth={2} />
+        <span className="profile-post-book-label">
+          {unlockUndoLeft > 0 ? "Undo" : "Unlock"}
+        </span>
+        <span className="profile-post-book-count">
+          {unlockUndoLeft > 0
+            ? unlockUndoLeft
+            : post.unlockPriceCents
+              ? formatTtdCents(post.unlockPriceCents)
+              : ""}
+        </span>
+      </button>
+    ) : null;
     const saveBtn = (
       <button
         type="button"
@@ -1478,6 +1634,8 @@ function FeedActions({
         {isMobile ? (
           <div className="profile-post-book-actions">
             {boostBtn}
+            {answerBtn}
+            {unlockBtn}
             {contributeBtn}
             {saveBtn}
             {shareBtn}
@@ -1487,6 +1645,8 @@ function FeedActions({
             <div className="profile-post-book-actions">
               {saveBtn}
               {shareBtn}
+              {answerBtn}
+              {unlockBtn}
             </div>
             {feedNav ? (
               <div className="profile-post-book-nav" aria-label="Feed navigation">
@@ -1592,6 +1752,49 @@ function FeedActions({
         <span>{undoing ? boostUndoLeft : formatCount(post.likeCount)}</span>
       </button>
       )}
+      {canAnswer ? (
+        <button
+          type="button"
+          className="profile-post-rail-btn"
+          data-studio-sfx="sheet"
+          onClick={(event) => {
+            event.stopPropagation();
+            onAnswer?.();
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          aria-label="Post value on this question"
+        >
+          <LifeBuoy aria-hidden="true" strokeWidth={2} />
+          <span>Value</span>
+        </button>
+      ) : null}
+      {showUnlock ? (
+        <button
+          type="button"
+          className={`profile-post-rail-btn${unlockUndoLeft > 0 ? " is-liked" : ""}`}
+          data-studio-sfx="like"
+          onClick={(event) => {
+            event.stopPropagation();
+            onUnlock?.();
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          aria-label={
+            unlockUndoLeft > 0
+              ? `Undo unlock, ${unlockUndoLeft} seconds left`
+              : "Unlock"
+          }
+        >
+          <LifeBuoy aria-hidden="true" strokeWidth={2} />
+          <span>
+            {unlockUndoLeft > 0
+              ? unlockUndoLeft
+              : post.unlockPriceCents
+                ? formatTtdCents(post.unlockPriceCents)
+                : "Unlock"}
+          </span>
+        </button>
+      ) : null}
+      {commentsLocked ? null : (
       <button
         type="button"
         className="profile-post-rail-btn"
@@ -1607,6 +1810,7 @@ function FeedActions({
         <Feather aria-hidden="true" fill="none" strokeWidth={2} />
         <span>{formatCount(localComments)}</span>
       </button>
+      )}
       <button
         type="button"
         className={`profile-post-rail-btn${saved ? " is-saved" : ""}`}
@@ -1652,6 +1856,7 @@ function FeedActions({
 export function ProfilePostViewer({
   postId,
   onOpenProfile,
+  onCreateAnswer,
   mode = "forYou",
   onModeChange,
   tabActive = true,
@@ -1659,6 +1864,7 @@ export function ProfilePostViewer({
   username?: string;
   postId: Id<"profilePosts"> | string;
   onOpenProfile?: (username: string) => void;
+  onCreateAnswer?: (requestPostId: string) => void;
   mode?: FeedMode;
   onModeChange?: (mode: FeedMode) => void;
   /** False while another studio tab is focused — pause playback, keep state. */
@@ -1692,6 +1898,8 @@ export function ProfilePostViewer({
   }, [feed, tabActive]);
   const boostPost = useMutation(api.profiles.boostPost);
   const undoBoost = useMutation(api.profiles.undoBoost);
+  const unlockHelpAnswer = useMutation(api.profiles.unlockHelpAnswer);
+  const undoUnlock = useMutation(api.profiles.undoUnlock);
   const toggleSave = useMutation(api.profiles.toggleSave);
   const recordShare = useMutation(api.profiles.recordShare);
   const recordPostView = useMutation(api.profiles.recordPostView);
@@ -1723,6 +1931,12 @@ export function ProfilePostViewer({
     boostId: Id<"profileBoosts">;
     undoUntil: number;
   } | null>(null);
+  const [pendingUnlock, setPendingUnlock] = useState<{
+    postId: Id<"profilePosts">;
+    unlockId: Id<"profileUnlocks">;
+    undoUntil: number;
+  } | null>(null);
+  const [localUnlocks, setLocalUnlocks] = useState<Record<string, boolean>>({});
   const [nowTick, setNowTick] = useState(() => Date.now());
   const pointerRef = useRef<{
     id: number;
@@ -1748,6 +1962,7 @@ export function ProfilePostViewer({
   const pendingSnapRef = useRef(false);
   const commitTokenRef = useRef(0);
   const boostBusyRef = useRef(false);
+  const unlockBusyRef = useRef(false);
 
   const resolvedFeed = useMemo(() => {
     return (feed ?? []).map((post) => {
@@ -2038,6 +2253,16 @@ export function ProfilePostViewer({
   }, [pendingUndo]);
 
   useEffect(() => {
+    if (!pendingUnlock) return undefined;
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      setNowTick(t);
+      if (t >= pendingUnlock.undoUntil) setPendingUnlock(null);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [pendingUnlock]);
+
+  useEffect(() => {
     if (!tabActive) return undefined;
     function onKey(event: KeyboardEvent) {
       if (animatingRef.current) return;
@@ -2299,6 +2524,53 @@ export function ProfilePostViewer({
     }
   }
 
+  async function handleUnlockClick(post: SlidePost) {
+    if (!auth.isAuthenticated) {
+      window.location.href = `/?next=${encodeURIComponent("/")}`;
+      return;
+    }
+    if (post.isOwner) return;
+    if (unlockBusyRef.current) return;
+    unlockBusyRef.current = true;
+    const undoable =
+      pendingUnlock &&
+      pendingUnlock.postId === post._id &&
+      nowTick < pendingUnlock.undoUntil;
+    if (undoable && pendingUnlock) {
+      try {
+        await undoUnlock({ unlockId: pendingUnlock.unlockId });
+        setPendingUnlock(null);
+        setLocalUnlocks((prev) => ({ ...prev, [post._id]: false }));
+        toast.success("Unlock undone");
+      } catch (error) {
+        toast.error(friendlyConvexError(error, "Could not undo unlock"));
+      } finally {
+        unlockBusyRef.current = false;
+      }
+      return;
+    }
+    if (localUnlocks[post._id] ?? post.viewerUnlocked) {
+      unlockBusyRef.current = false;
+      return;
+    }
+    try {
+      const result = await unlockHelpAnswer({ postId: post._id });
+      setLocalUnlocks((prev) => ({ ...prev, [post._id]: true }));
+      setPendingUnlock({
+        postId: post._id,
+        unlockId: result.unlockId,
+        undoUntil: result.undoUntil,
+      });
+      toast.success(
+        `Unlocked ${formatTtdCents(result.amountCents)} · 60s to undo`,
+      );
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not unlock"));
+    } finally {
+      unlockBusyRef.current = false;
+    }
+  }
+
   async function handleSave(post: SlidePost) {
     if (!auth.isAuthenticated) {
       window.location.href = `/?next=${encodeURIComponent("/")}`;
@@ -2439,7 +2711,7 @@ export function ProfilePostViewer({
     : null;
   const profileMeta = activeFeedRow ?? feedAnchor;
 
-  const activeSlidePost: SlidePost =
+  const activeSlidePost: SlidePost = applyLocalHelpState(
     activeFeedRow && activePost._id === activeFeedRow._id
       ? { ...activeFeedRow, ...activePost }
       : {
@@ -2454,24 +2726,29 @@ export function ProfilePostViewer({
             ? (localFollows[profileMeta.profileId] ?? profileMeta.isFollowing)
             : undefined,
           isOwner: profileMeta?.isOwner,
-        };
+        },
+    localUnlocks,
+  );
 
   const withProfile = (post: AuthorPost | FeedPost | null): SlidePost | null => {
     if (!post) return null;
-    if ("username" in post && post.username) return post;
-    return {
-      ...post,
-      username: authorUsername,
-      displayName: profileMeta?.displayName,
-      avatarUrl: profileMeta?.avatarUrl,
-      firstName: profileMeta?.firstName,
-      lastName: profileMeta?.lastName,
-      profileId: profileMeta?.profileId,
-      isFollowing: profileMeta
-        ? (localFollows[profileMeta.profileId] ?? profileMeta.isFollowing)
-        : undefined,
-      isOwner: profileMeta?.isOwner,
-    };
+    const base: SlidePost =
+      "username" in post && post.username
+        ? post
+        : {
+            ...post,
+            username: authorUsername,
+            displayName: profileMeta?.displayName,
+            avatarUrl: profileMeta?.avatarUrl,
+            firstName: profileMeta?.firstName,
+            lastName: profileMeta?.lastName,
+            profileId: profileMeta?.profileId,
+            isFollowing: profileMeta
+              ? (localFollows[profileMeta.profileId] ?? profileMeta.isFollowing)
+              : undefined,
+            isOwner: profileMeta?.isOwner,
+          };
+    return applyLocalHelpState(base, localUnlocks);
   };
 
   // Keep one mounted media node per post so scrolling roles (current↔next)
@@ -2555,6 +2832,11 @@ export function ProfilePostViewer({
                         post={post}
                         active={tabActive && role === "current"}
                         preload={tabActive}
+                        onUnlock={
+                          isInteractiveSlide
+                            ? () => void handleUnlockClick(post)
+                            : undefined
+                        }
                       />
                     </div>
                   );
@@ -2573,6 +2855,8 @@ export function ProfilePostViewer({
                       authorLastName={post.lastName}
                       publishedAt={post.publishedAt}
                       editedAt={localCaptions[post._id]?.editedAt ?? post.editedAt}
+                      postKind={post.postKind}
+                      parentRequestUsername={post.parentRequestUsername}
                       showFollow={Boolean(post.profileId) && !post.isOwner}
                       isFollowing={Boolean(
                         post.profileId
@@ -2687,11 +2971,24 @@ export function ProfilePostViewer({
               ? Math.max(1, Math.ceil((pendingUndo.undoUntil - nowTick) / 1000))
               : 0
           }
+          unlockUndoLeft={
+            pendingUnlock &&
+            pendingUnlock.postId === activePost._id &&
+            nowTick < pendingUnlock.undoUntil
+              ? Math.max(1, Math.ceil((pendingUnlock.undoUntil - nowTick) / 1000))
+              : 0
+          }
           onBoost={(event) =>
             void handleBoostClick(activeSlidePost, event.currentTarget)
           }
           onSave={() => void handleSave(activeSlidePost)}
           onShare={() => void handleShare(activeSlidePost)}
+          onAnswer={
+            onCreateAnswer && activeSlidePost.viewerCanAnswer
+              ? () => onCreateAnswer(activeSlidePost._id)
+              : undefined
+          }
+          onUnlock={() => void handleUnlockClick(activeSlidePost)}
           onOpenComments={() => {
             setSidePanelMode("comments");
             setCommentsOpen(true);
@@ -2711,6 +3008,7 @@ export function ProfilePostViewer({
       <ProfileCommentsPanel
         postId={activePost._id}
         open={commentsOpen && tabActive}
+        locked={Boolean(activeSlidePost.helpLocked)}
         onClose={() => {
           setCommentsOpen(false);
           setSidePanelMode("comments");

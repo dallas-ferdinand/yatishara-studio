@@ -661,7 +661,10 @@ export function FileEntryThumb({
       entry?.studioKind === "public" || entry?.systemKind === "public_assets";
     const isShared =
       entry?.studioKind === "shared" || entry?.systemKind === "shared_with_me";
-    if (isRecents || isTrash || isMessages || isPurchased || isPublic || isShared) {
+    const isScreenRecordings =
+      entry?.studioKind === "screenRecordings" ||
+      entry?.systemKind === "screen_recordings";
+    if (isRecents || isTrash || isMessages || isPurchased || isPublic || isShared || isScreenRecordings) {
       // System folders: big center glyph only — no bottom-left type chip.
       // Keep in sync with explorerEntryIcon (list view uses that).
       const systemIcon = isRecents
@@ -674,7 +677,9 @@ export function FileEntryThumb({
               ? "shoppingBag"
               : isShared
                 ? "share"
-                : "globe";
+                : isScreenRecordings
+                  ? "monitor"
+                  : "globe";
       const systemMod = isRecents
         ? "recents"
         : isTrash
@@ -685,7 +690,9 @@ export function FileEntryThumb({
               ? "purchased"
               : isShared
                 ? "shared"
-                : "public";
+                : isScreenRecordings
+                  ? "recordings"
+                  : "public";
       visual = (
         <div
           className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder desk-file-thumb-peek-wrap--system desk-file-thumb-peek-wrap--${systemMod}`}

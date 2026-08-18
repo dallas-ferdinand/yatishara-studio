@@ -18,9 +18,13 @@
 }
 
 .studio-create-library-scroll {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   /* Clear floating Create composer so tiles can scroll up past it. */
   padding: 10px 12px calc(var(--studio-composer-min-height, 96px) + 88px);
   display: flex;
@@ -103,9 +107,11 @@
   overflow: hidden;
   background: var(--studio-grid-tile-bg, color-mix(in srgb, var(--color-cursor-fg, #fff) 5%, transparent));
   padding: 0;
-  cursor: pointer;
   text-align: left;
   color: inherit;
+  /* Do not set touch-action here — pan-y + overflow:hidden eats the library scroll. */
+  cursor: default;
+  -webkit-touch-callout: none;
   /* Never inherit global press squash — it fights Preview / action hits. */
   transform: none !important;
   animation: none !important;
@@ -139,6 +145,10 @@
   height: auto;
   vertical-align: top;
   object-fit: cover;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .studio-gen-tile-img-wrap {
@@ -160,6 +170,8 @@
   width: 100%;
   height: auto;
   object-fit: cover;
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
 
 .studio-gen-tile-img-wrap:not(.is-ready) img,
@@ -189,6 +201,8 @@
   height: 100%;
   object-fit: cover;
   vertical-align: top;
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
 
 .studio-gen-tile-video video.is-under-poster {
@@ -200,7 +214,7 @@
 
 .studio-gen-tile-video.is-playing video {
   opacity: 1;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .studio-gen-tile-play {
@@ -217,6 +231,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  touch-action: manipulation;
   color: #fff;
   background: color-mix(in srgb, #000 55%, transparent);
   backdrop-filter: blur(6px);
@@ -339,6 +354,13 @@
   align-items: stretch;
   padding: 8px 8px 10px;
   box-sizing: border-box;
+  pointer-events: none;
+}
+
+.studio-gen-tile-audio .studio-orb-play,
+.studio-gen-tile-audio .studio-chat-audio-wave,
+.studio-gen-tile-audio button {
+  pointer-events: auto;
 }
 
 .studio-gen-tile-audio.is-loading {
@@ -578,6 +600,7 @@
   background: color-mix(in srgb, #000 55%, transparent);
   color: #fff;
   text-transform: capitalize;
+  pointer-events: none;
 }
 
 .studio-gen-tile-badge.is-busy {
@@ -603,6 +626,7 @@
     transparent 55%
   );
   opacity: 0;
+  /* Never capture pans — only the action buttons take clicks. */
   pointer-events: none;
   transition: opacity 120ms ease;
 }
@@ -610,12 +634,21 @@
 .studio-gen-tile.is-overlay-open .studio-gen-tile-overlay,
 .studio-gen-tile:focus-visible .studio-gen-tile-overlay {
   opacity: 1;
+  pointer-events: none;
+}
+
+.studio-gen-tile.is-overlay-open .studio-gen-tile-action,
+.studio-gen-tile:focus-visible .studio-gen-tile-action {
   pointer-events: auto;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .studio-gen-tile:hover .studio-gen-tile-overlay {
     opacity: 1;
+    pointer-events: none;
+  }
+
+  .studio-gen-tile:hover .studio-gen-tile-action {
     pointer-events: auto;
   }
 }
@@ -631,6 +664,7 @@
   background: color-mix(in srgb, #000 52%, transparent);
   color: #fff;
   cursor: pointer;
+  touch-action: manipulation;
   /* Keep hit target stable — no press-scale on overlay actions. */
   transform: none !important;
   animation: none !important;

@@ -25,6 +25,8 @@ const KIND_TO_PREF: Record<string, keyof StudioAlertPrefs> = {
   generation_failed: "generations",
   dm_message: "messages",
   followed_post: "follows",
+  help_answer_posted: "follows",
+  help_answer_unlocked: "payments",
   payment_status: "payments",
 };
 

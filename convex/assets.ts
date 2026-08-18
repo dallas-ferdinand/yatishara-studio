@@ -75,7 +75,11 @@ const assetReturn = v.object({
   sourceListingId: v.optional(v.id("assetListings")),
   purgedAt: v.optional(v.number()),
   licenseKind: v.optional(
-    v.union(v.literal("purchased_network"), v.literal("listed_network")),
+    v.union(
+      v.literal("purchased_network"),
+      v.literal("listed_network"),
+      v.literal("purchased_help_answer"),
+    ),
   ),
   reactionEmoji: v.optional(v.string()),
   deletedAt: v.optional(v.number()),
@@ -226,6 +230,14 @@ export const reserveUpload = authedMutation({
   handler: async (ctx, args) => {
     await requireFolderOwnerOrEditShare(ctx, args.folderId);
     await assertUploadsAllowed(ctx, ctx.user._id);
+    const folder = await ctx.db.get("folders", args.folderId);
+    if (
+      folder?.systemKind &&
+      folder.systemKind !== "messages" &&
+      folder.systemKind !== "screen_recordings"
+    ) {
+      throw new Error("You can’t upload into this system folder.");
+    }
     const now = Date.now();
     const assetId = await ctx.db.insert("assets", {
       ownerId: ctx.user._id,
@@ -382,8 +394,11 @@ export const update = authedMutation({
         throw new Error("Only the owner can move this file");
       }
       await requireFolderOwner(ctx, args.folderId);
-      if (asset.licenseKind === "purchased_network") {
-        throw new Error("Purchased Creative Network audio cannot be moved.");
+      if (
+        asset.licenseKind === "purchased_network" ||
+        asset.licenseKind === "purchased_help_answer"
+      ) {
+        throw new Error("Purchased files cannot be moved.");
       }
       if (asset.licenseKind === "listed_network") {
         throw new Error("Public Creative Network catalog audio cannot be moved.");
@@ -432,9 +447,12 @@ export const duplicate = authedMutation({
   returns: v.id("assets"),
   handler: async (ctx, args) => {
     const asset = await requireAssetOwner(ctx, args.assetId);
-    if (asset.licenseKind === "purchased_network") {
+    if (
+      asset.licenseKind === "purchased_network" ||
+      asset.licenseKind === "purchased_help_answer"
+    ) {
       throw new Error(
-        "Purchased Creative Network audio cannot be duplicated.",
+        "Purchased files cannot be duplicated.",
       );
     }
     if (asset.licenseKind === "listed_network") {
@@ -509,9 +527,12 @@ export const moveToTrash = authedMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const asset = await requireAssetOwner(ctx, args.assetId);
-    if (asset.licenseKind === "purchased_network") {
+    if (
+      asset.licenseKind === "purchased_network" ||
+      asset.licenseKind === "purchased_help_answer"
+    ) {
       throw new Error(
-        "Purchased Creative Network audio stays in your Purchased folder and cannot be deleted.",
+        "Purchased files stay in your Purchased folder and cannot be deleted.",
       );
     }
     if (asset.licenseKind === "listed_network") {
@@ -591,9 +612,12 @@ export const deleteForever = authedMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const asset = await requireAssetOwner(ctx, args.assetId);
-    if (asset.licenseKind === "purchased_network") {
+    if (
+      asset.licenseKind === "purchased_network" ||
+      asset.licenseKind === "purchased_help_answer"
+    ) {
       throw new Error(
-        "Purchased Creative Network audio cannot be permanently deleted.",
+        "Purchased files cannot be permanently deleted.",
       );
     }
     if (asset.licenseKind === "listed_network") {

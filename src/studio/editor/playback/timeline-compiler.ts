@@ -48,6 +48,21 @@ export type VideoSample = {
   role: "single" | "outgoing" | "incoming";
 };
 
+export type VisualSample =
+  | {
+      kind: "picture";
+      clipId: string;
+      trackIndex: number;
+      role: VideoSample["role"];
+      clip: CompiledClip;
+    }
+  | {
+      kind: "text";
+      clipId: string;
+      trackIndex: number;
+      clip: CompiledClip;
+    };
+
 export type RenderSlice = {
   timelineTime: number;
   video: VideoSample[];
@@ -55,14 +70,49 @@ export type RenderSlice = {
   audio: Array<{ clip: CompiledClip; sourceTime: number; gain: number }>;
   /** Upcoming audio beds to warm (same horizon as video preload). */
   preloadAudio: Array<{ clip: CompiledClip; sourceTime: number; gain: number }>;
-  /** @deprecated Prefer textOver / textUnder — kept as over+under concat for callers. */
+  /** Active text clips (any track order). */
   text: CompiledClip[];
-  /** Text lanes above the top active video (drawn on top of video). */
-  textOver: CompiledClip[];
-  /** Text lanes below the top active video (drawn under video). */
-  textUnder: CompiledClip[];
+  /**
+   * Bottom → top paint list. Pictures and text share trackIndex order:
+   * higher trackIndex is lower on the timeline and is drawn first.
+   */
+  visual: VisualSample[];
   preload: VideoSample[];
 };
+
+function visualRank(item: VisualSample): number {
+  if (item.kind === "picture" && item.role === "incoming") return 0;
+  if (item.kind === "picture" && item.role === "outgoing") return 1;
+  if (item.kind === "picture") return 2;
+  return 3;
+}
+
+/** Merge picture samples + text into one bottom→top stack. */
+export function visualStackBottomToTop(
+  video: VideoSample[],
+  text: CompiledClip[],
+): VisualSample[] {
+  const items: VisualSample[] = [
+    ...video.map((sample) => ({
+      kind: "picture" as const,
+      clipId: sample.clip.clipId,
+      trackIndex: sample.clip.trackIndex,
+      role: sample.role,
+      clip: sample.clip,
+    })),
+    ...text.map((clip) => ({
+      kind: "text" as const,
+      clipId: clip.clipId,
+      trackIndex: clip.trackIndex,
+      clip,
+    })),
+  ];
+  items.sort((a, b) => {
+    if (a.trackIndex !== b.trackIndex) return b.trackIndex - a.trackIndex;
+    return visualRank(a) - visualRank(b) || a.clipId.localeCompare(b.clipId);
+  });
+  return items;
+}
 
 const JOINT_TOLERANCE_SEC = 0.04;
 
@@ -92,16 +142,21 @@ export function compileTimeline(project: EditorProject): PlaybackPlan {
   const mutedTracks = new Set(
     project.tracks.filter((track) => track.muted).map((track) => track.id),
   );
+  const hiddenTracks = new Set(
+    project.tracks.filter((track) => track.hidden).map((track) => track.id),
+  );
   const trackIndexById = new Map(
     project.tracks.map((track, index) => [track.id, index]),
   );
-  const compiled = project.clips.map((clip) =>
-    compileClip(
-      clip,
-      mutedTracks.has(clip.trackId),
-      trackIndexById.get(clip.trackId) ?? 0,
-    ),
-  );
+  const compiled = project.clips
+    .filter((clip) => !hiddenTracks.has(clip.trackId))
+    .map((clip) =>
+      compileClip(
+        clip,
+        mutedTracks.has(clip.trackId),
+        trackIndexById.get(clip.trackId) ?? 0,
+      ),
+    );
   const clipsById = new Map(compiled.map((clip) => [clip.clipId, clip]));
   const video = compiled
     .filter((clip) => clip.kind === "video" || clip.kind === "image")
@@ -369,13 +424,7 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
   const activeText = plan.text
     .filter((clip) => contains(clip.timelineStart, clip.timelineEnd, time))
     .sort((a, b) => b.trackIndex - a.trackIndex);
-  // Text above the topmost active video draws over; text below draws under.
-  const topVideoIndex = video.reduce(
-    (min, sample) => Math.min(min, sample.clip.trackIndex),
-    Number.POSITIVE_INFINITY,
-  );
-  const textOver = activeText.filter((clip) => clip.trackIndex < topVideoIndex);
-  const textUnder = activeText.filter((clip) => clip.trackIndex > topVideoIndex);
+  const visual = visualStackBottomToTop(video, activeText);
   const currentIds = new Set(video.map((sample) => sample.clip.clipId));
   const preloadIds = new Set<string>();
   const preload: VideoSample[] = [];
@@ -412,9 +461,8 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
       : null,
     audio,
     preloadAudio,
-    text: [...textUnder, ...textOver],
-    textOver,
-    textUnder,
+    text: activeText,
+    visual,
     preload,
   };
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clipSourceInputArgs,
   collectExportPictureClips,
+  exportVisualStackBottomToTop,
   isStillExportSource,
   isStillImageCodec,
   pictureFadeFilterParts,
@@ -271,5 +272,43 @@ describe("segmentTransitionClip", () => {
       }),
     ).toBeNull();
     expect(segmentTransitionClip({ type: "gap", startTime: 0, duration: 1 })).toBeNull();
+  });
+});
+
+describe("exportVisualStackBottomToTop", () => {
+  it("places text between two pictures when its track sits between them", () => {
+    const top = {
+      id: "sheet",
+      assetId: "a-sheet",
+      trackId: "v-top",
+      trackIndex: 0,
+      startTime: 0,
+      trimIn: 0,
+      trimOut: 4,
+      label: "sheet",
+      kind: "image",
+    };
+    const bot = {
+      id: "movie",
+      assetId: "a-movie",
+      trackId: "v-bot",
+      trackIndex: 2,
+      startTime: 0,
+      trimIn: 0,
+      trimOut: 4,
+      label: "movie",
+      kind: "video",
+    };
+    const title = {
+      id: "title",
+      startTime: 0,
+      duration: 4,
+      trackId: "t-mid",
+      trackIndex: 1,
+      text: { text: "BETWEEN" },
+    };
+    expect(
+      exportVisualStackBottomToTop([bot, top], [title], 0, 4).map((item) => item.clip.id),
+    ).toEqual(["movie", "title", "sheet"]);
   });
 });

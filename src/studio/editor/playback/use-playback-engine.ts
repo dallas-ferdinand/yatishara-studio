@@ -7,7 +7,7 @@ import { normalizeTextTransform } from "../textLayout";
 import { clipOpacityAtLocalTime, textClipAnimationStyle } from "../editorEffects";
 import type { EditorMediaItem, EditorProject } from "../types";
 import { AudioMixer } from "./audio-mixer";
-import { CompositorClient } from "./compositor-client";
+import { CompositorClient, type CompositorVisualItem } from "./compositor-client";
 import {
   detectDecoderCapabilities,
   MediaDecoderClient,
@@ -44,8 +44,17 @@ function layerSourceSizes(
     const assetId = sample?.clip.assetId;
     if (!assetId || seen.has(assetId)) continue;
     const media = mediaById.get(assetId);
-    const width = layer.width || media?.width || 0;
-    const height = layer.height || media?.height || 0;
+    const isImage = media?.kind === "image";
+    const width =
+      layer.width ||
+      (!isImage ? media?.width : undefined) ||
+      (layer.frame ? layer.frame.displayWidth : 0) ||
+      0;
+    const height =
+      layer.height ||
+      (!isImage ? media?.height : undefined) ||
+      (layer.frame ? layer.frame.displayHeight : 0) ||
+      0;
     if (width < 1 || height < 1) continue;
     seen.add(assetId);
     out.push({ assetId, width, height });
@@ -98,7 +107,7 @@ function warmPlayheadVideos(
 }
 
 function mapTextItems(
-  items: RenderSlice["textOver"],
+  items: RenderSlice["text"],
   timelineTime: number,
 ): Array<{
   text: string;
@@ -173,6 +182,41 @@ function mapTextItems(
     });
 }
 
+function compositorVisual(
+  slice: RenderSlice,
+  pictures: PictureLayer[],
+  texts: ReturnType<typeof mapTextItems>,
+): CompositorVisualItem[] {
+  const picById = new Map(pictures.map((layer) => [layer.clipId, layer]));
+  const textById = new Map(texts.map((item) => [item.clipId, item]));
+  const visual: CompositorVisualItem[] = [];
+  for (const item of slice.visual) {
+    if (item.kind === "picture") {
+      const layer = picById.get(item.clipId);
+      if (!layer) continue;
+      visual.push({
+        type: "picture",
+        layer: {
+          clipId: layer.clipId,
+          frame: layer.frame,
+          textureKey: layer.textureKey,
+          transform: layer.transform,
+          opacity: layer.opacity,
+          width: layer.width,
+          height: layer.height,
+          role: layer.role ?? item.role,
+          fitMode: layer.fitMode,
+        },
+      });
+      continue;
+    }
+    const text = textById.get(item.clipId);
+    if (!text) continue;
+    visual.push({ type: "text", item: text });
+  }
+  return visual;
+}
+
 type EngineRuntime = {
   plan: PlaybackPlan;
   clock: TransportClock;
@@ -242,6 +286,16 @@ class EngineConsumer implements FrameConsumer {
 
   private publishLayerSizes(layers: PictureLayer[], slice: RenderSlice): void {
     const all = layerSourceSizes(layers, slice, this.mediaRef.current);
+    const seen = new Set(all.map((item) => item.assetId));
+    for (const [cacheKey, frame] of this.imageFrames) {
+      const assetId = cacheKey.split("@")[0];
+      if (!assetId || seen.has(assetId)) continue;
+      const width = frame.displayWidth;
+      const height = frame.displayHeight;
+      if (width < 2 || height < 2) continue;
+      seen.add(assetId);
+      all.push({ assetId, width, height });
+    }
     this.onSourceSize(all[all.length - 1] ?? null, all);
   }
 
@@ -341,15 +395,14 @@ class EngineConsumer implements FrameConsumer {
 
     this.publishLayerSizes(layers, slice);
 
-    const textsUnder = mapTextItems(slice.textUnder, slice.timelineTime);
-    const textsOver = mapTextItems(slice.textOver, slice.timelineTime);
+    const texts = mapTextItems(slice.text, slice.timelineTime);
+    const visual = compositorVisual(slice, layers, texts);
 
     const painted = this.compositor.paint({
       layers,
+      visual,
       transition: previewTransitionWhilePlaying(slice.transition?.type, true),
       progress: slice.transition?.progress,
-      textsUnder,
-      textsOver,
     });
     if (painted) this.stills.markSent(sentStills);
 
@@ -424,11 +477,15 @@ class EngineConsumer implements FrameConsumer {
             sample,
           };
         } catch {
+          const cacheKey = `${assetId}@${previewImageMaxEdge(this.previewLoadQualityRef.current)}:${url}`;
+          const cached = this.imageFrames.get(cacheKey);
           return {
             assetId,
             sourceTime: sample.sourceTime,
             generation,
             textureKey: `image:${assetId}`,
+            width: cached?.displayWidth,
+            height: cached?.displayHeight,
             sample,
           };
         }
@@ -459,7 +516,7 @@ class EngineConsumer implements FrameConsumer {
     const decoded = await Promise.all(slice.video.map((sample) => decodeSample(sample)));
     void audioReady;
     const valid = decoded.filter((item): item is NonNullable<typeof item> => item != null);
-    const hasText = slice.textOver.length > 0 || slice.textUnder.length > 0;
+    const hasText = slice.text.length > 0;
     if (valid.length === 0 && slice.video.length > 0 && !hasText) {
       this.audio.sync(slice, generation, this.mediaRef.current, false);
       return false;
@@ -513,24 +570,21 @@ class EngineConsumer implements FrameConsumer {
       return;
     }
     this.prepared = null;
-    const textsUnder = mapTextItems(slice.textUnder, slice.timelineTime);
-    const textsOver = mapTextItems(slice.textOver, slice.timelineTime);
-    const families = [
-      ...textsUnder.map((item) => item.fontFamily),
-      ...textsOver.map((item) => item.fontFamily),
-    ].filter((family) => family && !isLegacySystemFont(family));
+    const texts = mapTextItems(slice.text, slice.timelineTime);
+    const families = texts
+      .map((item) => item.fontFamily)
+      .filter((family) => family && !isLegacySystemFont(family));
     // Document fonts are enough — Canvas2D preview paints on the main thread.
     await Promise.all(families.map((family) => loadGoogleFont(family)));
     await this.compositor.ensureFonts(families);
     await this.compositor.render({
       layers: prepared.layers,
+      visual: compositorVisual(slice, prepared.layers, texts),
       transition: previewTransitionWhilePlaying(
         slice.transition?.type,
         this.playingRef.current,
       ),
       progress: slice.transition?.progress,
-      textsUnder,
-      textsOver,
     });
     this.stills.markSent(
       prepared.layers
@@ -614,6 +668,13 @@ class EngineConsumer implements FrameConsumer {
         bitmap.close();
         this.imageFrames.set(cacheKey, frame);
         this.imageLoads.delete(cacheKey);
+        const width = frame.displayWidth;
+        const height = frame.displayHeight;
+        if (width > 1 && height > 1) {
+          this.onSourceSize({ assetId, width, height }, [
+            { assetId, width, height },
+          ]);
+        }
         return frame;
       })
       .catch((error) => {
@@ -648,10 +709,7 @@ export type PlaybackEngineState = {
   } | null;
   /** Decoded contain-size per asset so stacked clips get their own selection box. */
   sourceSizes: Readonly<Record<string, { width: number; height: number }>>;
-  previewTransform: (
-    transform: ClipTransform,
-    target?: "a" | "b",
-  ) => void;
+  previewTransform: (transform: ClipTransform, clipId: string) => void;
   previewTextTransform: (clipId: string, transform: ClipTransform) => void;
   setMasterVolume: (volume: number) => void;
   metrics: () => SchedulerMetrics | null;
@@ -1255,16 +1313,14 @@ export function usePlaybackEngine(args: {
     supported: true,
     sourceSize,
     sourceSizes,
-    previewTransform: (transform, target = "a") => {
-      runtimeRef.current?.compositor.updateTransform(
-        [
-          transform.scale,
-          transform.x,
-          transform.y,
-          transform.rotation,
-        ],
-        target,
-      );
+    previewTransform: (transform, clipId) => {
+      if (!clipId) return;
+      runtimeRef.current?.compositor.updateTransform(clipId, [
+        transform.scale,
+        transform.x,
+        transform.y,
+        transform.rotation,
+      ]);
     },
     previewTextTransform: (clipId: string, transform: ClipTransform) => {
       const compositor = runtimeRef.current?.compositor;

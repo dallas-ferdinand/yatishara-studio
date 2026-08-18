@@ -1390,11 +1390,13 @@ function entryFileTypeLabel(entry) {
     entry.studioKind === "purchased" ||
     entry.studioKind === "public" ||
     entry.studioKind === "shared" ||
+    entry.studioKind === "screenRecordings" ||
     entry.studioKind === "trash" ||
     entry.systemKind === "messages" ||
     entry.systemKind === "purchased_assets" ||
     entry.systemKind === "public_assets" ||
-    entry.systemKind === "shared_with_me"
+    entry.systemKind === "shared_with_me" ||
+    entry.systemKind === "screen_recordings"
   ) {
     return "Folder";
   }
@@ -1497,11 +1499,13 @@ function renderEntryRows({
       e.studioKind === "purchased" ||
       e.studioKind === "public" ||
       e.studioKind === "shared" ||
+      e.studioKind === "screenRecordings" ||
       e.studioKind === "recents" ||
       e.systemKind === "messages" ||
       e.systemKind === "purchased_assets" ||
       e.systemKind === "public_assets" ||
       e.systemKind === "shared_with_me" ||
+      e.systemKind === "screen_recordings" ||
       e.isSharedLive
     ) {
       return false;

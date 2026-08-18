@@ -13,6 +13,7 @@ import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { putObject, signBunnyCdnUrl } from "./lib/bunny";
 import { ffmpegTransitionFor } from "./lib/editorEffectContract";
+import { ffmpegFitAspect, resolveFitMode } from "./lib/clipFit";
 import {
   collectExportAudioBeds,
   collectExportVideoSoundtracks,
@@ -26,6 +27,7 @@ import {
 import {
   clipSourceInputArgs,
   collectExportPictureClips,
+  exportVisualStackBottomToTop,
   isStillExportSource,
   pictureClipDuration,
   pictureFadeFilterParts,
@@ -93,6 +95,7 @@ type ClipEffects = {
   y?: number;
   rotation?: number;
   opacity?: number;
+  fitMode?: "contain" | "cover";
 };
 
 type TextClipContent = {
@@ -140,7 +143,12 @@ type EditorClip = {
 };
 
 type EditorProject = {
-  tracks: Array<{ id: string; kind: "video" | "audio" | "text"; muted?: boolean }>;
+  tracks: Array<{
+    id: string;
+    kind: "video" | "audio" | "text";
+    muted?: boolean;
+    hidden?: boolean;
+  }>;
   clips: EditorClip[];
   frameRatio?: "16:9" | "9:16" | "1:1";
 };
@@ -245,7 +253,7 @@ function normalizeVf(
   width: number,
   height: number,
   effects?: ClipEffects,
-  opts?: { overlay?: boolean },
+  opts?: { overlay?: boolean; kind?: string },
 ): string {
   // Draft effects.speed is process-on-demand (bake → new asset). Do not setpts here.
   const overlay = Boolean(opts?.overlay);
@@ -263,8 +271,9 @@ function normalizeVf(
   const scaledH = Math.max(2, Math.round(height * safeScale));
   const panPxX = Math.round(panX * width);
   const panPxY = Math.round(panY * height);
+  const fitMode = resolveFitMode(effects, opts?.kind);
   const filters = [
-    `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease`,
+    `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=${ffmpegFitAspect(fitMode)}`,
     "scale=trunc(iw/2)*2:trunc(ih/2)*2",
   ];
   if (Math.abs(rotation) > 0.05) {
@@ -496,7 +505,9 @@ async function renderClipSegment(args: {
       clipDurationSec,
     },
   );
-  const baseVf = normalizeVf(args.width, args.height, args.clip.effects);
+  const baseVf = normalizeVf(args.width, args.height, args.clip.effects, {
+    kind: args.clip.kind,
+  });
   const videoFilter = effects === "null" ? baseVf : `${baseVf},${effects}`;
   const encodeArgs = [
     "-t",
@@ -701,24 +712,19 @@ async function renderStackedPictureSegment(args: {
   const ownsAudio = (clip: ExportPictureClip) =>
     clip.trackId === args.audioTrackId && !args.mutedTrackIds.has(clip.trackId);
 
-  if (layers.length === 1) {
-    const only = layers[0]!;
-    await renderClipSegment({
-      sourcePath: only.sourcePath,
-      dest,
-      clip: only.clip as unknown as EditorClip,
-      duration,
-      textClips: args.textClips,
-      width,
-      height,
-      fontCacheDir: args.fontCacheDir,
-      muteAudio: !ownsAudio(only.clip),
-      segmentStartSec: args.startTime,
-      localStartSec: Math.max(0, args.startTime - only.clip.startTime),
-      clipDurationSec: pictureClipDuration(only.clip),
-    });
-    return;
-  }
+  const visual = exportVisualStackBottomToTop(
+    layers.map((layer) => layer.clip),
+    args.textClips,
+    args.startTime,
+    duration,
+  );
+  const pictureIndexById = new Map(
+    layers.map((layer, index) => [layer.clip.id, index] as const),
+  );
+  const visualIndexByPictureId = new Map<string, number>();
+  visual.forEach((item, index) => {
+    if (item.kind === "picture") visualIndexByPictureId.set(item.clip.id, index);
+  });
 
   const inputArgs: string[] = [];
   const graphParts: string[] = [];
@@ -749,9 +755,13 @@ async function renderStackedPictureSegment(args: {
       }),
     );
 
-    // Index 0 is the bottom lane — it owns the black frame; the rest keep alpha.
-    const overlay = index > 0;
-    const chain = [normalizeVf(width, height, layer.clip.effects, { overlay })];
+    const overlay = (visualIndexByPictureId.get(layer.clip.id) ?? index) > 0;
+    const chain = [
+      normalizeVf(width, height, layer.clip.effects, {
+        overlay,
+        kind: layer.clip.kind,
+      }),
+    ];
     chain.push(
       ...pictureFadeFilterParts({
         effects: layer.clip.effects,
@@ -778,25 +788,62 @@ async function renderStackedPictureSegment(args: {
     }
   }
 
-  let cur = "v0";
-  for (let i = 1; i < layers.length; i += 1) {
-    const next = `vx${i}`;
-    graphParts.push(`[${cur}][v${i}]overlay=0:0:format=auto[${next}]`);
+  const visualPaint = visual;
+  let cur: string | null = null;
+  let step = 0;
+  const nextLabel = () => {
+    const label = `vx${step}`;
+    step += 1;
+    return label;
+  };
+  if (visualPaint.length === 0 && layers.length > 0) {
+    cur = "v0";
+  }
+  for (const item of visualPaint) {
+    if (item.kind === "picture") {
+      const index = pictureIndexById.get(item.clip.id);
+      if (index == null) continue;
+      const src = `v${index}`;
+      if (!cur) {
+        cur = src;
+        continue;
+      }
+      const next = nextLabel();
+      graphParts.push(`[${cur}][${src}]overlay=0:0:format=auto[${next}]`);
+      cur = next;
+      continue;
+    }
+    const fontfile = await resolveExportFontFile(item.clip.text, args.fontCacheDir);
+    const textFileName = join(
+      args.fontCacheDir,
+      `overlay-${item.clip.id || "text"}-${args.startTime.toFixed(3)}.txt`,
+    );
+    const built = buildTextOverlayFilter({
+      clip: item.clip,
+      segmentStart: args.startTime,
+      segmentDuration: duration,
+      fontfile,
+      textFileName,
+    });
+    if (!built) continue;
+    await writeFile(textFileName, built.textFileBody, "utf8");
+    if (!cur) {
+      graphParts.push(
+        `color=c=black:s=${width}x${height}:d=${duration}:r=${EXPORT_FPS},format=yuv420p[vbase]`,
+      );
+      cur = "vbase";
+    }
+    const next = nextLabel();
+    graphParts.push(`[${cur}]${built.filter}[${next}]`);
     cur = next;
   }
-  graphParts.push(`[${cur}]format=yuv420p,setsar=1[vout]`);
-
-  const textParts = await buildTextOverlayParts(
-    args.textClips,
-    args.startTime,
-    duration,
-    args.fontCacheDir,
-  );
-  let videoMap = "vout";
-  if (textParts.length) {
-    graphParts.push(`[vout]${textParts.join(",")}[vtext]`);
-    videoMap = "vtext";
+  if (!cur) {
+    graphParts.push(
+      `color=c=black:s=${width}x${height}:d=${duration}:r=${EXPORT_FPS},format=yuv420p[vbase]`,
+    );
+    cur = "vbase";
   }
+  graphParts.push(`[${cur}]format=yuv420p,setsar=1[vout]`);
   if (audioChain) graphParts.push(audioChain);
 
   await runFfmpeg([
@@ -809,7 +856,7 @@ async function renderStackedPictureSegment(args: {
     "-filter_complex",
     graphParts.join(";"),
     "-map",
-    `[${videoMap}]`,
+    "[vout]",
     "-map",
     audioChain ? "[aout]" : `${layers.length}:a`,
     "-t",
@@ -1256,11 +1303,22 @@ async function runExportVideo(
   }
 
   const pictureClips = collectExportPictureClips(project);
+  const hiddenTrackIds = new Set(
+    project.tracks.filter((track) => track.hidden).map((track) => track.id),
+  );
+  const trackIndexById = new Map(
+    project.tracks.map((track, index) => [track.id, index] as const),
+  );
 
   const textClips =
     exportKind === "video"
-      ? collectExportTextClips(project.clips, (clip) =>
-          Math.max(0.05, Number(clip.trimOut ?? 3) - Number(clip.trimIn ?? 0) || 3),
+      ? collectExportTextClips(
+          project.clips.filter(
+            (clip) => !clip.trackId || !hiddenTrackIds.has(clip.trackId),
+          ),
+          (clip) =>
+            Math.max(0.05, Number(clip.trimOut ?? 3) - Number(clip.trimIn ?? 0) || 3),
+          trackIndexById,
         )
       : [];
   // The top video lane with picture keeps its soundtrack inside the segments, so a
@@ -1309,7 +1367,9 @@ async function runExportVideo(
       const segmentPath = join(tempDir, `segment-${index}.mp4`);
       if (segment.type === "gap") {
         const textParts = await buildTextOverlayParts(
-          textClips,
+          [...textClips].sort(
+            (a, b) => (b.trackIndex ?? 0) - (a.trackIndex ?? 0),
+          ),
           segment.startTime,
           segment.duration,
           fontCacheDir,

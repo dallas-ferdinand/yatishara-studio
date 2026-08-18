@@ -22,6 +22,8 @@ const notificationKind = v.union(
   v.literal("payment_status"),
   v.literal("dm_message"),
   v.literal("followed_post"),
+  v.literal("help_answer_posted"),
+  v.literal("help_answer_unlocked"),
 );
 
 const notificationReturn = v.object({
@@ -208,7 +210,12 @@ async function resolvePushChrome(
           ? conversation.userHighId
           : conversation.userLowId;
     }
-  } else if (kind === "followed_post" && notification.postId) {
+  } else if (
+    (kind === "followed_post" ||
+      kind === "help_answer_posted" ||
+      kind === "help_answer_unlocked") &&
+    notification.postId
+  ) {
     const post = await ctx.db.get("profilePosts", notification.postId);
     if (post) {
       actorUserId = post.ownerId;

@@ -67,6 +67,7 @@ import {
   CLIP_TRANSFORM_LIMITS,
   clampClipOpacity,
   normalizeClipTransform,
+  resolveFitMode,
 } from "./clipTransform";
 import { normalizeTextTransform } from "./textLayout";
 import {
@@ -1258,6 +1259,7 @@ function TransformPanel({ clip, onUpdateClip }) {
   const [opacityOpen, setOpacityOpen] = useState(true);
   const effects = clip.effects ?? {};
   const transform = normalizeClipTransform(effects);
+  const fitMode = resolveFitMode(effects, clip.kind);
   const opacity = clampClipOpacity(effects.opacity);
   const patchTransform = (next) => {
     onUpdateClip(clip.id, {
@@ -1267,6 +1269,14 @@ function TransformPanel({ clip, onUpdateClip }) {
         x: Number(next.x.toFixed(3)),
         y: Number(next.y.toFixed(3)),
         rotation: Number(next.rotation.toFixed(1)),
+      },
+    });
+  };
+  const patchFitMode = (next) => {
+    onUpdateClip(clip.id, {
+      effects: {
+        ...effects,
+        fitMode: next,
       },
     });
   };
@@ -1286,16 +1296,43 @@ function TransformPanel({ clip, onUpdateClip }) {
           label="Transform"
           open={transformOpen}
           onToggle={() => setTransformOpen((v) => !v)}
-          onReset={() => patchTransform({ scale: 1, x: 0, y: 0, rotation: 0 })}
+          onReset={() => {
+            onUpdateClip(clip.id, {
+              effects: {
+                ...effects,
+                scale: 1,
+                x: 0,
+                y: 0,
+                rotation: 0,
+                fitMode: clip.kind === "image" ? "contain" : "cover",
+              },
+            });
+          }}
           summary={
             <div className="studio-editor-style-card-toggle-row">
               <span>Transform</span>
               <span className="studio-editor-style-card-meta">
-                {Math.round(transform.scale * 100)}% · {Math.round(transform.rotation)}°
+                {fitMode === "contain" ? "Fit" : "Fill"} · {Math.round(transform.scale * 100)}%
               </span>
             </div>
           }
         >
+          <div className="studio-editor-chip-row" role="group" aria-label="Fit">
+            <button
+              type="button"
+              className={`studio-editor-chip${fitMode === "contain" ? " is-active" : ""}`}
+              onClick={() => patchFitMode("contain")}
+            >
+              Fit
+            </button>
+            <button
+              type="button"
+              className={`studio-editor-chip${fitMode === "cover" ? " is-active" : ""}`}
+              onClick={() => patchFitMode("cover")}
+            >
+              Fill
+            </button>
+          </div>
           <SliderRow
             label="Size"
             min={CLIP_TRANSFORM_LIMITS.scaleMin}

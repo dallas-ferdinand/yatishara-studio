@@ -69,9 +69,11 @@ export function recordFolderVisit(
     studioKind === "messages" ||
     studioKind === "purchased" ||
     studioKind === "public" ||
+    studioKind === "screenRecordings" ||
     systemKind === "messages" ||
     systemKind === "purchased_assets" ||
-    systemKind === "public_assets"
+    systemKind === "public_assets" ||
+    systemKind === "screen_recordings"
   ) {
     return loadFolderAccess(userId);
   }

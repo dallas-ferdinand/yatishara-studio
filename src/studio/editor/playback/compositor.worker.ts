@@ -221,17 +221,17 @@ uniform vec4 u_background;
 in vec2 v_uv;
 out vec4 outColor;
 
-vec2 containedSize(vec2 sourceSize) {
+vec2 coveredSize(vec2 sourceSize) {
   float sourceAspect = sourceSize.x / max(1.0, sourceSize.y);
   float canvasAspect = u_canvasSize.x / max(1.0, u_canvasSize.y);
   if (sourceAspect > canvasAspect) {
-    return vec2(1.0, canvasAspect / sourceAspect);
+    return vec2(sourceAspect / canvasAspect, 1.0);
   }
-  return vec2(sourceAspect / canvasAspect, 1.0);
+  return vec2(1.0, canvasAspect / sourceAspect);
 }
 
 vec4 sampleFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform, float opacity) {
-  vec2 objectSize = containedSize(sourceSize) * max(transform.x, 0.0);
+  vec2 objectSize = coveredSize(sourceSize) * max(transform.x, 0.0);
   if (objectSize.x < 1e-5 || objectSize.y < 1e-5) {
     return vec4(0.0);
   }
@@ -891,7 +891,7 @@ function copyCanvasToB(): void {
   lastBSize = [canvas.width, canvas.height];
 }
 
-function containedObjectSize(
+function coveredObjectSize(
   sourceW: number,
   sourceH: number,
   canvasW: number,
@@ -899,8 +899,8 @@ function containedObjectSize(
 ): [number, number] {
   const sourceAspect = sourceW / Math.max(1, sourceH);
   const canvasAspect = canvasW / Math.max(1, canvasH);
-  if (sourceAspect > canvasAspect) return [1, canvasAspect / sourceAspect];
-  return [sourceAspect / canvasAspect, 1];
+  if (sourceAspect > canvasAspect) return [sourceAspect / canvasAspect, 1];
+  return [1, canvasAspect / sourceAspect];
 }
 
 function readRgba(x: number, y: number): [number, number, number, number] {
@@ -1194,7 +1194,7 @@ function render(message: RenderMessage): void {
         lastBSize,
         layerSizes: layers.map((layer) => [layer.width ?? null, layer.height ?? null]),
         contain: layers.map((layer) =>
-          containedObjectSize(layer.width ?? 1, layer.height ?? 1, cw, ch),
+          coveredObjectSize(layer.width ?? 1, layer.height ?? 1, cw, ch),
         ),
         opacities: layers.map((layer) => layer.opacity ?? 1),
         transforms: layers.map((layer) => layer.transform ?? null),

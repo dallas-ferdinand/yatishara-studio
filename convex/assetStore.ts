@@ -100,8 +100,11 @@ async function resolveListableAudio(
   if (!asset.bunnyPath) {
     throw new Error("Asset has no media file.");
   }
-  if (asset.licenseKind === "purchased_network") {
-    throw new Error("Purchased Network audio cannot be re-listed.");
+  if (
+    asset.licenseKind === "purchased_network" ||
+    asset.licenseKind === "purchased_help_answer"
+  ) {
+    throw new Error("Purchased files cannot be re-listed.");
   }
   // listed_network (Public catalog copy) may be re-listed / refreshed.
 

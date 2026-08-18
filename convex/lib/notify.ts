@@ -12,7 +12,9 @@ export type NotificationKind =
   | "generation_failed"
   | "payment_status"
   | "dm_message"
-  | "followed_post";
+  | "followed_post"
+  | "help_answer_posted"
+  | "help_answer_unlocked";
 
 /** Absolute Studio origin for OS notification icons (must be https). */
 export const STUDIO_PUBLIC_ORIGIN =
@@ -103,7 +105,12 @@ export function notificationDeepLink(args: {
   if (args.kind === "dm_message" && args.conversationId) {
     return `/?open=messages&c=${args.conversationId}`;
   }
-  if (args.kind === "followed_post" && args.postId) {
+  if (
+    (args.kind === "followed_post" ||
+      args.kind === "help_answer_posted" ||
+      args.kind === "help_answer_unlocked") &&
+    args.postId
+  ) {
     return `/?open=post&p=${args.postId}`;
   }
   if (
@@ -130,7 +137,12 @@ export function notificationPushTag(args: {
   if (args.kind === "dm_message" && args.conversationId) {
     return `dm:${args.conversationId}`;
   }
-  if (args.kind === "followed_post" && args.postId) {
+  if (
+    (args.kind === "followed_post" ||
+      args.kind === "help_answer_posted" ||
+      args.kind === "help_answer_unlocked") &&
+    args.postId
+  ) {
     return `post:${args.postId}`;
   }
   if (

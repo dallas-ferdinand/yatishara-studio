@@ -32,6 +32,9 @@ export type ExportTextClip = {
   id: string;
   startTime: number;
   duration: number;
+  trackId?: string;
+  /** Index in project.tracks — lower = higher on the timeline = drawn last. */
+  trackIndex?: number;
   effects?: { scale?: number; x?: number; y?: number; rotation?: number };
   text?: ExportTextContent;
 };
@@ -123,6 +126,7 @@ export function collectExportTextClips(
   clips: Array<{
     id: string;
     kind?: string;
+    trackId?: string;
     startTime: number;
     trimIn?: number;
     trimOut?: number;
@@ -131,6 +135,7 @@ export function collectExportTextClips(
   }>,
   durationOf = (clip: { trimIn?: number; trimOut?: number }) =>
     Math.max(0.05, Number(clip.trimOut ?? 3) - Number(clip.trimIn ?? 0) || 3),
+  trackIndexById?: ReadonlyMap<string, number>,
 ): ExportTextClip[] {
   const out: ExportTextClip[] = [];
   for (const clip of clips) {
@@ -141,6 +146,10 @@ export function collectExportTextClips(
       id: clip.id,
       startTime: Number(clip.startTime) || 0,
       duration: durationOf(clip),
+      trackId: clip.trackId,
+      trackIndex: clip.trackId
+        ? trackIndexById?.get(clip.trackId) ?? 0
+        : 0,
       effects: clip.effects,
       text: clip.text,
     });

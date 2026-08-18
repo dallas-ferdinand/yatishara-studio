@@ -6,6 +6,7 @@ import {
   Globe,
   Home,
   MessageCircle,
+  Monitor,
   Pin,
   ShoppingBag,
   Trash2,
@@ -62,7 +63,14 @@ type StudioFilesNavPaneProps = {
   onUnpinPath: (path: string) => void;
 };
 
-const SYSTEM_ORDER = ["recents", "trash", "messages", "purchased", "public"] as const;
+const SYSTEM_ORDER = [
+  "recents",
+  "trash",
+  "messages",
+  "purchased",
+  "public",
+  "screenRecordings",
+] as const;
 
 function systemIcon(kind: string | undefined): ReactNode {
   switch (kind) {
@@ -76,6 +84,8 @@ function systemIcon(kind: string | undefined): ReactNode {
       return <ShoppingBag aria-hidden="true" />;
     case "public":
       return <Globe aria-hidden="true" />;
+    case "screenRecordings":
+      return <Monitor aria-hidden="true" />;
     default:
       return <Folder aria-hidden="true" />;
   }
@@ -87,7 +97,8 @@ function isSystemFolder(entry: StudioFilesNavEntry): boolean {
     entry.studioKind === "trash" ||
     entry.studioKind === "messages" ||
     entry.studioKind === "purchased" ||
-    entry.studioKind === "public"
+    entry.studioKind === "public" ||
+    entry.studioKind === "screenRecordings"
   );
 }
 

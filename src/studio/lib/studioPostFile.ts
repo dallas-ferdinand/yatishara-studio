@@ -9,6 +9,11 @@ export type PostDraftBody = {
   voiceAssetId?: string;
   voiceDurationSec?: number;
   publishedPostId?: string;
+  postKind?: "post" | "help_request" | "help_answer";
+  answerToPostId?: string;
+  previewStartMs?: number;
+  previewEndMs?: number;
+  recordingDurationMs?: number;
 };
 
 export function stripPostExt(name: string): string {
@@ -40,6 +45,13 @@ export function serializePostDraft(partial: Partial<PostDraftBody> & { assetIds?
     body.voiceDurationSec = partial.voiceDurationSec;
   }
   if (partial.publishedPostId) body.publishedPostId = partial.publishedPostId;
+  if (partial.postKind) body.postKind = partial.postKind;
+  if (partial.answerToPostId) body.answerToPostId = partial.answerToPostId;
+  if (partial.previewStartMs != null) body.previewStartMs = partial.previewStartMs;
+  if (partial.previewEndMs != null) body.previewEndMs = partial.previewEndMs;
+  if (partial.recordingDurationMs != null) {
+    body.recordingDurationMs = partial.recordingDurationMs;
+  }
   return JSON.stringify(body);
 }
 
@@ -64,6 +76,22 @@ export function parsePostDraft(raw: string | null | undefined): PostDraftBody {
         : {}),
       ...(typeof parsed.publishedPostId === "string" && parsed.publishedPostId
         ? { publishedPostId: parsed.publishedPostId }
+        : {}),
+      ...(parsed.postKind === "help_request" || parsed.postKind === "help_answer"
+        ? { postKind: parsed.postKind }
+        : {}),
+      ...(typeof parsed.answerToPostId === "string" && parsed.answerToPostId
+        ? { answerToPostId: parsed.answerToPostId }
+        : {}),
+      ...(typeof parsed.previewStartMs === "number" && Number.isFinite(parsed.previewStartMs)
+        ? { previewStartMs: parsed.previewStartMs }
+        : {}),
+      ...(typeof parsed.previewEndMs === "number" && Number.isFinite(parsed.previewEndMs)
+        ? { previewEndMs: parsed.previewEndMs }
+        : {}),
+      ...(typeof parsed.recordingDurationMs === "number" &&
+      Number.isFinite(parsed.recordingDurationMs)
+        ? { recordingDurationMs: parsed.recordingDurationMs }
         : {}),
     };
   } catch {

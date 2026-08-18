@@ -4,6 +4,7 @@ import {
   type CompositorLayer,
   type CompositorPaintArgs,
   type CompositorTextItem,
+  type CompositorVisualItem,
 } from "./compositor-2d";
 
 function closeLayerFrames(layers: CompositorLayer[] | undefined): void {
@@ -14,6 +15,18 @@ function closeLayerFrames(layers: CompositorLayer[] | undefined): void {
       /* already closed */
     }
   }
+}
+
+function closeVisualFrames(visual: CompositorVisualItem[] | undefined): void {
+  if (!visual) return;
+  closeLayerFrames(
+    visual
+      .filter(
+        (item): item is { type: "picture"; layer: CompositorLayer } =>
+          item.type === "picture",
+      )
+      .map((item) => item.layer),
+  );
 }
 
 export type CompositorFrame = {
@@ -38,6 +51,7 @@ export class CompositorClient {
       args.frameB?.close();
       closeLayerFrames(args.stack);
       closeLayerFrames(args.layers);
+      closeVisualFrames(args.visual);
       return;
     }
     this.compositor.paint(args);
@@ -53,6 +67,7 @@ export class CompositorClient {
       args.frameB?.close();
       closeLayerFrames(args.stack);
       closeLayerFrames(args.layers);
+      closeVisualFrames(args.visual);
       return false;
     }
     if (this.paintBusy) {
@@ -60,6 +75,7 @@ export class CompositorClient {
       args.frameB?.close();
       closeLayerFrames(args.stack);
       closeLayerFrames(args.layers);
+      closeVisualFrames(args.visual);
       return false;
     }
     this.paintBusy = true;
@@ -72,10 +88,10 @@ export class CompositorClient {
   }
 
   updateTransform(
+    clipId: string,
     transform: [number, number, number, number],
-    target: "a" | "b" = "a",
   ): void {
-    if (!this.disposed) this.compositor.updateTransform(transform, target);
+    if (!this.disposed) this.compositor.updateTransform(clipId, transform);
   }
 
   updateTextTransform(
@@ -100,4 +116,4 @@ export class CompositorClient {
   }
 }
 
-export type { CompositorLayer, CompositorPaintArgs, CompositorTextItem, TransitionType };
+export type { CompositorLayer, CompositorPaintArgs, CompositorTextItem, CompositorVisualItem, TransitionType };

@@ -1605,11 +1605,11 @@
 }
 
 .studio-editor-text-layer.is-under {
-  z-index: 5;
+  z-index: 3;
 }
 
 .studio-editor-text-layer.is-over {
-  z-index: 15;
+  z-index: 3;
 }
 
 .studio-editor-text-hit {
@@ -2120,6 +2120,8 @@
   max-width: 100%;
   max-height: 100%;
   transform-origin: center;
+  touch-action: none;
+  user-select: none;
 }
 
 .studio-editor-preview-video {
@@ -2160,17 +2162,47 @@
 }
 
 .studio-editor-preview-hit {
+  display: none;
+}
+
+.studio-editor-picture-stack-hit {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 9;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.studio-editor-picture-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.studio-editor-picture-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
+  pointer-events: none;
+  transform-origin: center center;
+  touch-action: none;
 }
 
 
 .studio-editor-text-transform {
-  z-index: 16;
+  z-index: 5;
 }
 
 .studio-editor-text-flip-row {
@@ -2681,7 +2713,7 @@
 .studio-editor-transform-layer {
   position: absolute;
   inset: 0;
-  z-index: 10;
+  z-index: 5;
   cursor: default;
   touch-action: none;
   overflow: visible;
@@ -2690,9 +2722,9 @@
 
 .studio-editor-transform-hit {
   position: absolute;
-  /* Reach outside the black frame so off-canvas media/handles stay draggable. */
-  inset: -50%;
-  pointer-events: auto;
+  transform-origin: center center;
+  pointer-events: none;
+  touch-action: none;
 }
 
 .studio-editor-transform-layer.is-playing {
@@ -2719,6 +2751,9 @@
   background: #fff;
   border: 1.5px solid #1e293b;
   border-radius: 999px;
+  pointer-events: none;
+  cursor: nwse-resize;
+  touch-action: none;
 }
 
 /* Sit on the outer side of the blue border, not inset into the media. */
@@ -2751,7 +2786,7 @@
   flex-direction: column;
   align-items: center;
   transform: translateX(-50%);
-  pointer-events: auto;
+  pointer-events: none;
   cursor: grab;
   touch-action: none;
 }

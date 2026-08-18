@@ -1,7 +1,21 @@
+import {
+  ffmpegFitAspect,
+  resolveFitMode,
+} from "../../../convex/lib/clipFit";
 import type { ClipEffects } from "./types";
 
+export {
+  contentRectForTransform,
+  defaultFitModeForKind,
+  ffmpegFitAspect,
+  fittedNormalizedSize,
+  isMediaFitMode,
+  resolveFitMode,
+  type MediaFitMode,
+} from "../../../convex/lib/clipFit";
+
 export type ClipTransform = {
-  /** 1 = 100% of the largest contained size, preserving source aspect. */
+  /** 1 = 100% of the fitted quad (contain for stills, cover for video). */
   scale: number;
   /** Pan as a fraction of canvas size. 0 = centered. */
   x: number;
@@ -56,43 +70,33 @@ export function normalizeClipTransform(
   };
 }
 
-/**
- * Contain-sized content rect in normalized canvas coordinates [0,1], after
- * user scale/pan. Used by the preview selection overlay.
- */
-export function contentRectForTransform(
-  transform: ClipTransform,
-  canvasWidth: number,
-  canvasHeight: number,
-  sourceWidth: number,
-  sourceHeight: number,
-): { left: number; top: number; width: number; height: number } {
-  const canvasAspect = canvasWidth / Math.max(1, canvasHeight);
-  const sourceAspect =
-    (sourceWidth || canvasWidth) / Math.max(1, sourceHeight || canvasHeight);
-  let containW = 1;
-  let containH = 1;
-  if (sourceAspect > canvasAspect) {
-    containW = 1;
-    containH = canvasAspect / sourceAspect;
-  } else {
-    containW = sourceAspect / canvasAspect;
-    containH = 1;
+/** Decoded pixels first, then stored media size. Never the canvas frame. */
+export function overlaySourceSize(
+  decoded?: { width?: number; height?: number } | null,
+  media?: { width?: number; height?: number } | null,
+): { width: number; height: number } | null {
+  const decodedW = decoded?.width;
+  const decodedH = decoded?.height;
+  if (decodedW && decodedW > 1 && decodedH && decodedH > 1) {
+    return { width: decodedW, height: decodedH };
   }
-  const width = containW * transform.scale;
-  const height = containH * transform.scale;
-  const left = 0.5 + transform.x - width / 2;
-  const top = 0.5 + transform.y - height / 2;
-  return { left, top, width, height };
+  const mediaW = media?.width;
+  const mediaH = media?.height;
+  if (mediaW && mediaW > 1 && mediaH && mediaH > 1) {
+    return { width: mediaW, height: mediaH };
+  }
+  return null;
 }
 
-/** FFmpeg contain + size/position/rotation matching the GPU compositor. */
+/** FFmpeg fit + crop matching the compositor. Scale 1 = the fitted quad. */
 export function ffmpegTransformFilter(
   width: number,
   height: number,
   effects: ClipEffects | undefined,
+  kind?: string,
 ): string {
   const transform = normalizeClipTransform(effects);
+  const fitMode = resolveFitMode(effects, kind);
   const scale = transform.scale;
   // Near-zero → tiny then pad to black (matches invisible GPU scale).
   const scaledW = Math.max(2, Math.round(width * Math.max(scale, 0)));
@@ -103,7 +107,7 @@ export function ffmpegTransformFilter(
   const filters = [
     scale < 0.005
       ? `scale=2:2`
-      : `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease`,
+      : `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=${ffmpegFitAspect(fitMode)}`,
   ];
   if (Math.abs(transform.rotation) > 0.05 && scale >= 0.005) {
     // FFmpeg positive angles are CCW; editor/CSS positive is CW.

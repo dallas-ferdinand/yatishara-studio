@@ -18,6 +18,7 @@ import {
   Eye,
   Film,
   Loader2,
+  Pause,
   Play,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -130,6 +131,12 @@ function GenTileImg({ src }: { src: string }) {
 }
 
 const TILE_VIDEO_PLAY_EVENT = "studio-gen-tile-video-play";
+export const GEN_TILE_ACTIVATE_EVENT = "studio-gen-tile-activate";
+
+function libraryScroller(from: HTMLElement | null): HTMLElement | null {
+  const el = from?.closest(".studio-create-library-scroll");
+  return el instanceof HTMLElement ? el : null;
+}
 
 /** Inline Create-grid video: center play, click to play/pause in-place. */
 function GenTileInlineVideo({
@@ -210,20 +217,22 @@ function GenTileInlineVideo({
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
-        onClick={(event) => void togglePlayback(event)}
         onError={() => setFailed(true)}
       />
-      {!playing && !failed ? (
+      {!failed ? (
         <button
           type="button"
           className="studio-gen-tile-play"
           data-studio-no-press="1"
-          title="Play"
-          aria-label="Play video"
-          onPointerDown={(event) => event.stopPropagation()}
+          title={playing ? "Pause" : "Play"}
+          aria-label={playing ? "Pause video" : "Play video"}
           onClick={(event) => void togglePlayback(event)}
         >
-          <Play className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+          {playing ? (
+            <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+          ) : (
+            <Play className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+          )}
         </button>
       ) : null}
     </span>
@@ -320,6 +329,7 @@ export function StudioGenerationTile({
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const activateRef = useRef<() => void>(() => {});
   const busy = isBusy(tile.stage);
   const failed = tile.stage === "failed";
   const cancelled = failed && wasCancelled(tile.error);
@@ -353,17 +363,31 @@ export function StudioGenerationTile({
 
   useEffect(() => {
     if (!overlayOpen || !isMobile) return;
+    const root = rootRef.current;
+    const scroller = libraryScroller(root);
     const onPointer = (event: PointerEvent) => {
-      const root = rootRef.current;
       if (!root) return;
       if (event.target instanceof Node && root.contains(event.target)) return;
       setOverlayOpen(false);
     };
+    const onScroll = () => setOverlayOpen(false);
     document.addEventListener("pointerdown", onPointer);
-    return () => document.removeEventListener("pointerdown", onPointer);
+    scroller?.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      scroller?.removeEventListener("scroll", onScroll);
+    };
   }, [overlayOpen, isMobile]);
 
-  function handleTileClick() {
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return undefined;
+    const onActivate = () => activateRef.current();
+    el.addEventListener(GEN_TILE_ACTIVATE_EVENT, onActivate);
+    return () => el.removeEventListener(GEN_TILE_ACTIVATE_EVENT, onActivate);
+  }, []);
+
+  function handleTileActivate() {
     if (doneAudio) {
       onSelect(tile);
       return;
@@ -379,6 +403,7 @@ export function StudioGenerationTile({
     }
     onSelect(tile);
   }
+  activateRef.current = handleTileActivate;
 
   async function handleStop(event: MouseEvent) {
     event.stopPropagation();
@@ -408,11 +433,7 @@ export function StudioGenerationTile({
   let mediaBody: ReactNode = null;
   if (doneAudio) {
     mediaBody = (
-      <div
-        className="studio-gen-tile-audio"
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
-      >
+      <div className="studio-gen-tile-audio">
         <StudioChatAudioPlayer
           src={tile.playableUrl!}
           title={tile.name}
@@ -466,11 +487,10 @@ export function StudioGenerationTile({
       }`}
       data-studio-no-press="1"
       tabIndex={0}
-      onClick={handleTileClick}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          handleTileClick();
+          handleTileActivate();
         }
       }}
       aria-label={tile.name}
@@ -511,11 +531,7 @@ export function StudioGenerationTile({
         ) : null}
 
         {!doneAudio ? (
-          <div
-            className="studio-gen-tile-overlay"
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
+          <div className="studio-gen-tile-overlay">
             {canPreview ? (
               <button
                 type="button"
@@ -523,7 +539,6 @@ export function StudioGenerationTile({
                 data-studio-no-press="1"
                 title="Open preview"
                 aria-label="Open preview"
-                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -541,7 +556,6 @@ export function StudioGenerationTile({
                 data-studio-no-press="1"
                 title="Upscale"
                 aria-label="Upscale"
-                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -558,7 +572,6 @@ export function StudioGenerationTile({
                 data-studio-no-press="1"
                 title="Generate video"
                 aria-label="Generate video"
-                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -576,7 +589,6 @@ export function StudioGenerationTile({
             data-studio-no-press="1"
             title="Open preview"
             aria-label="Open preview"
-            onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
