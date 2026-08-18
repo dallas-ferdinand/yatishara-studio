@@ -357,34 +357,47 @@ function PostMediaMosaic({ items, size = "grid" }) {
   const eager = size === "grid";
   return (
     <div className="desk-file-thumb-post-mosaic" data-count={cards.length} aria-hidden="true">
-      {cards.map((item, index) => (
-        <div
-          key={`${item.kind ?? "cell"}-${index}`}
-          className={`desk-file-thumb-post-cell desk-file-thumb-post-cell--${index}`}
-        >
-          {item.kind === "audio" && !item.thumbnailUrl ? (
-            <AudioWaveThumb
-              seedKey={`post-audio-${index}`}
-              barCount={size === "preview" ? 18 : 12}
-              className="desk-file-thumb-audio--peek"
-            />
-          ) : item.thumbnailUrl && !isVideoFileUrl(item.thumbnailUrl) ? (
-            <ProgressiveThumb
-              src={item.thumbnailUrl}
-              lqipSrc={item.thumbnailLqipUrl}
-              eager={eager && index === 0}
-            />
-          ) : (
-            <span className="desk-folder-peek-icon">
-              <Icon
-                name={item.kind === "video" ? "play" : item.kind === "audio" ? "music" : "post"}
-                size={size === "preview" ? 16 : 13}
-                className="text-cursor-muted"
+      {cards.map((item, index) => {
+        const posterUrl =
+          item.thumbnailUrl && !isVideoFileUrl(item.thumbnailUrl)
+            ? item.thumbnailUrl
+            : undefined;
+        const videoSrc =
+          item.kind === "video"
+            ? item.mediaUrl ||
+              (isVideoFileUrl(item.thumbnailUrl) ? item.thumbnailUrl : undefined)
+            : undefined;
+        return (
+          <div
+            key={`${item.kind ?? "cell"}-${index}`}
+            className={`desk-file-thumb-post-cell desk-file-thumb-post-cell--${index}`}
+          >
+            {item.kind === "audio" && !posterUrl ? (
+              <AudioWaveThumb
+                seedKey={`post-audio-${index}`}
+                barCount={size === "preview" ? 18 : 12}
+                className="desk-file-thumb-audio--peek"
               />
-            </span>
-          )}
-        </div>
-      ))}
+            ) : posterUrl ? (
+              <ProgressiveThumb
+                src={posterUrl}
+                lqipSrc={item.thumbnailLqipUrl}
+                eager={eager && index === 0}
+              />
+            ) : videoSrc ? (
+              <VideoThumb src={videoSrc} className="desk-file-thumb-video" />
+            ) : (
+              <span className="desk-folder-peek-icon">
+                <Icon
+                  name={item.kind === "video" ? "play" : item.kind === "audio" ? "music" : "post"}
+                  size={size === "preview" ? 16 : 13}
+                  className="text-cursor-muted"
+                />
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

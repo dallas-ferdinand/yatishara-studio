@@ -17,6 +17,7 @@ const postPreviewItem = v.object({
   kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
   thumbnailUrl: v.optional(v.string()),
   thumbnailLqipUrl: v.optional(v.string()),
+  mediaUrl: v.optional(v.string()),
 });
 
 const documentReturn = v.object({

@@ -5,6 +5,7 @@ import {
   LQIP_TRANSFORM,
   THUMB_TRANSFORM,
   signBunnyCdnUrl,
+  signBunnyFullUrl,
 } from "./bunny";
 
 const POST_PREVIEW_CAP = 4;
@@ -14,6 +15,7 @@ export type PostPreviewItem = {
   kind: "image" | "video" | "audio";
   thumbnailUrl?: string;
   thumbnailLqipUrl?: string;
+  mediaUrl?: string;
 };
 
 function asIdList(value: unknown): string[] {
@@ -93,22 +95,32 @@ export async function previewItemsByPostId(
     }),
   );
 
-  const signed = new Map<string, { thumbnailUrl?: string; thumbnailLqipUrl?: string }>();
+  const signed = new Map<
+    string,
+    { thumbnailUrl?: string; thumbnailLqipUrl?: string; mediaUrl?: string }
+  >();
   if (expiresUnix !== undefined) {
     await Promise.all(
       uniqueIds.map(async (id) => {
         const asset = assets.get(id);
         if (!asset) return;
         const path = assetThumbnailPath(asset);
-        if (!path) {
-          signed.set(id, {});
-          return;
+        const urls: { thumbnailUrl?: string; thumbnailLqipUrl?: string; mediaUrl?: string } =
+          {};
+        if (path) {
+          const [thumbnailUrl, thumbnailLqipUrl] = await Promise.all([
+            signBunnyCdnUrl(path, expiresUnix, THUMB_TRANSFORM),
+            signBunnyCdnUrl(path, expiresUnix, LQIP_TRANSFORM),
+          ]);
+          urls.thumbnailUrl = thumbnailUrl;
+          urls.thumbnailLqipUrl = thumbnailLqipUrl;
         }
-        const [thumbnailUrl, thumbnailLqipUrl] = await Promise.all([
-          signBunnyCdnUrl(path, expiresUnix, THUMB_TRANSFORM),
-          signBunnyCdnUrl(path, expiresUnix, LQIP_TRANSFORM),
-        ]);
-        signed.set(id, { thumbnailUrl, thumbnailLqipUrl });
+        // Videos without a poster: sign the file so the mosaic can use <video preload=metadata>.
+        // Never put an mp4 in thumbnailUrl (that lands in <img>).
+        if (asset.kind === "video" && asset.bunnyPath && !path) {
+          urls.mediaUrl = await signBunnyFullUrl(asset.bunnyPath, expiresUnix, "video");
+        }
+        signed.set(id, urls);
       }),
     );
   }
