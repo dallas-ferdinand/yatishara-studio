@@ -34,6 +34,7 @@ import {
 } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents, POST_BOOST_AMOUNT_CENTS } from "@/studio/lib/money";
 import { playUiSound } from "@/mos-app/sounds.js";
@@ -63,23 +64,6 @@ import "./post-compose-tab.css";
 
 const BOOST_COLORS = ["#f5c400", "#fb7185", "#38bdf8", "#a78bfa", "#34d399", "#fb923c"];
 const MAX_POST_CAPTION = 2200;
-const FEED_CAPTION_PCT_KEY = "studio-feed-caption-pct";
-const FEED_CAPTION_PCT_MIN = 20;
-const FEED_CAPTION_PCT_MAX = 58;
-const FEED_CAPTION_PCT_DEFAULT = 32;
-
-function readFeedCaptionPct() {
-  if (typeof window === "undefined") return FEED_CAPTION_PCT_DEFAULT;
-  try {
-    const n = Number(window.localStorage.getItem(FEED_CAPTION_PCT_KEY));
-    if (Number.isFinite(n)) {
-      return Math.min(FEED_CAPTION_PCT_MAX, Math.max(FEED_CAPTION_PCT_MIN, n));
-    }
-  } catch {
-    /* ignore */
-  }
-  return FEED_CAPTION_PCT_DEFAULT;
-}
 
 function burstBoostConfetti(origin: HTMLElement) {
   const rect = origin.getBoundingClientRect();
@@ -236,7 +220,7 @@ function isWatchFeedGestureTarget(target: EventTarget | null): boolean {
   if (target.closest(".profile-comments-dock")) return false;
   if (
     target.closest(
-      "button, a, input, textarea, select, [data-video-control], [contenteditable='true']",
+      "button, a, input, textarea, select, [data-video-control], [contenteditable='true'], [data-panel-resize-handle-id], .cursor-resize-v, .profile-post-feed-resize",
     )
   ) {
     return false;
@@ -1688,58 +1672,6 @@ export function ProfilePostViewer({
     undoUntil: number;
   } | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
-  const [captionPct, setCaptionPct] = useState(FEED_CAPTION_PCT_DEFAULT);
-  const captionPctRef = useRef(captionPct);
-  captionPctRef.current = captionPct;
-
-  useEffect(() => {
-    setCaptionPct(readFeedCaptionPct());
-  }, []);
-
-  const onCaptionResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const slide = event.currentTarget.closest(".profile-post-slide");
-    const height = slide instanceof HTMLElement ? slide.clientHeight : 0;
-    if (height < 8) return;
-    const startY = event.clientY;
-    const startPct = captionPctRef.current;
-    const handle = event.currentTarget;
-    const pointerId = event.pointerId;
-    handle.setPointerCapture(pointerId);
-    document.body.classList.add("is-feed-caption-resize");
-
-    function onMove(ev: PointerEvent) {
-      const next = Math.min(
-        FEED_CAPTION_PCT_MAX,
-        Math.max(
-          FEED_CAPTION_PCT_MIN,
-          startPct + ((startY - ev.clientY) / height) * 100,
-        ),
-      );
-      captionPctRef.current = next;
-      setCaptionPct(next);
-    }
-    function onUp() {
-      handle.releasePointerCapture(pointerId);
-      document.body.classList.remove("is-feed-caption-resize");
-      handle.removeEventListener("pointermove", onMove);
-      handle.removeEventListener("pointerup", onUp);
-      handle.removeEventListener("pointercancel", onUp);
-      try {
-        window.localStorage.setItem(
-          FEED_CAPTION_PCT_KEY,
-          String(captionPctRef.current),
-        );
-      } catch {
-        /* ignore */
-      }
-    }
-    handle.addEventListener("pointermove", onMove);
-    handle.addEventListener("pointerup", onUp);
-    handle.addEventListener("pointercancel", onUp);
-  }, []);
   const pointerRef = useRef<{
     id: number;
     x: number;
@@ -2544,7 +2476,6 @@ export function ProfilePostViewer({
         ref={rootRef}
         className="profile-post-viewer is-feed is-watch-layout"
         aria-label="Studio feed"
-        style={{ ["--feed-caption-h" as string]: `${captionPct}%` } as CSSProperties}
       >
         <div className="profile-post-viewer-blur" aria-hidden="true" />
         <div className="profile-post-track" ref={trackRef}>
@@ -2562,64 +2493,109 @@ export function ProfilePostViewer({
                 aria-hidden={!isInteractiveSlide}
                 inert={!isInteractiveSlide}
               >
-                <div className="profile-post-watch-player">
+                {(() => {
+                  const player = (
+                    <div className="profile-post-watch-player">
                       <FeedMedia
                         post={post}
                         active={tabActive && role === "current"}
                         preload={tabActive}
                       />
-                  </div>
-                {isMobile ? null : (
-                  <button
-                    type="button"
-                    className="profile-post-feed-resize"
-                    aria-label="Resize description"
-                    onPointerDown={onCaptionResizePointerDown}
-                  />
-                )}
-                <FeedCaption
-                  postId={post._id}
-                  username={postUsername}
-                  caption={slideCaption}
-                  hashtags={post.hashtags}
-                  mentions={post.mentions}
-                  voiceUrl={post.voiceUrl}
-                  voiceDurationSec={post.voiceDurationSec}
-                  authorAvatarUrl={post.avatarUrl}
-                  authorDisplayName={post.displayName}
-                  authorFirstName={post.firstName}
-                  authorLastName={post.lastName}
-                  publishedAt={post.publishedAt}
-                  editedAt={localCaptions[post._id]?.editedAt ?? post.editedAt}
-                  showFollow={Boolean(post.profileId) && !post.isOwner}
-                  isFollowing={Boolean(
-                    post.profileId
-                      ? (localFollows[post.profileId] ?? post.isFollowing)
-                      : post.isFollowing,
-                  )}
-                  showEdit={Boolean(post.isOwner)}
-                  active={isInteractiveSlide}
-                  placement="page"
-                  onOpenProfile={onOpenProfile}
-                  onToggleFollow={() => void handleFollowToggle(post)}
-                  onCaptionSaved={(nextCaption, nextEditedAt) => {
-                    setLocalCaptions((prev) => ({
-                      ...prev,
-                      [post._id]: { caption: nextCaption, editedAt: nextEditedAt },
-                    }));
-                  }}
-                  feedShare={
-                    isInteractiveSlide
-                      ? {
-                          postId: post._id,
-                          username: postUsername,
-                          displayName: post.displayName,
-                          caption: slideCaption,
-                          thumbnailUrl: post.thumbnailUrl,
-                        }
-                      : undefined
+                    </div>
+                  );
+                  const caption = (
+                    <FeedCaption
+                      postId={post._id}
+                      username={postUsername}
+                      caption={slideCaption}
+                      hashtags={post.hashtags}
+                      mentions={post.mentions}
+                      voiceUrl={post.voiceUrl}
+                      voiceDurationSec={post.voiceDurationSec}
+                      authorAvatarUrl={post.avatarUrl}
+                      authorDisplayName={post.displayName}
+                      authorFirstName={post.firstName}
+                      authorLastName={post.lastName}
+                      publishedAt={post.publishedAt}
+                      editedAt={localCaptions[post._id]?.editedAt ?? post.editedAt}
+                      showFollow={Boolean(post.profileId) && !post.isOwner}
+                      isFollowing={Boolean(
+                        post.profileId
+                          ? (localFollows[post.profileId] ?? post.isFollowing)
+                          : post.isFollowing,
+                      )}
+                      showEdit={Boolean(post.isOwner)}
+                      active={isInteractiveSlide}
+                      placement="page"
+                      onOpenProfile={onOpenProfile}
+                      onToggleFollow={() => void handleFollowToggle(post)}
+                      onCaptionSaved={(nextCaption, nextEditedAt) => {
+                        setLocalCaptions((prev) => ({
+                          ...prev,
+                          [post._id]: { caption: nextCaption, editedAt: nextEditedAt },
+                        }));
+                      }}
+                      feedShare={
+                        isInteractiveSlide
+                          ? {
+                              postId: post._id,
+                              username: postUsername,
+                              displayName: post.displayName,
+                              caption: slideCaption,
+                              thumbnailUrl: post.thumbnailUrl,
+                            }
+                          : undefined
+                      }
+                    />
+                  );
+                  if (isMobile) {
+                    return (
+                      <>
+                        {player}
+                        {caption}
+                      </>
+                    );
                   }
-                />
+                  if (!isInteractiveSlide) {
+                    return (
+                      <div className="profile-post-slide-split is-static">
+                        <div className="profile-post-media-panel">{player}</div>
+                        <div className="profile-post-caption-panel">{caption}</div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <PanelGroup
+                      direction="vertical"
+                      id="studio-feed-caption"
+                      autoSaveId="studio-feed-caption-v"
+                      className="profile-post-slide-split"
+                    >
+                      <Panel
+                        id="studio-feed-media"
+                        order={1}
+                        defaultSize={68}
+                        minSize={36}
+                        className="profile-post-media-panel"
+                      >
+                        {player}
+                      </Panel>
+                      <PanelResizeHandle
+                        className="cursor-resize-v profile-post-feed-resize"
+                        hitAreaMargins={{ coarse: 20, fine: 12 }}
+                      />
+                      <Panel
+                        id="studio-feed-caption-pane"
+                        order={2}
+                        defaultSize={32}
+                        minSize={16}
+                        className="profile-post-caption-panel"
+                      >
+                        {caption}
+                      </Panel>
+                    </PanelGroup>
+                  );
+                })()}
               </article>
             );
           })}

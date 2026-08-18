@@ -1189,14 +1189,101 @@
   content: none;
 }
 
-.profile-post-feed-resize {
-  display: none;
+.profile-post-slide.is-watch > .profile-post-slide-split {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
 }
 
-body.is-feed-caption-resize,
-body.is-feed-caption-resize * {
-  cursor: var(--studio-cursor-resize-y, ns-resize) !important;
-  user-select: none !important;
+.profile-post-slide-split {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+.profile-post-slide-split.is-static .profile-post-media-panel {
+  flex: 68 1 0;
+}
+
+.profile-post-slide-split.is-static .profile-post-caption-panel {
+  flex: 32 1 0;
+}
+
+.profile-post-media-panel,
+.profile-post-caption-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.profile-post-media-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-post-media-panel .profile-post-watch-player {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  z-index: 0;
+}
+
+.profile-post-caption-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-post-caption-panel .profile-post-caption-scroll {
+  flex: 1 1 auto;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  border-top: 0;
+}
+
+/* Same grab as the sidebar rail: fat hit strip, 1px hairline in the middle. */
+.cursor-resize-v.profile-post-feed-resize {
+  position: relative;
+  z-index: 20;
+  flex: 0 0 12px;
+  width: 100%;
+  height: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+  pointer-events: auto;
+  cursor: var(--studio-cursor-resize-y, ns-resize);
+}
+
+.cursor-resize-v.profile-post-feed-resize::before {
+  content: none;
+}
+
+.cursor-resize-v.profile-post-feed-resize::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--color-cursor-border, var(--studio-chrome-divider));
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.cursor-resize-v.profile-post-feed-resize:hover,
+.cursor-resize-v.profile-post-feed-resize[data-resize-handle-active] {
+  height: 12px;
+  background: transparent;
+}
+
+.cursor-resize-v.profile-post-feed-resize:hover::after,
+.cursor-resize-v.profile-post-feed-resize[data-resize-handle-active]::after {
+  height: 2px;
+  background: #3a3a3a;
 }
 
 .profile-post-watch-player {
@@ -1258,11 +1345,16 @@ body.is-feed-caption-resize * {
     position: relative;
     flex: 0 1 auto;
     min-height: 0;
-    max-height: min(28dvh, 42%);
     width: 100%;
     overflow: hidden;
     border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
   }
+
+@media (max-width: 899px) {
+  .profile-post-caption-scroll {
+    max-height: min(28dvh, 42%);
+  }
+}
 
   .profile-post-caption-scroll::before,
   .profile-post-caption-scroll::after {
@@ -1639,37 +1731,6 @@ body.is-feed-caption-resize * {
 
   .profile-post-slide.is-watch .profile-post-caption.is-page {
     padding: 8px 20px 16px;
-  }
-
-  .profile-post-caption-scroll {
-    flex: 0 0 var(--feed-caption-h, 32%);
-    max-height: none;
-    min-height: 120px;
-    border-top: 0;
-  }
-
-  .profile-post-feed-resize {
-    display: block;
-    position: relative;
-    flex: 0 0 auto;
-    width: 100%;
-    height: 1px;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: var(--studio-chrome-divider, var(--color-cursor-border-soft));
-    cursor: var(--studio-cursor-resize-y, ns-resize);
-    z-index: 3;
-  }
-
-  .profile-post-feed-resize::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: -5px;
-    bottom: -5px;
   }
 
   .is-watch-layout .profile-post-book-bar {
