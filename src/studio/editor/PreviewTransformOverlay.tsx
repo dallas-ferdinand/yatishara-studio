@@ -273,8 +273,18 @@ export function PreviewTransformOverlay({
   });
 
   const transform = normalizeClipTransform(clip.effects);
-  const sourceW = decodedWidth || media?.width || canvasWidth;
-  const sourceH = decodedHeight || media?.height || canvasHeight;
+  const sourceW =
+    decodedWidth && decodedWidth > 1
+      ? decodedWidth
+      : media?.width && media.width > 1
+        ? media.width
+        : canvasWidth;
+  const sourceH =
+    decodedHeight && decodedHeight > 1
+      ? decodedHeight
+      : media?.height && media.height > 1
+        ? media.height
+        : canvasHeight;
   const rect = contentRectForTransform(
     transform,
     canvasWidth,

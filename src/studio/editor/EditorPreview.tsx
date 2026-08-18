@@ -174,10 +174,10 @@ export function EditorPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- preview gain only
   }, [previewMuted, previewVolume]);
 
-  const decodedSize =
-    activeClip?.assetId && engine.sourceSize?.assetId === activeClip.assetId
-      ? engine.sourceSize
-      : null;
+  const decodedSize = activeClip?.assetId
+    ? engine.sourceSizes[activeClip.assetId] ??
+      (engine.sourceSize?.assetId === activeClip.assetId ? engine.sourceSize : null)
+    : null;
 
   const transformTarget = useMemo((): "a" | "b" => {
     if (!activeClip) return "a";

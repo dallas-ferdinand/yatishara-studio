@@ -30,6 +30,29 @@ import { PlayBus, playBusLayersByClipId } from "./play-bus";
 import { pictureLayersBottomToTop, type PictureLayer } from "./picture-layers";
 import { StillResidency } from "./still-residency";
 
+type LayerSourceSize = { assetId: string; width: number; height: number };
+
+function layerSourceSizes(
+  layers: PictureLayer[],
+  slice: RenderSlice,
+  mediaById: ReadonlyMap<string, EditorMediaItem>,
+): LayerSourceSize[] {
+  const out: LayerSourceSize[] = [];
+  const seen = new Set<string>();
+  for (const layer of layers) {
+    const sample = slice.video.find((item) => item.clip.clipId === layer.clipId);
+    const assetId = sample?.clip.assetId;
+    if (!assetId || seen.has(assetId)) continue;
+    const media = mediaById.get(assetId);
+    const width = layer.width || media?.width || 0;
+    const height = layer.height || media?.height || 0;
+    if (width < 1 || height < 1) continue;
+    seen.add(assetId);
+    out.push({ assetId, width, height });
+  }
+  return out;
+}
+
 /**
  * Spinner only after a lasting cold-buffer on PlayBus (element waiting before
  * first paint). Clock never holds.
@@ -176,11 +199,10 @@ class EngineConsumer implements FrameConsumer {
   private readonly previewLoadQualityRef: React.MutableRefObject<number>;
   private readonly playingRef: React.MutableRefObject<boolean>;
   private readonly onAudioReady: () => void;
-  private readonly onSourceSize: (size: {
-    assetId: string;
-    width: number;
-    height: number;
-  } | null) => void;
+  private readonly onSourceSize: (
+    size: LayerSourceSize | null,
+    all: LayerSourceSize[],
+  ) => void;
   private prepared: Prepared | null = null;
   private readonly imageFrames = new Map<string, VideoFrame>();
   private readonly imageLoads = new Map<string, Promise<VideoFrame>>();
@@ -196,11 +218,10 @@ class EngineConsumer implements FrameConsumer {
     previewLoadQualityRef: React.MutableRefObject<number>;
     playingRef: React.MutableRefObject<boolean>;
     onAudioReady: () => void;
-    onSourceSize: (size: {
-      assetId: string;
-      width: number;
-      height: number;
-    } | null) => void;
+    onSourceSize: (
+      size: LayerSourceSize | null,
+      all: LayerSourceSize[],
+    ) => void;
   }) {
     this.decoder = args.decoder;
     this.compositor = args.compositor;
@@ -217,6 +238,11 @@ class EngineConsumer implements FrameConsumer {
 
   setPlayBus(playBus: PlayBus | null): void {
     this.playBus = playBus;
+  }
+
+  private publishLayerSizes(layers: PictureLayer[], slice: RenderSlice): void {
+    const all = layerSourceSizes(layers, slice, this.mediaRef.current);
+    this.onSourceSize(all[all.length - 1] ?? null, all);
   }
 
   isPlayWaiting(): boolean {
@@ -313,17 +339,7 @@ class EngineConsumer implements FrameConsumer {
       }
     }
 
-    const top = layers[layers.length - 1];
-    if (top?.width && top.height) {
-      const sample = slice.video.find((item) => item.clip.clipId === top.clipId);
-      if (sample?.clip.assetId) {
-        this.onSourceSize({
-          assetId: sample.clip.assetId,
-          width: top.width,
-          height: top.height,
-        });
-      }
-    }
+    this.publishLayerSizes(layers, slice);
 
     const textsUnder = mapTextItems(slice.textUnder, slice.timelineTime);
     const textsOver = mapTextItems(slice.textOver, slice.timelineTime);
@@ -461,19 +477,7 @@ class EngineConsumer implements FrameConsumer {
       };
     });
     const layers = pictureLayersBottomToTop(resolved, slice);
-    const top = layers[layers.length - 1];
-    const topDecoded = top
-      ? valid.find((item) => item.sample.clip.clipId === top.clipId)
-      : valid[0];
-    this.onSourceSize(
-      topDecoded
-        ? {
-            assetId: topDecoded.assetId,
-            width: topDecoded.width ?? topDecoded.frame?.displayWidth ?? 0,
-            height: topDecoded.height ?? topDecoded.frame?.displayHeight ?? 0,
-          }
-        : null,
-    );
+    this.publishLayerSizes(layers, slice);
     this.prepared = {
       slice,
       generation,
@@ -642,6 +646,8 @@ export type PlaybackEngineState = {
     width: number;
     height: number;
   } | null;
+  /** Decoded contain-size per asset so stacked clips get their own selection box. */
+  sourceSizes: Readonly<Record<string, { width: number; height: number }>>;
   previewTransform: (
     transform: ClipTransform,
     target?: "a" | "b",
@@ -685,6 +691,9 @@ export function usePlaybackEngine(args: {
     width: number;
     height: number;
   } | null>(null);
+  const [sourceSizes, setSourceSizes] = useState<
+    Record<string, { width: number; height: number }>
+  >({});
   const capabilities = detectDecoderCapabilities();
   const runtimeRef = useRef<EngineRuntime | null>(null);
   const mediaRef = useRef<ReadonlyMap<string, EditorMediaItem>>(mediaById);
@@ -790,7 +799,7 @@ export function usePlaybackEngine(args: {
         previewLoadQualityRef,
         playingRef,
         onAudioReady: syncAudioNow,
-        onSourceSize: (next) => {
+        onSourceSize: (next, all) => {
           setSourceSize((current) => {
             if (
               current?.assetId === next?.assetId &&
@@ -800,6 +809,18 @@ export function usePlaybackEngine(args: {
               return current;
             }
             return next;
+          });
+          if (all.length === 0) return;
+          setSourceSizes((current) => {
+            let changed = false;
+            const merged = { ...current };
+            for (const item of all) {
+              const prev = merged[item.assetId];
+              if (prev?.width === item.width && prev?.height === item.height) continue;
+              merged[item.assetId] = { width: item.width, height: item.height };
+              changed = true;
+            }
+            return changed ? merged : current;
           });
         },
       });
@@ -1233,6 +1254,7 @@ export function usePlaybackEngine(args: {
     error,
     supported: true,
     sourceSize,
+    sourceSizes,
     previewTransform: (transform, target = "a") => {
       runtimeRef.current?.compositor.updateTransform(
         [
