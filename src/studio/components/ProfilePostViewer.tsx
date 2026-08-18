@@ -31,6 +31,7 @@ import {
   type FocusEvent as ReactFocusEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -220,12 +221,63 @@ function isWatchFeedGestureTarget(target: EventTarget | null): boolean {
   if (target.closest(".profile-comments-dock")) return false;
   if (
     target.closest(
-      "button, a, input, textarea, select, [data-video-control], [contenteditable='true'], [data-panel-resize-handle-id], .cursor-resize-v, .profile-post-feed-resize",
+      "button, a, input, textarea, select, [data-video-control], [contenteditable='true'], [data-panel-resize-handle-id], .cursor-resize, .cursor-resize-v, .profile-post-feed-resize",
     )
   ) {
     return false;
   }
   return Boolean(target.closest(".profile-post-watch-stack"));
+}
+
+function FeedDesktopSplit({
+  isMobile,
+  watch,
+  comments,
+}: {
+  isMobile: boolean;
+  watch: ReactNode;
+  comments: ReactNode;
+}) {
+  if (isMobile) {
+    return (
+      <>
+        {watch}
+        {comments}
+      </>
+    );
+  }
+  return (
+    <PanelGroup
+      direction="horizontal"
+      id="studio-feed-h"
+      autoSaveId="studio-feed-comments-h"
+      className="profile-post-feed-h"
+    >
+      <Panel
+        id="studio-feed-watch"
+        order={1}
+        defaultSize={72}
+        minSize={50}
+        className="profile-post-watch-panel"
+      >
+        {watch}
+      </Panel>
+      <PanelResizeHandle
+        className="cursor-resize"
+        hitAreaMargins={{ coarse: 20, fine: 12 }}
+      />
+      <Panel
+        id="studio-feed-comments"
+        order={2}
+        defaultSize={28}
+        minSize={18}
+        maxSize={42}
+        className="profile-post-comments-panel"
+      >
+        {comments}
+      </Panel>
+    </PanelGroup>
+  );
 }
 
 /** Collect up to `count` unique neighbors in one direction, wrapping the list. */
@@ -2465,6 +2517,9 @@ export function ProfilePostViewer({
       className="profile-post-viewer-layout is-watch-layout"
       ref={layoutRef}
     >
+      <FeedDesktopSplit
+        isMobile={isMobile}
+        watch={
       <div
         className="profile-post-watch-stack"
         onPointerDown={tabActive ? onPointerDown : undefined}
@@ -2651,7 +2706,8 @@ export function ProfilePostViewer({
         />
       ) : null}
       </div>
-
+        }
+        comments={
       <ProfileCommentsPanel
         postId={activePost._id}
         open={commentsOpen && tabActive}
@@ -2720,6 +2776,8 @@ export function ProfilePostViewer({
           onSave: () => void handleSave(activeSlidePost),
           onShare: () => void handleShare(activeSlidePost),
         }}
+      />
+        }
       />
     </div>
   );
