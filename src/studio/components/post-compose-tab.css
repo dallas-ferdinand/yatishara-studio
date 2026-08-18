@@ -617,6 +617,7 @@
   max-width: 16rem;
   font-size: 12px;
   line-height: 1.4;
+  color: var(--pc-muted);
 }
 
 .post-compose.is-drop-target .post-compose-mock,
@@ -640,8 +641,6 @@ body.is-touch-file-drag .post-compose.is-drop-target .post-compose-mock,
 body.is-touch-file-drag .post-compose.is-touch-drop-hover .post-compose-mock {
   outline: 2px solid color-mix(in srgb, var(--pc-accent) 72%, transparent);
   outline-offset: 2px;
-}
-  color: var(--pc-muted);
 }
 
 .post-compose-media-choice {
