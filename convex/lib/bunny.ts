@@ -113,11 +113,11 @@ export async function putObject(args: {
       ? copyUint8ArrayToArrayBuffer(args.body)
       : args.body;
   const byteLength =
-    typeof Blob !== "undefined" && args.body instanceof Blob
-      ? args.body.size
-      : args.body instanceof Uint8Array
+    args.body instanceof Uint8Array
+      ? args.body.byteLength
+      : args.body instanceof ArrayBuffer
         ? args.body.byteLength
-        : args.body.byteLength;
+        : args.body.size;
   const controller = new AbortController();
   const timeoutMs = Math.min(480_000, Math.max(120_000, Math.ceil(byteLength / 256) + 30_000));
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
