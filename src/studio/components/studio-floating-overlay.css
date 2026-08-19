@@ -1,0 +1,75 @@
+.studio-floating-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--studio-floating-overlay-z, 120);
+  pointer-events: none;
+}
+
+.studio-floating-overlay-slot {
+  position: absolute;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 24px));
+  height: max-content;
+  pointer-events: auto;
+}
+
+.studio-floating-overlay.is-bottom-right .studio-floating-overlay-slot {
+  right: 12px;
+  bottom: 12px;
+}
+
+.studio-floating-overlay.is-bottom-left .studio-floating-overlay-slot {
+  left: 12px;
+  bottom: 12px;
+}
+
+.studio-floating-overlay.is-top-right .studio-floating-overlay-slot {
+  right: 12px;
+  top: 12px;
+}
+
+.studio-floating-overlay.is-top-left .studio-floating-overlay-slot {
+  left: 12px;
+  top: 12px;
+}
+
+body:has(.studio-polish.is-studio-mobile) .studio-floating-overlay.is-bottom-right .studio-floating-overlay-slot,
+body:has(.studio-polish.is-studio-mobile) .studio-floating-overlay.is-bottom-left .studio-floating-overlay-slot {
+  bottom: calc(
+    12px + var(--studio-mobile-bottom-nav-height, 56px) + var(--studio-keyboard-inset, 0px)
+  );
+}
+
+body:has(.studio-polish.is-studio-mobile) .studio-floating-overlay.is-bottom-left .studio-floating-overlay-slot {
+  left: 10px;
+}
+
+body:has(.studio-polish.is-studio-mobile) .studio-floating-overlay.is-bottom-right .studio-floating-overlay-slot {
+  right: 10px;
+}
+
+/* Compact file-transfer chips hosted in the overlay. */
+.studio-floating-overlay .studio-file-transfer-tray,
+.studio-floating-overlay .studio-file-transfer-tray.is-floating {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  width: min(240px, calc(100vw - 24px));
+  max-height: 88px;
+  height: max-content;
+  padding: 4px;
+  gap: 3px;
+  flex: 0 0 auto;
+  overflow-y: auto;
+  pointer-events: auto;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-md, 8px);
+  background: var(--mos-plate);
+  box-shadow: 0 8px 20px color-mix(in srgb, #000 14%, transparent);
+}
+
+.studio-floating-overlay .studio-file-transfer {
+  min-height: 24px;
+  height: 24px;
+  padding: 0 4px 0 6px;
+}

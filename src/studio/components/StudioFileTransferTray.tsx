@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, LoaderCircle, RotateCcw, Upload, X } from "lucide-react";
+import { StudioFloatingOverlay } from "@/studio/components/StudioFloatingOverlay";
 
 export type StudioFileTransfer = {
   id: string;
@@ -34,7 +35,7 @@ export function StudioFileTransferTray({
   floating?: boolean;
 }) {
   if (!transfers.length) return null;
-  return (
+  const tray = (
     <section
       className={`studio-file-transfer-tray shrink-0${floating ? " is-floating" : ""}`}
       aria-label="File transfers"
@@ -98,5 +99,11 @@ export function StudioFileTransferTray({
         );
       })}
     </section>
+  );
+  if (!floating) return tray;
+  return (
+    <StudioFloatingOverlay label="File transfers">
+      {tray}
+    </StudioFloatingOverlay>
   );
 }
