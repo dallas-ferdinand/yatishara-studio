@@ -1,0 +1,136 @@
+/* Files explorer chrome — Your files / Asset library + search.
+   Must stay on StudioShell (static). Do not hang this on the dynamic
+   Asset library store: Your files never mounts that pane, so the toggle
+   would render unstyled (labels stacked on top of each other). */
+
+.studio-files-source-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  padding: 0 8px;
+  border: none;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel, #f5f5f7)));
+}
+
+.studio-files-source-toggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 24px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: var(--cursor-radius-pill, 999px);
+  background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel)));
+  color: var(--color-cursor-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.studio-files-source-toggle button > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.studio-files-source-toggle button.is-active {
+  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 42%, var(--color-cursor-border));
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 12%, transparent);
+  color: var(--color-cursor-text-bright);
+  box-shadow: none;
+}
+
+.studio-files-search-row {
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel, #f5f5f7)));
+}
+
+.studio-files-search-row > .cursor-panel-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  border-top: none !important;
+  border-bottom: none !important;
+  background: transparent !important;
+}
+
+/* Full Files workspace only: switcher shares the search strip. */
+.cursor-explorer-body.is-workspace-chrome .studio-files-chrome {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel, #f5f5f7)));
+}
+
+.cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-source-toggle {
+  width: auto;
+  flex: 0 0 auto;
+  align-self: stretch;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  border-bottom: none;
+  /* Full-height rail divider on the left of search; filter side stays short hairline. */
+  border-right: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: transparent;
+}
+
+.cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-source-toggle button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 899px) {
+  .studio-files-source-toggle button {
+    min-height: var(--studio-mobile-chrome-control, 34px);
+    height: var(--studio-mobile-chrome-control, 34px);
+    padding: 0 12px;
+    font-size: 13px;
+  }
+  .studio-files-source-toggle button > svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+.cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-search-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  border-bottom: none;
+  background: transparent;
+}

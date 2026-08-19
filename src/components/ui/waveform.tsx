@@ -237,20 +237,38 @@ export const ScrollingWaveform = ({
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       }
 
-      // Prefill left→right so the wave starts in-view (not empty / streaming from the right).
-      if (barsRef.current.length === 0 && rect.width > 0) {
+      // Prefill / extend so bars always span the live width. Masonry tiles
+      // often first layout tiny (content-visibility) then grow — a one-shot
+      // prefill left-aligns a short strip with a gap before the right clock.
+      if (rect.width > 0) {
         const step = barWidth + barGap
-        let currentX = 0
-        let index = 0
-        while (currentX < rect.width + step) {
-          barsRef.current.push({
-            x: currentX,
-            height: nextBarHeight(index),
-          })
-          currentX += step
-          index += 1
+        if (barsRef.current.length === 0) {
+          let currentX = 0
+          let index = 0
+          while (currentX < rect.width + step) {
+            barsRef.current.push({
+              x: currentX,
+              height: nextBarHeight(index),
+            })
+            currentX += step
+            index += 1
+          }
+          dataIndexRef.current = index
+        } else {
+          const last = barsRef.current[barsRef.current.length - 1]
+          if (!last) return
+          let currentX = last.x + step
+          let index = dataIndexRef.current
+          while (currentX < rect.width + step) {
+            barsRef.current.push({
+              x: currentX,
+              height: nextBarHeight(index),
+            })
+            currentX += step
+            index += 1
+          }
+          dataIndexRef.current = index
         }
-        dataIndexRef.current = index
       }
     })
 
@@ -302,7 +320,12 @@ export const ScrollingWaveform = ({
             x: nextX,
             height: nextBarHeight(index),
           })
-          if (barsRef.current.length > barCount * 2) break
+          if (
+            barsRef.current.length > barCount * 2 &&
+            nextX >= rect.width
+          ) {
+            break
+          }
         }
       }
 
@@ -370,7 +393,7 @@ export const ScrollingWaveform = ({
 
   return (
     <div
-      className={cn("relative flex items-center", className)}
+      className={cn("relative block h-full w-full min-w-0", className)}
       ref={containerRef}
       style={{ height: heightStyle }}
       {...props}

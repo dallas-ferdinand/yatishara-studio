@@ -172,9 +172,9 @@ function WaveformScrubber({
         barGap={2}
         barRadius={999}
         barHeight={3}
-        barCount={80}
+        barCount={160}
         fadeEdges
-        fadeWidth={28}
+        fadeWidth={16}
         barColor="gray"
         speed={playing ? 30 : 0}
       />

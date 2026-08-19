@@ -4,7 +4,6 @@ import {
   Suspense,
   useCallback,
   useEffect,
-  useId,
   useRef,
   useState,
   type CSSProperties,
@@ -59,26 +58,7 @@ const ORB_PALETTES: [string, string][] = [
   ["#F0E0F3", "#C09FC9"],
 ];
 
-/** Browsers typically allow ~8–16 WebGL contexts; stay conservative in masonry. */
-const MAX_LIVE_ORBS = 8;
-const liveOrbHolders = new Set<string>();
-const liveOrbWaiters = new Set<() => void>();
-
-function notifyOrbWaiters() {
-  for (const wake of [...liveOrbWaiters]) wake();
-}
-
-function claimLiveOrb(id: string): boolean {
-  if (liveOrbHolders.has(id)) return true;
-  if (liveOrbHolders.size >= MAX_LIVE_ORBS) return false;
-  liveOrbHolders.add(id);
-  return true;
-}
-
-function releaseLiveOrb(id: string) {
-  if (!liveOrbHolders.delete(id)) return;
-  notifyOrbWaiters();
-}
+/** Every on-screen orb may use WebGL. Off-screen tiles still stay gated. */
 
 function colorsFromSeed(seed: number): [string, string] {
   const n = Math.abs(seed || 1000) >>> 0;
@@ -129,55 +109,13 @@ function useVisibleInViewport(enabled: boolean) {
   return { setNode, visible };
 }
 
-/** Claim a WebGL slot when visible (or forced). Priority for playing. */
+/** Visible (or currently playing) orbs all get WebGL — no shared slot cap. */
 function useLiveOrbSlot(opts: {
   force?: boolean;
   visible: boolean;
   priority?: boolean;
 }) {
-  const id = useId();
-  const [live, setLive] = useState(false);
-
-  useEffect(() => {
-    const want = Boolean(opts.force || opts.visible);
-    if (!want) {
-      releaseLiveOrb(id);
-      setLive(false);
-      return undefined;
-    }
-
-    const tryClaim = () => {
-      if (claimLiveOrb(id)) {
-        setLive(true);
-        return true;
-      }
-      // Playing/selected: bump someone if needed by waiting briefly
-      setLive(false);
-      return false;
-    };
-
-    if (tryClaim()) return () => releaseLiveOrb(id);
-
-    const wake = () => {
-      if (tryClaim()) liveOrbWaiters.delete(wake);
-    };
-    liveOrbWaiters.add(wake);
-    // Priority: retry immediately after a tick in case a slot frees
-    if (opts.priority) {
-      const t = window.setTimeout(wake, 0);
-      return () => {
-        window.clearTimeout(t);
-        liveOrbWaiters.delete(wake);
-        releaseLiveOrb(id);
-      };
-    }
-    return () => {
-      liveOrbWaiters.delete(wake);
-      releaseLiveOrb(id);
-    };
-  }, [id, opts.force, opts.visible, opts.priority]);
-
-  return live;
+  return Boolean(opts.force || opts.visible);
 }
 
 function OrbShell({

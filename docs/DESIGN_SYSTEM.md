@@ -116,16 +116,18 @@ from `--mos-plate`:
   **Frequent** (most-visited folders). File activity: `explorer-file-access.js`
   (prune 20). Folder visits: `explorer-folder-access.js`. Main pane = explorer
   body + add/view controls in the pathbar.
-- Files source toggle (`.studio-files-source-toggle`): **full Files workspace**
-  only — left of search in `.studio-files-chrome` with a **full-height** vertical
-  divider. Search ↔ type-filter keeps the **short** hairline
-  (`.cursor-panel-search-end::before`). **Sidebar explorer** (editing / left rail)
-  and mobile: toggle stays on its **own row above** search (stacked). Search
+- Files source toggle (`.studio-files-source-toggle`): CSS owner
+  `src/studio/components/studio-files-chrome.css`, **static-imported from StudioShell**.
+  Do not hang this on the dynamic Asset library store — Your files never mounts
+  that pane. **Full Files workspace** only — left of search in `.studio-files-chrome`
+  with a **full-height** vertical divider. Search ↔ type-filter keeps the **short**
+  hairline (`.cursor-panel-search-end::before`). **Sidebar explorer** (editing / left
+  rail) and mobile: toggle stays on its **own row above** search (stacked). Search
   always lives inside `.studio-files-search-row` so the bottom hairline wraps the
   whole strip. Chrome fill = L1 `--mos-page` / `--mos-panel` (same grey as the
   rail — never a darker `--mos-bg` band). Folder = Your files, Library = **Asset
   library**. Owned library cards are HTML5-draggable onto the timeline; play/scrub
-  row stays interactive.
+  row stays interactive. Memory: **771**.
 - Active *controls* inside the file manager (breadcrumb `.is-current`) stay L3
   — that's the control affordance, not a plate.
 - File / folder **hover** (grid tile visual, preview tile, list row): accent
@@ -378,13 +380,18 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
   save to Screen Recordings. Works where the browser has `getDisplayMedia`
   (desktop + Chrome on Android). iOS Safari cannot capture the screen.
   Memory: **790**, **1482**.
-- **Desktop header** keeps New + Credits + Avatar + Menu only. Feed / Network /
+- **Desktop header** keeps **Close all** (when any tab is open) + New + Credits +
+  Avatar + Menu. Close all sits on the right, **before** the other tools, with a
+  1×14 hairline divider. **Mobile** Close all is the same 30px icon circle as
+  other header tools (`X`, same 14px glyph), not a text pill. Feed / Network /
   Messages / Files / History / Settings / Admin / Full screen live in the same
   app grid via `.studio-mobile-app-menu-sheet.is-desktop-popover` (top-right
   floating panel tucked under the Menu control; **same 8px** for header gap
   and right-edge gutter (one token). Width uses containing-block `%`, not
   `100vw`. Equal **12px** internal padding. No dim overlay, no second close X.
-  Do not re-grow the desktop tools row.
+  Do not re-grow the desktop tools row. Tab X close is a light
+  `mos-text 8%` wash circle (26px on mobile) — visible, not a heavy grey chip.
+  Memory: **699**.
 
 **DM peer right sidebar** (`StudioDmPeerSidebar`) reuses this chrome — do not invent a
 second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /
@@ -805,9 +812,9 @@ Do not collapse while the turn is still running.
 
 Studio voice avatars and play buttons use the **ElevenLabs Agent Orb**
 (`src/components/ui/orb.tsx`, R3F/Three perlin marble from ui.elevenlabs.io).
-Seeded pastel pairs, WebGL slot budget in `StudioOrbPlayButton` (max 8 live),
-CSS fallback while off-screen. Play glyph is white with a drop-shadow. Memory:
-**1498**.
+Seeded pastel pairs, no cap on how many on-screen orbs may be live WebGL
+(off-screen tiles still viewport-gated). CSS fallback while off-screen. Play
+glyph is white with a drop-shadow. Memory: **1498**.
 
 ---
 

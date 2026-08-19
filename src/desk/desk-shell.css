@@ -8602,7 +8602,7 @@ textarea.cursor-input {
   width: var(--cursor-unified-tab-width, 168px);
   min-width: var(--cursor-unified-tab-width, 168px);
   max-width: var(--cursor-unified-tab-width, 168px);
-  padding: 0 6px;
+  padding: 0 3px 0 6px;
   position: relative;
   border: 0;
   background: transparent;
@@ -8691,7 +8691,7 @@ textarea.cursor-input {
   z-index: 5;
   flex-shrink: 0;
   border: none;
-  background: transparent;
+  background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 8%, transparent);
   padding: 0;
   margin: 0;
   width: 22px;
@@ -8702,6 +8702,7 @@ textarea.cursor-input {
   justify-content: center;
   opacity: 1;
   pointer-events: auto;
+  color: var(--mos-text, var(--color-cursor-text));
 }
 /* Positioning only — panel look comes from the shared menu block. */
 .cursor-tab-context-menu {

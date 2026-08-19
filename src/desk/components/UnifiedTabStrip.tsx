@@ -45,7 +45,8 @@ function StableTabPreview({ src, kind }) {
   if (displayKind === "video") {
     return <video src={displaySrc} muted playsInline preload="metadata" />;
   }
-  return <img src={displaySrc} alt="" loading="lazy" />;
+  // Eager — `loading="lazy"` inside the overflow-x tab scroller never intersects.
+  return <img src={displaySrc} alt="" decoding="async" />;
 }
 
 function tabAudioOrbSeed(tab) {
@@ -60,6 +61,9 @@ function isAudioFileExt(value) {
 }
 
 function isAudioTab(tab) {
+  // Opened image/video editor files keep their thumbnail — never the audio orb.
+  if (tab?.previewKind === "image" || tab?.previewKind === "video") return false;
+  if (tab?.previewUrl && tab?.previewKind !== "audio") return false;
   if (tab?.previewKind === "audio" || tab?.kind === "audio") return true;
   if (isAudioFileExt(tab?.ext) || isAudioFileExt(tab?.title) || isAudioFileExt(tab?.path)) {
     return true;

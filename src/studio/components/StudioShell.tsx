@@ -398,7 +398,10 @@ import { StudioFilesNavPane } from "./StudioFilesNavPane";
 import { StudioFilesNavMobileSheet } from "./StudioFilesNavMobileSheet";
 /* Chrome used by statically mounted shell widgets. Pane CSS (Feed, CN, DMs,
    Academy, profile) lives on the dynamic() modules so phones don't parse it
-   until that surface opens. Dev: refresh if Turbopack misses a CSS HMR link. */
+   until that surface opens. Dev: refresh if Turbopack misses a CSS HMR link.
+   Files source toggle + search row are explorer chrome, not the Asset library
+   pane — keep them here or Your files renders the tabs unstyled. */
+import "./studio-files-chrome.css";
 import "./studio-asset-picker.css";
 import "./studio-share-people.css";
 import "./studio-profile-avatar.css";
@@ -2520,10 +2523,7 @@ export function StudioShell({
   const topFolders = useQuery(
     api.folders.listWithPeeks,
     // Boot without CDN signing — signing every root peek was timing out the 1s query budget.
-    // Mobile: skip until Files or Generate needs the workspace root.
-    hasCurrentUser && (!isMobile || needsExplorerFolderContents || needsComposerCatalog)
-      ? {}
-      : "skip",
+    hasCurrentUser ? {} : "skip",
   );
   const workspaceRoot = useMemo(
     () => workspaceRootFromList(topFolders),
@@ -6671,6 +6671,33 @@ export function StudioShell({
     }
   }
 
+  function closeAllTabs() {
+    const keys = Array.isArray(openTabs) ? openTabs : [];
+    if (!keys.length) return;
+    for (const key of keys) {
+      if (isComposerContextTabKey(key)) {
+        delete composerContextsRef.current[key];
+      }
+    }
+    writePersistedComposerContexts(
+      composerContextsRef.current,
+      tabAccountIdRef.current,
+    );
+    userClearedTabsRef.current = true;
+    setOpenTabs([]);
+    setActiveTab("");
+    commitLiveTabSession(
+      {
+        openTabs: [],
+        activeTab: "",
+        activeFolderId: latestTabSessionRef.current.activeFolderId,
+        navTrail: latestTabSessionRef.current.navTrail,
+        snapshots: latestTabSessionRef.current.snapshots,
+      },
+      { allowWipe: true },
+    );
+  }
+
   function handleEntryOpen(entry) {
     if (entry.studioKind === "videoEdit" && !isVideoEditorPreviewEnabled()) return;
     // Desktop pick-from-Files: folders still navigate; matching assets resolve
@@ -10204,15 +10231,33 @@ export function StudioShell({
           .studio-polish .cursor-workspace-head {
             gap: 6px;
             padding-left: max(4px, env(safe-area-inset-left, 0px)) !important;
-            padding-right: max(2px, env(safe-area-inset-right, 0px)) !important;
+            padding-right: env(safe-area-inset-right, 0px) !important;
           }
           .studio-polish .cursor-workspace-tools {
             gap: 4px;
             padding-left: 4px;
-            padding-right: max(2px, env(safe-area-inset-right, 0px));
+            padding-right: env(safe-area-inset-right, 0px);
             align-items: center;
             align-self: stretch;
             height: 100%;
+          }
+          .studio-close-all-btn {
+            width: var(--studio-mobile-chrome-control, 30px) !important;
+            min-width: var(--studio-mobile-chrome-control, 30px) !important;
+            height: var(--studio-mobile-chrome-control, 30px) !important;
+            min-height: var(--studio-mobile-chrome-control, 30px) !important;
+            padding: 0 !important;
+            font-size: 0;
+          }
+          .studio-close-all-btn svg {
+            width: 14px;
+            height: 14px;
+          }
+          .studio-polish .cursor-unified-tab .cursor-tab-close {
+            width: 26px !important;
+            height: 26px !important;
+            min-width: 26px;
+            min-height: 26px;
           }
           .studio-polish .cursor-workspace-tools .studio-settings-pill:not(.studio-profile-menu-trigger) {
             min-width: var(--studio-mobile-chrome-control, 30px) !important;
@@ -10277,7 +10322,7 @@ export function StudioShell({
             width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
             min-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
             max-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            padding: 0 6px !important;
+            padding: 0 3px 0 6px !important;
             align-self: center;
             border-radius: 999px !important;
             border-left-width: 1px !important;
@@ -11403,7 +11448,7 @@ export function StudioShell({
             0 0 16px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
         }
         .studio-polish .cursor-workspace-head {
-          padding: 0 2px 0 4px !important;
+          padding: 0 1px 0 4px !important;
           gap: 0;
           align-items: center;
           background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
@@ -11429,7 +11474,7 @@ export function StudioShell({
             height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px));
             padding-top: env(safe-area-inset-top, 0px) !important;
             padding-left: max(4px, env(safe-area-inset-left, 0px)) !important;
-            padding-right: max(2px, env(safe-area-inset-right, 0px)) !important;
+            padding-right: env(safe-area-inset-right, 0px) !important;
             background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
             border: 0 !important;
             border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
@@ -11488,7 +11533,7 @@ export function StudioShell({
           background: transparent !important;
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
-          padding: 0 6px !important;
+          padding: 0 3px 0 6px !important;
           margin: 0 !important;
           box-shadow: none !important;
           /* Visible so the inter-tab hairline (::after) can sit in the gap. */
@@ -11521,7 +11566,7 @@ export function StudioShell({
             border-radius: 999px !important;
             border-left-width: 1px !important;
             margin: 0 !important;
-            padding: 0 6px !important;
+            padding: 0 3px 0 6px !important;
             box-sizing: border-box !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab:hover:not(.cursor-unified-tab-new),
@@ -11529,7 +11574,7 @@ export function StudioShell({
             height: var(--studio-mobile-chrome-control, 30px) !important;
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
             max-height: var(--studio-mobile-chrome-control, 30px) !important;
-            padding: 0 6px !important;
+            padding: 0 3px 0 6px !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab-placeholder {
             height: var(--studio-mobile-chrome-control, 30px) !important;
@@ -12694,7 +12739,7 @@ export function StudioShell({
           height: calc(var(--cursor-head-h) - 2px) !important;
           min-height: calc(var(--cursor-head-h) - 2px) !important;
           max-height: calc(var(--cursor-head-h) - 2px) !important;
-          padding: 0 6px !important;
+          padding: 0 3px 0 6px !important;
           border: 1px solid transparent !important;
           box-sizing: border-box !important;
           background-clip: padding-box !important;
@@ -12771,20 +12816,24 @@ export function StudioShell({
           pointer-events: auto !important;
           z-index: 6 !important;
           position: relative;
-          color: color-mix(in srgb, var(--color-cursor-text-bright) 72%, transparent);
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 8%, transparent) !important;
+          color: var(--mos-text, var(--color-cursor-text)) !important;
         }
         .studio-polish .cursor-unified-tab .cursor-tab-close:hover,
         .studio-polish .cursor-unified-tab .cursor-tab-close:active {
-          color: var(--color-cursor-text-bright) !important;
-          background: color-mix(in srgb, var(--mos-text-bright) 10%, transparent) !important;
+          color: var(--color-cursor-text, var(--mos-text)) !important;
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 14%, transparent) !important;
         }
         .studio-polish .cursor-unified-tab.is-active .cursor-tab-close {
-          background: transparent !important;
-          color: currentColor !important;
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 8%, transparent) !important;
+          color: var(--mos-text, var(--color-cursor-text)) !important;
         }
         .studio-polish .cursor-unified-tab.is-active .cursor-tab-close:hover {
-          background: color-mix(in srgb, var(--mos-text-bright) 12%, transparent) !important;
-          color: var(--color-cursor-text-bright) !important;
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 14%, transparent) !important;
+          color: var(--color-cursor-text, var(--mos-text)) !important;
         }
         .studio-polish .cursor-unified-tab.is-active,
         .studio-polish .cursor-unified-tab.is-streaming.is-active,
@@ -19388,6 +19437,43 @@ export function StudioShell({
           box-shadow: none;
           filter: none;
           padding: 0;
+        }
+        .studio-close-all-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          height: 24px;
+          min-height: 24px;
+          padding: 0 8px;
+          border-radius: 999px;
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+          color: var(--color-cursor-text, var(--mos-text));
+          box-shadow: none;
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.01em;
+          line-height: 1;
+          white-space: nowrap;
+          cursor: pointer;
+          appearance: none;
+          -webkit-appearance: none;
+          font-family: inherit;
+        }
+        .studio-close-all-btn:hover {
+          border-color: var(--color-cursor-border, var(--mos-border));
+          background: var(--mos-hover, var(--color-cursor-hover));
+          color: var(--color-cursor-text, var(--mos-text));
+        }
+        .studio-workspace-tools-divider {
+          width: 1px;
+          height: 14px;
+          margin: 0 4px 0 2px;
+          flex: 0 0 auto;
+          align-self: center;
+          background: var(--mos-border, var(--color-cursor-border));
+          pointer-events: none;
         }
         .studio-settings-trigger svg {
           width: 12px;
@@ -26237,6 +26323,24 @@ export function StudioShell({
               )
             : null}
           <div className="cursor-panel-head-tools cursor-workspace-tools">
+            {openTabs.length > 0 ? (
+              <button
+                type="button"
+                className={`studio-close-all-btn${isMobile ? " studio-settings-pill studio-settings-trigger" : ""}`}
+                onClick={closeAllTabs}
+                aria-label="Close all tabs"
+                title="Close all tabs"
+              >
+                {isMobile ? (
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  "Close all"
+                )}
+              </button>
+            ) : null}
+            {!isMobile && openTabs.length > 0 ? (
+              <span className="studio-workspace-tools-divider" aria-hidden="true" />
+            ) : null}
             {!isMobile ? (
               <>
                 <button
@@ -27017,6 +27121,24 @@ export function StudioShell({
               )
             : null}
           <div className="cursor-panel-head-tools cursor-workspace-tools">
+            {openTabs.length > 0 ? (
+              <button
+                type="button"
+                className={`studio-close-all-btn${isMobile ? " studio-settings-pill studio-settings-trigger" : ""}`}
+                onClick={closeAllTabs}
+                aria-label="Close all tabs"
+                title="Close all tabs"
+              >
+                {isMobile ? (
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  "Close all"
+                )}
+              </button>
+            ) : null}
+            {!isMobile && openTabs.length > 0 ? (
+              <span className="studio-workspace-tools-divider" aria-hidden="true" />
+            ) : null}
             {!isMobile ? (
               <>
                 <button
