@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hitTransformHandle } from "./transformHit";
+import { hitTransformHandle, overlayRectStyle } from "./transformHit";
 
 const box = { left: 0.25, top: 0.4, width: 0.5, height: 0.08 };
 
@@ -20,5 +20,14 @@ describe("hitTransformHandle", () => {
     const nx = box.left + box.width / 2;
     const ny = box.top + box.height + 52 / canvasH;
     expect(hitTransformHandle(nx, ny, box, 0, canvasW, canvasH)).toBeNull();
+  });
+
+  it("sizes the overlay hit to the contain-rect, not the canvas", () => {
+    const style = overlayRectStyle(box, 15, 16);
+    expect(style.left).toBe("calc(25% - 16px)");
+    expect(style.top).toBe("calc(40% - 16px)");
+    expect(style.width).toBe("calc(50% + 32px)");
+    expect(style.height).toBe("calc(8% + 32px)");
+    expect(style.transform).toBe("rotate(15deg)");
   });
 });

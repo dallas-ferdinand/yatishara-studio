@@ -26,7 +26,7 @@ import { registerAcademyTools } from "./tools/academy.js";
 requireConfig();
 const server = new McpServer({
   name: "yatishara-studio",
-  version: "0.8.5"
+  version: "0.8.6"
 });
 const agentSurface = process.env.STUDIO_MCP_AGENT_SURFACE === "1";
 registerGuideResources(server);

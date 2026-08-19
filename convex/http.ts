@@ -24,6 +24,10 @@ import {
   agentWorkerCallback,
   agentWorkerCallbackOptions,
 } from "./agentWorkerHttp";
+import {
+  ffmpegWorkerCallback,
+  ffmpegWorkerCallbackOptions,
+} from "./ffmpegWorkerHttp";
 
 const http = httpRouter();
 
@@ -316,6 +320,29 @@ for (const path of [
   http.route({ path, method: "POST", handler: agentWorkerCallback });
   http.route({ path, method: "GET", handler: agentWorkerCallback });
   http.route({ path, method: "OPTIONS", handler: agentWorkerCallbackOptions });
+}
+
+for (const path of [
+  "/api/ffmpeg-worker/asset",
+  "/api/ffmpeg-worker/prepare-export-asset",
+  "/api/ffmpeg-worker/finalize-export-asset",
+  "/api/ffmpeg-worker/attach-output",
+  "/api/ffmpeg-worker/job-progress",
+  "/api/ffmpeg-worker/job-complete",
+  "/api/ffmpeg-worker/job-fail",
+  "/api/ffmpeg-worker/job-reap-orphans",
+  "/api/ffmpeg-worker/proxy-complete",
+  "/api/ffmpeg-worker/proxy-fail",
+  "/api/ffmpeg-worker/work-complete",
+  "/api/ffmpeg-worker/work-fail",
+  "/api/ffmpeg-worker/create-derived-asset",
+  "/api/ffmpeg-worker/create-frame-asset",
+  "/api/ffmpeg-worker/ensure-pulled-frames-folder",
+  "/api/ffmpeg-worker/help-preview-complete",
+  "/api/ffmpeg-worker/help-preview-fail",
+] as const) {
+  http.route({ path, method: "POST", handler: ffmpegWorkerCallback });
+  http.route({ path, method: "OPTIONS", handler: ffmpegWorkerCallbackOptions });
 }
 
 export default http;

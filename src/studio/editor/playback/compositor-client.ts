@@ -4,20 +4,34 @@ import {
   type CompositorLayer,
   type CompositorPaintArgs,
   type CompositorTextItem,
+  type CompositorVisualItem,
+  type PaintedSceneHit,
 } from "./compositor-2d";
 
 function closeLayerFrames(layers: CompositorLayer[] | undefined): void {
   for (const layer of layers ?? []) {
     try {
-      layer.frame?.close();
+      layer.frame?.close?.();
     } catch {
       /* already closed */
     }
   }
 }
 
+function closeVisualFrames(visual: CompositorVisualItem[] | undefined): void {
+  if (!visual) return;
+  closeLayerFrames(
+    visual
+      .filter(
+        (item): item is { type: "picture"; layer: CompositorLayer } =>
+          item.type === "picture",
+      )
+      .map((item) => item.layer),
+  );
+}
+
 export type CompositorFrame = {
-  frame?: VideoFrame;
+  frame?: import("./compositor-2d").CompositorDrawable;
 };
 
 export class CompositorClient {
@@ -25,6 +39,8 @@ export class CompositorClient {
   private disposed = false;
   /** Play-path: drop overlapping paints instead of queuing. */
   private paintBusy = false;
+  /** Last successful picture quads — HMR-stale instances / empty scenes still pick. */
+  private lastHits: PaintedSceneHit[] = [];
   onTextureMiss: ((textureKeys: string[]) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, width: number, height: number) {
@@ -34,10 +50,11 @@ export class CompositorClient {
 
   async render(args: CompositorPaintArgs): Promise<void> {
     if (this.disposed) {
-      args.frameA?.close();
-      args.frameB?.close();
+      args.frameA?.close?.();
+      args.frameB?.close?.();
       closeLayerFrames(args.stack);
       closeLayerFrames(args.layers);
+      closeVisualFrames(args.visual);
       return;
     }
     this.compositor.paint(args);
@@ -49,17 +66,19 @@ export class CompositorClient {
    */
   paint(args: CompositorPaintArgs): boolean {
     if (this.disposed) {
-      args.frameA?.close();
-      args.frameB?.close();
+      args.frameA?.close?.();
+      args.frameB?.close?.();
       closeLayerFrames(args.stack);
       closeLayerFrames(args.layers);
+      closeVisualFrames(args.visual);
       return false;
     }
     if (this.paintBusy) {
-      args.frameA?.close();
-      args.frameB?.close();
+      args.frameA?.close?.();
+      args.frameB?.close?.();
       closeLayerFrames(args.stack);
       closeLayerFrames(args.layers);
+      closeVisualFrames(args.visual);
       return false;
     }
     this.paintBusy = true;
@@ -72,10 +91,10 @@ export class CompositorClient {
   }
 
   updateTransform(
+    clipId: string,
     transform: [number, number, number, number],
-    target: "a" | "b" = "a",
   ): void {
-    if (!this.disposed) this.compositor.updateTransform(transform, target);
+    if (!this.disposed) this.compositor.updateTransform(clipId, transform);
   }
 
   updateTextTransform(
@@ -93,6 +112,20 @@ export class CompositorClient {
     if (!this.disposed) this.compositor.resize(width, height);
   }
 
+  paintedHits(): PaintedSceneHit[] {
+    if (this.disposed) return this.lastHits;
+    try {
+      const hits =
+        typeof this.compositor.paintedHits === "function"
+          ? this.compositor.paintedHits()
+          : [];
+      if (hits.length) this.lastHits = hits;
+      return hits.length ? hits : this.lastHits;
+    } catch {
+      return this.lastHits;
+    }
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -100,4 +133,4 @@ export class CompositorClient {
   }
 }
 
-export type { CompositorLayer, CompositorPaintArgs, CompositorTextItem, TransitionType };
+export type { CompositorLayer, CompositorPaintArgs, CompositorTextItem, CompositorVisualItem, PaintedSceneHit, TransitionType };

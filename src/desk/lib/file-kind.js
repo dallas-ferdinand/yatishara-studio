@@ -107,6 +107,12 @@ export function explorerEntryIcon(entry) {
   ) {
     return "share";
   }
+  if (
+    entry?.studioKind === "screenRecordings" ||
+    entry?.systemKind === "screen_recordings"
+  ) {
+    return "monitor";
+  }
   if (entry?.type === "dir" || entry?.type === "parent") return entry?.type === "parent" ? "chevL" : "folder";
   if (entry?.studioKind === "videoEdit") return "studioProject";
   if (entry?.documentKind === "post" || entry?.ext === ".post") return "post";

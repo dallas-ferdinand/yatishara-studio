@@ -37,7 +37,7 @@ export type ClipEffects = {
   volume?: number;
   /** CapCut-style playback rate. Timeline duration = sourceTrim / speed. Default 1. */
   speed?: number;
-  /** Canvas zoom. 1 = 100% cover fill. */
+  /** Canvas zoom. 1 = 100% of the fitted quad. */
   scale?: number;
   /** Horizontal pan as a fraction of canvas width. */
   x?: number;
@@ -45,6 +45,11 @@ export type ClipEffects = {
   y?: number;
   /** Rotation in degrees. */
   rotation?: number;
+  /**
+   * How the bitmap sits in the frame before scale/pan.
+   * Unset: stills contain (letterbox), video covers (fill).
+   */
+  fitMode?: "contain" | "cover";
   /** Static picture opacity 0–1 (multiplied with edge fade envelope). Default 1. */
   opacity?: number;
 };

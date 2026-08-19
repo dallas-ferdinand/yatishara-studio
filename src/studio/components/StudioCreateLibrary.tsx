@@ -7,6 +7,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Loader2, Sparkles } from "lucide-react";
 import {
+  GEN_TILE_ACTIVATE_EVENT,
   StudioGenerationTile,
   type GenerationLibraryTile,
 } from "./StudioGenerationTile";
@@ -272,6 +273,57 @@ export function StudioCreateLibrary({
     });
     return columns;
   }, [tiles, cols]);
+
+  // Tiles are not click targets — iOS/WebKit swallows pan when the finger
+  // starts on an onClick/overflow:hidden card. Activate on pointerup only if
+  // the library did not scroll.
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return undefined;
+    const origin = { x: 0, y: 0, scroll: 0, tile: null as Element | null };
+    const ignoreSel =
+      "button, a, input, textarea, select, [contenteditable='true'], .studio-chat-audio-wave, .studio-orb-play, .studio-gen-tile-action, .studio-gen-tile-play, .studio-gen-tile-stop, .studio-gen-tile-audio-details";
+    const onDown = (event: PointerEvent) => {
+      if (event.pointerType === "mouse" && event.button !== 0) {
+        origin.tile = null;
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        origin.tile = null;
+        return;
+      }
+      if (target.closest(ignoreSel)) {
+        origin.tile = null;
+        return;
+      }
+      origin.x = event.clientX;
+      origin.y = event.clientY;
+      origin.scroll = root.scrollTop;
+      origin.tile = target.closest(".studio-gen-tile");
+    };
+    const onUp = (event: PointerEvent) => {
+      const tile = origin.tile;
+      origin.tile = null;
+      if (!tile || !root.contains(tile)) return;
+      if (Math.abs(event.clientX - origin.x) > 10 || Math.abs(event.clientY - origin.y) > 10) {
+        return;
+      }
+      if (Math.abs(root.scrollTop - origin.scroll) > 2) return;
+      tile.dispatchEvent(new CustomEvent(GEN_TILE_ACTIVATE_EVENT));
+    };
+    const onCancel = () => {
+      origin.tile = null;
+    };
+    root.addEventListener("pointerdown", onDown, { passive: true });
+    root.addEventListener("pointerup", onUp, { passive: true });
+    root.addEventListener("pointercancel", onCancel, { passive: true });
+    return () => {
+      root.removeEventListener("pointerdown", onDown);
+      root.removeEventListener("pointerup", onUp);
+      root.removeEventListener("pointercancel", onCancel);
+    };
+  }, []);
 
   return (
     <div className={`studio-create-library${lightbox ? " is-previewing" : ""}`}>

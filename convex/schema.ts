@@ -162,6 +162,10 @@ export const creditTransactionKind = v.union(
   /** Feed Boost: 5 TTD cents from viewer wallet to post author. */
   v.literal("boost_sent"),
   v.literal("boost_received"),
+  /** Help Answer unlock: buyer pays list price (split sent + fee). */
+  v.literal("unlock_sent"),
+  v.literal("unlock_received"),
+  v.literal("unlock_fee"),
 );
 
 /** Protected system folders in the explorer. */
@@ -172,6 +176,8 @@ export const folderSystemKind = v.union(
   v.literal("public_assets"),
   /** Live-link items others shared with this user (virtual listing). */
   v.literal("shared_with_me"),
+  /** Desktop screen-share takes for Help Answers (and reusable on Posts). */
+  v.literal("screen_recordings"),
 );
 
 /** Studio item kinds that can be live-shared to another user. */
@@ -189,6 +195,8 @@ export const assetLicenseKind = v.union(
   v.literal("purchased_network"),
   /** Seller catalog copy in Public (source for purchases). */
   v.literal("listed_network"),
+  /** Buyer copy of a paid Help Answer in Purchased. */
+  v.literal("purchased_help_answer"),
 );
 
 export const assetListingStatus = v.union(
@@ -273,6 +281,8 @@ export const notificationKind = v.union(
   v.literal("payment_status"),
   v.literal("dm_message"),
   v.literal("followed_post"),
+  v.literal("help_answer_posted"),
+  v.literal("help_answer_unlocked"),
 );
 
 const modelHints = v.record(
@@ -349,8 +359,8 @@ export default defineSchema({
     color: v.optional(v.string()),
     sortOrder: v.number(),
     /**
-     * Protected system folders (Messages for DM media, Purchased for Creative
-     * Network audio). Cannot be renamed, moved, or trashed.
+     * Protected system folders (Messages, Purchased, My Public, Shared with me,
+     * Screen Recordings). Cannot be renamed, moved, or trashed.
      */
     systemKind: v.optional(folderSystemKind),
     /** Owner emoji sticker in the file manager (not Lucide icon). */
@@ -409,6 +419,8 @@ export default defineSchema({
     elevenMusicSongId: v.optional(v.string()),
     /** Creative Network listing this copy was purchased from. */
     sourceListingId: v.optional(v.id("assetListings")),
+    /** Help Answer post this Purchased copy was unlocked from. */
+    sourcePostId: v.optional(v.id("profilePosts")),
     /** When set, trash/delete/move-out is blocked (pay-once Network license). */
     licenseKind: v.optional(assetLicenseKind),
     /** Owner emoji sticker in the file manager. */
@@ -1156,6 +1168,32 @@ export default defineSchema({
     resultAssetId: v.optional(v.id("assets")),
     createdAt: v.number(),
     updatedAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_project", ["ownerId", "projectId"]),
+
+  /**
+   * Off-Convex ffmpeg work the UI/API still awaits (clip download, speed, frames).
+   * Export uses exportJobs; edit-proxy uses mediaProxyJobs.
+   */
+  ffmpegWorkJobs: defineTable({
+    ownerId: v.optional(v.id("users")),
+    kind: v.union(
+      v.literal("clip-download"),
+      v.literal("speed"),
+      v.literal("natural-speed"),
+      v.literal("pull-frame"),
+      v.literal("sample-frames"),
+    ),
+    status: v.union(
+      v.literal("running"),
+      v.literal("done"),
+      v.literal("error"),
+    ),
+    error: v.optional(v.string()),
+    result: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
   }).index("by_owner", ["ownerId"]),
 
   /** Public creative identity — separate from private account details on users. */
@@ -1226,11 +1264,33 @@ export default defineSchema({
     /** Set when the owner edits the caption/description after publish. */
     editedAt: v.optional(v.number()),
     unpublishedAt: v.optional(v.number()),
+    /** Missing on older rows → treat as "post". */
+    postKind: v.optional(
+      v.union(
+        v.literal("post"),
+        v.literal("help_request"),
+        v.literal("help_answer"),
+      ),
+    ),
+    /** Help Answer → the Help Request it replies to. */
+    parentRequestPostId: v.optional(v.id("profilePosts")),
+    previewStartMs: v.optional(v.number()),
+    previewEndMs: v.optional(v.number()),
+    recordingDurationMs: v.optional(v.number()),
+    /** 500 or 1000 TTD cents, derived from recording length at publish. */
+    unlockPriceCents: v.optional(v.number()),
+    helpAnswerFullAssetId: v.optional(v.id("assets")),
+    helpAnswerPreviewAssetId: v.optional(v.id("assets")),
+    /** Set with unpublishedAt when the owner takes down a sold answer. */
+    salesClosedAt: v.optional(v.number()),
   })
     .index("by_profile_and_published", ["profileId", "publishedAt"])
     .index("by_published", ["publishedAt"])
     .index("by_asset", ["assetId"])
-    .index("by_owner", ["ownerId"]),
+    .index("by_owner", ["ownerId"])
+    .index("by_kind_published", ["postKind", "publishedAt"])
+    .index("by_parent_request", ["parentRequestPostId"])
+    .index("by_parent_and_owner", ["parentRequestPostId", "ownerId"]),
 
   /** Global hashtag catalog (normalized tag without #). */
   hashtags: defineTable({
@@ -1340,6 +1400,35 @@ export default defineSchema({
     .index("by_user_post_status", ["userId", "postId", "status"])
     .index("by_post", ["postId"])
     .index("by_user_and_created", ["userId", "createdAt"]),
+
+  /** Paid Help Answer unlock. Undoable for 60s. */
+  profileUnlocks: defineTable({
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+    createdAt: v.number(),
+    amountCredits: v.number(),
+    sellerCredits: v.number(),
+    feeCredits: v.number(),
+    senderTransactionId: v.id("creditTransactions"),
+    receiverTransactionId: v.id("creditTransactions"),
+    feeTransactionId: v.id("creditTransactions"),
+    status: v.union(v.literal("active"), v.literal("undone")),
+    undoneAt: v.optional(v.number()),
+    buyerAssetId: v.optional(v.id("assets")),
+    notifiedAt: v.optional(v.number()),
+  })
+    .index("by_user_and_post", ["userId", "postId"])
+    .index("by_user_post_status", ["userId", "postId", "status"])
+    .index("by_post", ["postId"])
+    .index("by_user_and_created", ["userId", "createdAt"])
+    .index("by_status_and_created", ["status", "createdAt"]),
+
+  /** Accumulated Help Answer platform fees (10% of list price). */
+  platformFeeSinks: defineTable({
+    key: v.string(),
+    creditBalance: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 
   profileSaves: defineTable({
     userId: v.id("users"),

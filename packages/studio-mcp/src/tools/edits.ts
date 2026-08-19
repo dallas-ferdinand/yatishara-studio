@@ -27,12 +27,16 @@ const clipEffects = z
     volume: z
       .number()
       .optional()
-      .describe("0–1 gain; set 0 to mute this clip (per-clip mute)"),
+      .describe("0–2 gain (1 = 100%); set 0 to mute this clip (per-clip mute)"),
     speed: z.number().optional().describe("Playback rate; timeline duration = trim / speed"),
-    scale: z.number().optional().describe("Canvas zoom; 1 = 100% cover"),
+    scale: z.number().optional().describe("Canvas zoom; 1 = 100% cover fill"),
     x: z.number().optional().describe("Horizontal pan as fraction of canvas width"),
     y: z.number().optional().describe("Vertical pan as fraction of canvas height"),
     rotation: z.number().optional().describe("Rotation degrees"),
+    opacity: z
+      .number()
+      .optional()
+      .describe("Static picture opacity 0–1 (multiplied with edge fade)"),
   })
   .describe("ClipEffects — volume/fades/speed/transform");
 
@@ -179,7 +183,7 @@ export function registerEditTools(server: McpServer) {
 
   server.tool(
     "studio_edit_update_clips",
-    "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects (volume/fades/speed/scale/x/y/rotation), transitionOut, text (text clips). Per-clip mute = effects.volume 0 — only when the user asks to mute; exports will be silent if volume is 0. Default leave volume unset/1 to keep source audio.",
+    "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects (volume 0–2 / fades / speed / scale / x / y / rotation / opacity), transitionOut, text (text clips). Per-clip mute = effects.volume 0 — only when the user asks to mute; exports will be silent if volume is 0. Default leave volume unset/1 to keep source audio.",
     {
       projectId: z.string(),
       clips: z.array(clipPatch).min(1),

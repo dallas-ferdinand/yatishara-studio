@@ -108,7 +108,7 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_send_message` / `studio_send_image_message` / `studio_send_voice_message` / `studio_send_media_message` / `studio_share_post_to_dm` | Send text, image, voice, Studio media (video/file → peer Messages), or feed share |
 | `studio_mark_conversation_read` / `studio_unread_count` / `studio_search_messages` | Read receipts, badge, search |
 | `studio_*_dm_label*` / `studio_*_peer_*` | Labels, notes, block/unblock |
-| `studio_get_my_profile` / `studio_list_feed` / `studio_share_asset_post` / `studio_*_like|save|follow` | Feed + profiles (`social` scope) |
+| `studio_get_my_profile` / `studio_list_feed` / `studio_share_asset_post` / `studio_*_like|save|follow` | Feed + profiles (`social` scope). Help/Value: `postKind` help_request\|help_answer, `studio_list_help_requests`, `studio_unlock_help_answer` |
 | `studio_list_network_offers` / `studio_book_offer` / `studio_*_job*` | Creative Network offers + jobs (`marketplace`) |
 | `studio_browse_network_listings` / `studio_list_on_network` / `studio_purchase_network_listing` | Stock-audio listings (`marketplace`) |
 | `studio_list_payments` / `studio_list_credit_transactions` / `studio_get_storage` / `studio_get_subscription` | Billing depth (`read`) |

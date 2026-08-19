@@ -13,7 +13,18 @@ type WatchRow = {
 const CHIME_COOLDOWN_MS = 700;
 const FRESH_WINDOW_MS = 60_000;
 
-function playIncoming(kind: "dm_message" | "followed_post") {
+type WatchKind = "dm_message" | "followed_post" | "help_answer_posted" | "help_answer_unlocked";
+
+function isChimeKind(kind: string): kind is WatchKind {
+  return (
+    kind === "dm_message" ||
+    kind === "followed_post" ||
+    kind === "help_answer_posted" ||
+    kind === "help_answer_unlocked"
+  );
+}
+
+function playIncoming(kind: WatchKind) {
   playUiSound(kind === "dm_message" ? "message" : "notify");
 }
 
@@ -34,7 +45,7 @@ export function useIncomingAlertChimes(args: {
   const seededRef = useRef(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
   const lastChimeAtRef = useRef(0);
-  const deferredRef = useRef<"dm_message" | "followed_post" | null>(null);
+  const deferredRef = useRef<WatchKind | null>(null);
   const activeConversationIdRef = useRef(args.activeConversationId);
   const messagesThreadVisibleRef = useRef(args.messagesThreadVisible);
   activeConversationIdRef.current = args.activeConversationId;
@@ -88,7 +99,7 @@ export function useIncomingAlertChimes(args: {
 
     for (const row of fresh) {
       if (now - row.createdAt > FRESH_WINDOW_MS) continue;
-      if (row.kind !== "dm_message" && row.kind !== "followed_post") continue;
+      if (!isChimeKind(row.kind)) continue;
 
       // WA: no ding while that exact chat is open on screen.
       if (

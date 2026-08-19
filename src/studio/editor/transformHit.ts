@@ -17,6 +17,38 @@ const CORNER_PX = 14;
 const ROTATE_KNOB_PX = 16;
 /** Stem (14) + half knob (12) — visual center of the rotate control. */
 export const ROTATE_KNOB_CENTER_PX = 26;
+/** Extra hit pad so corner handles outside the blue box still receive events. */
+export const TRANSFORM_HIT_PAD_PX = 16;
+
+export function overlayRectStyle(
+  rect: TransformHitRect,
+  rotation: number,
+  padPx = 0,
+): {
+  left: string;
+  top: string;
+  width: string;
+  height: string;
+  transform: string;
+} {
+  const rotate = `rotate(${rotation}deg)`;
+  if (padPx <= 0) {
+    return {
+      left: `${rect.left * 100}%`,
+      top: `${rect.top * 100}%`,
+      width: `${rect.width * 100}%`,
+      height: `${rect.height * 100}%`,
+      transform: rotate,
+    };
+  }
+  return {
+    left: `calc(${rect.left * 100}% - ${padPx}px)`,
+    top: `calc(${rect.top * 100}% - ${padPx}px)`,
+    width: `calc(${rect.width * 100}% + ${padPx * 2}px)`,
+    height: `calc(${rect.height * 100}% + ${padPx * 2}px)`,
+    transform: rotate,
+  };
+}
 
 export function toLocalPoint(
   nx: number,
@@ -41,6 +73,20 @@ export function toLocalPoint(
     x: (lx + halfW) / Math.max(1, rect.width * canvasWidth),
     y: (ly + halfH) / Math.max(1, rect.height * canvasHeight),
   };
+}
+
+/** True when the canvas point sits on the contain-rect (rotation-aware). */
+export function pointHitsContentRect(
+  nx: number,
+  ny: number,
+  rect: TransformHitRect,
+  rotation: number,
+  canvasWidth: number,
+  canvasHeight: number,
+): boolean {
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  const local = toLocalPoint(nx, ny, rect, rotation, canvasWidth, canvasHeight);
+  return local.x >= 0 && local.x <= 1 && local.y >= 0 && local.y <= 1;
 }
 
 export function hitTransformHandle(

@@ -4674,46 +4674,57 @@ input[type="search"]:focus-visible {
   cursor: not-allowed;
 }
 
+.studio-file-transfer-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  pointer-events: none;
+}
+
 .studio-file-transfer-tray {
-  max-height: 118px;
-  padding: 5px 7px;
+  max-height: 88px;
+  padding: 4px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   overflow-y: auto;
   border-top: 1px solid var(--color-cursor-border-soft);
   background: var(--mos-plate);
 }
 
-/* Survives Files tab / left-rail swaps — uploads keep running and stay visible. */
+/* Overlay chip — never a layout sibling of the Studio shell. */
 .studio-file-transfer-tray.is-floating {
-  position: fixed;
+  position: absolute;
   right: 12px;
   bottom: 12px;
   z-index: 120;
-  width: min(360px, calc(100vw - 24px));
-  max-height: 160px;
+  width: min(240px, calc(100vw - 24px));
+  max-height: 88px;
+  height: max-content;
+  flex: 0 0 auto;
+  pointer-events: auto;
   border: 1px solid var(--color-cursor-border-soft);
   border-radius: var(--cursor-radius-md, 8px);
-  box-shadow: 0 10px 28px color-mix(in srgb, #000 16%, transparent);
-  border-top: 1px solid var(--color-cursor-border-soft);
+  box-shadow: 0 8px 20px color-mix(in srgb, #000 14%, transparent);
 }
 
-.studio-polish.is-studio-mobile .studio-file-transfer-tray.is-floating {
+.studio-polish.is-studio-mobile .studio-file-transfer-layer .studio-file-transfer-tray.is-floating,
+body:has(.studio-polish.is-studio-mobile) .studio-file-transfer-tray.is-floating {
   bottom: calc(
     12px + var(--studio-mobile-bottom-nav-height, 56px) + var(--studio-keyboard-inset, 0px)
   );
   right: 10px;
-  width: min(360px, calc(100vw - 20px));
+  width: min(240px, calc(100vw - 20px));
 }
 
 .studio-file-transfer {
   position: relative;
-  min-height: 28px;
-  padding: 0 5px 0 7px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0 4px 0 6px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   overflow: hidden;
   border-radius: var(--cursor-radius-md, 8px);
   background: var(--mos-plate-strong);
@@ -10227,33 +10238,15 @@ textarea.cursor-input {
 
 /* --- composer focus: keep default glass bg; accent ring via border/shadow only --- */
 
-/* --- mode switcher: free-standing pills on desktop only (mobile keeps a pill tray) --- */
-@media (min-width: 900px) {
-  .studio-polish .studio-mode-switcher {
-    background: transparent !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    padding: 0 !important;
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-    box-shadow: none !important;
-  }
-}
-
+/* --- mode switcher: contained pill tray on desktop and mobile.
+   Inactive rows stay clear inside the tray. Active keeps the
+   gradient chip + fading accent rim (do not flatten this on mobile). --- */
 .studio-polish .studio-mode-row {
   position: relative;
   z-index: 0;
   overflow: hidden;
-  background: color-mix(
-    in srgb,
-    var(--color-mos-composer, #07111f) 42%,
-    transparent
-  ) !important;
-  border: 1px solid color-mix(
-    in srgb,
-    var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) 38%,
-    transparent
-  ) !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
   color: color-mix(in srgb, var(--color-cursor-text-bright, #f4f6fb) 48%, transparent) !important;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -10266,16 +10259,8 @@ textarea.cursor-input {
 }
 
 .studio-polish .studio-mode-row:hover {
-  background: color-mix(
-    in srgb,
-    var(--color-mos-composer, #07111f) 28%,
-    transparent
-  ) !important;
-  border-color: color-mix(
-    in srgb,
-    var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) 62%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb, var(--color-cursor-fg, #fff) 8%, transparent) !important;
+  border-color: transparent !important;
   color: color-mix(in srgb, var(--color-cursor-text-bright, #f4f6fb) 78%, transparent) !important;
 }
 
@@ -10338,14 +10323,14 @@ textarea.cursor-input {
 }
 
 [data-appearance="light"] .studio-polish .studio-mode-row {
-  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 42%, transparent) !important;
-  border-color: rgba(15, 23, 42, 0.08) !important;
+  background: transparent !important;
+  border-color: transparent !important;
   color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 52%, transparent) !important;
 }
 
 [data-appearance="light"] .studio-polish .studio-mode-row:hover {
-  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 62%, transparent) !important;
-  border-color: rgba(15, 23, 42, 0.14) !important;
+  background: color-mix(in srgb, #000 5%, transparent) !important;
+  border-color: transparent !important;
   color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 78%, transparent) !important;
 }
 
@@ -10681,8 +10666,7 @@ textarea.cursor-input {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  flex: 1 1 auto;
-  margin-right: auto;
+  flex: 0 0 auto;
   min-width: 0;
 }
 

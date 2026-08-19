@@ -5,6 +5,9 @@ export const DEFAULT_CREDIT_PRICE_CENTS = 50;
 /** Must match `convex/lib/postBoost.ts`. */
 export const POST_BOOST_AMOUNT_CENTS = 5;
 export const POST_BOOST_UNDO_MS = 60_000;
+export const HELP_UNLOCK_UNDER_HOUR_CENTS = 500;
+export const HELP_UNLOCK_OVER_HOUR_CENTS = 1000;
+export const POST_UNLOCK_UNDO_MS = 60_000;
 
 /**
  * Preset top-up packs (credits). At 0.50 TTD/credit:

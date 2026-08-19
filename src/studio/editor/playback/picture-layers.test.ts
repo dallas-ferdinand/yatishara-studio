@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { pictureLayersBottomToTop } from "./picture-layers";
 import type { RenderSlice, VideoSample } from "./timeline-compiler";
 
-function sample(clipId: string, trackIndex: number): VideoSample {
+function sample(
+  clipId: string,
+  trackIndex: number,
+  kind: "image" | "video" = "image",
+): VideoSample {
   return {
     role: "single",
     sourceTime: 0,
@@ -12,7 +16,7 @@ function sample(clipId: string, trackIndex: number): VideoSample {
       assetId: clipId,
       trackId: `t-${clipId}`,
       trackIndex,
-      kind: "image",
+      kind,
       timelineStart: 0,
       timelineEnd: 4,
       sourceStart: 0,
@@ -22,7 +26,7 @@ function sample(clipId: string, trackIndex: number): VideoSample {
       clip: {
         id: clipId,
         trackId: `t-${clipId}`,
-        kind: "image",
+        kind,
         startTime: 0,
         trimIn: 0,
         trimOut: 4,
@@ -33,23 +37,31 @@ function sample(clipId: string, trackIndex: number): VideoSample {
   };
 }
 
-function sliceOf(...ids: string[]): RenderSlice {
+function sliceOf(
+  ...ids: Array<string | { id: string; kind: "image" | "video" }>
+): RenderSlice {
   return {
     timelineTime: 1,
-    video: ids.map((id, index) => sample(id, index)),
+    video: ids.map((entry, index) =>
+      typeof entry === "string"
+        ? sample(entry, index)
+        : sample(entry.id, index, entry.kind),
+    ),
     transition: null,
     audio: [],
     preloadAudio: [],
     text: [],
-    textOver: [],
-    textUnder: [],
+    visual: [],
     preload: [],
   };
 }
 
 describe("pictureLayersBottomToTop", () => {
   it("keeps every overlapping lane, bottom to top — not only first and last", () => {
-    const slice = sliceOf("sheet-a", "sheet-b", "blurry", "main");
+    const slice = sliceOf("sheet-a", "sheet-b", "blurry", {
+      id: "main",
+      kind: "video",
+    });
     const layers = pictureLayersBottomToTop(
       [
         { clipId: "sheet-a", textureKey: "image:sheet-a" },
@@ -65,6 +77,12 @@ describe("pictureLayersBottomToTop", () => {
       "blurry",
       "sheet-b",
       "sheet-a",
+    ]);
+    expect(layers.map((layer) => layer.fitMode)).toEqual([
+      "cover",
+      "contain",
+      "contain",
+      "contain",
     ]);
   });
 

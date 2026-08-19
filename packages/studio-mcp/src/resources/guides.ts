@@ -232,7 +232,7 @@ Open editor adopts newer Convex \`updatedAt\`. Still prefer \`studio_get_edit\` 
 
 ## Audio
 
-Keep source audio unless the user asks to mute. Do **not** set \`effects.volume: 0\` by default. Tracks \`muted: false\`.
+Keep source audio unless the user asks to mute. Do **not** set \`effects.volume: 0\` by default. Volume range is 0–2 (1 = 100%). Tracks \`muted: false\`. Picture transform: \`scale\` / \`x\` / \`y\` / \`rotation\` / \`opacity\` (cover fill at scale 1).
 
 ## Export / package
 
@@ -441,7 +441,8 @@ const SOCIAL = guide(
 
 - Profile: \`studio_get_my_profile\`, \`studio_update_my_profile\`, \`studio_get_profile\`, username claim/change
 - Feed: \`studio_list_feed\`, \`studio_list_public_posts\`, \`studio_list_my_collection\`
-- Share: \`studio_share_asset_post\`, \`studio_unshare_post\`, \`studio_update_post_caption\`, \`studio_is_asset_shared\`
+- Share: \`studio_share_asset_post\` (\`postKind\` post | help_request | help_answer), \`studio_unshare_post\`, \`studio_update_post_caption\`, \`studio_is_asset_shared\`
+- Help / Value: \`studio_list_help_requests\`, \`studio_get_help_request\`, \`studio_unlock_help_answer\` (paid — confirm first), \`studio_undo_help_unlock\` (≈60s)
 - Engage: \`studio_toggle_like\`, \`studio_toggle_save\`, comments, \`studio_follow\` / \`studio_unfollow\`
 - Discover: \`studio_list_platform_people\`, \`studio_suggest_hashtags\`, \`studio_suggest_people\`
 `,

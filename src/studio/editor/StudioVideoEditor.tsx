@@ -173,6 +173,7 @@ export function StudioVideoEditor({
   const ensureEditProxy = useMutation(api.assets.ensureEditProxy);
   const exportProject = useAction(api.videoEditActions.exportVideo);
   const createExportJob = useMutation(api.exportJobs.create);
+  const cancelExportJob = useMutation(api.exportJobs.cancel);
   const downloadClipSegment = useAction(api.videoEditActions.downloadClipSegment);
   const requestedProxyIdsRef = useRef(new Set());
   const [orphanAssetIds, setOrphanAssetIds] = useState([]);
@@ -217,33 +218,42 @@ export function StudioVideoEditor({
   const [renameRequest, setRenameRequest] = useState(null);
   const [overlaySnapEnabled, setOverlaySnapEnabled] = useState(readOverlaySnapEnabled);
 
-  const exportJob = useQuery(
-    api.exportJobs.get,
-    exportJobId ? { jobId: exportJobId } : "skip",
-  );
   const openedExportJobRef = useRef(null);
+  const sidePanelRef = useRef(state.ui.sidePanel);
+  sidePanelRef.current = state.ui.sidePanel;
 
-  useEffect(() => {
-    if (!exportJob) return;
-    if (exportJob.status === "running") return;
-    setExporting(false);
-    if (exportJob.status === "done") {
-      setExportProgressLocal(100);
-      setExportPhaseLocal("Export ready");
-      setExportResultName((name) => name || "export");
-      onStatus?.("Export ready.");
-      if (exportJob.resultAssetId && openedExportJobRef.current !== exportJob._id) {
-        openedExportJobRef.current = exportJob._id;
-        onOpenAsset?.(exportJob.resultAssetId);
+  const handleRestoreRunning = useCallback((jobId, kind) => {
+    setExportJobId((current) => current ?? jobId);
+    setExporting(true);
+    setExportKind(kind === "audio" ? "audio" : "video");
+    if (sidePanelRef.current !== "export") {
+      dispatch({ type: "set_side_panel", panel: "export" });
+    }
+  }, []);
+
+  const handleExportSettled = useCallback(
+    (job) => {
+      if (!job || job.status === "running") return;
+      setExporting(false);
+      if (job.status === "done") {
+        setExportProgressLocal(100);
+        setExportPhaseLocal("Export ready");
+        setExportResultName((name) => name || "export");
+        onStatus?.("Export ready.");
+        if (job.resultAssetId && openedExportJobRef.current !== job._id) {
+          openedExportJobRef.current = job._id;
+          onOpenAsset?.(job.resultAssetId);
+        }
+        return;
       }
-      return;
-    }
-    if (exportJob.status === "error") {
-      const message = friendlyConvexError(exportJob.error, exportJob.error || "Export failed.");
-      setExportError(message);
-      onStatus?.(message);
-    }
-  }, [exportJob, onOpenAsset, onStatus]);
+      if (job.status === "error") {
+        const message = friendlyConvexError(job.error, job.error || "Export failed.");
+        setExportError(message);
+        onStatus?.(message);
+      }
+    },
+    [onOpenAsset, onStatus],
+  );
 
   // Timeline clips may reference assets outside the open folder (explorer drag,
   // MCP append). Resolve those IDs so beds aren't silent for missing media map entries.
@@ -603,8 +613,6 @@ export function StudioVideoEditor({
   );
   const canExportAudio = canExportVideo;
   const canExportStudio = Boolean(localProjectId);
-  const exportProgress = exportJob?.progress ?? exportProgressLocal;
-  const exportPhase = exportJob?.phase || exportPhaseLocal;
   const inspectorOpen = inspectorPanelOpen({
     editorMode: state.ui.editorMode,
     clip: selectedClip,
@@ -884,7 +892,7 @@ export function StudioVideoEditor({
         kind: exportKind === "audio" ? "audio" : "video",
       });
       setExportJobId(jobId);
-      const result = await exportProject({
+      await exportProject({
         projectId: pid,
         folderId: homeFolderId,
         name: exportFilename.trim() || state.project.name,
@@ -894,13 +902,9 @@ export function StudioVideoEditor({
         audioFormat: exportAudioFormat,
         jobId,
       });
-      setExportProgressLocal(100);
-      setExportPhaseLocal("Export ready");
-      setExportResultName(exportFilename.trim() || state.project.name || "export");
-      onStatus?.("Export ready.");
-      if (result?.assetId) onOpenAsset?.(result.assetId);
-      setExportJobId(null);
-      setExporting(false);
+      // Worker runs ffmpeg off Convex. Job query drives progress / open-on-done.
+      setExportPhaseLocal("Rendering…");
+      onStatus?.(exportKind === "audio" ? "Rendering audio…" : "Rendering your video…");
     } catch (error) {
       if (isExportActionBlip(error)) {
         setExportPhaseLocal("Still rendering…");
@@ -982,6 +986,12 @@ export function StudioVideoEditor({
 
   return (
     <div className="studio-editor h-full">
+      <RestoreRunningExport
+        projectId={localProjectId}
+        armed={!exportJobId}
+        onFound={handleRestoreRunning}
+      />
+      <ExportJobSync jobId={exportJobId} onSettled={handleExportSettled} />
       {menuClip ? (
         <TimelineClipContextMenu
           clip={menuClip}
@@ -1240,13 +1250,10 @@ export function StudioVideoEditor({
                 exportAudioFormat={exportAudioFormat}
                 exportFilename={exportFilename}
                 exporting={exporting}
-                exportProgress={exportProgress}
-                exportPhase={exportPhase}
-                exportError={
-                  (exportJob?.status === "error" && exportJob.error
-                    ? friendlyConvexError(exportJob.error, exportJob.error)
-                    : "") || exportError
-                }
+                exportJobId={exportJobId}
+                exportProgress={exportProgressLocal}
+                exportPhase={exportPhaseLocal}
+                exportError={exportError}
                 exportResultName={exportResultName}
                 canExportVideo={canExportVideo}
                 canExportAudio={canExportAudio}
@@ -1257,12 +1264,20 @@ export function StudioVideoEditor({
                 onExportAudioFormatChange={setExportAudioFormat}
                 onExportFilenameChange={setExportFilename}
                 onExport={() => void handleExport()}
+                onCancelExport={() => {
+                  if (exportJobId) {
+                    void cancelExportJob({ jobId: exportJobId }).catch(() => {});
+                  }
+                  setExportError("Export cancelled.");
+                  setExporting(false);
+                }}
                 onDismissExport={() => {
                   setExportError("");
                   setExportResultName("");
                   setExportPhaseLocal("");
                   setExportProgressLocal(0);
                   setExportJobId(null);
+                  setExporting(false);
                 }}
                 onCloseExport={() => dispatch({ type: "set_side_panel", panel: "inspect" })}
               />
@@ -1280,4 +1295,30 @@ export function StudioVideoEditor({
       </div>
     </div>
   );
+}
+
+/** Status only — progress ticks stay in ExportPanel. */
+function ExportJobSync({ jobId, onSettled }) {
+  const job = useQuery(api.exportJobs.getStatus, jobId ? { jobId } : "skip");
+  const handledKeyRef = useRef("");
+  useEffect(() => {
+    if (!job || job.status === "running") return;
+    const key = `${job._id}:${job.status}`;
+    if (handledKeyRef.current === key) return;
+    handledKeyRef.current = key;
+    onSettled(job);
+  }, [job, onSettled]);
+  return null;
+}
+
+function RestoreRunningExport({ projectId, armed, onFound }) {
+  const running = useQuery(
+    api.exportJobs.latestRunning,
+    armed && projectId ? { projectId } : "skip",
+  );
+  useEffect(() => {
+    if (!running?._id) return;
+    onFound(running._id, running.kind);
+  }, [running?._id, running?.kind, onFound]);
+  return null;
 }

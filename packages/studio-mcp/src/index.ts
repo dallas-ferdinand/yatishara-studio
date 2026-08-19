@@ -28,7 +28,7 @@ requireConfig();
 
 const server = new McpServer({
   name: "yatishara-studio",
-  version: "0.8.5",
+  version: "0.8.6",
 });
 
 /**

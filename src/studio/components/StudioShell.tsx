@@ -68,6 +68,7 @@ import {
   Shrink,
   MessageCircle,
   Mic,
+  Monitor,
   Music2,
   Package,
   Palette,
@@ -146,6 +147,8 @@ import {
   StudioChatAudioPlayerLoading,
 } from "./StudioChatAudioPlayer";
 import { isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
+import { shouldShowStudioUpdatingOverlay } from "@/studio/lib/studio-live-updating";
+import { StudioUpdatingOverlay } from "@/components/studio-updating-overlay";
 import {
   STUDIO_DEFAULT_TAB_LABELS,
   STUDIO_DEFAULT_TAB_VALUES,
@@ -345,6 +348,12 @@ import {
 import {
   StudioFileTransferTray,
 } from "@/studio/components/StudioFileTransferTray";
+import {
+  ScreenShareRecordingPill,
+  useScreenShareLibraryBackup,
+  useScreenShareSnapshot,
+} from "@/studio/components/ScreenShareRecorder";
+import { screenShareSession } from "@/studio/lib/screenShareSession";
 import {
   IMAGE_UPSCALE_PROMPT,
   aspectRatioFromDimensions,
@@ -1623,6 +1632,7 @@ export function StudioShell({
   const copySharedToFolder = useMutation(api.studioShares.copySharedItemToFolder);
   const revokeStudioShare = useMutation(api.studioShares.revokeShare);
   const convex = useConvex();
+  useScreenShareLibraryBackup();
 
   const lastGenerationModeRef = useRef("image");
 
@@ -2037,10 +2047,27 @@ export function StudioShell({
   );
 
   function startAssetPick(request) {
-    const rootFolder = workspaceRootFromList(topFolders);
-    if (rootFolder) {
-      setActiveFolderId(rootFolder._id);
-      setNavTrail([{ id: rootFolder._id, name: "Files" }]);
+    if (request.folderId) {
+      setActiveFolderId(request.folderId);
+      const folder = (topFolders ?? []).find((item) => item._id === request.folderId);
+      const label = folder
+        ? systemFolderDisplayName(folder) || folder.name
+        : request.title ?? "Files";
+      const rootFolder = workspaceRootFromList(topFolders);
+      setNavTrail(
+        rootFolder && rootFolder._id !== request.folderId
+          ? [
+              { id: rootFolder._id, name: "Files" },
+              { id: request.folderId, name: label },
+            ]
+          : [{ id: request.folderId, name: label }],
+      );
+    } else {
+      const rootFolder = workspaceRootFromList(topFolders);
+      if (rootFolder) {
+        setActiveFolderId(rootFolder._id);
+        setNavTrail([{ id: rootFolder._id, name: "Files" }]);
+      }
     }
     setAssetPickSelected([]);
     setAssetPickShareOpen(false);
@@ -4512,6 +4539,11 @@ export function StudioShell({
       const sharedIdx = rest.findIndex((entry) => entry.studioKind === "shared");
       const sharedEntry =
         sharedIdx >= 0 ? rest.splice(sharedIdx, 1)[0] : null;
+      const recordingsIdx = rest.findIndex(
+        (entry) => entry.studioKind === "screenRecordings",
+      );
+      const recordingsEntry =
+        recordingsIdx >= 0 ? rest.splice(recordingsIdx, 1)[0] : null;
       return {
         ...entries,
         entries: [
@@ -4521,6 +4553,7 @@ export function StudioShell({
           ...(purchasedEntry ? [purchasedEntry] : []),
           ...(publicEntry ? [publicEntry] : []),
           ...(sharedEntry ? [sharedEntry] : []),
+          ...(recordingsEntry ? [recordingsEntry] : []),
           ...rest,
         ],
       };
@@ -5125,7 +5158,7 @@ export function StudioShell({
     if (isMobile) setMobileSection("composer");
   }
 
-  function openCreatePost(seedAssetId?: string) {
+  function openCreatePost(seedAssetId?: string, answerToPostId?: string) {
     setMobileAppMenuOpen(false);
     setSettingsOpen(false);
     setHistoryOpen(false);
@@ -5148,6 +5181,9 @@ export function StudioShell({
           kind: "post",
           contentMarkdown: serializePostDraft({
             assetIds: seedAssetId ? [String(seedAssetId)] : [],
+            ...(answerToPostId
+              ? { postKind: "help_answer", answerToPostId: String(answerToPostId) }
+              : {}),
           }),
         });
         openTab(`document:${id}`);
@@ -6639,6 +6675,7 @@ export function StudioShell({
             name: entry.name,
             kind: kind || entry.studioKind || "file",
             mimeType: entry.mimeType || "",
+            durationSeconds: entry.durationSeconds,
             ...filePickThumbFields(entry),
             path: entry.path,
             itemKind: shareItem.itemKind,
@@ -6664,6 +6701,7 @@ export function StudioShell({
           name: entry.name,
           kind,
           mimeType: entry.mimeType || "",
+          durationSeconds: entry.durationSeconds,
           ...filePickThumbFields(entry),
           path: entry.path,
           itemKind: "asset",
@@ -8291,7 +8329,8 @@ export function StudioShell({
       targetFolder?.systemKind === "purchased_assets" ||
       targetFolder?.systemKind === "public_assets" ||
       targetFolder?.systemKind === "messages" ||
-      targetFolder?.systemKind === "shared_with_me"
+      targetFolder?.systemKind === "shared_with_me" ||
+      targetFolder?.systemKind === "screen_recordings"
     ) {
       toast.error("You can’t upload into this system folder.");
       return;
@@ -9724,7 +9763,7 @@ export function StudioShell({
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-cn-book-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-cn-book-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop, .studio-file-transfer-layer, .studio-file-transfer-tray) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -9981,17 +10020,15 @@ export function StudioShell({
             /* No focus-line width/height GPU tween while typing */
             transition: none !important;
           }
-          /* Same TL/BR accent corners as .studio-dm-composer-box — do not zero them. */
-          .studio-polish.is-studio-mobile .studio-mode-row {
+          /* Same TL/BR accent corners as .studio-dm-composer-box — do not zero them.
+             Leave .is-active alone so the desktop gradient chip + rim can show. */
+          .studio-polish.is-studio-mobile .studio-mode-row:not(.is-active) {
             background: transparent !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
             transform: none !important;
             filter: none !important;
             isolation: auto !important;
-          }
-          .studio-polish.is-studio-mobile .studio-mode-row.is-active {
-            background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 16%, var(--mos-panel, #12151c)) !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tabs.is-dragging-strip,
           .studio-polish.is-studio-mobile .cursor-unified-tab.is-entering {
@@ -10286,7 +10323,7 @@ export function StudioShell({
             justify-content: center;
             gap: 0;
             padding: 0;
-            overflow: visible !important;
+            overflow: hidden;
             border: 1px solid transparent;
             border-radius: 999px !important;
             background: transparent !important;
@@ -10295,23 +10332,6 @@ export function StudioShell({
             color: color-mix(in srgb, var(--color-cursor-text-bright, var(--color-cursor-fg)) 52%, transparent);
             font-size: 10px;
           }
-          .studio-polish .studio-mode-row.is-active {
-            border: 1px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 42%, transparent) !important;
-            background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 16%, var(--mos-panel, #12151c)) !important;
-            color: var(--color-cursor-text-bright, #fff) !important;
-            box-shadow: none !important;
-          }
-          .studio-polish .studio-mode-row.is-active svg,
-          .studio-polish .studio-mode-row.is-active svg * {
-            color: inherit !important;
-            stroke: currentColor !important;
-            fill: none !important;
-            filter: none !important;
-          }
-          .studio-polish .studio-mode-row.is-active::before {
-            content: none !important;
-            display: none !important;
-          }
           .studio-polish .studio-mode-row svg {
             width: 14px;
             height: 14px;
@@ -10319,11 +10339,6 @@ export function StudioShell({
           [data-appearance="light"] .studio-polish .studio-mode-switcher {
             background: color-mix(in srgb, var(--mos-panel, #ececf0) 92%, #fff) !important;
             border-color: color-mix(in srgb, var(--color-cursor-border, var(--mos-border)) 75%, transparent) !important;
-          }
-          [data-appearance="light"] .studio-polish .studio-mode-row.is-active {
-            color: var(--color-cursor-fg, #1a1a1a) !important;
-            background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 14%, #fff) !important;
-            border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 45%, transparent) !important;
           }
           .studio-polish .studio-generate-column--desktop {
             display: none !important;
@@ -10391,8 +10406,14 @@ export function StudioShell({
             align-items: center;
             flex-wrap: wrap;
             gap: 6px;
+            flex: 0 0 auto;
+            min-width: 0;
+          }
+          .studio-polish .studio-composer-tool-slots {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             flex: 1 1 auto;
-            margin-right: auto;
             min-width: 0;
           }
           .studio-polish .studio-composer-options-btn {
@@ -10417,7 +10438,7 @@ export function StudioShell({
           .studio-polish .studio-composer-actions {
             flex: 0 0 auto;
             gap: 8px;
-            margin-left: auto;
+            margin-left: 0;
           }
           .studio-polish .studio-composer-circle-btn {
             display: inline-flex;
@@ -10627,7 +10648,7 @@ export function StudioShell({
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-cn-book-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-cn-book-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop, .studio-file-transfer-layer, .studio-file-transfer-tray) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -11043,6 +11064,26 @@ export function StudioShell({
           box-shadow: none;
           background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
           color: var(--color-cursor-text, var(--mos-text));
+        }
+        .studio-files-workspace-tab > .ys-updating-overlay {
+          position: relative;
+          inset: auto;
+          flex: 1 1 0;
+          min-width: 0;
+          height: 100%;
+          z-index: 6;
+        }
+        .studio-files-workspace-tab:has(> .ys-updating-overlay) {
+          flex-direction: row;
+          background: transparent;
+        }
+        .studio-files-workspace-tab:has(> .ys-updating-overlay) > .cursor-explorer-body {
+          flex: 0 0 min(380px, 42%);
+          width: min(380px, 42%);
+          max-width: 46%;
+          min-width: 248px;
+          height: 100%;
+          background: var(--mos-page, var(--mos-panel, #f5f5f7));
         }
         .studio-files-workspace-tab .cursor-explorer-body {
           flex: 1 1 auto;
@@ -17967,11 +18008,11 @@ export function StudioShell({
           flex-direction: row;
           align-items: center;
           justify-content: center;
-          gap: 2px;
+          gap: 3px;
           flex: 0 0 auto;
           width: auto;
-          height: 34px;
-          min-height: 34px;
+          height: auto;
+          min-height: 0;
           align-self: center;
           border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 55%, transparent);
           border-radius: 999px;
@@ -17979,7 +18020,9 @@ export function StudioShell({
           backdrop-filter: var(--studio-composer-glass-blur, saturate(120%) blur(4px));
           -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(120%) blur(4px));
           box-shadow: none;
-          padding: 2px;
+          padding: 3px;
+          overflow: visible;
+          box-sizing: border-box;
         }
         .studio-mode-row {
           position: relative;
@@ -17994,6 +18037,7 @@ export function StudioShell({
           min-height: 30px;
           flex: 0 0 30px;
           aspect-ratio: 1 / 1;
+          overflow: hidden;
           border: 1px solid transparent;
           border-radius: 999px;
           background: transparent;
@@ -19035,9 +19079,21 @@ export function StudioShell({
           align-items: center;
           flex-wrap: wrap;
           gap: 6px;
-          flex: 1 1 auto;
-          margin-right: auto;
+          flex: 0 0 auto;
           min-width: 0;
+        }
+        /* Middle band: upload / settings / enhance / record.
+           Desktop keeps a left+right cluster via enhance's margin-left: auto.
+           Mobile turns this into equal columns so the circles fill the glass. */
+        .studio-composer-tool-slots {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .studio-composer-enhance-btn {
+          margin-left: auto;
         }
         .studio-composer-options-btn {
           display: inline-flex;
@@ -19185,7 +19241,7 @@ export function StudioShell({
           align-items: center;
           gap: 6px;
           flex: 0 0 auto;
-          margin-left: auto;
+          margin-left: 0;
           overflow: visible;
           position: relative;
           z-index: 3;
@@ -19331,7 +19387,7 @@ export function StudioShell({
           justify-content: center;
           padding: 0;
         }
-        .studio-composer-toolbar-left .studio-upload-trigger {
+        .studio-composer-toolbar .studio-upload-trigger {
           border-radius: 999px;
         }
         /* One glyph size across the composer toolbar (matches send ArrowUp). */
@@ -19373,6 +19429,7 @@ export function StudioShell({
           padding: 2px 6px 6px;
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar-left {
+          flex: 0 0 auto;
           flex-wrap: nowrap;
           align-items: center;
           gap: 8px;
@@ -19382,8 +19439,21 @@ export function StudioShell({
         .studio-polish.is-studio-mobile .studio-composer-toolbar-left::-webkit-scrollbar {
           display: none;
         }
-        .studio-polish.is-studio-mobile .studio-composer-toolbar-left > * {
+        .studio-polish.is-studio-mobile .studio-composer-tool-slots {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+          align-items: center;
+          justify-items: center;
+          gap: 0;
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .studio-polish.is-studio-mobile .studio-composer-enhance-btn {
+          margin-left: 0;
+        }
+        .studio-polish.is-studio-mobile .studio-composer-actions {
           flex: 0 0 auto;
+          margin-left: 0;
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-composer-circle-btn,
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-pill-btn.studio-preset-trigger,
@@ -19439,7 +19509,7 @@ export function StudioShell({
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-composer-send-cost {
           font-size: 10px;
         }
-        .studio-composer-actions .cursor-composer-mic:not(.studio-composer-circle-btn) {
+        .studio-composer-toolbar .cursor-composer-mic:not(.studio-composer-circle-btn) {
           width: 26px;
           min-width: 26px;
           border-radius: var(--cursor-radius-pill);
@@ -23217,6 +23287,15 @@ export function StudioShell({
           width: 100%;
           flex-direction: column;
           overflow: hidden;
+        }
+        .studio-pane-foreground > .ys-updating-overlay {
+          position: absolute;
+          inset: 0;
+          z-index: 5;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--mos-page, #f5f5f7);
         }
         .studio-pane-foreground.is-covered {
           position: absolute;
@@ -27203,6 +27282,7 @@ export function StudioShell({
                   </>
                 }
               />
+              {shouldShowStudioUpdatingOverlay() ? <StudioUpdatingOverlay /> : null}
             </div>
           ) : null}
           <ActivePane
@@ -27402,6 +27482,7 @@ export function StudioShell({
             onOpenEditTab={isVideoEditorPreviewEnabled() ? openEditTab : undefined}
             onOpenAssetTab={(assetId) => openTab(`asset:${assetId}`)}
             onVideoEditProjectSaved={handleVideoEditProjectSaved}
+            editorLocked={shouldShowStudioUpdatingOverlay()}
             activeEditTab={activeTab}
             onOpenPublicProfile={openPublicProfile}
             onOpenProfilePost={openProfilePost}
@@ -28285,7 +28366,8 @@ export function StudioShell({
             activeFolder?.systemKind !== "purchased_assets" &&
             activeFolder?.systemKind !== "public_assets" &&
             activeFolder?.systemKind !== "messages" &&
-            activeFolder?.systemKind !== "shared_with_me"
+            activeFolder?.systemKind !== "shared_with_me" &&
+            activeFolder?.systemKind !== "screen_recordings"
           }
           canCreateFolder={
             !isTrashNav &&
@@ -28293,7 +28375,8 @@ export function StudioShell({
             activeFolder?.systemKind !== "purchased_assets" &&
             activeFolder?.systemKind !== "public_assets" &&
             activeFolder?.systemKind !== "messages" &&
-            activeFolder?.systemKind !== "shared_with_me"
+            activeFolder?.systemKind !== "shared_with_me" &&
+            activeFolder?.systemKind !== "screen_recordings"
           }
           inTrashView={isTrashNav}
           createItems={getCreateMenuItems()}
@@ -28453,7 +28536,14 @@ export function StudioShell({
             }
             if (action === "unshare-profile") {
               if (!entry?.studioId || entry.studioKind !== "asset") return;
-              void unshareAssetFromProfile({ assetId: entry.studioId })
+              const keep = window.confirm(
+                "Remove this from your profile? If this is paid Value, people who already unlocked keep it. Nobody else will be able to unlock or see it.",
+              );
+              if (!keep) return;
+              void unshareAssetFromProfile({
+                assetId: entry.studioId,
+                keepPurchasers: true,
+              })
                 .then(() => toast.success("Removed from profile"))
                 .catch((error) => {
                   toast.error(friendlyConvexError(error, "Could not update profile"));
@@ -28546,6 +28636,7 @@ export function StudioShell({
         onClose={() => setRenameTarget(null)}
         onRename={confirmRenameEntry}
       />
+      <ScreenShareRecordingPill />
       {fileTransfers.length && typeof document !== "undefined"
         ? createPortal(
             <StudioFileTransferTray
@@ -28555,7 +28646,7 @@ export function StudioShell({
               onDismiss={dismissFileTransfer}
               onRetry={retryFileTransfer}
             />,
-            shellRef.current instanceof HTMLElement ? shellRef.current : document.body,
+            document.body,
           )
         : null}
     </div>
@@ -29998,6 +30089,8 @@ function StudioComposer({
       <div className="studio-composer-toolbar">
         <div className="studio-composer-toolbar-left">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
+        </div>
+        <div className="studio-composer-tool-slots">
           {!isAudioMode ? <StudioUploadButton inputRef={uploadInputRef} /> : null}
           {isAudioMode && !isMobile ? (
             <button
@@ -30038,11 +30131,9 @@ function StudioComposer({
               )}
             </button>
           )}
-        </div>
-        <div className="studio-composer-actions">
           <button
             type="button"
-            className={`studio-composer-circle-btn${enhanceBusy ? " is-busy" : ""}`}
+            className={`studio-composer-circle-btn studio-composer-enhance-btn${enhanceBusy ? " is-busy" : ""}`}
             title="Enhance prompt (charged)"
             aria-label="Enhance prompt"
             disabled={
@@ -30113,6 +30204,8 @@ function StudioComposer({
               <Mic size={14} strokeWidth={2.25} aria-hidden="true" />
             )}
           </button>
+        </div>
+        <div className="studio-composer-actions">
           <button
             type="button"
             className={`studio-composer-circle-btn studio-composer-send-btn${assistanceOn ? " is-assist-send" : ""}${canCancelAssist ? " is-stop" : ""}`}
@@ -31439,6 +31532,7 @@ function StudioMobileAppMenu({
   onToggleFullscreen,
   onSignOut,
 }) {
+  const shareSnap = useScreenShareSnapshot();
   const sheetRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [settling, setSettling] = useState(false);
@@ -31707,6 +31801,33 @@ function StudioMobileAppMenu({
       onClick: () => {
         onClose?.();
         onCreatePost?.();
+      },
+    },
+    {
+      label: shareSnap.recording
+        ? "Stop rec"
+        : shareSnap.panelOpen
+          ? "Hide rec"
+          : "Record",
+      ariaLabel: shareSnap.recording
+        ? "Stop recording"
+        : shareSnap.panelOpen
+          ? "Hide recorder"
+          : "Record screen",
+      Icon: shareSnap.recording ? Square : Monitor,
+      onClick: () => {
+        if (shareSnap.recording) {
+          screenShareSession.stop();
+          onClose?.();
+          return;
+        }
+        if (shareSnap.panelOpen) {
+          screenShareSession.disarmPanel();
+          onClose?.();
+          return;
+        }
+        onClose?.();
+        screenShareSession.armPanel();
       },
     },
     { label: "Edit", ariaLabel: "Edit profile", Icon: Pencil, onClick: onEditProfile },
@@ -34367,6 +34488,7 @@ function ActivePane({
   onOpenAssetTab,
   onEditorStatus,
   onVideoEditProjectSaved,
+  editorLocked = false,
   activeEditTab,
   onOpenPublicProfile,
   onOpenProfilePost,
@@ -34514,6 +34636,11 @@ function ActivePane({
                 }
                 tabActive={isActive}
                 onOpenProfile={onOpenPublicProfile}
+                onCreateAnswer={
+                  onCreatePost
+                    ? (requestPostId) => onCreatePost(undefined, requestPostId)
+                    : undefined
+                }
               />
             </div>
           </div>
@@ -34663,6 +34790,12 @@ function ActivePane({
     return null;
   }, [activeTab, activeEntry]);
 
+  const editorTabLocked =
+    editorLocked &&
+    (Boolean(videoEditContext) ||
+      (typeof activeTab === "string" && activeTab.startsWith("files:")) ||
+      activeEntry?.studioKind === "videoEdit");
+
   // Closing the last tab: wallpaper + centered logo only (no composer / pane chrome).
   if (!activeTab) {
     return wrapPane(
@@ -34670,6 +34803,10 @@ function ActivePane({
         <StudioEmptyLogoButton />
       </div>,
     );
+  }
+
+  if (editorTabLocked) {
+    return wrapPane(<StudioUpdatingOverlay />);
   }
 
   if (activeTab.startsWith("create:")) {
@@ -34722,6 +34859,9 @@ function ActivePane({
     );
   }
   if (videoEditContext && (videoEditContext.projectId || videoEditContext.sourceAssetId)) {
+    if (shouldShowStudioUpdatingOverlay()) {
+      return wrapPane(<StudioUpdatingOverlay />);
+    }
     // Prefer the edit's own folder (tab key / entry). Fall back to the browse
     // folder only for brand-new edits that have not been placed yet.
     const folderId =
@@ -34732,6 +34872,9 @@ function ActivePane({
       return wrapPane(
         <div className="p-6 text-sm text-cursor-muted">Choose a folder with clips to edit.</div>,
       );
+    }
+    if (shouldShowStudioUpdatingOverlay()) {
+      return wrapPane(<StudioUpdatingOverlay />);
     }
     return wrapPane(
       <StudioVideoEditor
@@ -34878,7 +35021,7 @@ function ActivePane({
     );
   }
   if (activeEntry.studioKind === "videoEdit") {
-    return wrapPane(null);
+    return wrapPane(editorLocked ? <StudioUpdatingOverlay /> : null);
   }
   if (activeEntry.studioKind === "element") {
     return wrapPane(
@@ -39082,8 +39225,8 @@ function activityToneForKind(kind, status) {
   ) {
     return "danger";
   }
-  if (kind === "payment_status" || kind === "payment") return "payment";
-  if (kind === "dm_message" || kind === "followed_post") return "neutral";
+  if (kind === "dm_message" || kind === "followed_post" || kind === "help_answer_posted") return "neutral";
+  if (kind === "help_answer_unlocked" || kind === "payment_status" || kind === "payment") return "payment";
   return "neutral";
 }
 
@@ -39219,7 +39362,11 @@ function StudioActivityFeed({
           {items.map((item) => {
             const clickable =
               (item.kind === "dm_message" && item.conversationId && onOpenMessages) ||
-              (item.kind === "followed_post" && item.postId && onOpenPost) ||
+              ((item.kind === "followed_post" ||
+                item.kind === "help_answer_posted" ||
+                item.kind === "help_answer_unlocked") &&
+                item.postId &&
+                onOpenPost) ||
               ((item.kind === "payment_status" || item.kind === "payment") && onOpenBilling);
             return (
             <article
@@ -39232,7 +39379,12 @@ function StudioActivityFeed({
                   ? () => {
                       if (item.kind === "dm_message" && item.conversationId) {
                         onOpenMessages?.(item.conversationId);
-                      } else if (item.kind === "followed_post" && item.postId) {
+                      } else if (
+                        (item.kind === "followed_post" ||
+                          item.kind === "help_answer_posted" ||
+                          item.kind === "help_answer_unlocked") &&
+                        item.postId
+                      ) {
                         onOpenPost?.(item.postId);
                       } else if (item.kind === "payment_status" || item.kind === "payment") {
                         onOpenBilling?.();
@@ -39306,15 +39458,20 @@ function isLockedSystemFolder(entry) {
     entry?.studioKind === "purchased" ||
     entry?.studioKind === "public" ||
     entry?.studioKind === "shared" ||
+    entry?.studioKind === "screenRecordings" ||
     entry?.systemKind === "messages" ||
     entry?.systemKind === "purchased_assets" ||
     entry?.systemKind === "public_assets" ||
-    entry?.systemKind === "shared_with_me"
+    entry?.systemKind === "shared_with_me" ||
+    entry?.systemKind === "screen_recordings"
   );
 }
 
 function isPurchasedNetworkAsset(entry) {
-  return entry?.licenseKind === "purchased_network";
+  return (
+    entry?.licenseKind === "purchased_network" ||
+    entry?.licenseKind === "purchased_help_answer"
+  );
 }
 
 function isListedNetworkAsset(entry) {
@@ -39342,7 +39499,8 @@ function workspaceRootFromList(folders) {
         folder.systemKind !== "messages" &&
         folder.systemKind !== "purchased_assets" &&
         folder.systemKind !== "public_assets" &&
-        folder.systemKind !== "shared_with_me",
+        folder.systemKind !== "shared_with_me" &&
+        folder.systemKind !== "screen_recordings",
     ) ?? null
   );
 }
@@ -39352,6 +39510,7 @@ function systemFolderDisplayName(folder) {
   if (folder?.systemKind === "purchased_assets") return "Purchased";
   if (folder?.systemKind === "messages") return "Messages";
   if (folder?.systemKind === "shared_with_me") return "Shared with me";
+  if (folder?.systemKind === "screen_recordings") return "Screen Recordings";
   // Workspace root is stored as "Studio" in Convex — always show Files in UI.
   if (
     folder &&
@@ -39370,6 +39529,7 @@ function folderToEntry(folder) {
   const isPurchased = folder.systemKind === "purchased_assets";
   const isPublic = folder.systemKind === "public_assets";
   const isShared = folder.systemKind === "shared_with_me";
+  const isScreenRecordings = folder.systemKind === "screen_recordings";
   const name = systemFolderDisplayName(folder) || folder.name;
   return {
     type: "dir",
@@ -39386,7 +39546,9 @@ function folderToEntry(folder) {
           ? "public"
           : isShared
             ? "shared"
-            : "folder",
+            : isScreenRecordings
+              ? "screenRecordings"
+              : "folder",
     studioId: folder._id,
     systemKind: folder.systemKind,
     peekItems: folder.peekItems ?? [],

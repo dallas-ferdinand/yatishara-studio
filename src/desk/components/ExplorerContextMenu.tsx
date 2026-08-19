@@ -108,7 +108,12 @@ function buildMenuItems(entry, {
     entry.studioKind === "public" || entry.systemKind === "public_assets";
   const isSharedWithMeFolder =
     entry.studioKind === "shared" || entry.systemKind === "shared_with_me";
-  const isPurchasedNetworkAsset = entry.licenseKind === "purchased_network";
+  const isScreenRecordingsFolder =
+    entry.studioKind === "screenRecordings" ||
+    entry.systemKind === "screen_recordings";
+  const isPurchasedNetworkAsset =
+    entry.licenseKind === "purchased_network" ||
+    entry.licenseKind === "purchased_help_answer";
   const isListedNetworkAsset = entry.licenseKind === "listed_network";
   const isLockedNetworkAsset = isPurchasedNetworkAsset || isListedNetworkAsset;
   const isSharedLiveItem = Boolean(entry.sharedFromUserId || entry.isSharedLive);
@@ -130,7 +135,8 @@ function buildMenuItems(entry, {
     isMessagesFolder ||
     isPurchasedFolder ||
     isPublicFolder ||
-    isSharedWithMeFolder
+    isSharedWithMeFolder ||
+    isScreenRecordingsFolder
   ) {
     return [{ id: "open", label: "Open folder" }];
   }

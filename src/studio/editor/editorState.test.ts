@@ -575,4 +575,109 @@ describe("image clip kind", () => {
     expect(clipDuration(state.project.clips[0]!)).toBeCloseTo(12, 5);
     expect(state.project.clips[0]!.kind).toBe("image");
   });
+
+  it("inserts a video overlay lane for a still, not a fake image track", () => {
+    let state = createInitialState(
+      createEmptyProject({ name: "Test", folderId: "folder1" }),
+    );
+    state = reducer(state, {
+      type: "add_clip",
+      clip: {
+        assetId: "img1",
+        trackId: "track-v1",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 3,
+        label: "logo",
+        kind: "image",
+      },
+    });
+    const clipId = state.project.clips[0]!.id;
+    state = reducer(state, {
+      type: "move_clip_to_track",
+      clipId,
+      startTime: 0,
+      insertTrackAt: 0,
+    });
+    const still = state.project.clips.find((clip) => clip.id === clipId)!;
+    const lane = state.project.tracks.find((track) => track.id === still.trackId)!;
+    expect(still.kind).toBe("image");
+    expect(lane.kind).toBe("video");
+    expect(still.trackId).not.toBe("track-v1");
+  });
+
+  it("moves a still onto an existing overlay video lane and back to main", () => {
+    let state = createInitialState(
+      createEmptyProject({ name: "Test", folderId: "folder1" }),
+    );
+    state = reducer(state, {
+      type: "ripple_add_clip",
+      clip: {
+        assetId: "v1",
+        trackId: "track-v1",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 4,
+        sourceDuration: 4,
+        label: "movie",
+        kind: "video",
+      },
+      centerTime: 0,
+    });
+    state = reducer(state, {
+      type: "ripple_add_clip",
+      clip: {
+        assetId: "img1",
+        trackId: "",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 3,
+        label: "logo",
+        kind: "image",
+      },
+      centerTime: 0,
+      insertTrackAt: 0,
+    });
+    const overlay = state.project.clips.find((clip) => clip.kind === "image")!;
+    expect(state.project.tracks.find((track) => track.id === overlay.trackId)?.kind).toBe(
+      "video",
+    );
+    state = reducer(state, {
+      type: "move_clip",
+      clipId: overlay.id,
+      startTime: 1,
+      trackId: "track-v1",
+    });
+    expect(state.project.clips.find((clip) => clip.id === overlay.id)!.trackId).toBe(
+      "track-v1",
+    );
+    expect(state.project.clips.find((clip) => clip.id === overlay.id)!.kind).toBe("image");
+  });
+
+  it("upgrades leftover kind:image lanes to video tracks", () => {
+    const project = normalizeProject({
+      name: "legacy",
+      folderId: "f",
+      duration: 8,
+      tracks: [
+        { id: "track-img", kind: "image" as never, label: "Image" },
+        { id: "track-v1", kind: "video", label: "V1" },
+        { id: "track-audio", kind: "audio", label: "Audio" },
+      ],
+      clips: [
+        {
+          id: "c1",
+          trackId: "track-img",
+          kind: "image",
+          startTime: 0,
+          trimIn: 0,
+          trimOut: 3,
+          label: "logo",
+          assetId: "img1",
+        },
+      ],
+    });
+    expect(project.tracks.find((track) => track.id === "track-img")?.kind).toBe("video");
+    expect(project.clips[0]!.kind).toBe("image");
+  });
 });

@@ -54,16 +54,16 @@ async function promoteStagingToBunny(
   }
 
   try {
-    const body = new Uint8Array(await blob.arrayBuffer());
+    const buffer = await blob.arrayBuffer();
     await putObject({
       path: prepared.bunnyPath,
-      body,
+      body: buffer,
       contentType: prepared.mimeType || "application/octet-stream",
     });
     await ctx.runMutation(internal.assetsInternal.finalizeCommittedUpload, {
       userId: args.userId,
       assetId: args.assetId,
-      byteSize: body.byteLength,
+      byteSize,
     });
     return { assetId: args.assetId };
   } catch (error) {

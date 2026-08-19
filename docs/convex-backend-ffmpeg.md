@@ -1,51 +1,60 @@
-# Self-hosted Convex backend (ffmpeg)
+# Self-hosted Convex + VPS ffmpeg worker
 
-Studio video export (`convex/videoEditActions.exportVideo`) shells out to `ffmpeg` /
-`ffprobe` inside Convex Node actions. The stock
-`ghcr.io/get-convex/convex-backend` image does not include those binaries.
+All Studio ffmpeg (export, edit-proxy, clip download, speed, frame pull,
+help-answer preview) runs on **`studio-ffmpeg-worker`**, not inside the Convex
+Node isolate. Convex enqueues `POST /v1/jobs` and returns or polls a job row.
+There is no in-process ffmpeg fallback.
 
-## VPS layout
+## Layout
 
-On the Studio VPS the backend lives at `/opt/convex-studio-self-hosted/`:
+| Piece | Where |
+|---|---|
+| Worker | `/opt/yatishara-studio/services/studio-ffmpeg-worker` |
+| Compose | same folder (`container_name: studio-ffmpeg-worker`) |
+| Env | `/opt/studio-ffmpeg-worker.env` (`chmod 600`) |
+| Live Convex | `STUDIO_FFMPEG_WORKER_URL=http://studio-ffmpeg-worker:8797` |
+| Preview Convex | same URL (coolify network) |
 
-- `Dockerfile` — extends the official backend and installs `ffmpeg`
-- `docker-compose.yml` — builds `yatishara-convex-backend:ffmpeg`
-- `.env` — instance secrets (not committed)
+Job kinds: `export`, `proxy`, `clip-download`, `speed`, `natural-speed`,
+`pull-frame`, `sample-frames`, `help-preview`.
 
-This repo keeps a mirror of the Dockerfile at
-[`deploy/convex-backend/Dockerfile`](../deploy/convex-backend/Dockerfile).
+The worker downloads from Bunny, runs ffmpeg, uploads, then callbacks
+`https://convex-studio.yatishara.com/api/ffmpeg-worker/*` (or preview site origin).
 
-## Rebuild / restart
+Editor export is ffmpeg `filter_complex` (overlay, xfade, drawtext) on this
+worker. Live preview still paints with Canvas2D in the browser; that path is
+not used for export.
+
+## Rebuild / restart worker
 
 ```bash
-cd /opt/convex-studio-self-hosted
-# Keep the Dockerfile in sync with the repo copy when it changes:
-#   cp /opt/yatishara-studio/deploy/convex-backend/Dockerfile .
-docker compose build backend
-docker compose up -d backend
-docker exec convex-studio-backend ffmpeg -version | head -1
-curl -fsS https://convex-studio-api.yatishara.com/version
+cd /opt/yatishara-studio/services/studio-ffmpeg-worker
+npm run build   # esbuild → dist/server.mjs (tsx cannot load convex/lib on Node 22)
+docker compose up -d --build
+docker exec studio-ffmpeg-worker ffmpeg -version | head -1
+# Health is docker-network only; from a Convex backend:
+docker exec convex-studio-backend node -e "fetch('http://studio-ffmpeg-worker:8797/health').then(r=>r.text()).then(console.log)"
 ```
 
-Memory for the backend service is set to ~2.5G so exports can download and
-encode without OOM. Long multi-clip projects may still need further limits in
-the export action.
+## Convex backend
 
-## Long export timeouts (required)
+Do **not** shell ffmpeg from Convex actions. `convex/lib/studioFfmpeg.ts` and
+`studioExportPipeline.ts` exist so the worker can bundle them; they are not
+called from live actions. The custom `yatishara-convex-backend:ffmpeg` image
+may still contain binaries; they are unused.
 
-Studio export holds an HTTP request + Node action open until ffmpeg finishes.
-Convex defaults are too short for course-length lessons:
+Editor export returns after enqueue (`exportJobs` poll). MCP/API clip-download,
+speed, and frame-pull still wait on `ffmpegWorkJobs` inside the action, so keep
+the long HTTP/action timeouts until those APIs are job+poll too.
 
-| Knob | Default | VPS value |
-|------|---------|-----------|
-| `HTTP_SERVER_TIMEOUT_SECONDS` | 300 (5m) | `604800` (7d) |
-| `NODE_ACTION_USER_TIMEOUT_SECS` | 600 (10m) | `604800` (7d) |
-| `V8_ACTION_USER_TIMEOUT_SECS` | 600 (10m) | `604800` (7d) |
+Required backend env (docker `.env` on each Convex stack **and** `npx convex env set`
+so HTTP actions see the token):
 
-Set under `environment:` in `/opt/convex-studio-self-hosted/docker-compose.yml`
-(not only Coolify Next), then `docker compose up -d backend`.
+- `STUDIO_FFMPEG_WORKER_URL=http://studio-ffmpeg-worker:8797`
+- `STUDIO_FFMPEG_WORKER_TOKEN` (same as worker env)
+- `CONVEX_SITE_ORIGIN` (already set; worker callbacks use this)
 
-Without these, long exports return **502 Bad Gateway** mid-job. Traefik
-entrypoints are already `respondingTimeouts=0`; the Convex HTTP knob was the
-cap. Healthcheck is also softened (`interval 30s`, `retries 20`) so heavy
-ffmpeg load does not flap Traefik into **no available server**.
+After changing docker `.env`, recreate only the backend container. Then
+`npx convex deploy --yes --typecheck=disable` to each API
+(`https://convex-studio-api.yatishara.com` and
+`https://convex-preview-api.yatishara.com`).

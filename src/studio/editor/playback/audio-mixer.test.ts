@@ -91,8 +91,7 @@ function bedSlice(assetId: string, gain = 1, fadeIn = 0): RenderSlice {
     ],
     preloadAudio: [],
     text: [],
-    textOver: [],
-    textUnder: [],
+    visual: [],
     preload: [],
   };
 }

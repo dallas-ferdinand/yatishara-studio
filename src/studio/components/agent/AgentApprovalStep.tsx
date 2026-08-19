@@ -140,6 +140,9 @@ function approvalSummary(approval: AgentApprovalRow) {
   if (name === "studio_share_asset_post") {
     return "This will publish the selected asset to your public profile feed.";
   }
+  if (name === "studio_unlock_help_answer") {
+    return "This will spend credits to unlock the full help answer.";
+  }
   if (name === "studio_send_message") {
     return "This will send the drafted message as you.";
   }

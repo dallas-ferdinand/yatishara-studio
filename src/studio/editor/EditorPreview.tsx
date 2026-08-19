@@ -27,8 +27,13 @@ import {
 } from "lucide-react";
 import { exportSizeForRatio } from "./projectContract";
 import { PreviewTransformOverlay } from "./PreviewTransformOverlay";
+import {
+  usePreviewPointerRouter,
+  type LivePreviewChrome,
+  type TransformChromeHandle,
+} from "./PreviewPointerRouter";
+import { clipIsPictureKind } from "./previewScene";
 import { PreviewTextTransformOverlay } from "./PreviewTextTransformOverlay";
-import { PreviewTextOverlays } from "./PreviewTextOverlays";
 import {
   clipAtPlayhead,
   clipDuration,
@@ -174,27 +179,42 @@ export function EditorPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- preview gain only
   }, [previewMuted, previewVolume]);
 
-  const decodedSize = activeClip?.assetId
-    ? engine.sourceSizes[activeClip.assetId] ??
-      (engine.sourceSize?.assetId === activeClip.assetId ? engine.sourceSize : null)
-    : null;
+  const decodedSizes = useMemo(() => {
+    const merged: Record<string, { width: number; height: number }> = {
+      ...engine.sourceSizes,
+    };
+    if (
+      engine.sourceSize?.assetId &&
+      engine.sourceSize.width > 1 &&
+      engine.sourceSize.height > 1
+    ) {
+      merged[engine.sourceSize.assetId] = {
+        width: engine.sourceSize.width,
+        height: engine.sourceSize.height,
+      };
+    }
+    return merged;
+  }, [engine.sourceSize, engine.sourceSizes]);
 
-  const transformTarget = useMemo((): "a" | "b" => {
-    if (!activeClip) return "a";
-    const stacked: Array<{ id: string; trackIndex: number }> = [];
-    project.tracks.forEach((track, trackIndex) => {
-      if (track.kind !== "video") return;
-      const clip = clipAtPlayhead(project, track.id, playhead);
-      if (!clip || (clip.kind !== "video" && clip.kind !== "image")) return;
-      stacked.push({ id: clip.id, trackIndex });
-    });
-    stacked.sort((a, b) => a.trackIndex - b.trackIndex);
-    if (stacked.length <= 1) return "a";
-    const topId = stacked[0]?.id;
-    const underId = stacked[stacked.length - 1]?.id;
-    if (activeClip.id === underId && activeClip.id !== topId) return "b";
-    return "a";
-  }, [activeClip, playhead, project]);
+  const decodedSize = activeClip?.assetId
+    ? decodedSizes[activeClip.assetId]
+    : undefined;
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const pictureOverlayRef = useRef<TransformChromeHandle | null>(null);
+  const textOverlayRef = useRef<TransformChromeHandle | null>(null);
+  const liveChromeRef = useRef<LivePreviewChrome | null>(null);
+  const selectedPicture = (() => {
+    if (!selectedClipId) return null;
+    const selected = project.clips.find((clip) => clip.id === selectedClipId);
+    if (!selected || !clipIsPictureKind(selected.kind)) return null;
+    if (
+      playhead < selected.startTime ||
+      playhead >= selected.startTime + clipDuration(selected)
+    ) {
+      return null;
+    }
+    return selected;
+  })();
 
   let activeTextClip: EditorClip | null = null;
   if (selectedClipId) {
@@ -294,6 +314,48 @@ export function EditorPreview({
   };
 
   const panMode = canvasTool === "pan";
+
+  usePreviewPointerRouter({
+    frameRef,
+    stageRef,
+    enabled: !panMode,
+    project,
+    playhead,
+    mediaById,
+    sourceSizes: decodedSizes,
+    getPaintedHits: engine.getPaintedHits,
+    canvasWidth: frame.width,
+    canvasHeight: frame.height,
+    selectedClipId,
+    playing,
+    allowShiftPan: viewportZoom > 1,
+    pictureChromeRef: pictureOverlayRef,
+    textChromeRef: textOverlayRef,
+    liveChromeRef,
+    onSelect: (clipId) => {
+      onSelectClip(clipId);
+      if (playing) onPlayingChange(false);
+    },
+    onTogglePlay: () => onPlayingChange(!playing),
+    onPreviewPicture: (clipId, transform) => {
+      engine.previewTransform(transform, clipId);
+    },
+    onPreviewText: (clipId, transform) => {
+      engine.previewTextTransform(clipId, transform);
+    },
+    onCommitTransform: (clipId, transform) => {
+      const clip = project.clips.find((item) => item.id === clipId);
+      onUpdateClip(clipId, {
+        effects: {
+          ...(clip?.effects ?? {}),
+          scale: Number(transform.scale.toFixed(3)),
+          x: Number(transform.x.toFixed(3)),
+          y: Number(transform.y.toFixed(3)),
+          rotation: Number(transform.rotation.toFixed(1)),
+        },
+      });
+    },
+  });
 
   return (
     <div
@@ -423,13 +485,6 @@ export function EditorPreview({
           event.preventDefault();
           setCanvasZoom(viewportZoom * (event.deltaY > 0 ? 0.9 : 1.1));
         }}
-        onPointerDown={(event) => {
-          if (panMode) return;
-          // Empty stage padding around the frame only — not frame children.
-          if (event.button !== 0) return;
-          if (event.target !== event.currentTarget) return;
-          onSelectClip(null);
-        }}
         onPointerDownCapture={(event) => {
           // Select tool: middle-click or Shift+drag still pans when zoomed.
           if (panMode) return;
@@ -454,6 +509,7 @@ export function EditorPreview({
           />
         ) : null}
         <div
+          ref={frameRef}
           className="studio-editor-preview-frame"
           style={{
             aspectRatio: frame.cssRatio,
@@ -481,83 +537,47 @@ export function EditorPreview({
             ref={engine.canvasRef}
             className="studio-editor-preview-video studio-editor-preview-layer studio-editor-preview-canvas"
           />
-          <PreviewTextOverlays
-            layer="under"
-            project={project}
-            playhead={playhead}
-            canvasWidth={frame.width}
-            canvasHeight={frame.height}
-            selectedClipId={selectedClipId}
-            playing={playing}
-            suppressClipId={activeTextClip?.id ?? null}
-            onSelect={(clipId) => {
-              onSelectClip(clipId);
-              if (playing) onPlayingChange(false);
-            }}
-            onTogglePlay={() => onPlayingChange(!playing)}
-          />
-          {activeClip ? (
+          {selectedPicture ? (
             <PreviewTransformOverlay
-              clip={activeClip}
-              media={activeMedia}
-              decodedWidth={decodedSize?.width}
-              decodedHeight={decodedSize?.height}
+              ref={pictureOverlayRef}
+              clip={selectedPicture}
+              media={
+                selectedPicture.assetId
+                  ? mediaById.get(selectedPicture.assetId)
+                  : undefined
+              }
+              decodedWidth={
+                selectedPicture.assetId
+                  ? decodedSizes[selectedPicture.assetId]?.width
+                  : decodedSize?.width
+              }
+              decodedHeight={
+                selectedPicture.assetId
+                  ? decodedSizes[selectedPicture.assetId]?.height
+                  : decodedSize?.height
+              }
+              paintedRect={
+                engine
+                  .getPaintedHits()
+                  .find((hit) => hit.clipId === selectedPicture.id) ?? null
+              }
               canvasWidth={frame.width}
               canvasHeight={frame.height}
-              selected={selectedClipId === activeClip.id}
+              selected
               playing={playing}
-              transformTarget={transformTarget}
-              onSelect={(clipId) => {
-                onSelectClip(clipId);
-                if (playing) onPlayingChange(false);
-              }}
-              onUpdateClip={onUpdateClip}
-              onPreviewTransform={engine.previewTransform}
-              onTogglePlay={() => onPlayingChange(!playing)}
+              liveChromeRef={liveChromeRef}
             />
-          ) : (
-            <button
-              type="button"
-              className="studio-editor-preview-hit"
-              aria-label={playing ? "Pause" : "Play"}
-              onPointerDown={(event) => {
-                if (event.button !== 0) return;
-                onSelectClip(null);
-              }}
-              onClick={() => onPlayingChange(!playing)}
-            />
-          )}
-          <PreviewTextOverlays
-            layer="over"
-            project={project}
-            playhead={playhead}
-            canvasWidth={frame.width}
-            canvasHeight={frame.height}
-            selectedClipId={selectedClipId}
-            playing={playing}
-            suppressClipId={activeTextClip?.id ?? null}
-            onSelect={(clipId) => {
-              onSelectClip(clipId);
-              if (playing) onPlayingChange(false);
-            }}
-            onTogglePlay={() => onPlayingChange(!playing)}
-          />
+          ) : null}
           {activeTextClip ? (
             <PreviewTextTransformOverlay
+              ref={textOverlayRef}
               clip={activeTextClip}
               canvasWidth={frame.width}
               canvasHeight={frame.height}
               selected={selectedClipId === activeTextClip.id}
               playing={playing}
-              onSelect={(clipId) => {
-                onSelectClip(clipId);
-                if (playing) onPlayingChange(false);
-              }}
+              liveChromeRef={liveChromeRef}
               onUpdateClip={onUpdateClip}
-              onPreviewTransform={(transform) => {
-                engine.previewTextTransform(activeTextClip.id, transform);
-              }}
-              onTogglePlay={() => onPlayingChange(!playing)}
             />
           ) : null}
           {engine.buffering ? (

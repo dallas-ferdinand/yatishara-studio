@@ -67,6 +67,17 @@ import {
   transferPostBoost,
   viewerHasActiveBoost,
 } from "./lib/postBoost";
+import {
+  reverseHelpAnswerUnlock,
+  transferHelpAnswerUnlock,
+  viewerCanSeeHelpAnswerFull,
+} from "./lib/postUnlock";
+import {
+  normalizePostKind,
+  POST_UNLOCK_UNDO_MS,
+  unlockPriceCentsForDuration,
+  validateHelpAnswerMedia,
+} from "./lib/helpAnswer";
 
 const hashtagChipValidator = v.object({
   tag: v.string(),
@@ -211,16 +222,61 @@ function isPostMediaKind(
   return kind === "image" || kind === "video" || kind === "audio";
 }
 
-function uniquePostAssetIds(post: Doc<"profilePosts">): Id<"assets">[] {
+function uniquePostAssetIds(
+  post: Doc<"profilePosts">,
+  entitled = true,
+): Id<"assets">[] {
   const ids: Id<"assets">[] = [];
   const seen = new Set<string>();
-  for (const id of [post.assetId, ...(post.assetIds ?? [])]) {
-    if (seen.has(id)) continue;
+  const fullId = post.helpAnswerFullAssetId ?? post.assetId;
+  const previewId = post.helpAnswerPreviewAssetId;
+  const primary =
+    post.postKind === "help_answer" && !entitled && previewId
+      ? previewId
+      : post.assetId;
+  for (const id of [primary, ...(post.assetIds ?? [])]) {
+    if (!id || seen.has(id)) continue;
+    if (
+      post.postKind === "help_answer" &&
+      !entitled &&
+      id === fullId &&
+      id !== primary
+    ) {
+      continue;
+    }
     seen.add(id);
     ids.push(id);
     if (ids.length >= MAX_POST_MEDIA_ITEMS) break;
   }
   return ids;
+}
+
+function helpFieldsFromPost(
+  post: Doc<"profilePosts">,
+  args: {
+    entitled: boolean;
+    username: string;
+    parentRequestUsername?: string;
+    viewerCanAnswer?: boolean;
+    viewerHasAnswered?: boolean;
+  },
+) {
+  const postKind = normalizePostKind(post.postKind);
+  const helpLocked = postKind === "help_answer" && !args.entitled;
+  return {
+    postKind,
+    parentRequestPostId: post.parentRequestPostId,
+    parentRequestUsername: args.parentRequestUsername,
+    previewStartMs: post.previewStartMs,
+    previewEndMs: post.previewEndMs,
+    recordingDurationMs: post.recordingDurationMs,
+    unlockPriceCents: post.unlockPriceCents,
+    viewerUnlocked: args.entitled && postKind === "help_answer",
+    helpLocked,
+    viewerCanAnswer: args.viewerCanAnswer,
+    viewerHasAnswered: args.viewerHasAnswered,
+    salesClosed: Boolean(post.salesClosedAt),
+  };
 }
 
 type HydratedPostVoice = { url: string; durationSec?: number };
@@ -325,6 +381,24 @@ const publicPostReturn = v.object({
   likedByViewer: v.boolean(),
   savedByViewer: v.boolean(),
   username: v.string(),
+  postKind: v.optional(
+    v.union(
+      v.literal("post"),
+      v.literal("help_request"),
+      v.literal("help_answer"),
+    ),
+  ),
+  parentRequestPostId: v.optional(v.id("profilePosts")),
+  parentRequestUsername: v.optional(v.string()),
+  previewStartMs: v.optional(v.number()),
+  previewEndMs: v.optional(v.number()),
+  recordingDurationMs: v.optional(v.number()),
+  unlockPriceCents: v.optional(v.number()),
+  viewerUnlocked: v.optional(v.boolean()),
+  helpLocked: v.optional(v.boolean()),
+  viewerCanAnswer: v.optional(v.boolean()),
+  viewerHasAnswered: v.optional(v.boolean()),
+  salesClosed: v.optional(v.boolean()),
 });
 
 const feedPostReturn = v.object({
@@ -362,6 +436,24 @@ const feedPostReturn = v.object({
   isFollowing: v.boolean(),
   isOwner: v.boolean(),
   score: v.number(),
+  postKind: v.optional(
+    v.union(
+      v.literal("post"),
+      v.literal("help_request"),
+      v.literal("help_answer"),
+    ),
+  ),
+  parentRequestPostId: v.optional(v.id("profilePosts")),
+  parentRequestUsername: v.optional(v.string()),
+  previewStartMs: v.optional(v.number()),
+  previewEndMs: v.optional(v.number()),
+  recordingDurationMs: v.optional(v.number()),
+  unlockPriceCents: v.optional(v.number()),
+  viewerUnlocked: v.optional(v.boolean()),
+  helpLocked: v.optional(v.boolean()),
+  viewerCanAnswer: v.optional(v.boolean()),
+  viewerHasAnswered: v.optional(v.boolean()),
+  salesClosed: v.optional(v.boolean()),
 });
 
 type HydratedPostMediaItem = {
@@ -405,6 +497,18 @@ type HydratedPublicPost = {
   likedByViewer: boolean;
   savedByViewer: boolean;
   username: string;
+  postKind?: "post" | "help_request" | "help_answer";
+  parentRequestPostId?: Id<"profilePosts">;
+  parentRequestUsername?: string;
+  previewStartMs?: number;
+  previewEndMs?: number;
+  recordingDurationMs?: number;
+  unlockPriceCents?: number;
+  viewerUnlocked?: boolean;
+  helpLocked?: boolean;
+  viewerCanAnswer?: boolean;
+  viewerHasAnswered?: boolean;
+  salesClosed?: boolean;
 };
 
 async function viewerBoostedOrLiked(
@@ -426,14 +530,24 @@ async function hydratePostItemLists(
   ctx: QueryCtx,
   posts: Doc<"profilePosts">[],
   expiresUnix: number,
+  entitledFlags: boolean[],
 ): Promise<HydratedPostMediaItem[][]> {
-  const idLists = posts.map(uniquePostAssetIds);
+  const idLists = posts.map((post, i) =>
+    uniquePostAssetIds(post, entitledFlags[i] ?? true),
+  );
   const allIds = [...new Set(idLists.flat())];
   if (allIds.length === 0) return posts.map(() => []);
   const docs = await Promise.all(allIds.map((id) => ctx.db.get("assets", id)));
   const byId = new Map<string, Doc<"assets"> | null>();
   for (let i = 0; i < allIds.length; i++) {
     byId.set(allIds[i]!, docs[i] ?? null);
+  }
+  const lockedFullIds = new Set<string>();
+  for (let i = 0; i < posts.length; i++) {
+    const post = posts[i]!;
+    if (post.postKind === "help_answer" && !(entitledFlags[i] ?? true)) {
+      lockedFullIds.add(String(post.helpAnswerFullAssetId ?? post.assetId));
+    }
   }
   const thumbPaths = docs.map((asset) =>
     asset && !asset.deletedAt && isPostMediaKind(asset.kind)
@@ -444,6 +558,7 @@ async function hydratePostItemLists(
     if (!asset || asset.deletedAt || asset.kind !== "video" || !asset.bunnyPath) {
       return undefined;
     }
+    if (lockedFullIds.has(asset._id)) return undefined;
     if (assetThumbnailPath(asset)) return undefined;
     return asset.bunnyPath;
   });
@@ -473,6 +588,64 @@ async function hydratePostItemLists(
   });
 }
 
+async function loadHelpMetaForPosts(
+  ctx: QueryCtx,
+  posts: Doc<"profilePosts">[],
+  viewerId: Id<"users"> | null,
+): Promise<
+  Array<{
+    parentRequestUsername?: string;
+    viewerCanAnswer?: boolean;
+    viewerHasAnswered?: boolean;
+  }>
+> {
+  return await Promise.all(
+    posts.map(async (post) => {
+      const kind = normalizePostKind(post.postKind);
+      let parentRequestUsername: string | undefined;
+      if (kind === "help_answer" && post.parentRequestPostId) {
+        const request = await ctx.db.get("profilePosts", post.parentRequestPostId);
+        if (request) {
+          const profile = await ctx.db.get("profiles", request.profileId);
+          parentRequestUsername = profile?.username;
+        }
+      }
+      if (kind !== "help_request") {
+        return { parentRequestUsername };
+      }
+      if (!viewerId || viewerId === post.ownerId) {
+        const own = viewerId
+          ? await ctx.db
+              .query("profilePosts")
+              .withIndex("by_parent_and_owner", (q) =>
+                q
+                  .eq("parentRequestPostId", post._id)
+                  .eq("ownerId", viewerId),
+              )
+              .first()
+          : null;
+        return {
+          parentRequestUsername,
+          viewerCanAnswer: false,
+          viewerHasAnswered: Boolean(own && !own.unpublishedAt),
+        };
+      }
+      const existing = await ctx.db
+        .query("profilePosts")
+        .withIndex("by_parent_and_owner", (q) =>
+          q.eq("parentRequestPostId", post._id).eq("ownerId", viewerId),
+        )
+        .first();
+      const answered = Boolean(existing && !existing.unpublishedAt);
+      return {
+        parentRequestUsername,
+        viewerCanAnswer: !answered,
+        viewerHasAnswered: answered,
+      };
+    }),
+  );
+}
+
 async function hydratePublicPosts(
   ctx: QueryCtx,
   posts: Doc<"profilePosts">[],
@@ -481,7 +654,18 @@ async function hydratePublicPosts(
 ): Promise<HydratedPublicPost[]> {
   if (posts.length === 0) return [];
   const profiles = await Promise.all(posts.map((post) => ctx.db.get("profiles", post.profileId)));
-  const itemLists = await hydratePostItemLists(ctx, posts, expiresUnix);
+  const entitledFlags = await Promise.all(
+    posts.map((post) =>
+      viewerCanSeeHelpAnswerFull(ctx, { post, viewerId }),
+    ),
+  );
+  const itemLists = await hydratePostItemLists(
+    ctx,
+    posts,
+    expiresUnix,
+    entitledFlags,
+  );
+  const helpMeta = await loadHelpMetaForPosts(ctx, posts, viewerId);
   const voices = await hydratePostVoices(ctx, posts, expiresUnix);
   const likedFlags = viewerId
     ? await Promise.all(
@@ -544,6 +728,13 @@ async function hydratePublicPosts(
       likedByViewer: likedFlags[i] ?? false,
       savedByViewer: savedFlags[i] ?? false,
       username: author.username,
+      ...helpFieldsFromPost(post, {
+        entitled: entitledFlags[i] ?? false,
+        username: author.username,
+        parentRequestUsername: helpMeta[i]?.parentRequestUsername,
+        viewerCanAnswer: helpMeta[i]?.viewerCanAnswer,
+        viewerHasAnswered: helpMeta[i]?.viewerHasAnswered,
+      }),
     });
   }
   return results;
@@ -1116,22 +1307,48 @@ export const listMySharedAssetIds = authedQuery({
   },
 });
 
-export const shareAsset = authedMutation({
-  args: {
-    assetId: v.optional(v.id("assets")),
-    assetIds: v.optional(v.array(v.id("assets"))),
-    caption: v.optional(v.string()),
-    hashtags: v.optional(v.array(v.string())),
-    keywords: v.optional(v.array(v.string())),
-    voiceAssetId: v.optional(v.id("assets")),
-    voiceDurationSec: v.optional(v.number()),
-  },
-  returns: v.object({
-    postId: v.id("profilePosts"),
-    publicUrlPath: v.string(),
-  }),
-  handler: async (ctx, args) => {
-    const profile = await getProfileByUser(ctx, ctx.user._id);
+const shareAssetArgs = {
+  assetId: v.optional(v.id("assets")),
+  assetIds: v.optional(v.array(v.id("assets"))),
+  caption: v.optional(v.string()),
+  hashtags: v.optional(v.array(v.string())),
+  keywords: v.optional(v.array(v.string())),
+  voiceAssetId: v.optional(v.id("assets")),
+  voiceDurationSec: v.optional(v.number()),
+  postKind: v.optional(
+    v.union(
+      v.literal("post"),
+      v.literal("help_request"),
+      v.literal("help_answer"),
+    ),
+  ),
+  parentRequestPostId: v.optional(v.id("profilePosts")),
+  previewStartMs: v.optional(v.number()),
+  previewEndMs: v.optional(v.number()),
+  recordingDurationMs: v.optional(v.number()),
+};
+
+type ShareAssetInput = {
+  assetId?: Id<"assets">;
+  assetIds?: Id<"assets">[];
+  caption?: string;
+  hashtags?: string[];
+  keywords?: string[];
+  voiceAssetId?: Id<"assets">;
+  voiceDurationSec?: number;
+  postKind?: "post" | "help_request" | "help_answer";
+  parentRequestPostId?: Id<"profilePosts">;
+  previewStartMs?: number;
+  previewEndMs?: number;
+  recordingDurationMs?: number;
+};
+
+async function shareAssetForOwner(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  args: ShareAssetInput,
+): Promise<{ postId: Id<"profilePosts">; publicUrlPath: string }> {
+    const profile = await getProfileByUser(ctx, userId);
     if (!profile) {
       throw new Error("Claim a username in Settings → Profile before sharing");
     }
@@ -1150,15 +1367,73 @@ export const shareAsset = authedMutation({
       throw new Error("Add at least one photo, video, or audio");
     }
     for (const id of mediaIds) {
-      await requireOwnedAsset(ctx, ctx.user._id, id);
+      await requireOwnedAsset(ctx, userId, id);
     }
     const voice = await resolvePostVoice(
       ctx,
-      ctx.user._id,
+      userId,
       args.voiceAssetId,
       args.voiceDurationSec,
     );
     const primaryId = mediaIds[0]!;
+    const postKind = normalizePostKind(args.postKind);
+    let helpFields: {
+      postKind: "post" | "help_request" | "help_answer";
+      parentRequestPostId?: Id<"profilePosts">;
+      previewStartMs?: number;
+      previewEndMs?: number;
+      recordingDurationMs?: number;
+      unlockPriceCents?: number;
+      helpAnswerFullAssetId?: Id<"assets">;
+    } = { postKind };
+    if (postKind === "help_answer") {
+      const parentId = args.parentRequestPostId;
+      if (parentId) {
+        const request = await ctx.db.get("profilePosts", parentId);
+        if (
+          !request ||
+          request.unpublishedAt ||
+          normalizePostKind(request.postKind) !== "help_request"
+        ) {
+          throw new Error("Question not found");
+        }
+        if (request.ownerId === userId) {
+          throw new Error("You can’t post value on your own question");
+        }
+        const prior = await ctx.db
+          .query("profilePosts")
+          .withIndex("by_parent_and_owner", (q) =>
+            q.eq("parentRequestPostId", parentId).eq("ownerId", userId),
+          )
+          .first();
+        if (prior && !prior.unpublishedAt) {
+          throw new Error("You already posted value on this question");
+        }
+      }
+      const primaryAsset = await ctx.db.get("assets", primaryId);
+      if (!primaryAsset || primaryAsset.kind !== "video") {
+        throw new Error("Value needs a screen recording");
+      }
+      const recordingDurationMs =
+        args.recordingDurationMs ??
+        (typeof primaryAsset.durationSeconds === "number"
+          ? Math.round(primaryAsset.durationSeconds * 1000)
+          : 0);
+      validateHelpAnswerMedia({
+        recordingDurationMs,
+        previewStartMs: args.previewStartMs ?? 0,
+        previewEndMs: args.previewEndMs ?? 0,
+      });
+      helpFields = {
+        postKind: "help_answer",
+        ...(parentId ? { parentRequestPostId: parentId } : {}),
+        previewStartMs: args.previewStartMs,
+        previewEndMs: args.previewEndMs,
+        recordingDurationMs,
+        unlockPriceCents: unlockPriceCentsForDuration(recordingDurationMs),
+        helpAnswerFullAssetId: primaryId,
+      };
+    }
     for (const extraId of mediaIds.slice(1)) {
       const extraPost = await ctx.db
         .query("profilePosts")
@@ -1190,20 +1465,20 @@ export const shareAsset = authedMutation({
       await syncPostHashtags(ctx, {
         postId,
         profileId: profile!._id,
-        ownerId: ctx.user._id,
+        ownerId: userId,
         rawTags: hashtags,
         now,
       });
       await syncPostMentions(ctx, {
         postId,
-        ownerId: ctx.user._id,
+        ownerId: userId,
         usernames: fromCaptionMentions,
         now,
       });
     }
 
     if (existing) {
-      if (!existing.unpublishedAt && existing.ownerId === ctx.user._id) {
+      if (!existing.unpublishedAt && existing.ownerId === userId) {
         await ctx.db.patch(existing._id, {
           caption,
           keywords: keywords.length ? keywords : undefined,
@@ -1218,7 +1493,7 @@ export const shareAsset = authedMutation({
           publicUrlPath: publicUrlPath(profile.username),
         };
       }
-      if (existing.ownerId !== ctx.user._id) {
+      if (existing.ownerId !== userId) {
         throw new Error("This asset is already shared");
       }
       await ctx.db.patch(existing._id, {
@@ -1229,6 +1504,7 @@ export const shareAsset = authedMutation({
         publishedAt: now,
         unpublishedAt: undefined,
         ...voice,
+        ...helpFields,
       });
       await attachMeta(existing._id);
       await adjustProfileCounts(ctx, profile._id, {
@@ -1237,7 +1513,13 @@ export const shareAsset = authedMutation({
       await scheduleFollowedPostNotifications(ctx, {
         profileId: profile._id,
         postId: existing._id,
-        authorUserId: ctx.user._id,
+        authorUserId: userId,
+      });
+      await afterPublishHelpAnswer(ctx, {
+        postId: existing._id,
+        postKind,
+        parentRequestPostId: helpFields.parentRequestPostId,
+        authorUserId: userId,
       });
       return {
         postId: existing._id,
@@ -1246,7 +1528,7 @@ export const shareAsset = authedMutation({
     }
     const postId = await ctx.db.insert("profilePosts", {
       profileId: profile._id,
-      ownerId: ctx.user._id,
+      ownerId: userId,
       assetId: primaryId,
       assetIds: mediaIds,
       caption,
@@ -1258,6 +1540,7 @@ export const shareAsset = authedMutation({
       shareCount: 0,
       publishedAt: now,
       ...voice,
+      ...helpFields,
     });
     await attachMeta(postId);
     await adjustProfileCounts(ctx, profile._id, {
@@ -1266,37 +1549,108 @@ export const shareAsset = authedMutation({
     await scheduleFollowedPostNotifications(ctx, {
       profileId: profile._id,
       postId,
-      authorUserId: ctx.user._id,
+      authorUserId: userId,
+    });
+    await afterPublishHelpAnswer(ctx, {
+      postId,
+      postKind,
+      parentRequestPostId: helpFields.parentRequestPostId,
+      authorUserId: userId,
     });
     return {
       postId,
       publicUrlPath: publicUrlPath(profile.username),
     };
-  },
+}
+
+export const shareAsset = authedMutation({
+  args: shareAssetArgs,
+  returns: v.object({
+    postId: v.id("profilePosts"),
+    publicUrlPath: v.string(),
+  }),
+  handler: async (ctx, args) => shareAssetForOwner(ctx, ctx.user._id, args),
 });
 
-export const unshareAsset = authedMutation({
-  args: { assetId: v.id("assets") },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const profile = await getProfileByUser(ctx, ctx.user._id);
-    if (!profile) return null;
-    const post = await ctx.db
-      .query("profilePosts")
-      .withIndex("by_asset", (q) => q.eq("assetId", args.assetId))
-      .unique();
-    if (!post || post.ownerId !== ctx.user._id || post.unpublishedAt) {
-      return null;
+async function afterPublishHelpAnswer(
+  ctx: MutationCtx,
+  args: {
+    postId: Id<"profilePosts">;
+    postKind: "post" | "help_request" | "help_answer";
+    parentRequestPostId?: Id<"profilePosts">;
+    authorUserId: Id<"users">;
+  },
+) {
+  if (args.postKind !== "help_answer") return;
+  await ctx.scheduler.runAfter(0, internal.helpAnswerActions.cutHelpAnswerPreview, {
+    postId: args.postId,
+  });
+  if (!args.parentRequestPostId) return;
+  const request = await ctx.db.get("profilePosts", args.parentRequestPostId);
+  if (!request || request.ownerId === args.authorUserId) return;
+  const actor = await resolveActorDisplayName(ctx, args.authorUserId);
+  await createNotificationAndPush(ctx, {
+    userId: request.ownerId,
+    kind: "help_answer_posted",
+    title: actor,
+    body: "posted value on your question",
+    postId: args.postId,
+  });
+}
+
+async function unshareAssetForOwner(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  args: { assetId: Id<"assets">; keepPurchasers?: boolean },
+): Promise<null> {
+  const profile = await getProfileByUser(ctx, userId);
+  if (!profile) return null;
+  const post = await ctx.db
+    .query("profilePosts")
+    .withIndex("by_asset", (q) => q.eq("assetId", args.assetId))
+    .unique();
+  if (!post || post.ownerId !== userId || post.unpublishedAt) {
+    return null;
+  }
+  const now = Date.now();
+  if (normalizePostKind(post.postKind) === "help_answer") {
+    const paid = await ctx.db
+      .query("profileUnlocks")
+      .withIndex("by_post", (q) => q.eq("postId", post._id))
+      .collect();
+    const hasPurchasers = paid.some((row) => row.status === "active");
+    if (hasPurchasers && !args.keepPurchasers) {
+      throw new Error(
+        "People who already unlocked keep this. Confirm that nobody else can unlock or see it.",
+      );
     }
-    const now = Date.now();
     await clearPostHashtags(ctx, post, now);
     await clearPostMentions(ctx, post._id);
-    await ctx.db.patch(post._id, { unpublishedAt: now });
+    await ctx.db.patch(post._id, {
+      unpublishedAt: now,
+      salesClosedAt: now,
+    });
     await adjustProfileCounts(ctx, profile._id, {
       postCount: Math.max(0, profile.postCount - 1),
     });
     return null;
+  }
+  await clearPostHashtags(ctx, post, now);
+  await clearPostMentions(ctx, post._id);
+  await ctx.db.patch(post._id, { unpublishedAt: now });
+  await adjustProfileCounts(ctx, profile._id, {
+    postCount: Math.max(0, profile.postCount - 1),
+  });
+  return null;
+}
+
+export const unshareAsset = authedMutation({
+  args: {
+    assetId: v.id("assets"),
+    keepPurchasers: v.optional(v.boolean()),
   },
+  returns: v.null(),
+  handler: async (ctx, args) => unshareAssetForOwner(ctx, ctx.user._id, args),
 });
 
 const POST_CAPTION_MAX = 2200;
@@ -1636,7 +1990,13 @@ async function listFeedImpl(
 
     if (args.seedPostId) {
       const seed = await ctx.db.get("profilePosts", args.seedPostId);
-      if (seed && !seed.unpublishedAt) {
+      const seedEntitled =
+        seed &&
+        (await viewerCanSeeHelpAnswerFull(ctx, {
+          post: seed,
+          viewerId: viewerId ?? null,
+        }));
+      if (seed && (!seed.unpublishedAt || seedEntitled)) {
         // Following mode: only pin seed when that author is followed.
         const seedAllowed =
           mode === "forYou" || followingIds.has(seed.profileId);
@@ -1761,19 +2121,39 @@ async function listFeedImpl(
 
     if (ordered.length === 0) return [];
 
+    const feedPosts = ordered.map((item) => item.post);
+    const entitledFlags = await Promise.all(
+      feedPosts.map((post) =>
+        viewerCanSeeHelpAnswerFull(ctx, { post, viewerId: viewerId ?? null }),
+      ),
+    );
+    const helpMeta = await loadHelpMetaForPosts(ctx, feedPosts, viewerId ?? null);
     const assets = await Promise.all(
-      ordered.map((item) => ctx.db.get("assets", item.post.assetId)),
+      ordered.map((item, i) => {
+        const ids = uniquePostAssetIds(item.post, entitledFlags[i] ?? true);
+        const displayId = ids[0] ?? item.post.assetId;
+        return ctx.db.get("assets", displayId);
+      }),
     );
     const itemLists = await hydratePostItemLists(
       ctx,
-      ordered.map((item) => item.post),
+      feedPosts,
       expiresUnix,
+      entitledFlags,
     );
+    const lockedFullIds = new Set<string>();
+    for (let i = 0; i < feedPosts.length; i++) {
+      const post = feedPosts[i]!;
+      if (post.postKind === "help_answer" && !(entitledFlags[i] ?? true)) {
+        lockedFullIds.add(String(post.helpAnswerFullAssetId ?? post.assetId));
+      }
+    }
     const thumbPaths = assets.map((asset) => (asset ? assetThumbnailPath(asset) : undefined));
     const videoPreviewPaths = assets.map((asset) => {
       if (!asset || asset.deletedAt || asset.kind !== "video" || !asset.bunnyPath) {
         return undefined;
       }
+      if (lockedFullIds.has(asset._id)) return undefined;
       if (assetThumbnailPath(asset)) return undefined;
       return asset.bunnyPath;
     });
@@ -1934,6 +2314,13 @@ async function listFeedImpl(
         isFollowing: item.fromFollowing,
         isOwner,
         score: item.score,
+        ...helpFieldsFromPost(item.post, {
+          entitled: entitledFlags[i] ?? false,
+          username: item.profile.username,
+          parentRequestUsername: helpMeta[i]?.parentRequestUsername,
+          viewerCanAnswer: helpMeta[i]?.viewerCanAnswer,
+          viewerHasAnswered: helpMeta[i]?.viewerHasAnswered,
+        }),
       });
     }
 
@@ -1968,6 +2355,7 @@ async function signFullPostMedia(
   ctx: QueryCtx,
   post: Doc<"profilePosts">,
   expiresUnix: number,
+  entitled: boolean,
 ): Promise<{
   postId: Id<"profilePosts">;
   kind: "image" | "video" | "audio";
@@ -1976,9 +2364,17 @@ async function signFullPostMedia(
   width?: number;
   height?: number;
   items: HydratedPostMediaItem[];
+  helpLocked?: boolean;
+  unlockPriceCents?: number;
+  previewStartMs?: number;
+  previewEndMs?: number;
 } | null> {
-  const ids = uniquePostAssetIds(post);
+  const ids = uniquePostAssetIds(post, entitled);
   const docs = await Promise.all(ids.map((id) => ctx.db.get("assets", id)));
+  const lockedFullId =
+    post.postKind === "help_answer" && !entitled
+      ? String(post.helpAnswerFullAssetId ?? post.assetId)
+      : null;
   const playable: Doc<"assets">[] = [];
   for (const asset of docs) {
     if (!asset || asset.deletedAt || !isPostMediaKind(asset.kind) || !asset.bunnyPath) {
@@ -1990,11 +2386,13 @@ async function signFullPostMedia(
   const thumbPaths = playable.map((asset) => assetThumbnailPath(asset));
   const thumbs = await signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM);
   const mediaUrls = await Promise.all(
-    playable.map((asset) =>
-      asset.bunnyPath
-        ? signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind)
-        : Promise.resolve(undefined),
-    ),
+    playable.map((asset) => {
+      if (!asset.bunnyPath) return Promise.resolve(undefined);
+      if (lockedFullId && asset._id === lockedFullId) {
+        return Promise.resolve(undefined);
+      }
+      return signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind);
+    }),
   );
   const items: HydratedPostMediaItem[] = playable.map((asset, i) => {
     const thumbPath = thumbPaths[i];
@@ -2021,6 +2419,10 @@ async function signFullPostMedia(
     width: primary.width,
     height: primary.height,
     items,
+    helpLocked: post.postKind === "help_answer" && !entitled,
+    unlockPriceCents: post.unlockPriceCents,
+    previewStartMs: post.previewStartMs,
+    previewEndMs: post.previewEndMs,
   };
 }
 
@@ -2039,16 +2441,26 @@ export const getPublicPostMedia = query({
       width: v.optional(v.number()),
       height: v.optional(v.number()),
       items: v.optional(v.array(postMediaItemReturn)),
+      helpLocked: v.optional(v.boolean()),
+      unlockPriceCents: v.optional(v.number()),
+      previewStartMs: v.optional(v.number()),
+      previewEndMs: v.optional(v.number()),
     }),
   ),
   handler: async (ctx, args) => {
     const post = await ctx.db.get("profilePosts", args.postId);
-    if (!post || post.unpublishedAt) return null;
+    if (!post) return null;
+    const viewerId = await getAuthUserId(ctx);
+    const entitled = await viewerCanSeeHelpAnswerFull(ctx, {
+      post,
+      viewerId,
+    });
+    if (post.unpublishedAt && !entitled) return null;
     const profile = await ctx.db.get("profiles", post.profileId);
     if (!profile || !profile.isPublic) return null;
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
-    return await signFullPostMedia(ctx, post, expiresUnix);
+    return await signFullPostMedia(ctx, post, expiresUnix, entitled);
   },
 });
 
@@ -2474,6 +2886,153 @@ export const undoBoost = authedMutation({
   },
 });
 
+export const unlockHelpAnswer = authedMutation({
+  args: { postId: v.id("profilePosts") },
+  returns: v.object({
+    unlocked: v.boolean(),
+    unlockId: v.id("profileUnlocks"),
+    undoUntil: v.number(),
+    amountCents: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || normalizePostKind(post.postKind) !== "help_answer") {
+      throw new Error("Answer not found");
+    }
+    if (post.unpublishedAt || post.salesClosedAt) {
+      throw new Error("This answer is no longer available");
+    }
+    const profile = await ctx.db.get("profiles", post.profileId);
+    if (!profile || !profile.isPublic) {
+      throw new Error("Answer not found");
+    }
+    const priceCents = post.unlockPriceCents;
+    if (!priceCents) throw new Error("This answer cannot be unlocked");
+    const transfer = await transferHelpAnswerUnlock(ctx, {
+      senderUserId: ctx.user._id,
+      receiverUserId: profile.userId,
+      postId: post._id,
+      unlockPriceCents: priceCents,
+    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.helpAnswerActions.copyUnlockMedia,
+      { unlockId: transfer.unlockId },
+    );
+    await ctx.scheduler.runAfter(
+      POST_UNLOCK_UNDO_MS,
+      internal.helpAnswerInternal.notifyUnlockIfStillActive,
+      { unlockId: transfer.unlockId },
+    );
+    return {
+      unlocked: true,
+      unlockId: transfer.unlockId,
+      undoUntil: transfer.undoUntil,
+      amountCents: priceCents,
+    };
+  },
+});
+
+export const undoUnlock = authedMutation({
+  args: { unlockId: v.id("profileUnlocks") },
+  returns: v.object({ unlocked: v.boolean() }),
+  handler: async (ctx, args) => {
+    const reversed = await reverseHelpAnswerUnlock(ctx, {
+      unlockId: args.unlockId,
+      requesterUserId: ctx.user._id,
+    });
+    if (reversed.buyerAssetId) {
+      await ctx.scheduler.runAfter(0, internal.helpAnswerInternal.purgeUnlockCopy, {
+        assetId: reversed.buyerAssetId,
+      });
+    }
+    return { unlocked: false };
+  },
+});
+
+export const getHelpRequestContext = authedQuery({
+  args: { postId: v.id("profilePosts") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      postId: v.id("profilePosts"),
+      username: v.string(),
+      displayName: v.optional(v.string()),
+      caption: v.optional(v.string()),
+      alreadyAnswered: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (
+      !post ||
+      post.unpublishedAt ||
+      normalizePostKind(post.postKind) !== "help_request"
+    ) {
+      return null;
+    }
+    const profile = await ctx.db.get("profiles", post.profileId);
+    if (!profile?.username || !profile.isPublic) return null;
+    const existing = await ctx.db
+      .query("profilePosts")
+      .withIndex("by_parent_and_owner", (q) =>
+        q.eq("parentRequestPostId", post._id).eq("ownerId", ctx.user._id),
+      )
+      .first();
+    return {
+      postId: post._id,
+      username: profile.username,
+      caption: post.caption,
+      alreadyAnswered: Boolean(existing && !existing.unpublishedAt),
+    };
+  },
+});
+
+export const listHelpRequestsToAnswer = authedQuery({
+  args: { limit: v.optional(v.number()) },
+  returns: v.array(
+    v.object({
+      postId: v.id("profilePosts"),
+      username: v.string(),
+      caption: v.optional(v.string()),
+      alreadyAnswered: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 16, 1), 32);
+    const rows = await ctx.db
+      .query("profilePosts")
+      .withIndex("by_kind_published", (q) => q.eq("postKind", "help_request"))
+      .order("desc")
+      .take(limit * 4);
+    const out: Array<{
+      postId: Id<"profilePosts">;
+      username: string;
+      caption?: string;
+      alreadyAnswered: boolean;
+    }> = [];
+    for (const post of rows) {
+      if (post.unpublishedAt || post.ownerId === ctx.user._id) continue;
+      const profile = await ctx.db.get("profiles", post.profileId);
+      if (!profile?.username || !profile.isPublic) continue;
+      const existing = await ctx.db
+        .query("profilePosts")
+        .withIndex("by_parent_and_owner", (q) =>
+          q.eq("parentRequestPostId", post._id).eq("ownerId", ctx.user._id),
+        )
+        .first();
+      out.push({
+        postId: post._id,
+        username: profile.username,
+        caption: post.caption,
+        alreadyAnswered: Boolean(existing && !existing.unpublishedAt),
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
+  },
+});
+
 export const toggleSave = authedMutation({
   args: { postId: v.id("profilePosts") },
   returns: v.object({
@@ -2607,6 +3166,15 @@ async function requirePublicPost(
   const profile = await ctx.db.get("profiles", post.profileId);
   if (!profile || !profile.isPublic) throw new Error("Post not found");
   return post;
+}
+
+async function viewerCanSeeHelpComments(
+  ctx: QueryCtx | MutationCtx,
+  post: Doc<"profilePosts">,
+  viewerId: Id<"users"> | null,
+): Promise<boolean> {
+  if (normalizePostKind(post.postKind) !== "help_answer") return true;
+  return await viewerCanSeeHelpAnswerFull(ctx, { post, viewerId });
 }
 
 const commentReturnValidator = v.object({
@@ -2797,6 +3365,12 @@ export const listComments = query({
     } catch {
       return [];
     }
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post) return [];
+    const viewerId = await getAuthUserId(ctx);
+    if (!(await viewerCanSeeHelpComments(ctx, post, viewerId))) {
+      return [];
+    }
     const sort = normalizeCommentSort(args.sort);
     const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
     const expiresUnix =
@@ -2808,7 +3382,6 @@ export const listComments = query({
       .order(sort === "oldest" ? "asc" : "desc")
       .take(fetchCap);
 
-    const post = await ctx.db.get("profilePosts", args.postId);
     const topLevel: Doc<"profileComments">[] = [];
     for (const row of rows) {
       if (row.deletedAt || row.parentId) continue;
@@ -2847,6 +3420,12 @@ export const searchComments = query({
     } catch {
       return [];
     }
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post) return [];
+    const viewerId = await getAuthUserId(ctx);
+    if (!(await viewerCanSeeHelpComments(ctx, post, viewerId))) {
+      return [];
+    }
     const sort = normalizeCommentSort(args.sort);
     const limit = Math.min(Math.max(args.limit ?? 40, 1), 80);
     const expiresUnix =
@@ -2866,11 +3445,10 @@ export const searchComments = query({
       }
     }
 
-    const post = await ctx.db.get("profilePosts", args.postId);
     const hydrated = await hydrateComments(
       ctx,
       candidates,
-      post?.ownerId,
+      post.ownerId,
       expiresUnix,
     );
     const matched = hydrated.filter((comment) => {
@@ -2905,6 +3483,12 @@ export const listCommentReplies = query({
     } catch {
       return [];
     }
+    const post = await ctx.db.get("profilePosts", parent.postId);
+    if (!post) return [];
+    const viewerId = await getAuthUserId(ctx);
+    if (!(await viewerCanSeeHelpComments(ctx, post, viewerId))) {
+      return [];
+    }
     const sort = normalizeCommentSort(args.sort);
     const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
     const expiresUnix =
@@ -2916,7 +3500,6 @@ export const listCommentReplies = query({
       .order(sort === "oldest" ? "asc" : "desc")
       .take(fetchCap);
 
-    const post = await ctx.db.get("profilePosts", parent.postId);
     const alive = rows.filter((row) => !row.deletedAt);
     const sorted = sortCommentRows(alive, sort).slice(0, limit);
     return hydrateComments(ctx, sorted, post?.ownerId, expiresUnix);
@@ -2938,6 +3521,9 @@ export const addComment = authedMutation({
   }),
   handler: async (ctx, args) => {
     const post = await requirePublicPost(ctx, args.postId);
+    if (!(await viewerCanSeeHelpComments(ctx, post, ctx.user._id))) {
+      throw new Error("Unlock this value to comment");
+    }
     const body = sanitizeCommentBody(args.body, {
       allowEmpty: Boolean(args.imageAssetId || args.audioAssetId),
     });
@@ -3021,7 +3607,10 @@ export const toggleCommentLike = authedMutation({
     if (!comment || comment.deletedAt) {
       throw new Error("Comment not found");
     }
-    await requirePublicPost(ctx, comment.postId);
+    const post = await requirePublicPost(ctx, comment.postId);
+    if (!(await viewerCanSeeHelpComments(ctx, post, ctx.user._id))) {
+      throw new Error("Unlock this value to comment");
+    }
     const existing = await ctx.db
       .query("profileCommentLikes")
       .withIndex("by_user_and_comment", (q) =>
@@ -3483,10 +4072,7 @@ export const listMyCollectionForApi = internalQuery({
 export const shareAssetForApi = internalMutation({
   args: {
     userId: v.id("users"),
-    assetId: v.id("assets"),
-    caption: v.optional(v.string()),
-    hashtags: v.optional(v.array(v.string())),
-    keywords: v.optional(v.array(v.string())),
+    ...shareAssetArgs,
   },
   returns: v.object({
     postId: v.id("profilePosts"),
@@ -3494,113 +4080,8 @@ export const shareAssetForApi = internalMutation({
   }),
   handler: async (ctx, args) => {
     const user = await requireUserForApi(ctx, args.userId);
-    const profile = await getProfileByUser(ctx, user._id);
-    if (!profile) {
-      throw new Error("Claim a username in Settings → Profile before sharing");
-    }
-    if (!profile.isPublic) {
-      throw new Error("Turn on your public profile before sharing");
-    }
-    await requireOwnedAsset(ctx, user._id, args.assetId);
-    const existing = await ctx.db
-      .query("profilePosts")
-      .withIndex("by_asset", (q) => q.eq("assetId", args.assetId))
-      .unique();
-    const caption = args.caption?.trim() || undefined;
-    const fromCaptionTags = extractHashtagsFromCaption(caption);
-    const fromCaptionKeywords = extractKeywordsFromCaption(caption);
-    const fromCaptionMentions = extractMentionsFromCaption(caption);
-    const hashtags = normalizeHashtagList([
-      ...(args.hashtags ?? []),
-      ...fromCaptionTags,
-    ]);
-    const keywords = normalizeKeywordList([
-      ...(args.keywords ?? []),
-      ...fromCaptionKeywords,
-    ]);
-    const now = Date.now();
-
-    async function attachMeta(postId: Id<"profilePosts">) {
-      await syncPostHashtags(ctx, {
-        postId,
-        profileId: profile!._id,
-        ownerId: user._id,
-        rawTags: hashtags,
-        now,
-      });
-      await syncPostMentions(ctx, {
-        postId,
-        ownerId: user._id,
-        usernames: fromCaptionMentions,
-        now,
-      });
-    }
-
-    if (existing) {
-      if (!existing.unpublishedAt && existing.ownerId === user._id) {
-        await ctx.db.patch(existing._id, {
-          caption,
-          keywords: keywords.length ? keywords : undefined,
-          publishedAt: now,
-          unpublishedAt: undefined,
-        });
-        await attachMeta(existing._id);
-        return {
-          postId: existing._id,
-          publicUrlPath: publicUrlPath(profile.username),
-        };
-      }
-      if (existing.ownerId !== user._id) {
-        throw new Error("This asset is already shared");
-      }
-      await ctx.db.patch(existing._id, {
-        profileId: profile._id,
-        caption,
-        keywords: keywords.length ? keywords : undefined,
-        publishedAt: now,
-        unpublishedAt: undefined,
-      });
-      await attachMeta(existing._id);
-      await adjustProfileCounts(ctx, profile._id, {
-        postCount: profile.postCount + 1,
-      });
-      await scheduleFollowedPostNotifications(ctx, {
-        profileId: profile._id,
-        postId: existing._id,
-        authorUserId: user._id,
-      });
-      return {
-        postId: existing._id,
-        publicUrlPath: publicUrlPath(profile.username),
-      };
-    }
-    const postId = await ctx.db.insert("profilePosts", {
-      profileId: profile._id,
-      ownerId: user._id,
-      assetId: args.assetId,
-      assetIds: [args.assetId],
-      caption,
-      keywords: keywords.length ? keywords : undefined,
-      likeCount: 0,
-      viewCount: 0,
-      commentCount: 0,
-      saveCount: 0,
-      shareCount: 0,
-      publishedAt: now,
-    });
-    await attachMeta(postId);
-    await adjustProfileCounts(ctx, profile._id, {
-      postCount: profile.postCount + 1,
-    });
-    await scheduleFollowedPostNotifications(ctx, {
-      profileId: profile._id,
-      postId,
-      authorUserId: user._id,
-    });
-    return {
-      postId,
-      publicUrlPath: publicUrlPath(profile.username),
-    };
+    const { userId: _userId, ...rest } = args;
+    return shareAssetForOwner(ctx, user._id, rest);
   },
 });
 
@@ -3608,27 +4089,178 @@ export const unshareAssetForApi = internalMutation({
   args: {
     userId: v.id("users"),
     assetId: v.id("assets"),
+    keepPurchasers: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const user = await requireUserForApi(ctx, args.userId);
-    const profile = await getProfileByUser(ctx, user._id);
-    if (!profile) return null;
-    const post = await ctx.db
-      .query("profilePosts")
-      .withIndex("by_asset", (q) => q.eq("assetId", args.assetId))
-      .unique();
-    if (!post || post.ownerId !== user._id || post.unpublishedAt) {
+    return unshareAssetForOwner(ctx, user._id, {
+      assetId: args.assetId,
+      keepPurchasers: args.keepPurchasers,
+    });
+  },
+});
+
+export const unlockHelpAnswerForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+  },
+  returns: v.object({
+    unlocked: v.boolean(),
+    unlockId: v.id("profileUnlocks"),
+    undoUntil: v.number(),
+    amountCents: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || normalizePostKind(post.postKind) !== "help_answer") {
+      throw new Error("Answer not found");
+    }
+    if (post.unpublishedAt || post.salesClosedAt) {
+      throw new Error("This answer is no longer available");
+    }
+    const profile = await ctx.db.get("profiles", post.profileId);
+    if (!profile || !profile.isPublic) {
+      throw new Error("Answer not found");
+    }
+    const priceCents = post.unlockPriceCents;
+    if (!priceCents) throw new Error("This answer cannot be unlocked");
+    const transfer = await transferHelpAnswerUnlock(ctx, {
+      senderUserId: user._id,
+      receiverUserId: profile.userId,
+      postId: post._id,
+      unlockPriceCents: priceCents,
+    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.helpAnswerActions.copyUnlockMedia,
+      { unlockId: transfer.unlockId },
+    );
+    await ctx.scheduler.runAfter(
+      POST_UNLOCK_UNDO_MS,
+      internal.helpAnswerInternal.notifyUnlockIfStillActive,
+      { unlockId: transfer.unlockId },
+    );
+    return {
+      unlocked: true,
+      unlockId: transfer.unlockId,
+      undoUntil: transfer.undoUntil,
+      amountCents: priceCents,
+    };
+  },
+});
+
+export const undoUnlockForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    unlockId: v.id("profileUnlocks"),
+  },
+  returns: v.object({ unlocked: v.boolean() }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const reversed = await reverseHelpAnswerUnlock(ctx, {
+      unlockId: args.unlockId,
+      requesterUserId: user._id,
+    });
+    if (reversed.buyerAssetId) {
+      await ctx.scheduler.runAfter(0, internal.helpAnswerInternal.purgeUnlockCopy, {
+        assetId: reversed.buyerAssetId,
+      });
+    }
+    return { unlocked: false };
+  },
+});
+
+export const getHelpRequestContextForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      postId: v.id("profilePosts"),
+      username: v.string(),
+      displayName: v.optional(v.string()),
+      caption: v.optional(v.string()),
+      alreadyAnswered: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireUserForApi(ctx, args.userId);
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (
+      !post ||
+      post.unpublishedAt ||
+      normalizePostKind(post.postKind) !== "help_request"
+    ) {
       return null;
     }
-    const now = Date.now();
-    await clearPostHashtags(ctx, post, now);
-    await clearPostMentions(ctx, post._id);
-    await ctx.db.patch(post._id, { unpublishedAt: now });
-    await adjustProfileCounts(ctx, profile._id, {
-      postCount: Math.max(0, profile.postCount - 1),
-    });
-    return null;
+    const profile = await ctx.db.get("profiles", post.profileId);
+    if (!profile?.username || !profile.isPublic) return null;
+    const existing = await ctx.db
+      .query("profilePosts")
+      .withIndex("by_parent_and_owner", (q) =>
+        q.eq("parentRequestPostId", post._id).eq("ownerId", args.userId),
+      )
+      .first();
+    return {
+      postId: post._id,
+      username: profile.username,
+      caption: post.caption,
+      alreadyAnswered: Boolean(existing && !existing.unpublishedAt),
+    };
+  },
+});
+
+export const listHelpRequestsToAnswerForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      postId: v.id("profilePosts"),
+      username: v.string(),
+      caption: v.optional(v.string()),
+      alreadyAnswered: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireUserForApi(ctx, args.userId);
+    const limit = Math.min(Math.max(args.limit ?? 16, 1), 32);
+    const rows = await ctx.db
+      .query("profilePosts")
+      .withIndex("by_kind_published", (q) => q.eq("postKind", "help_request"))
+      .order("desc")
+      .take(limit * 4);
+    const out: Array<{
+      postId: Id<"profilePosts">;
+      username: string;
+      caption?: string;
+      alreadyAnswered: boolean;
+    }> = [];
+    for (const post of rows) {
+      if (post.unpublishedAt || post.ownerId === args.userId) continue;
+      const profile = await ctx.db.get("profiles", post.profileId);
+      if (!profile?.username || !profile.isPublic) continue;
+      const existing = await ctx.db
+        .query("profilePosts")
+        .withIndex("by_parent_and_owner", (q) =>
+          q.eq("parentRequestPostId", post._id).eq("ownerId", args.userId),
+        )
+        .first();
+      out.push({
+        postId: post._id,
+        username: profile.username,
+        caption: post.caption,
+        alreadyAnswered: Boolean(existing && !existing.unpublishedAt),
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
   },
 });
 
@@ -3767,12 +4399,17 @@ export const getPublicPostMediaForApi = internalQuery({
   handler: async (ctx, args) => {
     await requireUserForApi(ctx, args.userId);
     const post = await ctx.db.get("profilePosts", args.postId);
-    if (!post || post.unpublishedAt) return null;
+    if (!post) return null;
+    const entitled = await viewerCanSeeHelpAnswerFull(ctx, {
+      post,
+      viewerId: args.userId,
+    });
+    if (post.unpublishedAt && !entitled) return null;
     const profile = await ctx.db.get("profiles", post.profileId);
     if (!profile || !profile.isPublic) return null;
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
-    const signed = await signFullPostMedia(ctx, post, expiresUnix);
+    const signed = await signFullPostMedia(ctx, post, expiresUnix, entitled);
     if (!signed) return null;
     return {
       postId: signed.postId,
@@ -3951,6 +4588,10 @@ export const listCommentsForApi = internalQuery({
       .order("desc")
       .take(limit * 3 + 40);
     const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post) return [];
+    if (!(await viewerCanSeeHelpComments(ctx, post, args.userId))) {
+      return [];
+    }
     const topLevel: Doc<"profileComments">[] = [];
     for (const row of rows) {
       if (row.deletedAt || row.parentId) continue;
@@ -3958,7 +4599,7 @@ export const listCommentsForApi = internalQuery({
       if (topLevel.length >= limit) break;
     }
     topLevel.reverse();
-    return hydrateComments(ctx, topLevel, post?.ownerId, expiresUnix, args.userId);
+    return hydrateComments(ctx, topLevel, post.ownerId, expiresUnix, args.userId);
   },
 });
 
@@ -3988,8 +4629,12 @@ export const listCommentRepliesForApi = internalQuery({
       .order("asc")
       .take(limit + 20);
     const post = await ctx.db.get("profilePosts", parent.postId);
+    if (!post) return [];
+    if (!(await viewerCanSeeHelpComments(ctx, post, args.userId))) {
+      return [];
+    }
     const alive = rows.filter((row) => !row.deletedAt).slice(0, limit);
-    return hydrateComments(ctx, alive, post?.ownerId, expiresUnix, args.userId);
+    return hydrateComments(ctx, alive, post.ownerId, expiresUnix, args.userId);
   },
 });
 
@@ -4008,6 +4653,9 @@ export const addCommentForApi = internalMutation({
   handler: async (ctx, args) => {
     const user = await requireUserForApi(ctx, args.userId);
     const post = await requirePublicPost(ctx, args.postId);
+    if (!(await viewerCanSeeHelpComments(ctx, post, user._id))) {
+      throw new Error("Unlock this value to comment");
+    }
     const body = sanitizeCommentBody(args.body, {
       allowEmpty: Boolean(args.imageAssetId),
     });
@@ -4071,7 +4719,10 @@ export const toggleCommentLikeForApi = internalMutation({
     if (!comment || comment.deletedAt) {
       throw new Error("Comment not found");
     }
-    await requirePublicPost(ctx, comment.postId);
+    const post = await requirePublicPost(ctx, comment.postId);
+    if (!(await viewerCanSeeHelpComments(ctx, post, user._id))) {
+      throw new Error("Unlock this value to comment");
+    }
     const existing = await ctx.db
       .query("profileCommentLikes")
       .withIndex("by_user_and_comment", (q) =>

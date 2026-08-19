@@ -255,12 +255,13 @@ describe("timeline compiler", () => {
     expect(sliceAt(plan, 3.999).audio[0]?.gain).toBeLessThan(0.05);
   });
 
-  it("splits text above video as over and text below video as under", () => {
+  it("interleaves text with pictures by track order, including text between videos", () => {
     const project = createEmptyProject({ name: "test", folderId: "folder" });
     project.tracks = [
       { id: "track-t-over", kind: "text", label: "Over" },
       { id: "track-v1", kind: "video", label: "V1" },
-      { id: "track-t-under", kind: "text", label: "Under" },
+      { id: "track-t-mid", kind: "text", label: "Mid" },
+      { id: "track-v2", kind: "video", label: "V2" },
       { id: "track-audio", kind: "audio", label: "Audio" },
     ];
     project.clips = [
@@ -274,22 +275,28 @@ describe("timeline compiler", () => {
         kind: "text",
         text: { text: "ON TOP" },
       },
-      clip("v", 0, 2),
+      { ...clip("v-top", 0, 2), trackId: "track-v1" },
       {
-        id: "under",
-        trackId: "track-t-under",
+        id: "mid",
+        trackId: "track-t-mid",
         startTime: 0,
         trimIn: 0,
         trimOut: 2,
-        label: "Under",
+        label: "Mid",
         kind: "text",
-        text: { text: "UNDER" },
+        text: { text: "BETWEEN" },
       },
+      { ...clip("v-bot", 0, 2), trackId: "track-v2" },
     ];
     const plan = compileTimeline(project);
     const slice = sliceAt(plan, 0.5);
-    expect(slice.textOver.map((item) => item.clipId)).toEqual(["over"]);
-    expect(slice.textUnder.map((item) => item.clipId)).toEqual(["under"]);
+    expect(slice.visual.map((item) => item.clipId)).toEqual([
+      "v-bot",
+      "mid",
+      "v-top",
+      "over",
+    ]);
+    expect(slice.text.map((item) => item.clipId).sort()).toEqual(["mid", "over"]);
   });
 
   it("stacks overlapping picture lanes from top to bottom", () => {

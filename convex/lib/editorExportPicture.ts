@@ -1,5 +1,7 @@
 /** Picture-source rules for export — stills vs movies vs audio-only. */
 
+import type { ExportTextClip } from "./editorExportText";
+
 const STILL_CODECS = new Set([
   "png",
   "mjpeg",
@@ -34,6 +36,7 @@ export type ExportPictureClip = {
     fadeIn?: number;
     fadeOut?: number;
     speed?: number;
+    fitMode?: "contain" | "cover";
   };
   transitionOut?: { type?: string; duration?: number } | null;
 };
@@ -48,9 +51,44 @@ export type PictureTimelineSegment =
       layers: ExportPictureClip[];
     };
 
+export type ExportVisualItem =
+  | { kind: "picture"; clip: ExportPictureClip }
+  | { kind: "text"; clip: ExportTextClip };
+
+/**
+ * Same law as preview: higher trackIndex paints first (bottom of timeline).
+ * Pictures in `layers` are already the active stack for the segment; texts
+ * that overlap the segment are interleaved by trackIndex.
+ */
+export function exportVisualStackBottomToTop(
+  pictures: ExportPictureClip[],
+  texts: ExportTextClip[],
+  startTime: number,
+  duration: number,
+): ExportVisualItem[] {
+  const end = startTime + duration;
+  const items: ExportVisualItem[] = [
+    ...pictures.map((clip) => ({ kind: "picture" as const, clip })),
+    ...texts
+      .filter(
+        (clip) =>
+          clip.startTime < end && clip.startTime + clip.duration > startTime,
+      )
+      .map((clip) => ({ kind: "text" as const, clip })),
+  ];
+  items.sort((a, b) => {
+    const ai = a.clip.trackIndex ?? 0;
+    const bi = b.clip.trackIndex ?? 0;
+    if (ai !== bi) return bi - ai;
+    if (a.kind !== b.kind) return a.kind === "picture" ? -1 : 1;
+    return a.clip.id.localeCompare(b.clip.id);
+  });
+  return items;
+}
+
 /** Every video/image clip on a video lane (multi-row picture stack). */
 export function collectExportPictureClips(project: {
-  tracks: Array<{ id: string; kind: string }>;
+  tracks: Array<{ id: string; kind: string; hidden?: boolean }>;
   clips: Array<{
     id: string;
     assetId?: string;
@@ -68,7 +106,9 @@ export function collectExportPictureClips(project: {
     project.tracks.map((track, index) => [track.id, index] as const),
   );
   const videoTrackIds = new Set(
-    project.tracks.filter((track) => track.kind === "video").map((track) => track.id),
+    project.tracks
+      .filter((track) => track.kind === "video" && !track.hidden)
+      .map((track) => track.id),
   );
   return project.clips
     .filter((clip) => {

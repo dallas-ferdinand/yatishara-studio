@@ -30,6 +30,26 @@ describe("collectExportTextClips", () => {
       },
     ]);
     expect(clips.map((c) => c.id)).toEqual(["t1", "t2"]);
+    expect(clips.map((c) => c.trackIndex)).toEqual([0, 0]);
+  });
+
+  it("records timeline trackIndex so export can interleave with pictures", () => {
+    const clips = collectExportTextClips(
+      [
+        {
+          id: "t1",
+          kind: "text",
+          trackId: "t-mid",
+          startTime: 0,
+          trimIn: 0,
+          trimOut: 2,
+          text: { text: "Mid" },
+        },
+      ],
+      undefined,
+      new Map([["t-mid", 2]]),
+    );
+    expect(clips[0]?.trackIndex).toBe(2);
   });
 
   it("skips empty text", () => {

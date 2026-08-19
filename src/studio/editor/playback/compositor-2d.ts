@@ -1,15 +1,44 @@
-import { contentRectForTransform, type ClipTransform } from "../clipTransform";
+import { contentRectForTransform, type ClipTransform, type MediaFitMode } from "../clipTransform";
 import { loadGoogleFont } from "../loadGoogleFont";
 import { normalizeEditorTransition } from "../../../../convex/lib/editorEffectContract";
 import type { TransitionType } from "../types";
 
+/**
+ * Anything `drawImage` can paint. Browser: VideoFrame / ImageBitmap.
+ */
+export type CompositorDrawable = {
+  width: number;
+  height: number;
+  displayWidth?: number;
+  displayHeight?: number;
+  close?: () => void;
+  clone?: () => CompositorDrawable;
+};
+
+export type CompositorCanvas = {
+  width: number;
+  height: number;
+  getContext(
+    kind: "2d",
+    attrs?: { alpha?: boolean },
+  ): CanvasRenderingContext2D | null;
+};
+
+export type Canvas2dCompositorHost = {
+  createCanvas?: (width: number, height: number) => CompositorCanvas;
+  loadFonts?: (families: string[]) => Promise<void>;
+};
+
 export type CompositorLayer = {
-  frame?: VideoFrame;
+  clipId?: string;
+  frame?: CompositorDrawable;
   textureKey?: string;
   transform?: [number, number, number, number];
   opacity?: number;
   width?: number;
   height?: number;
+  role?: "single" | "outgoing" | "incoming";
+  fitMode?: MediaFitMode;
 };
 
 export type CompositorTextItem = {
@@ -49,9 +78,13 @@ export type CompositorTextItem = {
   glowBlur?: number;
 };
 
+export type CompositorVisualItem =
+  | { type: "picture"; layer: CompositorLayer }
+  | { type: "text"; item: CompositorTextItem };
+
 export type CompositorPaintArgs = {
-  frameA?: VideoFrame;
-  frameB?: VideoFrame;
+  frameA?: CompositorDrawable;
+  frameB?: CompositorDrawable;
   textureKeyA?: string;
   textureKeyB?: string;
   transformA?: [number, number, number, number];
@@ -65,6 +98,8 @@ export type CompositorPaintArgs = {
   textsOver?: CompositorTextItem[];
   stack?: CompositorLayer[];
   layers?: CompositorLayer[];
+  /** Bottom → top. When present, this is the paint list — not the under/over sandwich. */
+  visual?: CompositorVisualItem[];
 };
 
 type TransformTuple = [number, number, number, number];
@@ -79,13 +114,38 @@ const SYSTEM_STACKS: Record<string, string> = {
   display: "Impact, Haettenschweiler, 'Arial Black', sans-serif",
 };
 
-function closeFrame(frame?: VideoFrame): void {
-  if (!frame) return;
+function isVideoFrame(value: unknown): value is VideoFrame {
+  return typeof VideoFrame !== "undefined" && value instanceof VideoFrame;
+}
+
+function drawableSize(drawable: CompositorDrawable): { width: number; height: number } {
+  const width = drawable.displayWidth ?? drawable.width;
+  const height = drawable.displayHeight ?? drawable.height;
+  return { width, height };
+}
+
+function closeFrame(frame?: CompositorDrawable): void {
+  if (!frame?.close) return;
   try {
     frame.close();
   } catch {
     /* already closed */
   }
+}
+
+function cloneDrawable(frame: CompositorDrawable): CompositorDrawable {
+  if (typeof frame.clone === "function") return frame.clone();
+  return frame;
+}
+
+function defaultCreateCanvas(width: number, height: number): CompositorCanvas {
+  if (typeof document === "undefined") {
+    throw new Error("Canvas factory required when document is missing.");
+  }
+  const el = document.createElement("canvas");
+  el.width = Math.max(1, Math.round(width));
+  el.height = Math.max(1, Math.round(height));
+  return el;
 }
 
 function closeLayers(layers: CompositorLayer[] | undefined): void {
@@ -98,6 +158,41 @@ function tupleToTransform(tuple: TransformTuple): ClipTransform {
     x: tuple[1],
     y: tuple[2],
     rotation: tuple[3],
+  };
+}
+
+export type PaintedSceneHit = {
+  clipId: string;
+  kind: "picture";
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  rotation: number;
+};
+
+/** Same dest quad drawContained uses. Pick/chrome must read this, not a probed size. */
+export function picturePaintedRect(
+  canvasW: number,
+  canvasH: number,
+  sourceW: number,
+  sourceH: number,
+  transform: ClipTransform,
+  fitMode: MediaFitMode = "cover",
+): PaintedSceneHit {
+  const rect = contentRectForTransform(
+    transform,
+    canvasW,
+    canvasH,
+    sourceW,
+    sourceH,
+    fitMode,
+  );
+  return {
+    clipId: "",
+    kind: "picture",
+    ...rect,
+    rotation: transform.rotation,
   };
 }
 
@@ -123,34 +218,30 @@ function applyCase(
   return text;
 }
 
-type Drawable = VideoFrame | ImageBitmap;
-
 function sourceSize(
-  drawable: Drawable,
+  drawable: CompositorDrawable,
   layer: Pick<CompositorLayer, "width" | "height">,
 ): { width: number; height: number } {
   if (layer.width && layer.height) return { width: layer.width, height: layer.height };
-  if (drawable instanceof VideoFrame) {
-    return { width: drawable.displayWidth, height: drawable.displayHeight };
-  }
-  return { width: drawable.width, height: drawable.height };
+  return drawableSize(drawable);
 }
 
 function drawContained(
   ctx: CanvasRenderingContext2D,
-  drawable: Drawable,
+  drawable: CompositorDrawable,
   canvasW: number,
   canvasH: number,
   layer: CompositorLayer,
 ): void {
   const size = sourceSize(drawable, layer);
   const transform = tupleToTransform(layer.transform ?? IDENTITY);
-  const rect = contentRectForTransform(
-    transform,
+  const rect = picturePaintedRect(
     canvasW,
     canvasH,
     size.width,
     size.height,
+    transform,
+    layer.fitMode ?? "cover",
   );
   const destW = rect.width * canvasW;
   const destH = rect.height * canvasH;
@@ -159,7 +250,7 @@ function drawContained(
   ctx.globalAlpha *= Number.isFinite(layer.opacity) ? Number(layer.opacity) : 1;
   ctx.translate((rect.left + rect.width / 2) * canvasW, (rect.top + rect.height / 2) * canvasH);
   ctx.rotate((transform.rotation * Math.PI) / 180);
-  ctx.drawImage(drawable, -destW / 2, -destH / 2, destW, destH);
+  ctx.drawImage(drawable as CanvasImageSource, -destW / 2, -destH / 2, destW, destH);
   ctx.restore();
 }
 
@@ -297,37 +388,51 @@ function paintTextItems(
 }
 
 type SceneLayer = {
-  drawable: Drawable;
+  clipId?: string;
+  role?: CompositorLayer["role"];
+  drawable: CompositorDrawable;
   textureKey?: string;
   transform: TransformTuple;
   opacity: number;
   width?: number;
   height?: number;
+  fitMode?: MediaFitMode;
   retain: boolean;
 };
+
+type SceneVisualOp =
+  | { type: "picture"; layer: SceneLayer }
+  | { type: "text"; item: CompositorTextItem };
 
 /**
  * Preview compositor: Canvas2D on the visible canvas. No WebGL, no
  * OffscreenCanvas transfer — VPS / software-GL machines can still stack.
  */
 export class Canvas2dCompositor {
-  private readonly canvas: HTMLCanvasElement;
+  private readonly canvas: CompositorCanvas;
   private readonly ctx: CanvasRenderingContext2D;
-  private readonly stills = new Map<string, VideoFrame>();
+  private readonly createCanvas: (width: number, height: number) => CompositorCanvas;
+  private readonly loadFonts: ((families: string[]) => Promise<void>) | undefined;
+  private readonly stills = new Map<string, CompositorDrawable>();
   private scene: {
-    layers: SceneLayer[];
-    textsUnder: CompositorTextItem[];
-    textsOver: CompositorTextItem[];
+    visual: SceneVisualOp[];
     background: [number, number, number, number];
     transition: TransitionType;
     progress: number;
   } | null = null;
-  private scratch: HTMLCanvasElement | null = null;
+  private scratch: CompositorCanvas | null = null;
   disposed = false;
   onTextureMiss: ((textureKeys: string[]) => void) | null = null;
 
-  constructor(canvas: HTMLCanvasElement, width: number, height: number) {
+  constructor(
+    canvas: CompositorCanvas,
+    width: number,
+    height: number,
+    host?: Canvas2dCompositorHost,
+  ) {
     this.canvas = canvas;
+    this.createCanvas = host?.createCanvas ?? defaultCreateCanvas;
+    this.loadFonts = host?.loadFonts;
     canvas.width = Math.max(1, Math.round(width));
     canvas.height = Math.max(1, Math.round(height));
     let ctx: CanvasRenderingContext2D | null = null;
@@ -351,11 +456,11 @@ export class Canvas2dCompositor {
     if (this.canvas.height !== h) this.canvas.height = h;
   }
 
-  private rememberStill(key: string | undefined, frame?: VideoFrame): void {
+  private rememberStill(key: string | undefined, frame?: CompositorDrawable): void {
     if (!key?.startsWith("image:") || !frame) return;
     const prev = this.stills.get(key);
     if (prev && prev !== frame) closeFrame(prev);
-    this.stills.set(key, frame.clone());
+    this.stills.set(key, cloneDrawable(frame));
     while (this.stills.size > STILL_CACHE_MAX) {
       const oldest = this.stills.keys().next().value;
       if (!oldest) break;
@@ -374,10 +479,12 @@ export class Canvas2dCompositor {
       const cached = this.stills.get(key);
       if (cached) {
         return {
+          clipId: layer.clipId,
+          role: layer.role,
           drawable: cached,
           textureKey: key,
-          width: layer.width ?? cached.displayWidth,
-          height: layer.height ?? cached.displayHeight,
+          width: layer.width ?? drawableSize(cached).width,
+          height: layer.height ?? drawableSize(cached).height,
           retain: true,
         };
       }
@@ -386,6 +493,8 @@ export class Canvas2dCompositor {
     }
     if (layer.frame) {
       return {
+        clipId: layer.clipId,
+        role: layer.role,
         drawable: layer.frame,
         textureKey: key,
         width: layer.width,
@@ -397,7 +506,7 @@ export class Canvas2dCompositor {
   }
 
   private scratchCtx(width: number, height: number): CanvasRenderingContext2D {
-    if (!this.scratch) this.scratch = document.createElement("canvas");
+    if (!this.scratch) this.scratch = this.createCanvas(width, height);
     if (this.scratch.width !== width) this.scratch.width = width;
     if (this.scratch.height !== height) this.scratch.height = height;
     const ctx = this.scratch.getContext("2d", { alpha: true });
@@ -495,7 +604,7 @@ export class Canvas2dCompositor {
       ctx.save();
       ctx.translate(w / 2, h / 2);
       ctx.scale(scale, scale);
-      ctx.drawImage(this.scratch!, -w / 2, -h / 2);
+      ctx.drawImage(this.scratch! as CanvasImageSource, -w / 2, -h / 2);
       ctx.restore();
       ctx.save();
       ctx.globalAlpha = progress;
@@ -515,7 +624,7 @@ export class Canvas2dCompositor {
 
   private redrawScene(): void {
     if (!this.scene) return;
-    const { layers, textsUnder, textsOver, background, transition, progress } = this.scene;
+    const { visual, background, transition, progress } = this.scene;
     const ctx = this.ctx;
     const w = this.canvas.width;
     const h = this.canvas.height;
@@ -525,30 +634,99 @@ export class Canvas2dCompositor {
     ctx.filter = "none";
     ctx.fillStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
     ctx.fillRect(0, 0, w, h);
-    paintTextItems(ctx, textsUnder, w, h);
-    const transitioning =
-      layers.length === 2 && normalizeEditorTransition(transition) !== "none";
-    if (transitioning) {
-      this.paintTransition(
-        layers[0]!,
-        layers[1]!,
-        normalizeEditorTransition(transition),
-        progress,
-      );
-    } else {
-      this.paintLayerList(layers);
+
+    const transitionType = normalizeEditorTransition(transition);
+    const transitioning = transitionType !== "none";
+    let paintedTransition = false;
+    const pictureAt = (index: number): SceneLayer | null => {
+      const op = visual[index];
+      return op?.type === "picture" ? op.layer : null;
+    };
+    const paintPicture = (layer: SceneLayer) => {
+      if (
+        transitioning &&
+        !paintedTransition &&
+        (layer.role === "outgoing" || layer.role === "incoming")
+      ) {
+        const outgoing = visual.find(
+          (op): op is { type: "picture"; layer: SceneLayer } =>
+            op.type === "picture" && op.layer.role === "outgoing",
+        )?.layer;
+        const incoming = visual.find(
+          (op): op is { type: "picture"; layer: SceneLayer } =>
+            op.type === "picture" && op.layer.role === "incoming",
+        )?.layer;
+        if (outgoing && incoming) {
+          this.paintTransition(incoming, outgoing, transitionType, progress);
+          paintedTransition = true;
+          return;
+        }
+      }
+      drawContained(ctx, layer.drawable, w, h, layer);
+    };
+
+    for (let index = 0; index < visual.length; index += 1) {
+      const op = visual[index]!;
+      if (op.type === "text") {
+        paintTextItems(ctx, [op.item], w, h);
+        continue;
+      }
+      const layer = pictureAt(index);
+      if (!layer) continue;
+      if (
+        paintedTransition &&
+        (layer.role === "outgoing" || layer.role === "incoming")
+      ) {
+        continue;
+      }
+      paintPicture(layer);
     }
-    paintTextItems(ctx, textsOver, w, h);
   }
 
   private releaseScene(keepStills = true): void {
     if (!this.scene) return;
-    for (const layer of this.scene.layers) {
-      if (layer.retain) continue;
-      if (layer.drawable instanceof VideoFrame) closeFrame(layer.drawable);
+    for (const op of this.scene.visual) {
+      if (op.type !== "picture") continue;
+      if (op.layer.retain) continue;
+      if (isVideoFrame(op.layer.drawable)) closeFrame(op.layer.drawable);
     }
     this.scene = null;
     void keepStills;
+  }
+
+  private incomingPictureLayers(args: CompositorPaintArgs): CompositorLayer[] {
+    if (args.visual?.length) {
+      return args.visual
+        .filter(
+          (item): item is { type: "picture"; layer: CompositorLayer } =>
+            item.type === "picture",
+        )
+        .map((item) => item.layer);
+    }
+    if (args.layers?.length) return args.layers;
+    return [
+      ...(args.frameB || args.textureKeyB
+        ? [
+            {
+              frame: args.frameB,
+              textureKey: args.textureKeyB,
+              transform: args.transformB ?? IDENTITY,
+              opacity: args.opacityB ?? 1,
+            },
+          ]
+        : []),
+      ...(args.stack ?? []),
+      ...(args.frameA || args.textureKeyA
+        ? [
+            {
+              frame: args.frameA,
+              textureKey: args.textureKeyA,
+              transform: args.transformA ?? IDENTITY,
+              opacity: args.opacityA ?? 1,
+            },
+          ]
+        : []),
+    ];
   }
 
   paint(args: CompositorPaintArgs): string[] {
@@ -557,59 +735,68 @@ export class Canvas2dCompositor {
       closeFrame(args.frameB);
       closeLayers(args.stack);
       closeLayers(args.layers);
+      closeLayers(
+        args.visual
+          ?.filter(
+            (item): item is { type: "picture"; layer: CompositorLayer } =>
+              item.type === "picture",
+          )
+          .map((item) => item.layer),
+      );
       return [];
     }
     const missing: string[] = [];
-    const incoming: CompositorLayer[] =
-      args.layers?.length
-        ? args.layers
-        : [
-            ...(args.frameB || args.textureKeyB
-              ? [
-                  {
-                    frame: args.frameB,
-                    textureKey: args.textureKeyB,
-                    transform: args.transformB ?? IDENTITY,
-                    opacity: args.opacityB ?? 1,
-                  },
-                ]
-              : []),
-            ...(args.stack ?? []),
-            ...(args.frameA || args.textureKeyA
-              ? [
-                  {
-                    frame: args.frameA,
-                    textureKey: args.textureKeyA,
-                    transform: args.transformA ?? IDENTITY,
-                    opacity: args.opacityA ?? 1,
-                  },
-                ]
-              : []),
-          ];
+    const incoming = this.incomingPictureLayers(args);
     this.releaseScene();
-    const layers: SceneLayer[] = [];
+    const resolvedByKey = new Map<CompositorLayer, SceneLayer>();
     for (const layer of incoming) {
       const resolved = this.resolveLayer(layer, missing);
       if (!resolved) continue;
-      layers.push({
+      resolvedByKey.set(layer, {
         ...resolved,
+        clipId: layer.clipId ?? resolved.clipId,
+        role: layer.role ?? resolved.role,
         transform: layer.transform ?? IDENTITY,
         opacity: Number.isFinite(layer.opacity) ? Number(layer.opacity) : 1,
+        fitMode: layer.fitMode ?? "cover",
       });
     }
+    const visual: SceneVisualOp[] = [];
+    if (args.visual?.length) {
+      for (const item of args.visual) {
+        if (item.type === "text") {
+          visual.push({ type: "text", item: item.item });
+          continue;
+        }
+        const resolved = resolvedByKey.get(item.layer);
+        if (resolved) visual.push({ type: "picture", layer: resolved });
+      }
+    } else {
+      for (const item of args.textsUnder ?? []) {
+        visual.push({ type: "text", item });
+      }
+      for (const layer of incoming) {
+        const resolved = resolvedByKey.get(layer);
+        if (resolved) visual.push({ type: "picture", layer: resolved });
+      }
+      for (const item of args.textsOver ?? []) {
+        visual.push({ type: "text", item });
+      }
+    }
     this.scene = {
-      layers,
-      textsUnder: args.textsUnder ?? [],
-      textsOver: args.textsOver ?? [],
+      visual,
       background: args.background ?? [0, 0, 0, 1],
       transition: args.transition ?? "none",
       progress: args.progress ?? 0,
     };
     this.redrawScene();
     const held = new Set(
-      layers.filter((layer) => !layer.retain).map((layer) => layer.drawable),
+      visual
+        .filter((op): op is { type: "picture"; layer: SceneLayer } => op.type === "picture")
+        .filter((op) => !op.layer.retain)
+        .map((op) => op.layer.drawable),
     );
-    const maybeClose = (frame?: VideoFrame) => {
+    const maybeClose = (frame?: CompositorDrawable) => {
       if (!frame || held.has(frame)) return;
       closeFrame(frame);
     };
@@ -621,34 +808,53 @@ export class Canvas2dCompositor {
     return missing;
   }
 
-  updateTransform(transform: TransformTuple, target: "a" | "b" = "a"): void {
-    if (!this.scene || this.scene.layers.length === 0) return;
-    const layers = this.scene.layers;
-    const index =
-      target === "b" || layers.length === 1 ? 0 : layers.length - 1;
-    const layer = layers[index];
-    if (!layer) return;
-    layer.transform = transform;
-    this.redrawScene();
+  updateTransform(clipId: string, transform: TransformTuple): void {
+    if (!this.scene || !clipId) return;
+    let found = false;
+    for (const op of this.scene.visual) {
+      if (op.type === "picture" && op.layer.clipId === clipId) {
+        op.layer.transform = transform;
+        found = true;
+      }
+      if (op.type === "text" && op.item.clipId === clipId) {
+        op.item.poseScale = transform[0];
+        op.item.poseX = transform[1];
+        op.item.poseY = transform[2];
+        op.item.rotation = transform[3];
+        found = true;
+      }
+    }
+    if (found) this.redrawScene();
   }
 
   updateTextTransform(clipId: string, transform: TransformTuple): void {
-    if (!this.scene) return;
-    const patch = (items: CompositorTextItem[]) =>
-      items.map((item) =>
-        item.clipId === clipId
-          ? {
-              ...item,
-              poseScale: transform[0],
-              poseX: transform[1],
-              poseY: transform[2],
-              rotation: transform[3],
-            }
-          : item,
-      );
-    this.scene.textsUnder = patch(this.scene.textsUnder);
-    this.scene.textsOver = patch(this.scene.textsOver);
-    this.redrawScene();
+    this.updateTransform(clipId, transform);
+  }
+
+  /** Top-to-bottom picture quads from the last paint. */
+  paintedHits(): PaintedSceneHit[] {
+    if (!this.scene) return [];
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const hits: PaintedSceneHit[] = [];
+    for (let index = this.scene.visual.length - 1; index >= 0; index -= 1) {
+      const op = this.scene.visual[index];
+      if (op.type !== "picture" || !op.layer.clipId) continue;
+      const size = sourceSize(op.layer.drawable, op.layer);
+      const transform = tupleToTransform(op.layer.transform);
+      hits.push({
+        ...picturePaintedRect(
+          w,
+          h,
+          size.width,
+          size.height,
+          transform,
+          op.layer.fitMode ?? "cover",
+        ),
+        clipId: op.layer.clipId,
+      });
+    }
+    return hits;
   }
 
   resize(width: number, height: number): void {
@@ -657,6 +863,10 @@ export class Canvas2dCompositor {
   }
 
   async ensureFonts(families: string[]): Promise<void> {
+    if (this.loadFonts) {
+      await this.loadFonts(families);
+      return;
+    }
     await Promise.all(families.map((family) => loadGoogleFont(family)));
   }
 

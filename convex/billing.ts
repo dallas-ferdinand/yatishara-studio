@@ -129,6 +129,9 @@ const creditTransactionKind = v.union(
   v.literal("course_purchase"),
   v.literal("boost_sent"),
   v.literal("boost_received"),
+  v.literal("unlock_sent"),
+  v.literal("unlock_received"),
+  v.literal("unlock_fee"),
 );
 
 const settlePaywiseCallbackRef = makeFunctionReference<

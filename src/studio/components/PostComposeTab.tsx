@@ -5,8 +5,10 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   Folder,
   Image as ImageIcon,
+  LifeBuoy,
   Loader2,
   Mic,
   Pause,
@@ -24,6 +26,7 @@ import {
   useRef,
   useState,
   useCallback,
+  useSyncExternalStore,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type DragEvent as ReactDragEvent,
@@ -32,6 +35,7 @@ import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import {
   flattenPastedHtmlInComposer,
   insertPlainTextAtSelection,
@@ -54,6 +58,24 @@ import {
   orbSeedForVoice,
 } from "./StudioOrbPlayButton";
 import {
+  ScreenShareRecorder,
+  ScreenShareSaveStatus,
+  screenShareSupported,
+  useScreenShareRecordedHandler,
+} from "./ScreenShareRecorder";
+import {
+  isScreenShareSaving,
+  screenShareSession,
+} from "@/studio/lib/screenShareSession";
+import { ValuePreviewTrim } from "./ValuePreviewTrim";
+import { togglePreviewPlayback } from "@/studio/lib/valuePreviewTrim";
+import {
+  clampHelpPreviewRange,
+  unlockPriceCentsForDuration,
+  validateHelpAnswerMedia,
+} from "../../../convex/lib/helpAnswer";
+import { formatTtdCents } from "@/studio/lib/money";
+import {
   EXPLORER_DND_TYPE,
   inferMediaKind,
   peekActiveExplorerDrag,
@@ -63,6 +85,7 @@ import {
 type PostComposeTabProps = {
   assetId?: string;
   draftDocumentId?: string;
+  answerToPostId?: string;
   onCancel: () => void;
   onPublished: (args: { handle: string; postId: string }) => void;
   /** Files rail / dock pick — same chooser as DMs, not the list-folder sheet. */
@@ -71,12 +94,14 @@ type PostComposeTabProps = {
     pickMode?: "choose" | "share";
     title?: string;
     maxSelected?: number;
+    folderId?: string;
     onConfirm?: (
       assets: Array<{
         _id: string;
         name: string;
         kind: string;
         signedThumbnailUrl?: string;
+        durationSeconds?: number;
       }>,
     ) => void;
   }) => void;
@@ -88,6 +113,7 @@ type PostComposeTabProps = {
 
 const MAX_CAPTION = 2200;
 const MAX_POST_MEDIA = 6;
+const POST_KINDS = ["post", "help_request", "help_answer"] as const;
 const CHIP_CLASS = "post-compose-inline-chip";
 
 type PostMediaKind = "image" | "video" | "audio";
@@ -99,7 +125,18 @@ type ComposeSlot = {
   name: string;
   previewUrl?: string;
   file?: File;
+  durationMs?: number;
+  screenRecording?: boolean;
 };
+
+function isScreenRecordingName(name: string) {
+  return /^Screen recording/i.test(name.trim());
+}
+
+function isScreenRecordingSlot(slot: ComposeSlot | null | undefined): slot is ComposeSlot {
+  if (!slot || slot.kind !== "video") return false;
+  return Boolean(slot.screenRecording) || isScreenRecordingName(slot.name);
+}
 
 type InlineTrigger =
   | { kind: "hash"; query: string; start: number; end: number }
@@ -463,14 +500,19 @@ function recordingTimeLabel(seconds: number): string {
 export function PostComposeTab({
   assetId,
   draftDocumentId,
+  answerToPostId,
   onCancel,
   onPublished,
   onRequestPickAsset,
   onBindDrop,
 }: PostComposeTabProps) {
   const captionId = useId();
+  const { isMobile } = useMobileLayout();
   const shareAsset = useMutation(api.profiles.shareAsset);
   const ensureStudioDefaults = useMutation(api.users.ensureStudioDefaults);
+  const ensureScreenRecordings = useMutation(
+    api.folders.ensureScreenRecordingsFolderForMe,
+  );
   const updateDocument = useMutation(api.documents.update);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
@@ -484,6 +526,22 @@ export function PostComposeTab({
     if (!draftDoc || draftDoc.kind !== "post") return null;
     return parsePostDraft(draftDoc.contentMarkdown);
   }, [draftDoc]);
+  const [answerParentId, setAnswerParentId] = useState<string | undefined>(
+    () => answerToPostId || undefined,
+  );
+  const [postKind, setPostKind] = useState<"post" | "help_request" | "help_answer">(
+    () => (answerToPostId ? "help_answer" : "post"),
+  );
+  const resolvedAnswerTo =
+    postKind === "help_answer"
+      ? answerParentId || answerToPostId || parsedDraft?.answerToPostId || undefined
+      : undefined;
+  const helpRequest = useQuery(
+    api.profiles.getHelpRequestContext,
+    resolvedAnswerTo
+      ? { postId: resolvedAnswerTo as Id<"profilePosts"> }
+      : "skip",
+  );
   const hydrateIds = useMemo(() => {
     const ids: string[] = [];
     if (assetId) ids.push(assetId);
@@ -522,10 +580,17 @@ export function PostComposeTab({
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistBusyRef = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const previewStartSeekKeyRef = useRef<string | null>(null);
   const dragCountRef = useRef(0);
   const [dragOver, setDragOver] = useState(false);
 
   const [caption, setCaption] = useState("");
+  const [previewStartMs, setPreviewStartMs] = useState(0);
+  const [previewEndMs, setPreviewEndMs] = useState(30_000);
+  const [recordingDurationMs, setRecordingDurationMs] = useState(0);
+  const [recordBusy, setRecordBusy] = useState(false);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
   const [caret, setCaret] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [pendingVoice, setPendingVoice] = useState<{
@@ -713,6 +778,7 @@ export function PostComposeTab({
         name: signedSeed.name,
         previewUrl:
           signedSeed.signedReadUrl || signedSeed.signedThumbnailUrl || undefined,
+        screenRecording: kind === "video" && isScreenRecordingName(signedSeed.name),
       },
     ]);
   }, [draftDocumentId, signedSeed]);
@@ -742,17 +808,44 @@ export function PostComposeTab({
       if (!asset) continue;
       const kind = asset.kind;
       if (kind !== "image" && kind !== "video" && kind !== "audio") continue;
+      const durationMs =
+        kind === "video" &&
+        typeof (asset as { durationSeconds?: number }).durationSeconds === "number"
+          ? Math.round(
+              Number((asset as { durationSeconds?: number }).durationSeconds) * 1000,
+            )
+          : undefined;
       nextSlots.push({
         key: id,
         assetId: id as Id<"assets">,
         kind,
         name: asset.name,
         previewUrl: asset.signedReadUrl || asset.signedThumbnailUrl || undefined,
+        durationMs,
+        screenRecording:
+          kind === "video" &&
+          (isScreenRecordingName(asset.name) ||
+            (parsedDraft.postKind === "help_answer" &&
+              !nextSlots.some((slot) => slot.kind === "video"))),
       });
     }
     if (nextSlots.length) setSlots(nextSlots);
     if (parsedDraft.caption) {
       setCaption(parsedDraft.caption);
+    }
+    if (parsedDraft.postKind === "help_request" || parsedDraft.postKind === "help_answer") {
+      setPostKind(parsedDraft.postKind);
+    }
+    if (parsedDraft.answerToPostId) setAnswerParentId(parsedDraft.answerToPostId);
+    if (parsedDraft.previewStartMs != null) setPreviewStartMs(parsedDraft.previewStartMs);
+    if (parsedDraft.previewEndMs != null) setPreviewEndMs(parsedDraft.previewEndMs);
+    if (parsedDraft.recordingDurationMs != null) {
+      setRecordingDurationMs(parsedDraft.recordingDurationMs);
+    } else {
+      const seededDuration = nextSlots.find((slot) =>
+        isScreenRecordingSlot(slot),
+      )?.durationMs;
+      if (seededDuration) setRecordingDurationMs(seededDuration);
     }
     if (parsedDraft.voiceAssetId) {
       const voice = byId.get(parsedDraft.voiceAssetId) as
@@ -771,6 +864,7 @@ export function PostComposeTab({
 
   const persistDraft = useCallback(async () => {
     if (!draftDocumentId || !draftHydratedRef.current || publishing) return;
+    if (isScreenShareSaving(screenShareSession.getSnapshot().phase)) return;
     if (persistBusyRef.current) return;
     persistBusyRef.current = true;
     try {
@@ -828,6 +922,11 @@ export function PostComposeTab({
           voiceAssetId,
           voiceDurationSec,
           publishedPostId: parsedDraft?.publishedPostId,
+          postKind,
+          answerToPostId: resolvedAnswerTo,
+          previewStartMs,
+          previewEndMs,
+          recordingDurationMs,
         }),
         ...(draftDoc?.title === "Untitled post" && nextTitle ? { title: nextTitle } : {}),
       });
@@ -842,7 +941,12 @@ export function PostComposeTab({
     draftDocumentId,
     ensureStudioDefaults,
     parsedDraft?.publishedPostId,
+    postKind,
+    previewEndMs,
+    previewStartMs,
     publishing,
+    recordingDurationMs,
+    resolvedAnswerTo,
     reserveUpload,
     updateDocument,
   ]);
@@ -856,7 +960,7 @@ export function PostComposeTab({
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [caption, draftDocumentId, pendingVoice, persistDraft, slots]);
+  }, [caption, draftDocumentId, pendingVoice, persistDraft, slots, postKind, previewStartMs, previewEndMs, recordingDurationMs]);
 
   useLayoutEffect(() => {
     const el = editorRef.current;
@@ -869,7 +973,7 @@ export function PostComposeTab({
   useEffect(() => {
     return () => {
       for (const slot of slotsRef.current) {
-        if (slot.file && slot.previewUrl) URL.revokeObjectURL(slot.previewUrl);
+        if (slot.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(slot.previewUrl);
       }
       teardownRecorder();
     };
@@ -893,7 +997,161 @@ export function PostComposeTab({
   const isVideo = current?.kind === "video";
   const isAudio = current?.kind === "audio";
   const [previewSize, setPreviewSize] = useState<{ w: number; h: number } | null>(null);
-  const canPublish = slots.length > 0 && !publishing && recState === "idle";
+  useEffect(() => {
+    if (answerToPostId) {
+      setPostKind("help_answer");
+      setAnswerParentId(answerToPostId);
+    }
+  }, [answerToPostId]);
+
+  const isHelpAnswer = postKind === "help_answer";
+
+  useEffect(() => {
+    screenShareSession.setStageControls(isHelpAnswer);
+    return () => screenShareSession.setStageControls(false);
+  }, [isHelpAnswer]);
+
+  useEffect(() => {
+    if (!isHelpAnswer || recordingDurationMs > 0) return undefined;
+    const slot = slots.find((item) => isScreenRecordingSlot(item));
+    if (!slot?.previewUrl) return undefined;
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.src = slot.previewUrl;
+    const onMeta = () => {
+      if (Number.isFinite(video.duration) && video.duration > 0) {
+        setRecordingDurationMs(Math.round(video.duration * 1000));
+      }
+    };
+    video.addEventListener("loadedmetadata", onMeta);
+    return () => {
+      video.removeEventListener("loadedmetadata", onMeta);
+      video.src = "";
+    };
+  }, [isHelpAnswer, recordingDurationMs, slots]);
+
+  useEffect(() => {
+    if (!slots.some((slot) => isScreenRecordingSlot(slot))) {
+      setRecordingDurationMs(0);
+    }
+  }, [slots]);
+
+  async function handleScreenRecorded(file: File, durationMs: number) {
+    setRecordBusy(true);
+    setRecordingDurationMs(durationMs);
+    const defaultEnd = Math.min(30_000, Math.max(10_000, durationMs - 1000));
+    setPreviewStartMs(0);
+    setPreviewEndMs(defaultEnd);
+    const localKey = `record:${file.name}:${file.size}:${Date.now()}`;
+    const previewUrl = URL.createObjectURL(file);
+    setSlots((prev) => {
+      const slot: ComposeSlot = {
+        key: localKey,
+        kind: "video",
+        name: file.name,
+        previewUrl,
+        durationMs,
+        screenRecording: true,
+      };
+      if (isHelpAnswer) return [slot];
+      if (prev.length >= MAX_POST_MEDIA) {
+        URL.revokeObjectURL(previewUrl);
+        return prev;
+      }
+      return [...prev, slot];
+    });
+    setSlotIndex(0);
+    try {
+      const folderId = await ensureScreenRecordings({});
+      screenShareSession.setSaveProgress(0, file.size);
+      const uploaded = await uploadStudioAsset({
+        file,
+        folderId,
+        kind: "video",
+        name: file.name,
+        reserveUpload,
+        commitStagingUpload,
+        onProgress: (loaded, total) => screenShareSession.setSaveProgress(loaded, total),
+        onCommitting: () => screenShareSession.beginFinishing(),
+      });
+      setSlots((prev) =>
+        prev.map((slot) =>
+          slot.key === localKey ? { ...slot, assetId: uploaded } : slot,
+        ),
+      );
+      toast.success("Saved to Screen Recordings");
+    } catch (error) {
+      setSlots((prev) => {
+        const hit = prev.find((slot) => slot.key === localKey);
+        if (hit?.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(hit.previewUrl);
+        return prev.filter((slot) => slot.key !== localKey);
+      });
+      toast.error(friendlyConvexError(error, "Could not save recording"));
+    } finally {
+      screenShareSession.clearSave();
+      setRecordBusy(false);
+    }
+  }
+
+  useScreenShareRecordedHandler((file, durationMs) => {
+    void handleScreenRecorded(file, durationMs);
+  });
+
+  const primarySlot = slots[0];
+  const recordingSlot = slots.find((slot) => isScreenRecordingSlot(slot)) ?? null;
+  const helpDurationMs =
+    recordingDurationMs || recordingSlot?.durationMs || 0;
+  const showPreviewTrim =
+    isHelpAnswer && isScreenRecordingSlot(current) && helpDurationMs > 0;
+  let helpError: string | null = null;
+  if (isHelpAnswer) {
+    try {
+      validateHelpAnswerMedia({
+        recordingDurationMs: helpDurationMs,
+        previewStartMs,
+        previewEndMs,
+      });
+    } catch (error) {
+      helpError = error instanceof Error ? error.message : "Fix the preview range";
+    }
+    if (primarySlot && !recordingSlot) {
+      helpError = "Value needs a screen recording";
+    }
+    if (helpRequest?.alreadyAnswered) {
+      helpError = "You already posted value on this question";
+    }
+  }
+  const shareSnap = useSyncExternalStore(
+    screenShareSession.subscribe,
+    screenShareSession.getSnapshot,
+    screenShareSession.getSnapshot,
+  );
+  const recordingSaving = isScreenShareSaving(shareSnap.phase) || recordBusy;
+  const canPublish =
+    slots.length > 0 &&
+    slots.every((slot) => Boolean(slot.assetId) || Boolean(slot.file)) &&
+    !publishing &&
+    recState === "idle" &&
+    !recordingSaving &&
+    (!isHelpAnswer || !helpError);
+
+  useEffect(() => {
+    if (!isHelpAnswer || helpDurationMs <= 0) return;
+    const next = clampHelpPreviewRange({
+      recordingDurationMs: helpDurationMs,
+      previewStartMs,
+      previewEndMs,
+    });
+    if (
+      next.previewStartMs === previewStartMs &&
+      next.previewEndMs === previewEndMs
+    ) {
+      return;
+    }
+    setPreviewStartMs(next.previewStartMs);
+    setPreviewEndMs(next.previewEndMs);
+  }, [helpDurationMs, isHelpAnswer]); // preview bounds follow the take length
+
   const remaining = MAX_POST_MEDIA - slots.length;
   const seeding =
     (Boolean(assetId) && !draftDocumentId && seededAssets === undefined) ||
@@ -1211,6 +1469,17 @@ export function PostComposeTab({
       const result = await shareAsset({
         assetIds,
         caption: caption.trim() || undefined,
+        postKind: isHelpAnswer ? "help_answer" : postKind,
+        ...(isHelpAnswer
+          ? {
+              ...(resolvedAnswerTo
+                ? { parentRequestPostId: resolvedAnswerTo as Id<"profilePosts"> }
+                : {}),
+              previewStartMs,
+              previewEndMs,
+              recordingDurationMs: helpDurationMs,
+            }
+          : {}),
         ...(voiceAssetId
           ? { voiceAssetId, ...(voiceDurationSec != null ? { voiceDurationSec } : {}) }
           : {}),
@@ -1225,10 +1494,17 @@ export function PostComposeTab({
             voiceAssetId,
             voiceDurationSec,
             publishedPostId: result.postId,
+            postKind: isHelpAnswer ? "help_answer" : postKind,
+            answerToPostId: resolvedAnswerTo,
+            previewStartMs,
+            previewEndMs,
+            recordingDurationMs: helpDurationMs,
           }),
         });
       }
-      toast.success("Post created");
+      toast.success(
+        isHelpAnswer ? "Value posted" : postKind === "help_request" ? "Question posted" : "Post created",
+      );
       onPublished({ handle, postId: result.postId });
     } catch (error) {
       toast.error(friendlyConvexError(error, "Could not create post"));
@@ -1283,14 +1559,47 @@ export function PostComposeTab({
     setPickerOpen(true);
   }
 
-  function addPickedAsset(pick: {
-    _id: string;
-    name: string;
-    kind: string;
-    signedThumbnailUrl?: string;
-  }) {
+  async function openScreenRecordings() {
+    if (!onRequestPickAsset) {
+      setPickerOpen(true);
+      return;
+    }
+    const folderId = await ensureScreenRecordings({});
+    onRequestPickAsset({
+      pickMode: "choose",
+      kinds: ["video"],
+      title: "Screen Recordings",
+      maxSelected: 1,
+      folderId,
+      onConfirm: (picked) => {
+        const item = picked?.[0];
+        if (item) addPickedAsset(item, { screenRecording: true });
+      },
+    });
+  }
+
+  function addPickedAsset(
+    pick: {
+      _id: string;
+      name: string;
+      kind: string;
+      signedThumbnailUrl?: string;
+      durationSeconds?: number;
+    },
+    opts?: { screenRecording?: boolean },
+  ) {
     const kind = pick.kind;
     if (kind !== "image" && kind !== "video" && kind !== "audio") return;
+    const durationMs =
+      kind === "video" &&
+      typeof pick.durationSeconds === "number" &&
+      Number.isFinite(pick.durationSeconds)
+        ? Math.round(pick.durationSeconds * 1000)
+        : undefined;
+    const screenRecording =
+      kind === "video" &&
+      (Boolean(opts?.screenRecording) || isScreenRecordingName(pick.name));
+    if (screenRecording && durationMs) setRecordingDurationMs(durationMs);
     setSlots((prev) => {
       if (prev.length >= MAX_POST_MEDIA) return prev;
       if (prev.some((slot) => slot.assetId === pick._id)) return prev;
@@ -1302,6 +1611,8 @@ export function PostComposeTab({
           kind,
           name: pick.name,
           previewUrl: pick.signedThumbnailUrl,
+          durationMs,
+          screenRecording,
         },
       ];
     });
@@ -1311,6 +1622,7 @@ export function PostComposeTab({
   function addDroppedEntry(entry: {
     type?: string;
     studioKind?: string;
+    systemKind?: string;
     studioId?: string;
     _id?: string;
     name?: string;
@@ -1331,12 +1643,21 @@ export function PostComposeTab({
       toast.message(`You can pick up to ${MAX_POST_MEDIA} files`);
       return true;
     }
-    addPickedAsset({
-      _id: id,
-      name: entry.name || "Media",
-      kind,
-      signedThumbnailUrl: entry.signedThumbnailUrl || entry.thumbnailUrl,
-    });
+    addPickedAsset(
+      {
+        _id: id,
+        name: entry.name || "Media",
+        kind,
+        signedThumbnailUrl: entry.signedThumbnailUrl || entry.thumbnailUrl,
+      },
+      {
+        screenRecording:
+          kind === "video" &&
+          (entry.studioKind === "screenRecordings" ||
+            entry.systemKind === "screen_recordings" ||
+            isScreenRecordingName(entry.name || "")),
+      },
+    );
     return true;
   }
 
@@ -1420,7 +1741,7 @@ export function PostComposeTab({
   function removeSlot(key: string) {
     setSlots((prev) => {
       const hit = prev.find((slot) => slot.key === key);
-      if (hit?.file && hit.previewUrl) URL.revokeObjectURL(hit.previewUrl);
+      if (hit?.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(hit.previewUrl);
       const next = prev.filter((slot) => slot.key !== key);
       setSlotIndex((i) => Math.max(0, Math.min(i, next.length - 1)));
       return next;
@@ -1464,7 +1785,50 @@ export function PostComposeTab({
       onDropCapture={handleDrop}
     >
       <div className="post-compose-toolbar">
-        <h2 className="post-compose-toolbar-title">Create post</h2>
+        <div
+          className="post-compose-type-row"
+          role="tablist"
+          aria-label="Post type"
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            const index = POST_KINDS.indexOf(postKind);
+            const delta = event.key === "ArrowRight" ? 1 : -1;
+            const next = POST_KINDS[(index + delta + POST_KINDS.length) % POST_KINDS.length];
+            setPostKind(next);
+          }}
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={postKind === "post"}
+            className={`post-compose-type-chip${postKind === "post" ? " is-active" : ""}`}
+            onClick={() => setPostKind("post")}
+          >
+            <ImageIcon size={12} aria-hidden="true" />
+            Post
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={postKind === "help_request"}
+            className={`post-compose-type-chip${postKind === "help_request" ? " is-active" : ""}`}
+            onClick={() => setPostKind("help_request")}
+          >
+            <CircleHelp size={12} aria-hidden="true" />
+            Question
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={postKind === "help_answer"}
+            className={`post-compose-type-chip${postKind === "help_answer" ? " is-active" : ""}`}
+            onClick={() => setPostKind("help_answer")}
+          >
+            <LifeBuoy size={12} aria-hidden="true" />
+            Value
+          </button>
+        </div>
         <div className="post-compose-toolbar-actions">
           <button
             type="button"
@@ -1485,6 +1849,11 @@ export function PostComposeTab({
                 <Loader2 className="post-compose-spin" aria-hidden="true" />
                 Creating…
               </>
+            ) : recordingSaving ? (
+              <>
+                <Loader2 className="post-compose-spin" aria-hidden="true" />
+                Saving…
+              </>
             ) : (
               "Create"
             )}
@@ -1492,8 +1861,11 @@ export function PostComposeTab({
         </div>
       </div>
 
-      <div className="post-compose-body">
-        <div className="post-compose-mock" aria-label="Post preview">
+      <div className={`post-compose-body${isMobile ? " is-stack" : ""}`}>
+        <div
+          className={`post-compose-mock${showPreviewTrim ? " has-trim" : ""}`}
+          aria-label="Post preview"
+        >
           <div
             className={`post-compose-mock-slide${!current ? " is-empty" : ""}${isAudio ? " is-audio" : ""}`}
             style={
@@ -1522,15 +1894,50 @@ export function PostComposeTab({
                   <div className="post-compose-preview-empty" aria-busy="true">
                     Loading…
                   </div>
+                ) : isHelpAnswer ? (
+                  recordingSaving ? (
+                    <div className="post-compose-value-empty">
+                      <ScreenShareSaveStatus variant="stage" />
+                    </div>
+                  ) : (
+                  <div className="post-compose-value-empty">
+                    <span className="post-compose-value-empty-mark" aria-hidden="true">
+                      <LifeBuoy strokeWidth={2} />
+                    </span>
+                    <span className="post-compose-value-empty-title">Record your screen</span>
+                    <span className="post-compose-value-empty-copy">
+                      People watch a short preview. The rest unlocks for $5 or $10 TTD.
+                    </span>
+                    <ScreenShareRecorder
+                      disabled={publishing}
+                      busy={recordBusy}
+                    />
+                    {onRequestPickAsset || screenShareSupported() ? (
+                      <button
+                        type="button"
+                        className="post-compose-btn is-ghost"
+                        onClick={() => void openScreenRecordings()}
+                        disabled={publishing || recordingSaving}
+                      >
+                        <Folder size={14} aria-hidden="true" />
+                        Use a saved recording
+                      </button>
+                    ) : null}
+                  </div>
+                  )
                 ) : (
                 <button
                   type="button"
                   className="post-compose-media-empty"
                   onClick={() => setChoiceOpen((open) => !open)}
                 >
-                  <span className="post-compose-media-empty-title">Add to this post</span>
+                  <span className="post-compose-media-empty-title">
+                    {postKind === "help_request" ? "Add to this question" : "Add to this post"}
+                  </span>
                   <span className="post-compose-media-empty-copy">
-                    Click anywhere or drop from Files — up to {MAX_POST_MEDIA} photos, videos, or audio
+                    {postKind === "help_request"
+                      ? "A photo or video helps people see what you’re asking"
+                      : `Click anywhere or drop from Files — up to ${MAX_POST_MEDIA} photos, videos, or audio`}
                   </span>
                 </button>
                 )
@@ -1554,11 +1961,14 @@ export function PostComposeTab({
                 >
                   {({ onLoad, onError }) => (
                     <video
+                      ref={previewVideoRef}
                       src={previewUrl}
                       muted
                       playsInline
-                      loop
-                      autoPlay
+                      loop={!isHelpAnswer}
+                      autoPlay={!isHelpAnswer}
+                      onPlay={() => setPreviewPlaying(true)}
+                      onPause={() => setPreviewPlaying(false)}
                       onLoadedData={(event) => {
                         const video = event.currentTarget;
                         if (video.videoWidth > 0 && video.videoHeight > 0) {
@@ -1567,6 +1977,18 @@ export function PostComposeTab({
                           setPreviewSize((prev) =>
                             prev && prev.w === w && prev.h === h ? prev : { w, h },
                           );
+                        }
+                        if (
+                          isHelpAnswer &&
+                          isScreenRecordingSlot(current) &&
+                          Number.isFinite(video.duration) &&
+                          video.duration > 0
+                        ) {
+                          setRecordingDurationMs(Math.round(video.duration * 1000));
+                          if (previewStartSeekKeyRef.current !== current.key) {
+                            previewStartSeekKeyRef.current = current.key;
+                            video.currentTime = previewStartMs / 1000;
+                          }
                         }
                         onLoad();
                       }}
@@ -1605,6 +2027,24 @@ export function PostComposeTab({
               ) : (
                 <div className="post-compose-preview-empty">{current.name}</div>
               )}
+              {recordingSaving && current ? (
+                <ScreenShareSaveStatus variant="overlay" />
+              ) : null}
+              {isHelpAnswer && isVideo && previewUrl && !recordingSaving ? (
+                <button
+                  type="button"
+                  className={`post-compose-preview-play${previewPlaying ? " is-playing" : ""}`}
+                  aria-label={previewPlaying ? "Pause preview" : "Play preview"}
+                  onClick={() => {
+                    const video = previewVideoRef.current;
+                    if (video) togglePreviewPlayback(video, previewStartMs, previewEndMs);
+                  }}
+                >
+                  <span className="post-compose-preview-play-mark" aria-hidden="true">
+                    <Play size={20} />
+                  </span>
+                </button>
+              ) : null}
               {choiceOpen ? (
                 <div className="post-compose-media-choice" role="menu">
                   <button
@@ -1628,6 +2068,20 @@ export function PostComposeTab({
               ) : null}
             </div>
           </div>
+          {showPreviewTrim ? (
+            <ValuePreviewTrim
+              durationMs={helpDurationMs}
+              startMs={previewStartMs}
+              endMs={previewEndMs}
+              src={previewUrl}
+              videoRef={previewVideoRef}
+              onChange={(start, end) => {
+                setPreviewStartMs(start);
+                setPreviewEndMs(end);
+              }}
+            />
+          ) : null}
+          {!(isHelpAnswer && !current) ? (
           <div className="post-compose-media-strip" aria-label="Post media">
             {slots.length > 1 ? (
               <button
@@ -1665,6 +2119,7 @@ export function PostComposeTab({
                   ) : (
                     <ImageIcon aria-hidden="true" />
                   )}
+                  {recordingSaving && !slot.assetId ? null : (
                   <span
                     className="post-compose-media-thumb-remove"
                     role="button"
@@ -1676,6 +2131,7 @@ export function PostComposeTab({
                   >
                     <X aria-hidden="true" />
                   </span>
+                  )}
                 </button>
               ))}
               {remaining > 0 ? (
@@ -1700,7 +2156,31 @@ export function PostComposeTab({
               </button>
             ) : null}
           </div>
+          ) : null}
         </div>
+
+        <aside className="post-compose-side" aria-label="Description">
+        {isHelpAnswer && resolvedAnswerTo ? (
+          <div className="post-compose-answer-banner">
+            <LifeBuoy size={12} aria-hidden="true" />
+            <span>
+              Value for {helpRequest?.username ? `@${helpRequest.username}` : "this question"}
+            </span>
+          </div>
+        ) : null}
+        {isHelpAnswer && helpDurationMs > 0 ? (
+          <div className="post-compose-help">
+            <p className="post-compose-help-price">
+              Unlocks for {formatTtdCents(unlockPriceCentsForDuration(helpDurationMs))}
+              {helpDurationMs >= 60 * 60 * 1000 ? " · 1 hour+" : " · under 1 hour"}
+            </p>
+            {helpError ? <p className="post-compose-help-error">{helpError}</p> : null}
+          </div>
+        ) : isHelpAnswer && helpError ? (
+          <div className="post-compose-help">
+            <p className="post-compose-help-error">{helpError}</p>
+          </div>
+        ) : null}
 
         <div className="post-compose-form">
           <div className="post-compose-field" ref={suggestWrapRef}>
@@ -1714,7 +2194,13 @@ export function PostComposeTab({
               aria-label="Post description"
               aria-autocomplete="list"
               aria-expanded={Boolean(visibleMenu)}
-              data-placeholder="Write a description…"
+              data-placeholder={
+                isHelpAnswer
+                  ? "Add a note with this value…"
+                  : postKind === "help_request"
+                    ? "Ask your question…"
+                    : "Write a description…"
+              }
               suppressContentEditableWarning
               onInput={() => {
                 flattenPastedHtmlInComposer(editorRef.current);
@@ -1924,6 +2410,7 @@ export function PostComposeTab({
             )}
           </div>
         </div>
+        </aside>
       </div>
       {pickerOpen ? (
         <StudioAssetPickerSheet
