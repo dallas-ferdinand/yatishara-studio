@@ -8,8 +8,11 @@ services:
     image: yatishara-studio-ffmpeg-worker:local
     container_name: studio-ffmpeg-worker
     restart: unless-stopped
-    mem_limit: 3072m
-    memswap_limit: 3328m
+    # VPS-4 2027: 1080p/4K encode + parallel proxy jobs. Host is 24 GB / 8 vCPU.
+    mem_limit: 6144m
+    memswap_limit: 6656m
+    cpus: "6.0"
+    shm_size: 1gb
     networks:
       - coolify
     env_file:
@@ -18,6 +21,7 @@ services:
       - PORT=8797
       - CONVEX_SITE_URL=https://convex-studio.yatishara.com
       - CONVEX_PREVIEW_SITE_URL=https://convex-preview.yatishara.com
+      - NODE_OPTIONS=--max-old-space-size=1536
     volumes:
       - /opt/yatishara-studio:/opt/yatishara-studio:ro
     working_dir: /opt/yatishara-studio/services/studio-ffmpeg-worker
