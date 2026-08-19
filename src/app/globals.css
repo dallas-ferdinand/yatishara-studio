@@ -170,7 +170,16 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-sans: var(--font-onest);
-  --font-mono: var(--font-jetbrains);
+  --font-mono: var(
+    --font-jetbrains,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    monospace
+  );
 }
 
 html,

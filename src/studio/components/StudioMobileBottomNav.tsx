@@ -2,7 +2,7 @@
 "use client";
 
 import { Bot, Cloud, Folder, GraduationCap, History, MessageCircle, PanelLeft, Sparkles, Store, X } from "lucide-react";
-import { useRef } from "react";
+import { memo, useRef } from "react";
 
 /** Optional context action — Files linked to Create (Generate) or Network (My Assets). */
 export const MOBILE_NAV_ACTION = {
@@ -93,7 +93,7 @@ function NavButton({
  * Create: standalone (Create History retired). Files/Extras may still link to Create.
  * Files dock open: Files + Extras (Places); History hidden.
  */
-export function StudioMobileBottomNav({
+export const StudioMobileBottomNav = memo(function StudioMobileBottomNav({
   section,
   onSelect,
   onPrefetch,
@@ -306,4 +306,4 @@ export function StudioMobileBottomNav({
       {tools ? <div className="studio-mobile-nav-tools">{tools}</div> : null}
     </nav>
   );
-}
+});

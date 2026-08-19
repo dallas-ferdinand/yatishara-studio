@@ -1138,6 +1138,37 @@ select.cursor-select:focus {
   background: var(--mos-plate, #ececf0);
 }
 
+.desk-file-thumb-audio--orb {
+  overflow: visible;
+  background: transparent !important;
+}
+
+.desk-file-thumb-audio-orb.studio-orb-play,
+.desk-file-thumb-audio-orb.studio-orb-play.is-md {
+  width: 56px;
+  height: 56px;
+}
+
+.desk-file-thumb--preview .desk-file-thumb-audio-orb.studio-orb-play,
+.desk-file-thumb--preview .desk-file-thumb-audio-orb.studio-orb-play.is-md {
+  width: 96px;
+  height: 96px;
+}
+
+.desk-file-thumb-audio--peek {
+  display: grid;
+  place-items: center;
+  background: transparent !important;
+}
+
+.desk-file-thumb-audio--peek .desk-file-thumb-audio-orb.studio-orb-play,
+.desk-file-thumb-audio--peek .desk-file-thumb-audio-orb.studio-orb-play.is-md {
+  width: 78%;
+  height: 78%;
+  max-width: 44px;
+  max-height: 44px;
+}
+
 .desk-file-thumb-audio-wave {
   position: absolute;
   inset: 14% 10%;
@@ -8591,14 +8622,17 @@ textarea.cursor-input {
 }
 /* Voiceover / audio tabs — ElevenLabs Orb (same as Voices picker), not <img>. */
 .cursor-unified-tab-preview.is-audio {
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   overflow: visible;
   background: transparent;
 }
 .cursor-unified-tab-preview.is-audio .cursor-unified-tab-audio-orb.studio-orb-play,
-.cursor-unified-tab-preview.is-audio .studio-orb-play {
-  width: 18px;
-  height: 18px;
+.cursor-unified-tab-preview.is-audio .studio-orb-play,
+.cursor-unified-tab-preview.is-audio .studio-orb-play.is-md {
+  width: 20px;
+  height: 20px;
 }
 .cursor-unified-tab-preview.is-audio .studio-orb-frame {
   padding: 1px;

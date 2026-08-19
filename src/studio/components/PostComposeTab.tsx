@@ -81,6 +81,7 @@ import {
   peekActiveExplorerDrag,
   readExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
+import "./post-compose-tab.css";
 
 type PostComposeTabProps = {
   assetId?: string;

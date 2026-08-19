@@ -11,6 +11,10 @@ import { externalPreviewUrl } from "@mos-app/preview.js";
 import { MediaLoadWave } from "@/studio/components/media-load-frame";
 import { mediaUrlPath } from "@/studio/lib/mediaUrls";
 import { StudioEmoji } from "@/studio/components/StudioEmoji";
+import {
+  orbSeedForVoice,
+  StudioOrbAvatar,
+} from "@/studio/components/StudioOrbPlayButton";
 
 const TEXT_KINDS = new Set(["code", "markdown", "html", "csv", "text"]);
 
@@ -97,43 +101,13 @@ function peekItemIcon(item) {
   return "file";
 }
 
-function seedFromId(id) {
-  let seed = 2166136261;
-  const text = String(id || "audio");
-  for (let i = 0; i < text.length; i += 1) {
-    seed ^= text.charCodeAt(i);
-    seed = Math.imul(seed, 16777619);
-  }
-  return seed >>> 0;
-}
-
-function nextRand(seed) {
-  let x = seed || 1;
-  x ^= x << 13;
-  x ^= x >>> 17;
-  x ^= x << 5;
-  return x >>> 0;
-}
-
-/** Dense pseudo-waveform tile — no decode required. */
-function AudioWaveThumb({ seedKey = "audio", barCount = 28, className = "" }) {
-  const bars = [];
-  let seed = seedFromId(seedKey);
-  for (let i = 0; i < barCount; i += 1) {
-    seed = nextRand(seed);
-    const a = (seed % 1000) / 1000;
-    seed = nextRand(seed);
-    const b = (seed % 1000) / 1000;
-    const envelope = 0.32 + 0.68 * Math.abs(Math.sin(i * 0.37 + a * 4));
-    bars.push(Math.max(0.16, Math.min(1, envelope * (0.42 + b * 0.58))));
-  }
+function AudioOrbThumb({ seedKey = "audio", name = "", className = "" }) {
   return (
-    <div className={`desk-file-thumb-audio ${className}`.trim()} aria-hidden="true">
-      <div className="desk-file-thumb-audio-wave">
-        {bars.map((h, i) => (
-          <span key={i} style={{ height: `${Math.round(h * 100)}%` }} />
-        ))}
-      </div>
+    <div className={`desk-file-thumb-audio desk-file-thumb-audio--orb ${className}`.trim()} aria-hidden="true">
+      <StudioOrbAvatar
+        seed={orbSeedForVoice(String(seedKey), String(name || seedKey))}
+        className="desk-file-thumb-audio-orb"
+      />
     </div>
   );
 }
@@ -373,9 +347,9 @@ function PostMediaMosaic({ items, size = "grid" }) {
             className={`desk-file-thumb-post-cell desk-file-thumb-post-cell--${index}`}
           >
             {item.kind === "audio" && !posterUrl ? (
-              <AudioWaveThumb
-                seedKey={`post-audio-${index}`}
-                barCount={size === "preview" ? 18 : 12}
+              <AudioOrbThumb
+                seedKey={item.assetId ?? item.path ?? `post-audio-${index}`}
+                name={item.name ?? item.label ?? ""}
                 className="desk-file-thumb-audio--peek"
               />
             ) : posterUrl ? (
@@ -416,9 +390,9 @@ function FolderPeekStack({ items, size = "grid" }) {
         >
           <div className="desk-folder-peek-card-media">
             {item.kind === "audio" || item.icon === "music" ? (
-              <AudioWaveThumb
-                seedKey={item.label ?? `peek-audio-${index}`}
-                barCount={size === "preview" ? 22 : 16}
+              <AudioOrbThumb
+                seedKey={item.studioId ?? item.path ?? item.label ?? `peek-audio-${index}`}
+                name={item.label ?? item.name ?? ""}
                 className="desk-file-thumb-audio--peek"
               />
             ) : item.thumbnailUrl ? (
@@ -924,9 +898,9 @@ export function FileEntryThumb({
           onRenameCommit={onRenameCommit}
           onRenameDismiss={onRenameDismiss}
           onDoubleClickRename={onLabelDoubleClick}>
-          <AudioWaveThumb
-            seedKey={entry?.path ?? entry?._id ?? label}
-            barCount={size === "preview" ? 36 : 28}
+          <AudioOrbThumb
+            seedKey={entry?.studioId ?? entry?.path ?? entry?._id ?? label}
+            name={label}
           />
         </ThumbWithPeek>
       );

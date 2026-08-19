@@ -62,6 +62,7 @@ import {
 } from "@/studio/lib/studioLiveCache";
 import { markStudioPaint } from "@/studio/lib/studioPaintMarks";
 import { formatPostWhen } from "@/studio/lib/formatPostWhen";
+import { isConstrainedNetwork } from "@/studio/lib/constrainedNetwork";
 import "./profile-post-viewer.css";
 import "./post-compose-tab.css";
 
@@ -378,6 +379,7 @@ function FeedMedia({
   preload?: boolean;
   onUnlock?: () => void;
 }) {
+  const { isMobile } = useMobileLayout();
   const [expiresUnix, setExpiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60,
   );
@@ -485,7 +487,9 @@ function FeedMedia({
   const isVideo = itemKind === "video";
   const isAudio = itemKind === "audio";
   const playSrc = isVideo || isAudio ? stableSrc ?? undefined : displaySrc ?? undefined;
-  const shouldWarm = active || preload;
+  const constrained = isConstrainedNetwork();
+  const shouldWarmImage = active || (preload && !constrained && !isMobile);
+  const shouldWarmVideo = active;
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current != null) {
@@ -545,7 +549,7 @@ function FeedMedia({
 
   // Decode neighbor/active images early.
   useEffect(() => {
-    if (!shouldWarm || itemKind === "video" || itemKind === "audio" || !displaySrc) return;
+    if (!shouldWarmImage || itemKind === "video" || itemKind === "audio" || !displaySrc) return;
     if (typeof Image === "undefined") return;
     const img = new window.Image();
     img.decoding = "async";
@@ -557,12 +561,12 @@ function FeedMedia({
       }
     };
     img.src = displaySrc;
-  }, [shouldWarm, itemKind, displaySrc]);
+  }, [shouldWarmImage, itemKind, displaySrc]);
 
   // Kick video network fetch once per locked src — never reload on role/active flips.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || itemKind !== "video" || !playSrc || !shouldWarm) return;
+    if (!video || itemKind !== "video" || !playSrc || !shouldWarmVideo) return;
     if (loadedSrcRef.current === playSrc) return;
     loadedSrcRef.current = playSrc;
     try {
@@ -570,7 +574,7 @@ function FeedMedia({
     } catch {
       /* ignore */
     }
-  }, [shouldWarm, playSrc, itemKind]);
+  }, [shouldWarmVideo, playSrc, itemKind]);
 
   // Pause when leaving the slide/tab; autoplay with volume when scrolled to.
   useEffect(() => {
@@ -898,7 +902,9 @@ function FeedMedia({
               autoPlay={active}
               muted={!soundEnabled || policyMuted}
               controls={false}
-              preload={shouldWarm ? "auto" : "none"}
+              preload={
+                active ? (constrained ? "metadata" : "auto") : "none"
+              }
               onLoadedData={(event) => {
                 const video = event.currentTarget;
                 if (video.videoWidth > 0 && video.videoHeight > 0) {
@@ -936,8 +942,8 @@ function FeedMedia({
               crossOrigin="anonymous"
               draggable={false}
               decoding="async"
-              loading={shouldWarm ? "eager" : "lazy"}
-              fetchPriority={active ? "high" : shouldWarm ? "low" : "auto"}
+              loading={active ? "eager" : "lazy"}
+              fetchPriority={active ? "high" : "auto"}
               onLoad={(event) => {
                 const img = event.currentTarget;
                 if (img.naturalWidth > 0 && img.naturalHeight > 0) {
@@ -2832,7 +2838,7 @@ export function ProfilePostViewer({
                       <FeedMedia
                         post={post}
                         active={tabActive && role === "current"}
-                        preload={tabActive}
+                        preload={tabActive && role !== "idle"}
                         onUnlock={
                           isInteractiveSlide
                             ? () => void handleUnlockClick(post)

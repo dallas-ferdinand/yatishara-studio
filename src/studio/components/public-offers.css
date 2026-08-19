@@ -1126,6 +1126,13 @@
     border-color 0.14s ease;
 }
 
+@media (max-width: 899px) {
+  .public-offers-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 220px;
+  }
+}
+
 .public-offers-card:hover {
   border-color: color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border));
   background: var(--mos-hover, var(--color-cursor-hover));

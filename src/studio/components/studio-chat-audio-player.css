@@ -74,13 +74,6 @@
   margin-bottom: 14px;
 }
 
-.studio-chat-audio-meta {
-  display: flex;
-  justify-content: flex-end;
-  width: 100%;
-  min-width: 0;
-}
-
 .studio-chat-audio-row {
   display: flex;
   align-items: center;
@@ -90,7 +83,7 @@
 }
 
 .studio-chat-audio-row.is-wave-fill {
-  align-items: stretch;
+  align-items: center;
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -205,12 +198,23 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: baseline;
-  gap: 2px;
+  justify-content: center;
+  min-width: 4.5ch;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
   white-space: nowrap;
   color: color-mix(in srgb, var(--color-cursor-text-bright, #f4f6fb) 58%, transparent);
+}
+
+.studio-chat-audio-time.is-elapsed {
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.studio-chat-audio-time.is-remain {
+  text-align: right;
+  justify-content: flex-end;
 }
 
 .studio-chat-audio-error {
@@ -220,11 +224,6 @@
   letter-spacing: 0.01em;
   white-space: nowrap;
   color: color-mix(in srgb, var(--mos-danger, #f87171) 88%, transparent);
-}
-
-.studio-chat-audio-time-sep {
-  opacity: 0.55;
-  margin-inline: 1px;
 }
 
 [data-appearance="light"] .studio-chat-audio-player {

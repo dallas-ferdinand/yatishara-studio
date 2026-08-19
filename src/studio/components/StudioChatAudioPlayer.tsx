@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  AudioPlayerDuration,
   AudioPlayerProvider,
   AudioPlayerTime,
   useAudioPlayer,
@@ -10,7 +9,10 @@ import {
 } from "@/components/ui/audio-player";
 import { ScrollingWaveform } from "@/components/ui/waveform";
 import { cn } from "@/lib/utils";
-import { StudioOrbPlayButton } from "@/studio/components/StudioOrbPlayButton";
+import {
+  orbSeedForVoice,
+  StudioOrbPlayButton,
+} from "@/studio/components/StudioOrbPlayButton";
 import { MediaLoadWave } from "@/studio/components/media-load-frame";
 import "./studio-chat-audio-player.css";
 
@@ -56,6 +58,11 @@ function resolveDuration(
   }
   if (hint !== undefined && Number.isFinite(hint) && hint > 0) return hint;
   return undefined;
+}
+
+function resolvePlayerOrbSeed(orbSeed?: number, title?: string) {
+  if (typeof orbSeed === "number" && Number.isFinite(orbSeed)) return orbSeed;
+  return orbSeedForVoice(title?.trim() || "audio");
 }
 
 /** Stable envelope fed into ScrollingWaveform so the first view is full. */
@@ -181,16 +188,19 @@ function PlayControl({
   onRequestLoad,
   src,
   title,
+  orbSeed,
 }: {
   disabled?: boolean;
   size?: "sm" | "md";
   onRequestLoad?: () => void;
   src?: string;
   title?: string;
+  orbSeed?: number;
 }) {
   const player = useAudioPlayer();
   const playing = player.isPlaying;
   const loading = player.isBuffering && playing;
+  const seed = resolvePlayerOrbSeed(orbSeed, title);
 
   return (
     <StudioOrbPlayButton
@@ -199,7 +209,7 @@ function PlayControl({
       loading={loading}
       showGlyph
       disabled={disabled || !src}
-      seed={2100}
+      seed={seed}
       onClick={() => {
         onRequestLoad?.();
         if (playing) {
@@ -221,17 +231,21 @@ function PlayControl({
   );
 }
 
-function DurationLabel({ durationHint }: { durationHint?: number }) {
+function RemainingLabel({ durationHint }: { durationHint?: number }) {
   const player = useAudioPlayer();
+  const elapsed = useAudioPlayerTime();
   const duration = resolveDuration(player.duration, durationHint);
-  if (duration !== undefined) {
+  if (duration === undefined) {
     return (
-      <span className="studio-chat-audio-duration text-inherit">
-        {formatAudioClock(duration)}
-      </span>
+      <span className="studio-chat-audio-time is-remain text-inherit">--:--</span>
     );
   }
-  return <AudioPlayerDuration className="text-inherit" />;
+  const left = Math.max(0, duration - (Number.isFinite(elapsed) ? elapsed : 0));
+  return (
+    <span className="studio-chat-audio-time is-remain text-inherit">
+      {formatAudioClock(left)}
+    </span>
+  );
 }
 
 function AudioPlayerBody({
@@ -243,7 +257,7 @@ function AudioPlayerBody({
   showTitle,
   headerEnd,
   footer,
-  orbSeed = 2100,
+  orbSeed,
   onRequestLoad,
 }: {
   src: string;
@@ -259,6 +273,7 @@ function AudioPlayerBody({
 }) {
   const player = useAudioPlayer();
   const failed = Boolean(player.error);
+  const seed = resolvePlayerOrbSeed(orbSeed, title);
   // Pane + compact = masonry / card tile (big orb, wave fills leftover).
   const waveBars = isPane ? (compact ? 96 : 120) : compact ? 72 : 96;
   const waveHeight: number | string = isPane
@@ -273,14 +288,10 @@ function AudioPlayerBody({
     [src, waveBars],
   );
   const hasHead = Boolean(showTitle && title) || headerEnd != null;
-
-  const timeBlock = (
-    <span className="studio-chat-audio-time">
-      <AudioPlayerTime className="text-inherit" />
-      <span className="studio-chat-audio-time-sep">/</span>
-      <DurationLabel durationHint={durationHint} />
-    </span>
+  const elapsedLabel = (
+    <AudioPlayerTime className="studio-chat-audio-time is-elapsed text-inherit" />
   );
+  const remainLabel = <RemainingLabel durationHint={durationHint} />;
 
   const play = () => {
     onRequestLoad?.();
@@ -334,30 +345,27 @@ function AudioPlayerBody({
             loading={player.isBuffering && player.isPlaying}
             showGlyph
             disabled={failed || !src}
-            seed={orbSeed}
+            seed={seed}
             onClick={play}
           />
         </div>
       ) : null}
 
       {isPane ? (
-        <>
-          <div className="studio-chat-audio-meta">
-            {failed ? (
-              <span className="studio-chat-audio-error">Couldn&apos;t load</span>
-            ) : (
-              timeBlock
-            )}
-          </div>
-          <div className="studio-chat-audio-row is-wave-fill">
-            <WaveformScrubber
-              key={src}
-              data={waveform}
-              height={waveHeight}
-              durationHint={durationHint}
-            />
-          </div>
-        </>
+        <div className="studio-chat-audio-row is-wave-fill">
+          {failed ? (
+            <span className="studio-chat-audio-error">Couldn&apos;t load</span>
+          ) : (
+            elapsedLabel
+          )}
+          <WaveformScrubber
+            key={src}
+            data={waveform}
+            height={waveHeight}
+            durationHint={durationHint}
+          />
+          {failed ? null : remainLabel}
+        </div>
       ) : (
         <div className="studio-chat-audio-row">
           <PlayControl
@@ -366,18 +374,20 @@ function AudioPlayerBody({
             onRequestLoad={onRequestLoad}
             src={src}
             title={title}
+            orbSeed={orbSeed}
           />
+          {failed ? (
+            <span className="studio-chat-audio-error">Couldn&apos;t load</span>
+          ) : (
+            elapsedLabel
+          )}
           <WaveformScrubber
             key={src}
             data={waveform}
             height={waveHeight}
             durationHint={durationHint}
           />
-          {failed ? (
-            <span className="studio-chat-audio-error">Couldn&apos;t load</span>
-          ) : (
-            timeBlock
-          )}
+          {failed ? null : remainLabel}
         </div>
       )}
 

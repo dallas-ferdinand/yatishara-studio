@@ -478,12 +478,16 @@ Studio must feel **native**, not like a website waiting to load:
 - **Messages instant open** — DM cache + warm top chats in the sidebar.
 - **Gate Shell Convex** — skip composer catalog / threads / seller listings until
   that surface is active; skip folder contents while Files isn’t shown — desktop
-  social rails **and** mobile until the Files dock is open. Asset-pick / my-assets
+  social rails **and** mobile until the Files dock is open. On mobile, also skip
+  Generate catalog / pricing / folder peeks / seller status while Feed, Network,
+  Academy, Messages, or Agent is the visible section. Asset-pick / my-assets
   re-enable. Live `listEvents` skips bulk playable CDN signatures. `StudioComposer`
   mounts only on `composer:` / `thread:` tabs. Do **not** split Shell into
   components for this.
 - **Scroll glass** — no `backdrop-filter` on scrolling surfaces; glass stays on
-  fixed composer / menus.
+  fixed composer / menus. Mobile (`max-width: 899px`): chrome/composer frost is
+  `blur(8px)` with a more opaque `--studio-composer-glass` fill — keep glass,
+  cheaper GPU than desktop `blur(18px–22px)`.
 - **Overlay motion** — app menu / history sheet rise ~110ms (not 220ms+).
 - Files dock + Back stack: see Mobile Generate Files dock. Memory: **786**.
 
@@ -797,6 +801,14 @@ After the turn finishes: collapse the list into one muted line, **Worked 2.5 min
 (seconds under a minute). Clicking that text drops the full vertical tool list.
 Do not collapse while the turn is still running.
 
+### Voice / audio orb (ElevenLabs)
+
+Studio voice avatars and play buttons use the **ElevenLabs Agent Orb**
+(`src/components/ui/orb.tsx`, R3F/Three perlin marble from ui.elevenlabs.io).
+Seeded pastel pairs, WebGL slot budget in `StudioOrbPlayButton` (max 8 live),
+CSS fallback while off-screen. Play glyph is white with a drop-shadow. Memory:
+**1498**.
+
 ---
 
 ## Memory
@@ -818,5 +830,6 @@ Update memory when you change a rule here:
 - Button/chip heights — profile compact actions **28px** / chrome heads **32px** / form primaries 34–36px (`docs/DESIGN_SYSTEM.md` §5b).
 - **668** (pinned) — Chrome + inline panel heads = `--cursor-head-h` 32px (DM New label, Offers steps, etc.); close 24px.
 - **1388** — Agent tools: vertical rows while live; after the turn, one **Worked 2.5 mins** disclosure (not summary chips).
+- **1498** — Voice/audio orb = ElevenLabs Agent Orb (R3F perlin marble). Not custom fluid/particles.
 - **1471** — Feed/post #/@ chips = L3 `--mos-plate-strong` fill, no stroke.
 - **Preview load quality** — Video editor preview header center `CursorSelect` (40/60/80/100%, default **60%**), same plate greys as zoom controls. ≤60% loads 720 edit proxy; ≥80% prefers 1080 proxy. Also drives opened-image Bunny `signedReadUrl.quality`. Downloads / generation stay at 100%. Persisted `yatishara-studio-preview-load-quality`.

@@ -82,8 +82,8 @@ export function studioBackgroundCdnBase(): string {
 }
 
 /** Viewport/DPR-aware wallpaper transform.
- * Glass backdrop-filter samples this image — keep quality near-lossless so frost
- * still reads crystalline. Cap decode size so phones are not punished with 8K.
+ * Glass backdrop-filter samples this image — keep desktop quality near-lossless
+ * so frost still reads crystalline. Phones cap decode size and quality.
  */
 export function studioBackgroundTransformParams(
   options?: { width?: number; quality?: number; dpr?: number },
@@ -94,9 +94,12 @@ export function studioBackgroundTransformParams(
   const cssWidth =
     options?.width ??
     (typeof window !== "undefined" ? Math.max(window.innerWidth || 1280, 390) : 1920);
-  // Prefer true 4K device pixels on large/retina screens; phones stay lighter.
-  const width = Math.min(4096, Math.round(cssWidth * Math.max(1, dpr)));
-  const quality = options?.quality ?? (width >= 1600 ? 96 : 94);
+  const isMobile = cssWidth < 900;
+  const width = isMobile
+    ? Math.min(1280, Math.round(cssWidth * Math.max(1, dpr)))
+    : Math.min(4096, Math.round(cssWidth * Math.max(1, dpr)));
+  const quality =
+    options?.quality ?? (isMobile ? 75 : width >= 1600 ? 96 : 94);
   return `width=${width}&quality=${quality}`;
 }
 

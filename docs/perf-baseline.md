@@ -21,6 +21,9 @@ Anonymous sign-in at `https://studio.yatishara.com` (desktop, unthrottled):
 - Encoded JS ≈ 346 KB / largest chunk ≈ 205 KB
 - Linked CSS+fonts ≈ 187 KB
 
+Hashed `/_next/static` is `public, max-age=31536000, immutable`. HTML, `sw.js`,
+and `version.json` stay `no-store` so deploys still take immediately.
+
 Field telemetry: `PerformanceReporter` records LCP/INP/CLS/TTFB/LoAF and milestones (`auth-ready`, `workspace-ready`, `first-folder-ready`) into `window.__studioPerf`.
 
 ## Verification commands

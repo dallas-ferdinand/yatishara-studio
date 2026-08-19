@@ -51,8 +51,9 @@ const nextConfig: NextConfig = {
               headers: [
                 {
                   key: "Cache-Control",
-                  // Hashed filenames — revalidate every load so deploys never stick.
-                  value: "public, max-age=0, must-revalidate",
+                  // Content-hashed filenames — long-cache on phones. HTML / sw.js /
+                  // version.json stay no-store so deploys still take immediately.
+                  value: "public, max-age=31536000, immutable",
                 },
                 {
                   key: "Strict-Transport-Security",

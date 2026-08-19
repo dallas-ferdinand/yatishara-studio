@@ -279,23 +279,16 @@ import {
   StudioBalanceChip,
 } from "./CreditBalanceRing";
 import { StudioFullscreenStatusBar } from "./StudioFullscreenStatusBar";
-import { StudioMessagesPane } from "./StudioMessagesPane";
-import { StudioMessagesSidebar } from "./StudioMessagesSidebar";
-import { StudioAgentPane } from "./StudioAgentPane";
-import "./studio-agent.css";
 import {
   StudioCreativeNetworkProvider,
   useCreativeNetwork,
 } from "./StudioCreativeNetworkContext";
-import { StudioCreativeNetworkSidebar } from "./StudioCreativeNetworkSidebar";
-import { StudioAcademySidebar } from "./StudioAcademySidebar";
 import { StudioAcademyProvider } from "./StudioAcademyContext";
 import {
   AdminStudioOpsProvider,
   useAdminStudioOpsOptional,
 } from "./AdminStudioOpsContext";
 import { AdminStudioOpsSidebar } from "./AdminStudioOpsSidebar";
-import { StudioCreativeNetworkStore } from "./StudioCreativeNetworkStore";
 import { StudioOnlinePresence } from "./StudioOnlinePresence";
 import { WamPayLabel } from "./WamPayMark";
 import {
@@ -401,18 +394,11 @@ import {
   StudioOrbAvatar,
 } from "./StudioOrbPlayButton";
 import { StudioVoicePicker } from "./StudioVoicePicker";
-import "./post-compose-tab.css";
-import "./profile-post-viewer.css";
-/* Turbopack: CSS for dynamic() panes / shared chrome must also be static-imported
-   here, or HMR throws "No link element found for chunk …src_studio_components_*.css". */
-import "./public-offers.css";
 import { StudioFilesNavPane } from "./StudioFilesNavPane";
 import { StudioFilesNavMobileSheet } from "./StudioFilesNavMobileSheet";
-import "./studio-creative-network.css";
-import "./studio-creative-network-store.css";
-import "./marketplace-offers-pane.css";
-import "./public-profile.css";
-import "./studio-messages.css";
+/* Chrome used by statically mounted shell widgets. Pane CSS (Feed, CN, DMs,
+   Academy, profile) lives on the dynamic() modules so phones don't parse it
+   until that surface opens. Dev: refresh if Turbopack misses a CSS HMR link. */
 import "./studio-asset-picker.css";
 import "./studio-share-people.css";
 import "./studio-profile-avatar.css";
@@ -479,6 +465,32 @@ const AdminStudioOpsPane = dynamic(
 );
 const StudioAcademyPane = dynamic(
   () => import("./StudioAcademyPane").then((m) => m.StudioAcademyPane),
+  { ssr: false },
+);
+const StudioAcademySidebar = dynamic(
+  () => import("./StudioAcademySidebar").then((m) => m.StudioAcademySidebar),
+  { ssr: false },
+);
+const StudioMessagesPane = dynamic(
+  () => import("./StudioMessagesPane").then((m) => m.StudioMessagesPane),
+  { ssr: false },
+);
+const StudioMessagesSidebar = dynamic(
+  () => import("./StudioMessagesSidebar").then((m) => m.StudioMessagesSidebar),
+  { ssr: false },
+);
+const StudioAgentPane = dynamic(
+  () => import("./StudioAgentPane").then((m) => m.StudioAgentPane),
+  { ssr: false },
+);
+const StudioCreativeNetworkSidebar = dynamic(
+  () =>
+    import("./StudioCreativeNetworkSidebar").then((m) => m.StudioCreativeNetworkSidebar),
+  { ssr: false },
+);
+const StudioCreativeNetworkStore = dynamic(
+  () =>
+    import("./StudioCreativeNetworkStore").then((m) => m.StudioCreativeNetworkStore),
   { ssr: false },
 );
 const StudioBillingPane = dynamic(
@@ -2282,11 +2294,24 @@ export function StudioShell({
         !activeTab.startsWith("billing:") &&
         !activeTab.startsWith("admin:")));
   const needsComposerCatalog =
-    isGenerateSurface || Boolean(activeTab?.startsWith("thread:"));
+    (isGenerateSurface || Boolean(activeTab?.startsWith("thread:"))) &&
+    (!isMobile ||
+      mobileSection === "composer" ||
+      mobileSection === "files");
   const needsThreadsList =
-    historyOpen ||
-    Boolean(activeTab?.startsWith("thread:")) ||
-    openTabs.some((tab) => tab.startsWith("thread:"));
+    (historyOpen ||
+      Boolean(activeTab?.startsWith("thread:")) ||
+      openTabs.some((tab) => tab.startsWith("thread:"))) &&
+    (!isMobile ||
+      historyOpen ||
+      mobileSection === "composer" ||
+      mobileSection === "files");
+  const needsNetworkQueries =
+    !isMobile ||
+    mobileSection === "network" ||
+    settingsOpen ||
+    (typeof activeTab === "string" &&
+      (activeTab.startsWith("network:") || activeTab.startsWith("offers:")));
   // Skip heavy folder contents while Files UI is not actually shown.
   // Desktop: Messages / Feed / Network filters own the left rail.
   // Mobile: dock stays mounted for instant open, but don't subscribe until
@@ -2313,7 +2338,7 @@ export function StudioShell({
         ));
   const mySellerStatus = useQuery(
     api.marketplace.getMySellerStatus,
-    hasCurrentUser ? {} : "skip",
+    hasCurrentUser && needsNetworkQueries ? {} : "skip",
   );
   /** Per-asset listing status for explorer context menu — never boot listMyListings here. */
   const contextMenuAssetId =
@@ -2340,8 +2365,9 @@ export function StudioShell({
   }, [explorerUserId]);
 
   // Prefetch Feed / Network / History chunks after auth so first open isn't a spinner.
+  // Phones: skip — idle chunks compete with first paint; tap prefetch still warms.
   useEffect(() => {
-    if (!hasCurrentUser) return undefined;
+    if (!hasCurrentUser || isMobile) return undefined;
     let idleId = 0;
     let timeoutId = 0;
     const run = () => preloadStudioHotPanes();
@@ -2356,7 +2382,7 @@ export function StudioShell({
       }
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [hasCurrentUser]);
+  }, [hasCurrentUser, isMobile]);
 
   // Keep asset wallpaper signed URL fresh after auth / on boot.
   useEffect(() => {
@@ -2381,18 +2407,24 @@ export function StudioShell({
     };
   }, [assetUrlExpiresUnix, convex, hasCurrentUser]);
 
-  const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
-  const pricing = useQuery(api.billing.getPricing, hasCurrentUser ? {} : "skip");
-  const wamReturnPayment = useQuery(
-    api.billing.findMyPaymentForWamReturn,
-    hasCurrentUser && wamReturnIdentifier ? { identifier: wamReturnIdentifier } : "skip",
-  );
   // Defer payment lists until settings or admin — they stampeded boot and near-timeouted with listThreads.
   const needsBillingDetails =
     settingsOpen ||
     activeTab.startsWith("admin:") ||
     activeTab.startsWith("billing:") ||
     openTabs.some((tab) => tab.startsWith("admin:") || tab.startsWith("billing:"));
+  const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
+  const pricing = useQuery(
+    api.billing.getPricing,
+    hasCurrentUser &&
+      (!isMobile || needsComposerCatalog || needsBillingDetails)
+      ? {}
+      : "skip",
+  );
+  const wamReturnPayment = useQuery(
+    api.billing.findMyPaymentForWamReturn,
+    hasCurrentUser && wamReturnIdentifier ? { identifier: wamReturnIdentifier } : "skip",
+  );
   const needsProfileShares =
     settingsOpen ||
     settingsSection === "profile" ||
@@ -2488,7 +2520,10 @@ export function StudioShell({
   const topFolders = useQuery(
     api.folders.listWithPeeks,
     // Boot without CDN signing — signing every root peek was timing out the 1s query budget.
-    hasCurrentUser ? {} : "skip",
+    // Mobile: skip until Files or Generate needs the workspace root.
+    hasCurrentUser && (!isMobile || needsExplorerFolderContents || needsComposerCatalog)
+      ? {}
+      : "skip",
   );
   const workspaceRoot = useMemo(
     () => workspaceRootFromList(topFolders),
@@ -2506,7 +2541,11 @@ export function StudioShell({
   );
   const selectedFolder = useQuery(
     api.folders.get,
-    hasCurrentUser && activeFolderId && !isTrashView && !isRecentsView
+    hasCurrentUser &&
+      activeFolderId &&
+      !isTrashView &&
+      !isRecentsView &&
+      (needsExplorerFolderContents || needsComposerCatalog)
       ? { folderId: activeFolderId, includeDeleted: isTrashBrowse }
       : "skip",
   );
@@ -2902,7 +2941,7 @@ export function StudioShell({
   );
   const outgoingShareKeys = useQuery(
     api.studioShares.listMyOutgoingShareKeys,
-    hasCurrentUser ? {} : "skip",
+    hasCurrentUser && needsExplorerFolderContents ? {} : "skip",
   );
   const outgoingShareKeySet = useMemo(() => {
     const set = new Set();
@@ -2959,7 +2998,7 @@ export function StudioShell({
   const filesNavHomeRootId = navTrail[0]?.id ?? workspaceRoot?._id ?? null;
   const filesNavHomeFolders = useQuery(
     api.folders.listWithPeeks,
-    hasCurrentUser && filesNavHomeRootId
+    hasCurrentUser && filesNavHomeRootId && needsExplorerFolderContents
       ? { parentId: filesNavHomeRootId }
       : "skip",
   );
@@ -10043,16 +10082,21 @@ export function StudioShell({
             --studio-chat-column-max: 100%;
             --studio-chat-empty-clearance: calc(108px + env(safe-area-inset-bottom, 0px));
             --cursor-head-h: var(--studio-mobile-nav-height, 44px);
+            --studio-composer-glass-blur: saturate(160%) blur(8px);
+            --studio-composer-glass: color-mix(in srgb, var(--mos-bg, #05080f) 92%, transparent);
+            --studio-composer-glass-strong: color-mix(in srgb, var(--mos-bg, #05080f) 96%, transparent);
             /* Dark overlay chrome — readable bars, still slightly frosted */
-            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent);
-            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent);
-            --studio-mobile-chrome-blur: saturate(160%) blur(18px);
+            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-bg, #05080f) 92%, transparent);
+            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-bg, #05080f) 92%, transparent);
+            --studio-mobile-chrome-blur: saturate(160%) blur(8px);
           }
           [data-appearance="light"] .studio-polish.is-studio-mobile {
-            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-page, var(--mos-panel, #f5f5f7)) 84%, transparent);
-            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-page, var(--mos-panel, #f5f5f7)) 84%, transparent);
+            --studio-composer-glass-blur: saturate(160%) blur(8px);
+            --studio-composer-glass: color-mix(in srgb, var(--mos-panel, #f5f5f7) 94%, transparent);
+            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-page, var(--mos-panel, #f5f5f7)) 90%, transparent);
+            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-page, var(--mos-panel, #f5f5f7)) 90%, transparent);
             --studio-mobile-chrome-border: var(--color-cursor-border, var(--mos-border));
-            --studio-mobile-chrome-blur: saturate(160%) blur(16px);
+            --studio-mobile-chrome-blur: saturate(160%) blur(8px);
           }
           [data-appearance="light"] .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
             background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
@@ -10673,7 +10717,7 @@ export function StudioShell({
         @media (hover: hover) {
           /* Feed like/save/share keep their own ink; bright hover must not
              override liked red / saved gold while the pointer stays down. */
-          .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover):not(.profile-post-rail-btn):not(.profile-post-rail-follow):not(.profile-post-follow-btn):not(.profile-post-edit-btn):not(.profile-post-book-btn):not(.profile-post-caption-user):not(.profile-comments-post-action):not(.profile-comment-like) :where(svg, .icon-inline) {
+          .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover):not(.studio-orb-play):not(.profile-post-rail-btn):not(.profile-post-rail-follow):not(.profile-post-follow-btn):not(.profile-post-edit-btn):not(.profile-post-book-btn):not(.profile-post-caption-user):not(.profile-comments-post-action):not(.profile-comment-like) :where(svg, .icon-inline) {
             color: var(--color-cursor-text-bright) !important;
           }
         }
@@ -34332,6 +34376,10 @@ function StudioChatResultCard({
           <StudioChatAudioPlayer
             src={playSrc}
             title={title}
+            orbSeed={orbSeedForVoice(
+              String(entry.studioId ?? entry.path ?? title),
+              title,
+            )}
           />
         ) : needsSignedMedia ? (
           <StudioChatAudioPlayerLoading label="Loading audio" />
@@ -35644,6 +35692,10 @@ function StudioAssetPreview({ entry, initialScale, hideName }) {
             variant="pane"
             src={mediaUrl}
             title={safeEntryTitle(entry)}
+            orbSeed={orbSeedForVoice(
+              String(entry.studioId ?? entry.path ?? ""),
+              safeEntryTitle(entry),
+            )}
           />
         ) : (
           <div className="studio-asset-empty">

@@ -98,6 +98,14 @@
   width: 100%;
 }
 
+@media (max-width: 899px) {
+  .studio-create-masonry-item,
+  .studio-gen-tile {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 180px;
+  }
+}
+
 .studio-gen-tile {
   position: relative;
   display: block;
@@ -426,25 +434,18 @@
   min-height: 0;
 }
 
-.studio-gen-tile-audio .studio-chat-audio-meta {
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  padding: 0;
-}
-
 .studio-gen-tile-audio .studio-chat-audio-row {
   flex: 0 0 auto;
   width: 100%;
-  gap: 6px;
+  gap: 8px;
+  align-items: center;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-row.is-wave-fill {
   flex: 0 0 auto;
   min-height: 48px;
   height: 48px;
-  align-items: stretch;
+  align-items: center;
 }
 
 .studio-gen-tile-audio .studio-chat-audio-wave {
@@ -465,9 +466,9 @@
 
 .studio-gen-tile-audio .studio-chat-audio-time {
   font-size: 11px;
-  text-align: center;
-  justify-content: center;
-  width: 100%;
+  width: auto;
+  text-align: inherit;
+  justify-content: inherit;
 }
 
 /*
@@ -491,6 +492,20 @@
   justify-self: center;
   filter: none;
   background: transparent;
+}
+
+@media (max-width: 899px) {
+  .studio-gen-tile-audio .studio-orb-play,
+  .studio-gen-tile-audio .studio-orb-play.is-md,
+  .studio-gen-tile-audio .studio-orb-play.is-lg {
+    width: 80px !important;
+    height: 80px !important;
+    min-width: 80px !important;
+    min-height: 80px !important;
+    max-width: 80px !important;
+    max-height: 80px !important;
+    flex: 0 0 80px;
+  }
 }
 
 .studio-gen-tile-audio .studio-orb-frame,
@@ -1283,14 +1298,6 @@
   padding: 0;
 }
 
-.studio-gen-lightbox-audio .studio-chat-audio-meta {
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  padding: 0;
-}
-
 .studio-gen-lightbox-audio .studio-chat-audio-row.is-wave-fill {
   flex: 0 0 auto;
   min-height: 64px;
@@ -1317,9 +1324,7 @@
 
 .studio-gen-lightbox-audio .studio-chat-audio-time {
   font-size: 12px;
-  text-align: center;
-  justify-content: center;
-  width: 100%;
+  width: auto;
 }
 
 .studio-gen-lightbox-audio .studio-orb-play,

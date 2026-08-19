@@ -327,6 +327,8 @@
   pointer-events: none;
   transform: translate3d(0, 0, 0);
   z-index: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 80dvh;
 }
 
 .profile-post-slide-glass {
@@ -439,16 +441,10 @@
   flex: 0 0 auto;
 }
 
-.profile-post-audio-stage .studio-chat-audio-meta {
-  flex: 0 0 auto;
-  justify-content: center;
-  width: 100%;
-}
-
 .profile-post-audio-stage .studio-chat-audio-row.is-wave-fill {
   flex: 0 0 auto;
-  align-self: center;
-  width: min(100%, 9.5rem);
+  align-self: stretch;
+  width: 100%;
   min-height: 40px;
   height: 40px;
 }

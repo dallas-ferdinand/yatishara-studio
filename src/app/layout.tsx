@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, JetBrains_Mono, Onest } from "next/font/google";
+import { Bricolage_Grotesque, Onest } from "next/font/google";
 import Script from "next/script";
 import { MERCURY_LOGO_PRELOAD } from "@/lib/brand-assets";
 import { getThemeBootInlineScript } from "@/mos-app/theme.js";
@@ -20,12 +20,6 @@ const onest = Onest({
 
 const bricolage = Bricolage_Grotesque({
   variable: "--font-bricolage",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const jetbrains = JetBrains_Mono({
-  variable: "--font-jetbrains",
   subsets: ["latin"],
   display: "swap",
 });
@@ -85,7 +79,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${onest.variable} ${bricolage.variable} ${jetbrains.variable} h-full`}
+      className={`${onest.variable} ${bricolage.variable} h-full`}
       suppressHydrationWarning
     >
       <head>

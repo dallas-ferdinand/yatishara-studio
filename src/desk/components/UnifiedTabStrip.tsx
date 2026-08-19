@@ -55,8 +55,16 @@ function tabAudioOrbSeed(tab) {
   return orbSeedForVoice(String(tab?.key ?? "audio"), String(tab?.title ?? ""));
 }
 
+function isAudioFileExt(value) {
+  return /\.(mp3|wav|aac|m4a|ogg|flac|opus|aiff|aif)$/i.test(String(value ?? ""));
+}
+
 function isAudioTab(tab) {
-  return tab?.previewKind === "audio" || tab?.kind === "audio";
+  if (tab?.previewKind === "audio" || tab?.kind === "audio") return true;
+  if (isAudioFileExt(tab?.ext) || isAudioFileExt(tab?.title) || isAudioFileExt(tab?.path)) {
+    return true;
+  }
+  return false;
 }
 
 function tabFromKey(tabs, key) {

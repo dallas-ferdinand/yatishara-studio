@@ -20,6 +20,12 @@ describe("studio background delivery", () => {
     expect(params).toContain("quality=96");
   });
 
+  it("caps phone wallpaper decode at 1280px and lower quality", () => {
+    const params = studioBackgroundTransformParams({ width: 390, dpr: 3 });
+    expect(params).toContain("width=1170");
+    expect(params).toContain("quality=75");
+  });
+
   it("builds CDN paths with transform query when CDN is configured", () => {
     const prev = process.env.NEXT_PUBLIC_STUDIO_BG_CDN;
     process.env.NEXT_PUBLIC_STUDIO_BG_CDN = "https://cdn.example/wallpapers";
