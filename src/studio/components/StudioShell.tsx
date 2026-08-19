@@ -68,6 +68,7 @@ import {
   Shrink,
   MessageCircle,
   Mic,
+  Monitor,
   Music2,
   Package,
   Palette,
@@ -345,7 +346,12 @@ import {
 import {
   StudioFileTransferTray,
 } from "@/studio/components/StudioFileTransferTray";
-import { ScreenShareRecordingPill } from "@/studio/components/ScreenShareRecorder";
+import {
+  ScreenShareRecordingPill,
+  useScreenShareLibraryBackup,
+  useScreenShareSnapshot,
+} from "@/studio/components/ScreenShareRecorder";
+import { screenShareSession } from "@/studio/lib/screenShareSession";
 import {
   IMAGE_UPSCALE_PROMPT,
   aspectRatioFromDimensions,
@@ -1624,6 +1630,7 @@ export function StudioShell({
   const copySharedToFolder = useMutation(api.studioShares.copySharedItemToFolder);
   const revokeStudioShare = useMutation(api.studioShares.revokeShare);
   const convex = useConvex();
+  useScreenShareLibraryBackup();
 
   const lastGenerationModeRef = useRef("image");
 
@@ -9754,7 +9761,7 @@ export function StudioShell({
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-cn-book-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-cn-book-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop, .studio-file-transfer-layer, .studio-file-transfer-tray) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -10639,7 +10646,7 @@ export function StudioShell({
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-cn-book-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-fullscreen-status, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-cn-book-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop, .studio-file-transfer-layer, .studio-file-transfer-tray) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -28596,14 +28603,7 @@ export function StudioShell({
         onClose={() => setRenameTarget(null)}
         onRename={confirmRenameEntry}
       />
-      <ScreenShareRecordingPill
-        hidden={
-          activeTab === "post:compose" ||
-          (typeof activeTab === "string" &&
-            activeTab.startsWith("post:compose:")) ||
-          isPostDocument(activeEntry)
-        }
-      />
+      <ScreenShareRecordingPill />
       {fileTransfers.length && typeof document !== "undefined"
         ? createPortal(
             <StudioFileTransferTray
@@ -28613,7 +28613,7 @@ export function StudioShell({
               onDismiss={dismissFileTransfer}
               onRetry={retryFileTransfer}
             />,
-            shellRef.current instanceof HTMLElement ? shellRef.current : document.body,
+            document.body,
           )
         : null}
     </div>
@@ -31499,6 +31499,7 @@ function StudioMobileAppMenu({
   onToggleFullscreen,
   onSignOut,
 }) {
+  const shareSnap = useScreenShareSnapshot();
   const sheetRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [settling, setSettling] = useState(false);
@@ -31767,6 +31768,33 @@ function StudioMobileAppMenu({
       onClick: () => {
         onClose?.();
         onCreatePost?.();
+      },
+    },
+    {
+      label: shareSnap.recording
+        ? "Stop rec"
+        : shareSnap.panelOpen
+          ? "Hide rec"
+          : "Record",
+      ariaLabel: shareSnap.recording
+        ? "Stop recording"
+        : shareSnap.panelOpen
+          ? "Hide recorder"
+          : "Record screen",
+      Icon: shareSnap.recording ? Square : Monitor,
+      onClick: () => {
+        if (shareSnap.recording) {
+          screenShareSession.stop();
+          onClose?.();
+          return;
+        }
+        if (shareSnap.panelOpen) {
+          screenShareSession.disarmPanel();
+          onClose?.();
+          return;
+        }
+        onClose?.();
+        screenShareSession.armPanel();
       },
     },
     { label: "Edit", ariaLabel: "Edit profile", Icon: Pencil, onClick: onEditProfile },

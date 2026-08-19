@@ -13,6 +13,8 @@ export type ScreenShareSnapshot = {
   recording: boolean;
   elapsedMs: number;
   includeMic: boolean;
+  panelOpen: boolean;
+  stageControls: boolean;
   phase: ScreenSharePhase;
   saveLoaded: number;
   saveTotal: number;
@@ -129,12 +131,14 @@ function createScreenRecorder(stream: MediaStream): MediaRecorder {
 type RecordedHandler = (file: File, durationMs: number) => void;
 
 const listeners = new Set<() => void>();
+const recordedHandlers: RecordedHandler[] = [];
 
 let recording = false;
 let elapsedMs = 0;
 let includeMic = true;
+let panelOpen = false;
+let stageControls = false;
 let pending: ScreenShareSnapshot["pending"] = null;
-let recordedHandler: RecordedHandler | null = null;
 let phase: ScreenSharePhase = "idle";
 let saveLoaded = 0;
 let saveTotal = 0;
@@ -149,24 +153,13 @@ let audioCtx: AudioContext | null = null;
 let startedAt = 0;
 let tickId: number | null = null;
 
-let cached: ScreenShareSnapshot = {
-  recording: false,
-  elapsedMs: 0,
-  includeMic: true,
-  phase: "idle",
-  saveLoaded: 0,
-  saveTotal: 0,
-  uploadStartedAt: 0,
-  finishStartedAt: 0,
-  finishEstimateMs: 8_000,
-  pending: null,
-};
-
-function emit(): void {
-  cached = {
+function snapshotFromState(): ScreenShareSnapshot {
+  return {
     recording,
     elapsedMs,
     includeMic,
+    panelOpen,
+    stageControls,
     phase,
     saveLoaded,
     saveTotal,
@@ -175,22 +168,17 @@ function emit(): void {
     finishEstimateMs,
     pending,
   };
+}
+
+let cached: ScreenShareSnapshot = snapshotFromState();
+
+function emit(): void {
+  cached = snapshotFromState();
   for (const listener of listeners) listener();
 }
 
 function writeCached(): void {
-  cached = {
-    recording,
-    elapsedMs,
-    includeMic,
-    phase,
-    saveLoaded,
-    saveTotal,
-    uploadStartedAt,
-    finishStartedAt,
-    finishEstimateMs,
-    pending,
-  };
+  cached = snapshotFromState();
 }
 
 function snapshot(): ScreenShareSnapshot {
@@ -235,17 +223,18 @@ function finishBlob(rec: MediaRecorder, chunks: BlobPart[]): void {
         blob,
         `Screen recording ${stamp}.webm`,
       );
-      if (recordedHandler) {
+      const handler = recordedHandlers[recordedHandlers.length - 1] ?? null;
+      if (handler) {
         pending = null;
         phase = "uploading";
         saveLoaded = 0;
         saveTotal = file.size;
         uploadStartedAt = Date.now();
-        recordedHandler(file, durationMs);
+        handler(file, durationMs);
       } else {
         pending = { file, durationMs };
         phase = "idle";
-        toast.success("Recording kept — open Post to save it");
+        toast.success("Recording kept — it will save when Studio is ready");
       }
       emit();
     } catch {
@@ -273,8 +262,36 @@ export const screenShareSession = {
     includeMic = next;
     emit();
   },
+  armPanel(): void {
+    if (panelOpen) return;
+    panelOpen = true;
+    emit();
+  },
+  disarmPanel(): void {
+    if (!panelOpen) return;
+    if (recording || isScreenShareSaving(phase)) return;
+    panelOpen = false;
+    emit();
+  },
+  setStageControls(next: boolean): void {
+    if (stageControls === next) return;
+    stageControls = next;
+    emit();
+  },
+  addRecordedHandler(handler: RecordedHandler): () => void {
+    recordedHandlers.push(handler);
+    return () => {
+      const index = recordedHandlers.lastIndexOf(handler);
+      if (index >= 0) recordedHandlers.splice(index, 1);
+    };
+  },
+  recordedHandlerCount(): number {
+    return recordedHandlers.length;
+  },
+  /** Last registered handler wins. Compose overlays the library saver. */
   setRecordedHandler(handler: RecordedHandler | null): void {
-    recordedHandler = handler;
+    recordedHandlers.length = 0;
+    if (handler) recordedHandlers.push(handler);
   },
   consumePending(): ScreenShareSnapshot["pending"] {
     const held = pending;
@@ -351,6 +368,7 @@ export const screenShareSession = {
       startedAt = Date.now();
       elapsedMs = 0;
       recording = true;
+      panelOpen = true;
       phase = "recording";
       rec.start(2000);
       tickId = window.setInterval(() => {

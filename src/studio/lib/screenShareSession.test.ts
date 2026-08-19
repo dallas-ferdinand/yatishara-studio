@@ -37,6 +37,15 @@ describe("screenShareSession", () => {
     expect(calls).toBeGreaterThanOrEqual(2);
   });
 
+  it("opens a control panel without starting capture", () => {
+    screenShareSession.disarmPanel();
+    expect(screenShareSession.getSnapshot().panelOpen).toBe(false);
+    screenShareSession.armPanel();
+    expect(screenShareSession.getSnapshot().panelOpen).toBe(true);
+    screenShareSession.disarmPanel();
+    expect(screenShareSession.getSnapshot().panelOpen).toBe(false);
+  });
+
   it("names each save step so Stop is never silent", () => {
     expect(isScreenShareSaving("idle")).toBe(false);
     expect(isScreenShareSaving("recording")).toBe(false);
@@ -131,6 +140,18 @@ describe("screenShareSession", () => {
   it("estimates a longer last hop for bigger files", () => {
     expect(finishEstimateMsForSize(1_000)).toBe(8_000);
     expect(finishEstimateMsForSize(50 * 1024 * 1024)).toBeGreaterThan(8_000);
+  });
+
+  it("stacks recorded handlers so the last one can be removed", () => {
+    screenShareSession.setRecordedHandler(null);
+    expect(screenShareSession.recordedHandlerCount()).toBe(0);
+    const unsubLib = screenShareSession.addRecordedHandler(() => {});
+    const unsubCompose = screenShareSession.addRecordedHandler(() => {});
+    expect(screenShareSession.recordedHandlerCount()).toBe(2);
+    unsubCompose();
+    expect(screenShareSession.recordedHandlerCount()).toBe(1);
+    unsubLib();
+    expect(screenShareSession.recordedHandlerCount()).toBe(0);
   });
 
   it("tracks upload progress on the shared snapshot", () => {

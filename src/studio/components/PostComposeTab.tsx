@@ -1007,6 +1007,11 @@ export function PostComposeTab({
   const isHelpAnswer = postKind === "help_answer";
 
   useEffect(() => {
+    screenShareSession.setStageControls(isHelpAnswer);
+    return () => screenShareSession.setStageControls(false);
+  }, [isHelpAnswer]);
+
+  useEffect(() => {
     if (!isHelpAnswer || recordingDurationMs > 0) return undefined;
     const slot = slots.find((item) => isScreenRecordingSlot(item));
     if (!slot?.previewUrl) return undefined;

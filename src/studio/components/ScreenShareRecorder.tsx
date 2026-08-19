@@ -1,9 +1,13 @@
 "use client";
 
-import { Loader2, Mic, MicOff, Monitor, Square } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useAction, useMutation } from "convex/react";
+import { Loader2, Mic, MicOff, Monitor, Square, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { api } from "../../../convex/_generated/api";
+import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import {
   isScreenShareSaving,
   screenShareSaveLabel,
@@ -30,12 +34,29 @@ export function screenShareSupported(): boolean {
   );
 }
 
-function useScreenShareSnapshot() {
+export function useScreenShareSnapshot() {
   return useSyncExternalStore(
     screenShareSession.subscribe,
     screenShareSession.getSnapshot,
     screenShareSession.getSnapshot,
   );
+}
+
+export async function startScreenShareRecording(): Promise<boolean> {
+  if (!screenShareSupported()) {
+    toast.error("Screen recording is desktop only.");
+    return false;
+  }
+  const result = await screenShareSession.start();
+  if (result === "unsupported") {
+    toast.error("Screen recording is desktop only.");
+    return false;
+  }
+  if (result === "cancelled") {
+    toast.error("Screen share was cancelled or isn’t available.");
+    return false;
+  }
+  return true;
 }
 
 export function useScreenShareRecordedHandler(
@@ -48,11 +69,50 @@ export function useScreenShareRecordedHandler(
     const handler = (file: File, durationMs: number) => {
       onRecordedRef.current(file, durationMs);
     };
-    screenShareSession.setRecordedHandler(handler);
+    const unsub = screenShareSession.addRecordedHandler(handler);
     const held = screenShareSession.consumePending();
     if (held) handler(held.file, held.durationMs);
-    return () => screenShareSession.setRecordedHandler(null);
+    return unsub;
   }, []);
+}
+
+/** Always-on save to Screen Recordings. Compose overlays this when a post is open. */
+export function useScreenShareLibraryBackup(): void {
+  const ensureScreenRecordings = useMutation(
+    api.folders.ensureScreenRecordingsFolderForMe,
+  );
+  const reserveUpload = useMutation(api.assets.reserveUpload);
+  const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
+
+  const save = useCallback(
+    async (file: File) => {
+      try {
+        const folderId = await ensureScreenRecordings({});
+        screenShareSession.setSaveProgress(0, file.size);
+        await uploadStudioAsset({
+          file,
+          folderId,
+          kind: "video",
+          name: file.name,
+          reserveUpload,
+          commitStagingUpload,
+          onProgress: (loaded, total) =>
+            screenShareSession.setSaveProgress(loaded, total),
+          onCommitting: () => screenShareSession.beginFinishing(),
+        });
+        toast.success("Saved to Screen Recordings");
+      } catch (error) {
+        toast.error(friendlyConvexError(error, "Could not save recording"));
+      } finally {
+        screenShareSession.clearSave();
+      }
+    },
+    [commitStagingUpload, ensureScreenRecordings, reserveUpload],
+  );
+
+  useScreenShareRecordedHandler((file) => {
+    void save(file);
+  });
 }
 
 export function ScreenShareSaveStatus({
@@ -105,31 +165,24 @@ export function ScreenShareSaveStatus({
 export function ScreenShareRecorder({
   disabled,
   busy,
+  compact = false,
 }: {
   disabled?: boolean;
   busy?: boolean;
+  compact?: boolean;
 }) {
   const snap = useScreenShareSnapshot();
   const saving = isScreenShareSaving(snap.phase);
 
   async function start() {
-    if (!screenShareSupported()) {
-      toast.error("Screen recording for Value is desktop only.");
-      return;
-    }
-    const result = await screenShareSession.start();
-    if (result === "unsupported") {
-      toast.error("Screen recording for Value is desktop only.");
-    } else if (result === "cancelled") {
-      toast.error("Screen share was cancelled or isn’t available.");
-    }
+    await startScreenShareRecording();
   }
 
   const supported = screenShareSupported();
-  if (saving) return <ScreenShareSaveStatus variant="stage" />;
+  if (saving) return <ScreenShareSaveStatus variant={compact ? "pill" : "stage"} />;
 
   return (
-    <div className="post-compose-record">
+    <div className={`post-compose-record${compact ? " is-compact" : ""}`}>
       {snap.recording ? (
         <button
           type="button"
@@ -166,7 +219,7 @@ export function ScreenShareRecorder({
           <MicOff size={14} aria-hidden="true" />
         )}
       </button>
-      {!supported ? (
+      {!supported && !compact ? (
         <p className="post-compose-record-hint">Desktop only — no camera.</p>
       ) : null}
     </div>
@@ -174,28 +227,29 @@ export function ScreenShareRecorder({
 }
 
 /** Overlay on document.body — never a .studio-polish flex child. */
-export function ScreenShareRecordingPill({ hidden = false }: { hidden?: boolean }) {
+export function ScreenShareRecordingPill() {
   const snap = useScreenShareSnapshot();
   const saving = isScreenShareSaving(snap.phase);
   if (typeof document === "undefined") return null;
-  if (hidden || (!saving && !snap.recording)) return null;
+  const open = snap.panelOpen || snap.recording || saving;
+  if (!open || snap.stageControls) return null;
   const chip = saving ? (
     <div className="studio-screen-share-pill is-saving" role="status">
       <ScreenShareSaveStatus variant="pill" />
     </div>
   ) : (
-    <div className="studio-screen-share-pill" role="status">
-      <span className="post-compose-record-live" aria-hidden="true" />
-      <span className="studio-screen-share-pill-label">
-        Rec {timeLabel(snap.elapsedMs)}
-      </span>
-      <button
-        type="button"
-        className="studio-screen-share-pill-stop"
-        onClick={() => screenShareSession.stop()}
-      >
-        Stop
-      </button>
+    <div className="studio-screen-share-pill is-controls" role="region" aria-label="Screen recording">
+      <ScreenShareRecorder compact />
+      {snap.recording ? null : (
+        <button
+          type="button"
+          className="studio-screen-share-pill-close"
+          aria-label="Hide recorder"
+          onClick={() => screenShareSession.disarmPanel()}
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
   return createPortal(

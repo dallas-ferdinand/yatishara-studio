@@ -364,7 +364,12 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
   stage `flex: 1 1 0%` + `overflow: hidden`, body `overflow-y: auto`,
   `grid-auto-rows: max-content` so sheet collapse scrolls instead of squishing
   tiles. Landing 40px plate fade masks on `.studio-mobile-app-menu-scroll`.
-  Scoped via `.is-app-grid`. Memory: **790**.
+  Scoped via `.is-app-grid`. **Record** (after Post) opens the same
+  Record screen + mic controls as Value compose, as a floating bar on the
+  current tab — it does **not** start capture until you press Record screen.
+  Mic on/off is chosen there before the take. While live the menu tile reads
+  **Stop rec**; while the bar is up it reads **Hide rec**. Finished takes
+  save to Screen Recordings. Desktop only. Memory: **790**, **1482**.
 - **Desktop header** keeps New + Credits + Avatar + Menu only. Feed / Network /
   Messages / Files / History / Settings / Admin / Full screen live in the same
   app grid via `.studio-mobile-app-menu-sheet.is-desktop-popover` (top-right
@@ -639,7 +644,11 @@ on the player (lock mark + price + accent Unlock) — never white text on a dim.
 match `.studio-admin-head-tab` (24px nested pills, Lucide leading icons, idle
 muted, active = accent wash). Description rail stays comments-flush (left
 hairline, `--mos-panel`, no card). **Value recording is on the stage**, not in
-the caption column. After a take, a WhatsApp-style free-preview timeline sits
+the caption column. Screen capture also starts from the hamburger **Record**
+tile at any time: that opens a floating Record screen + mic bar on the current
+tab (same controls as the Value stage). Mic is chosen before capture; the bar
+stays if you switch away from the post tab. Rec pill / bar while away from compose.
+After a take, a WhatsApp-style free-preview timeline sits
 under the video and above the media gallery/arrows: filmstrip, play/pause,
 playhead, and draggable in/out handles. Gold handles sit outside the crop with
 rounded outer corners. Filmstrip corners stay square where a handle covers them

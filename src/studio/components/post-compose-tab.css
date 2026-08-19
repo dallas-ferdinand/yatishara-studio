@@ -1317,6 +1317,45 @@ body.is-touch-file-drag .post-compose.is-touch-drop-hover .post-compose-mock {
   font-weight: 550;
   font-variant-numeric: tabular-nums;
   pointer-events: auto;
+  --pc-ink: var(--color-cursor-text, var(--color-cursor-text-bright));
+  --pc-muted: var(--color-cursor-muted, color-mix(in srgb, var(--pc-ink) 58%, transparent));
+  --pc-line-strong: var(--color-cursor-border, var(--mos-border));
+  --pc-hover: var(--mos-hover, var(--mos-plate-strong));
+  --pc-accent: var(--cursor-accent, var(--color-cursor-accent));
+  --pc-surface: var(--mos-plate-strong);
+}
+
+.studio-screen-share-pill.is-controls {
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 8px 8px 8px 8px;
+}
+
+.studio-screen-share-pill.is-controls .post-compose-record {
+  flex-wrap: nowrap;
+}
+
+.studio-screen-share-pill-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-cursor-muted, var(--pc-muted));
+  cursor: pointer;
+}
+
+.studio-screen-share-pill-close:hover {
+  background: var(--mos-hover, var(--mos-plate-strong));
+  color: var(--color-cursor-text);
+}
+
+.studio-screen-share-pill-close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--pc-accent, var(--mos-accent)) 70%, transparent);
+  outline-offset: 2px;
 }
 
 body:has(.studio-polish.is-studio-mobile) .studio-screen-share-pill {
