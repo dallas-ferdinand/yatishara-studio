@@ -10319,9 +10319,9 @@ export function StudioShell({
           .studio-polish .cursor-unified-tab {
             height: var(--studio-mobile-chrome-control, 30px) !important;
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
-            width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            min-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            max-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
+            width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
+            min-width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
+            max-width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
             padding: 0 3px 0 6px !important;
             align-self: center;
             border-radius: 999px !important;
@@ -10348,9 +10348,9 @@ export function StudioShell({
             flex: 0 0 auto;
           }
           .studio-polish .cursor-unified-tab-placeholder {
-            width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            min-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            max-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
+            width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
+            min-width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
+            max-width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
             height: var(--studio-mobile-chrome-control, 30px) !important;
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
           }
@@ -11523,9 +11523,9 @@ export function StudioShell({
         .studio-polish .cursor-unified-tab {
           height: calc(var(--cursor-head-h) - 2px) !important;
           min-height: calc(var(--cursor-head-h) - 2px) !important;
-          width: min(140px, var(--cursor-unified-tab-width, 154px));
-          min-width: min(140px, var(--cursor-unified-tab-width, 154px));
-          max-width: min(140px, var(--cursor-unified-tab-width, 154px));
+          width: min(144px, var(--cursor-unified-tab-width, 158px));
+          min-width: min(144px, var(--cursor-unified-tab-width, 158px));
+          max-width: min(144px, var(--cursor-unified-tab-width, 158px));
           border: 1px solid transparent !important;
           border-left-width: 1px !important;
           border-radius: 999px !important;
@@ -11642,7 +11642,14 @@ export function StudioShell({
         }
         .studio-polish .cursor-unified-tab-preview-overlay {
           color: #fff !important;
-          background: transparent;
+          background: color-mix(in srgb, #000 22%, transparent);
+        }
+        .studio-polish .cursor-unified-tab-preview:not(:has(img)):not(:has(video)) .cursor-unified-tab-preview-overlay {
+          background: color-mix(in srgb, var(--mos-text, #111) 10%, transparent);
+        }
+        .studio-polish .cursor-unified-tab-preview:not(:has(img)):not(:has(video)) .cursor-unified-tab-preview-overlay svg {
+          color: var(--mos-text, var(--color-cursor-text)) !important;
+          filter: none !important;
         }
         .studio-polish .cursor-unified-tab-preview-overlay svg {
           color: #fff !important;
@@ -12717,9 +12724,9 @@ export function StudioShell({
           padding-left: 6px !important;
         }
         .studio-polish .cursor-unified-tab-placeholder {
-          width: min(140px, var(--cursor-unified-tab-width, 154px));
-          min-width: min(140px, var(--cursor-unified-tab-width, 154px));
-          max-width: min(140px, var(--cursor-unified-tab-width, 154px));
+          width: min(144px, var(--cursor-unified-tab-width, 158px));
+          min-width: min(144px, var(--cursor-unified-tab-width, 158px));
+          max-width: min(144px, var(--cursor-unified-tab-width, 158px));
           height: calc(var(--cursor-head-h) - 2px);
           min-height: calc(var(--cursor-head-h) - 2px);
           margin: 0;
@@ -40440,13 +40447,21 @@ function tabDescriptor({
         status: "ready",
       };
     }
-    const previewUrl =
+    const thumbUrl =
       (typeof entry.thumbnailUrl === "string" && entry.thumbnailUrl) ||
       entry.sheetAsset?.thumbnailUrl ||
       entry.sheetAsset?.mediaUrl ||
-      ((entry.kind === "image" || entry.kind === "video") && typeof entry.mediaUrl === "string"
+      undefined;
+    const mediaFallback =
+      (entry.kind === "image" || entry.kind === "video") &&
+      typeof entry.mediaUrl === "string"
         ? entry.mediaUrl
-        : undefined);
+        : undefined;
+    const previewUrl = thumbUrl || mediaFallback;
+    const videoPoster =
+      entry.kind === "video" &&
+      previewUrl &&
+      !/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(previewUrl);
     return {
       key,
       kind: "file",
@@ -40469,7 +40484,9 @@ function tabDescriptor({
             : previewUrl
               ? "image"
               : undefined
-          : entry.kind ?? (entry.studioKind === "element" ? "image" : undefined),
+          : videoPoster
+            ? "image"
+            : entry.kind ?? (entry.studioKind === "element" ? "image" : undefined),
       status: "ready",
     };
   }

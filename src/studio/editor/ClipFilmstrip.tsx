@@ -113,34 +113,24 @@ export function ClipFilmstrip({ media, label, widthPx, trimIn = 0, trimOut = 4 }
     return <LogoFilmstrip label={label} width={width} tileCount={tileCount} />;
   }
 
-  if (frames.length > 1) {
-    return (
-      <div className="studio-editor-filmstrip" aria-hidden="true" title={label} style={{ width }}>
-        {frames.map((src, index) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={`${index}-${src.slice(0, 24)}`}
-            src={src}
-            alt=""
-            draggable={false}
-            style={{ width: TILE_W, height: "100%", objectFit: "cover", flexShrink: 0 }}
-          />
-        ))}
-      </div>
-    );
-  }
+  // Stills resolve as one frame. Tile them like video (object-fit cover), never
+  // CSS-repeat at 28×100% — that squashes the photo into thin strips.
+  const tiles = frames.length > 1
+    ? frames
+    : Array.from({ length: tileCount }, () => frames[0]);
 
   return (
-    <div
-      className="studio-editor-filmstrip studio-editor-filmstrip--css"
-      aria-hidden="true"
-      title={label}
-      style={{
-        backgroundImage: `url("${frames[0]}")`,
-        backgroundSize: `${TILE_W}px 100%`,
-        backgroundRepeat: "repeat-x",
-        width,
-      }}
-    />
+    <div className="studio-editor-filmstrip" aria-hidden="true" title={label} style={{ width }}>
+      {tiles.map((src, index) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={`${index}-${String(src).slice(0, 24)}`}
+          src={src}
+          alt=""
+          draggable={false}
+          style={{ width: TILE_W, height: "100%", objectFit: "cover", flexShrink: 0 }}
+        />
+      ))}
+    </div>
   );
 }

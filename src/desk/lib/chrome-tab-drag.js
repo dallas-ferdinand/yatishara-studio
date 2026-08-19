@@ -15,7 +15,7 @@ export const TAB_DRAG_LEADING_INSET_PX = 16;
 /** Ghost settle duration (ms) — keep in sync with desk-shell.css */
 export const TAB_DRAG_SETTLE_MS = 160;
 /** Uniform tab width — keep in sync with --cursor-unified-tab-width in desk-shell.css */
-export const UNIFIED_TAB_WIDTH_PX = 168;
+export const UNIFIED_TAB_WIDTH_PX = 172;
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));

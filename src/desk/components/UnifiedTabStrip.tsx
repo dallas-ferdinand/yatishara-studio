@@ -15,7 +15,7 @@ import {
   resolveDragOrder,
 } from "@/desk/lib/chrome-tab-drag";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
-import { workspaceTabIcon } from "@/desk/lib/file-kind";
+import { fileViewerKind, workspaceTabIcon } from "@/desk/lib/file-kind";
 import { displayEntryPath } from "@/desk/lib/display-path";
 import {
   orbSeedForVoice,
@@ -42,10 +42,14 @@ function StableTabPreview({ src, kind }) {
   const displaySrc = heldSrc || src;
   const displayKind = heldKind || kind;
   if (!displaySrc) return null;
-  if (displayKind === "video") {
+  const videoSrc =
+    displayKind === "video" &&
+    /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(String(displaySrc));
+  if (videoSrc) {
     return <video src={displaySrc} muted playsInline preload="metadata" />;
   }
-  // Eager — `loading="lazy"` inside the overflow-x tab scroller never intersects.
+  // Poster thumbs are jpg/webp even when the tab is a video. Putting those in
+  // <video> leaves the 20px chip empty.
   return <img src={displaySrc} alt="" decoding="async" />;
 }
 
@@ -102,13 +106,18 @@ function isVideoEditTab(tab) {
 }
 
 function tabPreviewOverlayIcon(tab) {
-  if (!tab?.previewUrl) return null;
+  if (!tab) return null;
   if (tab.studioKind === "profile" || tab.studioKind === "profilePost") return null;
   // Match file-manager video-edit badge (clapperboard / theater slate).
   if (isVideoEditTab(tab)) return "studioProject";
   if (tab.documentKind === "post" || tab.ext === ".post") return "post";
-  if (tab.previewKind === "video" || tab.kind === "video") return "play";
-  if (tab.previewKind === "image" || tab.kind === "image") return "image";
+  const fromExt = tab.ext ? fileViewerKind(tab.ext) : "";
+  if (tab.previewKind === "video" || tab.kind === "video" || fromExt === "video") {
+    return "play";
+  }
+  if (tab.previewKind === "image" || tab.kind === "image" || fromExt === "image") {
+    return "image";
+  }
   return null;
 }
 
@@ -885,10 +894,14 @@ function UnifiedTabStripInner({
         const active = tab.key === activeKey;
         const previewUrl = tab.previewUrl;
         const audioTab = isAudioTab(tab);
-        const showPreview = Boolean(
-          previewUrl || tab.previewInitials || audioTab || isVideoEditTab(tab),
-        );
         const previewOverlayIcon = audioTab ? null : tabPreviewOverlayIcon(tab);
+        const showPreview = Boolean(
+          previewUrl ||
+            tab.previewInitials ||
+            audioTab ||
+            isVideoEditTab(tab) ||
+            previewOverlayIcon,
+        );
         return (
           <div
             key={tab.key}
@@ -969,7 +982,7 @@ function UnifiedTabStripInner({
                   className="cursor-unified-tab-audio-orb"
                 />
               </span>
-            ) : tab.previewUrl || isVideoEditTab(tab) ? (
+            ) : tab.previewUrl || isVideoEditTab(tab) || previewOverlayIcon ? (
               <span className="cursor-unified-tab-preview shrink-0 pointer-events-none" aria-hidden="true">
                 <StableTabPreview src={tab.previewUrl} kind={tab.previewKind} />
                 {previewOverlayIcon ? (

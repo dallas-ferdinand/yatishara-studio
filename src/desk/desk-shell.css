@@ -99,7 +99,7 @@
   --desk-leading-tight: 1.45;
   --desk-composer-max: 680px;
   --desk-chat-thread-max: var(--desk-composer-max);
-  --cursor-unified-tab-width: 168px;
+  --cursor-unified-tab-width: 172px;
 }
 [data-appearance="light"] {
   --cursor-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.12);

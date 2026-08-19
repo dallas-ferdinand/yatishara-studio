@@ -3767,6 +3767,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   height: 100%;
   width: 28px;
   object-fit: cover;
+  object-position: center;
   flex-shrink: 0;
   pointer-events: none;
   user-select: none;
