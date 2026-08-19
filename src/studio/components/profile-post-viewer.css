@@ -1230,6 +1230,10 @@
   flex: 32 1 0;
 }
 
+.profile-post-slide-split.is-static .profile-post-feed-resize {
+  pointer-events: none;
+}
+
 .profile-post-media-panel,
 .profile-post-caption-panel {
   min-height: 0;

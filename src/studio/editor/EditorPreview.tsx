@@ -32,7 +32,7 @@ import {
   type LivePreviewChrome,
   type TransformChromeHandle,
 } from "./PreviewPointerRouter";
-import { clipIsPictureKind, useProbedImageSizes } from "./previewScene";
+import { clipIsPictureKind } from "./previewScene";
 import { PreviewTextTransformOverlay } from "./PreviewTextTransformOverlay";
 import {
   clipAtPlayhead,
@@ -179,16 +179,6 @@ export function EditorPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- preview gain only
   }, [previewMuted, previewVolume]);
 
-  const mediaCatalogSizes = useMemo(() => {
-    const merged: Record<string, { width: number; height: number }> = {};
-    for (const media of mediaById.values()) {
-      if (media.kind === "image") continue;
-      if (media.width && media.width > 1 && media.height && media.height > 1) {
-        merged[media.assetId] = { width: media.width, height: media.height };
-      }
-    }
-    return merged;
-  }, [mediaById]);
   const decodedSizes = useMemo(() => {
     const merged: Record<string, { width: number; height: number }> = {
       ...engine.sourceSizes,
@@ -205,14 +195,9 @@ export function EditorPreview({
     }
     return merged;
   }, [engine.sourceSize, engine.sourceSizes]);
-  const probedSizes = useProbedImageSizes(project.clips, mediaById);
-  const overlaySizes = useMemo(
-    () => ({ ...mediaCatalogSizes, ...decodedSizes, ...probedSizes }),
-    [decodedSizes, mediaCatalogSizes, probedSizes],
-  );
 
   const decodedSize = activeClip?.assetId
-    ? overlaySizes[activeClip.assetId]
+    ? decodedSizes[activeClip.assetId]
     : undefined;
   const frameRef = useRef<HTMLDivElement | null>(null);
   const pictureOverlayRef = useRef<TransformChromeHandle | null>(null);
@@ -338,7 +323,7 @@ export function EditorPreview({
     playhead,
     mediaById,
     sourceSizes: decodedSizes,
-    probedSizes,
+    getPaintedHits: engine.getPaintedHits,
     canvasWidth: frame.width,
     canvasHeight: frame.height,
     selectedClipId,
@@ -563,13 +548,18 @@ export function EditorPreview({
               }
               decodedWidth={
                 selectedPicture.assetId
-                  ? overlaySizes[selectedPicture.assetId]?.width
+                  ? decodedSizes[selectedPicture.assetId]?.width
                   : decodedSize?.width
               }
               decodedHeight={
                 selectedPicture.assetId
-                  ? overlaySizes[selectedPicture.assetId]?.height
+                  ? decodedSizes[selectedPicture.assetId]?.height
                   : decodedSize?.height
+              }
+              paintedRect={
+                engine
+                  .getPaintedHits()
+                  .find((hit) => hit.clipId === selectedPicture.id) ?? null
               }
               canvasWidth={frame.width}
               canvasHeight={frame.height}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pickPreviewPointer } from "./PreviewPointerRouter";
+import { picturePaintedRect } from "./playback/compositor-2d";
 import { ROTATE_KNOB_CENTER_PX } from "./transformHit";
 import type { EditorClip, EditorMediaItem, EditorProject } from "./types";
 
@@ -49,9 +50,22 @@ const sourceSizes = {
   sheet: { width: 720, height: 1280 },
   movie: { width: 1920, height: 1080 },
 };
-const probedSizes = {
-  sheet: { width: 720, height: 1280 },
-};
+
+function paintedFor(clipId: string, width: number, height: number, fitMode: "contain" | "cover" = clipId === "sheet" ? "contain" : "cover") {
+  return [
+    {
+      ...picturePaintedRect(
+        1280,
+        720,
+        width,
+        height,
+        { scale: 1, x: 0, y: 0, rotation: 0 },
+        fitMode,
+      ),
+      clipId,
+    },
+  ];
+}
 
 function pick(
   nx: number,
@@ -60,7 +74,7 @@ function pick(
   playhead: number,
   selectedClipId: string | null,
   sizes = sourceSizes,
-  probed = probedSizes,
+  painted: ReturnType<typeof paintedFor> = [],
 ) {
   return pickPreviewPointer(
     nx,
@@ -70,7 +84,7 @@ function pick(
     selectedClipId,
     mediaById,
     sizes,
-    probed,
+    painted,
     1280,
     720,
   );
@@ -138,6 +152,12 @@ describe("pickPreviewPointer", () => {
       clips: [clip("sheet", "top"), clip("movie", "track-v1", "video")],
     };
     expect(pick(0.5, 0.5, project, 1, "movie")).toEqual({
+      action: "item",
+      clipId: "sheet",
+      kind: "picture",
+      handle: "move",
+    });
+    expect(pick(0.5, 0.5, project, 1, "movie", {}, [])).toEqual({
       action: "item",
       clipId: "sheet",
       kind: "picture",
@@ -262,7 +282,7 @@ describe("pickPreviewPointer", () => {
     expect(pick(0.95, 0.95, project, 1, "sheet")).toEqual({ action: "empty" });
   });
 
-  it("prefers probed portrait dimensions over wrong engine decoded sizes", () => {
+  it("picks the painted portrait quad when decoded sizes are wrong", () => {
     const project: EditorProject = {
       name: "mismatch",
       folderId: "f",
@@ -271,8 +291,8 @@ describe("pickPreviewPointer", () => {
       clips: [clip("sheet", "track-v1")],
     };
     const wrongDecoded = { sheet: { width: 1920, height: 1080 } };
-    const portraitProbed = { sheet: { width: 720, height: 1280 } };
-    expect(pick(0.5, 0.08, project, 1, null, wrongDecoded, portraitProbed)).toEqual({
+    const painted = paintedFor("sheet", 720, 1280, "contain");
+    expect(pick(0.5, 0.08, project, 1, null, wrongDecoded, painted)).toEqual({
       action: "item",
       clipId: "sheet",
       kind: "picture",

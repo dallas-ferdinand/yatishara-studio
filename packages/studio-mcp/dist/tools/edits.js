@@ -18,12 +18,13 @@ const clipEffects = z.object({
   fadeOut: z.number().optional().describe("Picture edge fade-out seconds"),
   audioFadeIn: z.number().optional().describe("Audio edge fade-in seconds"),
   audioFadeOut: z.number().optional().describe("Audio edge fade-out seconds"),
-  volume: z.number().optional().describe("0\u20131 gain; set 0 to mute this clip (per-clip mute)"),
+  volume: z.number().optional().describe("0\u20132 gain (1 = 100%); set 0 to mute this clip (per-clip mute)"),
   speed: z.number().optional().describe("Playback rate; timeline duration = trim / speed"),
-  scale: z.number().optional().describe("Canvas zoom; 1 = 100% cover"),
+  scale: z.number().optional().describe("Canvas zoom; 1 = 100% cover fill"),
   x: z.number().optional().describe("Horizontal pan as fraction of canvas width"),
   y: z.number().optional().describe("Vertical pan as fraction of canvas height"),
-  rotation: z.number().optional().describe("Rotation degrees")
+  rotation: z.number().optional().describe("Rotation degrees"),
+  opacity: z.number().optional().describe("Static picture opacity 0\u20131 (multiplied with edge fade)")
 }).describe("ClipEffects \u2014 volume/fades/speed/transform");
 const clipPatch = z.object({
   clipId: z.string(),
@@ -149,7 +150,7 @@ function registerEditTools(server) {
   );
   server.tool(
     "studio_edit_update_clips",
-    "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects (volume/fades/speed/scale/x/y/rotation), transitionOut, text (text clips). Per-clip mute = effects.volume 0 \u2014 only when the user asks to mute; exports will be silent if volume is 0. Default leave volume unset/1 to keep source audio.",
+    "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects (volume 0\u20132 / fades / speed / scale / x / y / rotation / opacity), transitionOut, text (text clips). Per-clip mute = effects.volume 0 \u2014 only when the user asks to mute; exports will be silent if volume is 0. Default leave volume unset/1 to keep source audio.",
     {
       projectId: z.string(),
       clips: z.array(clipPatch).min(1),

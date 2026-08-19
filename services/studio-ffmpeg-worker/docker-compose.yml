@@ -1,0 +1,34 @@
+# Studio ffmpeg worker — encodes off Convex. Both live and preview Convex
+# reach it on the coolify network as http://studio-ffmpeg-worker:8797
+services:
+  worker:
+    build:
+      context: /opt/yatishara-studio/services/studio-ffmpeg-worker
+      dockerfile: Dockerfile
+    image: yatishara-studio-ffmpeg-worker:local
+    container_name: studio-ffmpeg-worker
+    restart: unless-stopped
+    mem_limit: 3072m
+    memswap_limit: 3328m
+    networks:
+      - coolify
+    env_file:
+      - /opt/studio-ffmpeg-worker.env
+    environment:
+      - PORT=8797
+      - CONVEX_SITE_URL=https://convex-studio.yatishara.com
+      - CONVEX_PREVIEW_SITE_URL=https://convex-preview.yatishara.com
+    volumes:
+      - /opt/yatishara-studio:/opt/yatishara-studio:ro
+    working_dir: /opt/yatishara-studio/services/studio-ffmpeg-worker
+    command: ["node", "dist/server.mjs"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8797/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+networks:
+  coolify:
+    external: true

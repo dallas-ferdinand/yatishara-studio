@@ -7,7 +7,7 @@ import { normalizeTextTransform } from "../textLayout";
 import { clipOpacityAtLocalTime, textClipAnimationStyle } from "../editorEffects";
 import type { EditorMediaItem, EditorProject } from "../types";
 import { AudioMixer } from "./audio-mixer";
-import { CompositorClient, type CompositorVisualItem } from "./compositor-client";
+import { CompositorClient, type CompositorVisualItem, type PaintedSceneHit } from "./compositor-client";
 import {
   detectDecoderCapabilities,
   MediaDecoderClient,
@@ -709,6 +709,7 @@ export type PlaybackEngineState = {
   } | null;
   /** Decoded contain-size per asset so stacked clips get their own selection box. */
   sourceSizes: Readonly<Record<string, { width: number; height: number }>>;
+  getPaintedHits: () => readonly PaintedSceneHit[];
   previewTransform: (transform: ClipTransform, clipId: string) => void;
   previewTextTransform: (clipId: string, transform: ClipTransform) => void;
   setMasterVolume: (volume: number) => void;
@@ -1313,6 +1314,7 @@ export function usePlaybackEngine(args: {
     supported: true,
     sourceSize,
     sourceSizes,
+    getPaintedHits: () => runtimeRef.current?.compositor.paintedHits() ?? [],
     previewTransform: (transform, clipId) => {
       if (!clipId) return;
       runtimeRef.current?.compositor.updateTransform(clipId, [

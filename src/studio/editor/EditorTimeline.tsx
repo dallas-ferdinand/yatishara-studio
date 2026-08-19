@@ -26,7 +26,14 @@ import {
 } from "./editorEffects";
 import { transitionJointsOnTrack, visibleTracks } from "./editorTimelineUtils";
 import { computeRippleLayout, isMainStoryTrack, collapsePlacementsForTrack } from "./editorRipple";
-import { clipCanSplitAt, clipDuration, formatTimecodeFull, formatTimecodeRuler } from "./editorState";
+import {
+  clipCanSplitAt,
+  clipDuration,
+  clipKindCompatibleWithTrack,
+  formatTimecodeFull,
+  formatTimecodeRuler,
+  trackKindForClipKind,
+} from "./editorState";
 import { MIN_CLIP_SEC, quantizeToFrame } from "./projectContract";
 import {
   collectSnapTimes,
@@ -500,7 +507,7 @@ function TimelineClipBlock({
           lastViable = true;
           onHighlightInsert?.({
             index: lastInsertAt,
-            kind: clip.kind,
+            kind: trackKindForClipKind(clip.kind),
             mode: "insert",
           });
         } else if (target?.type === "track") {
@@ -1569,7 +1576,7 @@ export function EditorTimeline({
         if (!row) continue;
         const rect = row.getBoundingClientRect();
         if (clientY < rect.top || clientY > rect.bottom) continue;
-        if (track.kind === clipKind) {
+        if (clipKindCompatibleWithTrack(clipKind, track.kind)) {
           return { type: "track", trackId: track.id };
         }
       }

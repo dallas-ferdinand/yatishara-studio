@@ -22,7 +22,9 @@ import {
   clipIsPictureKind,
   hitSceneItemAtPoint,
   pictureContentRect,
+  pictureOccupancyRect,
   pictureSourceSize,
+  type PaintedSceneHit,
 } from "./previewScene";
 import { DEFAULT_TEXT_TRANSFORM, normalizeTextTransform, textContentRectNormalized } from "./textLayout";
 import { hitTransformHandle, type TransformHandle } from "./transformHit";
@@ -90,7 +92,7 @@ function selectedChromeRect(
   clip: EditorClip,
   mediaById: ReadonlyMap<string, EditorMediaItem>,
   sourceSizes: Readonly<Record<string, { width: number; height: number }>>,
-  probedSizes: Readonly<Record<string, { width: number; height: number }>>,
+  paintedHits: readonly PaintedSceneHit[],
   canvasWidth: number,
   canvasHeight: number,
 ): { left: number; top: number; width: number; height: number; rotation: number } | null {
@@ -103,13 +105,16 @@ function selectedChromeRect(
       rotation: transform.rotation,
     };
   }
-  return pictureContentRect(
-    clip,
-    mediaById,
-    sourceSizes,
-    canvasWidth,
-    canvasHeight,
-    probedSizes,
+  const painted = paintedHits.find((hit) => hit.clipId === clip.id);
+  if (painted) return painted;
+  return (
+    pictureContentRect(
+      clip,
+      mediaById,
+      sourceSizes,
+      canvasWidth,
+      canvasHeight,
+    ) ?? pictureOccupancyRect(normalizeClipTransform(clip.effects).rotation)
   );
 }
 
@@ -126,7 +131,7 @@ export function pickPreviewPointer(
   selectedClipId: string | null,
   mediaById: ReadonlyMap<string, EditorMediaItem>,
   sourceSizes: Readonly<Record<string, { width: number; height: number }>>,
-  probedSizes: Readonly<Record<string, { width: number; height: number }>>,
+  paintedHits: readonly PaintedSceneHit[],
   canvasWidth: number,
   canvasHeight: number,
 ): PreviewPointerPick {
@@ -136,7 +141,7 @@ export function pickPreviewPointer(
       selected,
       mediaById,
       sourceSizes,
-      probedSizes,
+      paintedHits,
       canvasWidth,
       canvasHeight,
     );
@@ -165,7 +170,7 @@ export function pickPreviewPointer(
     sourceSizes,
     canvasWidth,
     canvasHeight,
-    probedSizes,
+    paintedHits,
   );
   if (hit) {
     const kind = kindForClip(hit.clip);
@@ -179,7 +184,7 @@ export function pickPreviewPointer(
       selected,
       mediaById,
       sourceSizes,
-      probedSizes,
+      paintedHits,
       canvasWidth,
       canvasHeight,
     );
@@ -254,7 +259,7 @@ type PreviewPointerRouterProps = {
   playhead: number;
   mediaById: ReadonlyMap<string, EditorMediaItem>;
   sourceSizes: Readonly<Record<string, { width: number; height: number }>>;
-  probedSizes: Readonly<Record<string, { width: number; height: number }>>;
+  getPaintedHits: () => readonly PaintedSceneHit[];
   canvasWidth: number;
   canvasHeight: number;
   selectedClipId: string | null;
@@ -285,7 +290,7 @@ export function usePreviewPointerRouter({
   playhead,
   mediaById,
   sourceSizes,
-  probedSizes,
+  getPaintedHits,
   canvasWidth,
   canvasHeight,
   selectedClipId,
@@ -307,7 +312,7 @@ export function usePreviewPointerRouter({
     playhead,
     mediaById,
     sourceSizes,
-    probedSizes,
+    getPaintedHits,
     canvasWidth,
     canvasHeight,
     selectedClipId,
@@ -328,7 +333,7 @@ export function usePreviewPointerRouter({
     playhead,
     mediaById,
     sourceSizes,
-    probedSizes,
+    getPaintedHits,
     canvasWidth,
     canvasHeight,
     selectedClipId,
@@ -423,7 +428,6 @@ export function usePreviewPointerRouter({
             latest.sourceSizes,
             latest.canvasWidth,
             latest.canvasHeight,
-            latest.probedSizes,
           )
         : { width: latest.canvasWidth, height: latest.canvasHeight };
       return snapPictureTransform(
@@ -431,8 +435,8 @@ export function usePreviewPointerRouter({
         gesture.handle,
         latest.canvasWidth,
         latest.canvasHeight,
-        source.width,
-        source.height,
+        source?.width ?? latest.canvasWidth,
+        source?.height ?? latest.canvasHeight,
         resolveFitMode(clip?.effects, clip?.kind),
       );
     };
@@ -451,7 +455,7 @@ export function usePreviewPointerRouter({
         latest.selectedClipId,
         latest.mediaById,
         latest.sourceSizes,
-        latest.probedSizes,
+        latest.getPaintedHits(),
         canvasForHit().width,
         canvasForHit().height,
       );
@@ -529,7 +533,7 @@ export function usePreviewPointerRouter({
         latest.selectedClipId,
         latest.mediaById,
         latest.sourceSizes,
-        latest.probedSizes,
+        latest.getPaintedHits(),
         canvasForHit().width,
         canvasForHit().height,
       );
@@ -549,7 +553,7 @@ export function usePreviewPointerRouter({
         clip,
         latest.mediaById,
         latest.sourceSizes,
-        latest.probedSizes,
+        latest.getPaintedHits(),
         hit.width,
         hit.height,
       );
@@ -635,7 +639,7 @@ export function usePreviewPointerRouter({
         latest.selectedClipId,
         latest.mediaById,
         latest.sourceSizes,
-        latest.probedSizes,
+        latest.getPaintedHits(),
         canvasForHit().width,
         canvasForHit().height,
       );

@@ -79,13 +79,11 @@ Do not run production deploy commands from local development unless intentionall
 - Convex Auth server env must also be set on the Studio Convex deployment when used by Convex functions.
 - Keep `yatishara-studio-preview` **stopped** during deploys so the VPS is not CPU-starved.
 
-## Convex backend (ffmpeg for video export)
+## Convex backend + ffmpeg worker
 
 Self-hosted Convex runs at `/opt/convex-studio-self-hosted` as
-`convex-studio-backend`. Export requires `ffmpeg`/`ffprobe` in that container —
-see [convex-backend-ffmpeg.md](./convex-backend-ffmpeg.md). Rebuild with
-`docker compose build backend && docker compose up -d backend` after changing
-[`deploy/convex-backend/Dockerfile`](../deploy/convex-backend/Dockerfile).
+`convex-studio-backend`. Video export and edit proxies run on
+`studio-ffmpeg-worker` — see [convex-backend-ffmpeg.md](./convex-backend-ffmpeg.md).
 
 ## Production Env Groups
 
@@ -145,10 +143,12 @@ sudo /usr/local/sbin/yatishara-studio-preview-recycle.sh
 
 Preview architecture:
 
-1. systemd runs the repo with Next dev on the VPS.
-2. Traefik routes `preview.studio.yatishara.com` to that dev server.
-3. Browser requests hit `src/proxy.ts` → Convex Auth middleware (open preview; no password gate).
-4. Sophie Ops avatar/media proxies (`/api/studio-ops/*`) call host `studio-cs` on `:8795`. Inside the preview container that must be `host.docker.internal` / Coolify gateway (`10.0.1.1`), never `127.0.0.1` — same rule as Convex `STUDIO_CS_OPS_URL`.
+1. systemd runs the **dev worktree** (`/opt/yatishara-studio-dev`, branch `dev`) with Next dev. Drop-in: `/etc/systemd/system/yatishara-studio-preview.service.d/worktree.conf`. Root file: `/etc/yatishara-studio-preview.root`.
+2. Traefik routes `preview.studio.yatishara.com` to that dev server, which talks to **preview Convex** (`convex-preview-api` / `convex-preview`).
+3. `/opt/yatishara-studio` on `main` is GitHub + what Coolify ships to live, with **prod Convex**.
+4. Promote: finish on the dev worktree, land on `main`, then live Next + prod Convex. Do not treat the worktree as production.
+5. Browser requests hit `src/proxy.ts` → Convex Auth middleware (open preview; no password gate).
+6. Sophie Ops avatar/media proxies (`/api/studio-ops/*`) call host `studio-cs` on `:8795`. Inside the preview container that must be `host.docker.internal` / Coolify gateway (`10.0.1.1`), never `127.0.0.1` — same rule as Convex `STUDIO_CS_OPS_URL`.
 
 ## Verification
 

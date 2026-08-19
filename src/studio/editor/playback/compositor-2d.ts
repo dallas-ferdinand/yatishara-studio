@@ -3,9 +3,35 @@ import { loadGoogleFont } from "../loadGoogleFont";
 import { normalizeEditorTransition } from "../../../../convex/lib/editorEffectContract";
 import type { TransitionType } from "../types";
 
+/**
+ * Anything `drawImage` can paint. Browser: VideoFrame / ImageBitmap.
+ */
+export type CompositorDrawable = {
+  width: number;
+  height: number;
+  displayWidth?: number;
+  displayHeight?: number;
+  close?: () => void;
+  clone?: () => CompositorDrawable;
+};
+
+export type CompositorCanvas = {
+  width: number;
+  height: number;
+  getContext(
+    kind: "2d",
+    attrs?: { alpha?: boolean },
+  ): CanvasRenderingContext2D | null;
+};
+
+export type Canvas2dCompositorHost = {
+  createCanvas?: (width: number, height: number) => CompositorCanvas;
+  loadFonts?: (families: string[]) => Promise<void>;
+};
+
 export type CompositorLayer = {
   clipId?: string;
-  frame?: VideoFrame;
+  frame?: CompositorDrawable;
   textureKey?: string;
   transform?: [number, number, number, number];
   opacity?: number;
@@ -57,8 +83,8 @@ export type CompositorVisualItem =
   | { type: "text"; item: CompositorTextItem };
 
 export type CompositorPaintArgs = {
-  frameA?: VideoFrame;
-  frameB?: VideoFrame;
+  frameA?: CompositorDrawable;
+  frameB?: CompositorDrawable;
   textureKeyA?: string;
   textureKeyB?: string;
   transformA?: [number, number, number, number];
@@ -88,13 +114,38 @@ const SYSTEM_STACKS: Record<string, string> = {
   display: "Impact, Haettenschweiler, 'Arial Black', sans-serif",
 };
 
-function closeFrame(frame?: VideoFrame): void {
-  if (!frame) return;
+function isVideoFrame(value: unknown): value is VideoFrame {
+  return typeof VideoFrame !== "undefined" && value instanceof VideoFrame;
+}
+
+function drawableSize(drawable: CompositorDrawable): { width: number; height: number } {
+  const width = drawable.displayWidth ?? drawable.width;
+  const height = drawable.displayHeight ?? drawable.height;
+  return { width, height };
+}
+
+function closeFrame(frame?: CompositorDrawable): void {
+  if (!frame?.close) return;
   try {
     frame.close();
   } catch {
     /* already closed */
   }
+}
+
+function cloneDrawable(frame: CompositorDrawable): CompositorDrawable {
+  if (typeof frame.clone === "function") return frame.clone();
+  return frame;
+}
+
+function defaultCreateCanvas(width: number, height: number): CompositorCanvas {
+  if (typeof document === "undefined") {
+    throw new Error("Canvas factory required when document is missing.");
+  }
+  const el = document.createElement("canvas");
+  el.width = Math.max(1, Math.round(width));
+  el.height = Math.max(1, Math.round(height));
+  return el;
 }
 
 function closeLayers(layers: CompositorLayer[] | undefined): void {
@@ -107,6 +158,41 @@ function tupleToTransform(tuple: TransformTuple): ClipTransform {
     x: tuple[1],
     y: tuple[2],
     rotation: tuple[3],
+  };
+}
+
+export type PaintedSceneHit = {
+  clipId: string;
+  kind: "picture";
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  rotation: number;
+};
+
+/** Same dest quad drawContained uses. Pick/chrome must read this, not a probed size. */
+export function picturePaintedRect(
+  canvasW: number,
+  canvasH: number,
+  sourceW: number,
+  sourceH: number,
+  transform: ClipTransform,
+  fitMode: MediaFitMode = "cover",
+): PaintedSceneHit {
+  const rect = contentRectForTransform(
+    transform,
+    canvasW,
+    canvasH,
+    sourceW,
+    sourceH,
+    fitMode,
+  );
+  return {
+    clipId: "",
+    kind: "picture",
+    ...rect,
+    rotation: transform.rotation,
   };
 }
 
@@ -132,34 +218,29 @@ function applyCase(
   return text;
 }
 
-type Drawable = VideoFrame | ImageBitmap;
-
 function sourceSize(
-  drawable: Drawable,
+  drawable: CompositorDrawable,
   layer: Pick<CompositorLayer, "width" | "height">,
 ): { width: number; height: number } {
   if (layer.width && layer.height) return { width: layer.width, height: layer.height };
-  if (drawable instanceof VideoFrame) {
-    return { width: drawable.displayWidth, height: drawable.displayHeight };
-  }
-  return { width: drawable.width, height: drawable.height };
+  return drawableSize(drawable);
 }
 
 function drawContained(
   ctx: CanvasRenderingContext2D,
-  drawable: Drawable,
+  drawable: CompositorDrawable,
   canvasW: number,
   canvasH: number,
   layer: CompositorLayer,
 ): void {
   const size = sourceSize(drawable, layer);
   const transform = tupleToTransform(layer.transform ?? IDENTITY);
-  const rect = contentRectForTransform(
-    transform,
+  const rect = picturePaintedRect(
     canvasW,
     canvasH,
     size.width,
     size.height,
+    transform,
     layer.fitMode ?? "cover",
   );
   const destW = rect.width * canvasW;
@@ -169,7 +250,7 @@ function drawContained(
   ctx.globalAlpha *= Number.isFinite(layer.opacity) ? Number(layer.opacity) : 1;
   ctx.translate((rect.left + rect.width / 2) * canvasW, (rect.top + rect.height / 2) * canvasH);
   ctx.rotate((transform.rotation * Math.PI) / 180);
-  ctx.drawImage(drawable, -destW / 2, -destH / 2, destW, destH);
+  ctx.drawImage(drawable as CanvasImageSource, -destW / 2, -destH / 2, destW, destH);
   ctx.restore();
 }
 
@@ -309,7 +390,7 @@ function paintTextItems(
 type SceneLayer = {
   clipId?: string;
   role?: CompositorLayer["role"];
-  drawable: Drawable;
+  drawable: CompositorDrawable;
   textureKey?: string;
   transform: TransformTuple;
   opacity: number;
@@ -328,21 +409,30 @@ type SceneVisualOp =
  * OffscreenCanvas transfer — VPS / software-GL machines can still stack.
  */
 export class Canvas2dCompositor {
-  private readonly canvas: HTMLCanvasElement;
+  private readonly canvas: CompositorCanvas;
   private readonly ctx: CanvasRenderingContext2D;
-  private readonly stills = new Map<string, VideoFrame>();
+  private readonly createCanvas: (width: number, height: number) => CompositorCanvas;
+  private readonly loadFonts: ((families: string[]) => Promise<void>) | undefined;
+  private readonly stills = new Map<string, CompositorDrawable>();
   private scene: {
     visual: SceneVisualOp[];
     background: [number, number, number, number];
     transition: TransitionType;
     progress: number;
   } | null = null;
-  private scratch: HTMLCanvasElement | null = null;
+  private scratch: CompositorCanvas | null = null;
   disposed = false;
   onTextureMiss: ((textureKeys: string[]) => void) | null = null;
 
-  constructor(canvas: HTMLCanvasElement, width: number, height: number) {
+  constructor(
+    canvas: CompositorCanvas,
+    width: number,
+    height: number,
+    host?: Canvas2dCompositorHost,
+  ) {
     this.canvas = canvas;
+    this.createCanvas = host?.createCanvas ?? defaultCreateCanvas;
+    this.loadFonts = host?.loadFonts;
     canvas.width = Math.max(1, Math.round(width));
     canvas.height = Math.max(1, Math.round(height));
     let ctx: CanvasRenderingContext2D | null = null;
@@ -366,11 +456,11 @@ export class Canvas2dCompositor {
     if (this.canvas.height !== h) this.canvas.height = h;
   }
 
-  private rememberStill(key: string | undefined, frame?: VideoFrame): void {
+  private rememberStill(key: string | undefined, frame?: CompositorDrawable): void {
     if (!key?.startsWith("image:") || !frame) return;
     const prev = this.stills.get(key);
     if (prev && prev !== frame) closeFrame(prev);
-    this.stills.set(key, frame.clone());
+    this.stills.set(key, cloneDrawable(frame));
     while (this.stills.size > STILL_CACHE_MAX) {
       const oldest = this.stills.keys().next().value;
       if (!oldest) break;
@@ -393,8 +483,8 @@ export class Canvas2dCompositor {
           role: layer.role,
           drawable: cached,
           textureKey: key,
-          width: layer.width ?? cached.displayWidth,
-          height: layer.height ?? cached.displayHeight,
+          width: layer.width ?? drawableSize(cached).width,
+          height: layer.height ?? drawableSize(cached).height,
           retain: true,
         };
       }
@@ -416,7 +506,7 @@ export class Canvas2dCompositor {
   }
 
   private scratchCtx(width: number, height: number): CanvasRenderingContext2D {
-    if (!this.scratch) this.scratch = document.createElement("canvas");
+    if (!this.scratch) this.scratch = this.createCanvas(width, height);
     if (this.scratch.width !== width) this.scratch.width = width;
     if (this.scratch.height !== height) this.scratch.height = height;
     const ctx = this.scratch.getContext("2d", { alpha: true });
@@ -514,7 +604,7 @@ export class Canvas2dCompositor {
       ctx.save();
       ctx.translate(w / 2, h / 2);
       ctx.scale(scale, scale);
-      ctx.drawImage(this.scratch!, -w / 2, -h / 2);
+      ctx.drawImage(this.scratch! as CanvasImageSource, -w / 2, -h / 2);
       ctx.restore();
       ctx.save();
       ctx.globalAlpha = progress;
@@ -598,7 +688,7 @@ export class Canvas2dCompositor {
     for (const op of this.scene.visual) {
       if (op.type !== "picture") continue;
       if (op.layer.retain) continue;
-      if (op.layer.drawable instanceof VideoFrame) closeFrame(op.layer.drawable);
+      if (isVideoFrame(op.layer.drawable)) closeFrame(op.layer.drawable);
     }
     this.scene = null;
     void keepStills;
@@ -706,7 +796,7 @@ export class Canvas2dCompositor {
         .filter((op) => !op.layer.retain)
         .map((op) => op.layer.drawable),
     );
-    const maybeClose = (frame?: VideoFrame) => {
+    const maybeClose = (frame?: CompositorDrawable) => {
       if (!frame || held.has(frame)) return;
       closeFrame(frame);
     };
@@ -741,12 +831,42 @@ export class Canvas2dCompositor {
     this.updateTransform(clipId, transform);
   }
 
+  /** Top-to-bottom picture quads from the last paint. */
+  paintedHits(): PaintedSceneHit[] {
+    if (!this.scene) return [];
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const hits: PaintedSceneHit[] = [];
+    for (let index = this.scene.visual.length - 1; index >= 0; index -= 1) {
+      const op = this.scene.visual[index];
+      if (op.type !== "picture" || !op.layer.clipId) continue;
+      const size = sourceSize(op.layer.drawable, op.layer);
+      const transform = tupleToTransform(op.layer.transform);
+      hits.push({
+        ...picturePaintedRect(
+          w,
+          h,
+          size.width,
+          size.height,
+          transform,
+          op.layer.fitMode ?? "cover",
+        ),
+        clipId: op.layer.clipId,
+      });
+    }
+    return hits;
+  }
+
   resize(width: number, height: number): void {
     this.sizeCanvas(width, height);
     this.redrawScene();
   }
 
   async ensureFonts(families: string[]): Promise<void> {
+    if (this.loadFonts) {
+      await this.loadFonts(families);
+      return;
+    }
     await Promise.all(families.map((family) => loadGoogleFont(family)));
   }
 

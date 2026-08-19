@@ -1,10 +1,11 @@
 import { normalizeClipTransform, resolveFitMode, type MediaFitMode } from "../clipTransform";
 import { clipOpacityAtLocalTime } from "../editorEffects";
+import type { CompositorDrawable } from "./compositor-2d";
 import type { RenderSlice } from "./timeline-compiler";
 
 export type PictureLayer = {
   clipId: string;
-  frame?: VideoFrame;
+  frame?: CompositorDrawable;
   textureKey?: string;
   transform: [number, number, number, number];
   opacity: number;
@@ -16,7 +17,7 @@ export type PictureLayer = {
 
 export type ResolvedPictureLane = {
   clipId: string;
-  frame?: VideoFrame;
+  frame?: CompositorDrawable;
   textureKey?: string;
   width?: number;
   height?: number;

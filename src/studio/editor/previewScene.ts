@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import { clipDuration } from "./editorState";
 import {
   contentRectForTransform,
@@ -9,9 +8,12 @@ import {
   resolveFitMode,
 } from "./clipTransform";
 import { textClipAnimationStyle } from "./editorEffects";
+import type { PaintedSceneHit } from "./playback/compositor-2d";
 import { normalizeTextTransform, textLayoutRect } from "./textLayout";
 import { hitTransformHandle, pointHitsContentRect } from "./transformHit";
 import type { ClipKind, EditorClip, EditorMediaItem, EditorProject } from "./types";
+
+export type { PaintedSceneHit };
 
 export type SceneItemKind = "video" | "image" | "text";
 
@@ -51,7 +53,9 @@ export function sceneItemsAtPlayhead(
   for (const clip of project.clips) {
     const track = project.tracks.find((item) => item.id === clip.trackId);
     if (!track || track.hidden) continue;
-    if (track.kind !== "video" && track.kind !== "text") continue;
+    // Picture stills were briefly stored on invalid kind:"image" lanes —
+    // skip only audio so overlay stills still pick.
+    if (track.kind === "audio") continue;
     const kind = sceneKind(clip);
     if (!kind) continue;
     if (kind === "text" && !clip.text?.text) continue;
@@ -106,23 +110,19 @@ export function pictureSourceSize(
   sourceSizes: Readonly<Record<string, { width: number; height: number }>>,
   canvasWidth: number,
   canvasHeight: number,
-  probedSizes: Readonly<Record<string, { width: number; height: number }>> = {},
-): { width: number; height: number } {
+): { width: number; height: number } | null {
   const media = clip.assetId ? mediaById.get(clip.assetId) : undefined;
-  const still = clip.kind === "image" || media?.kind === "image";
-  if (still && clip.assetId) {
-    const probed = overlaySourceSize(probedSizes[clip.assetId], null);
-    if (probed) return probed;
-    const decoded = overlaySourceSize(sourceSizes[clip.assetId], null);
-    if (decoded) return decoded;
-    return { width: canvasWidth, height: canvasHeight };
-  }
   const decoded = clip.assetId ? sourceSizes[clip.assetId] : undefined;
   const measured = overlaySourceSize(decoded, null);
   if (measured) return measured;
+  const still = clip.kind === "image" || media?.kind === "image";
+  if (still) return null;
   const fromMedia = overlaySourceSize(null, media);
   if (fromMedia) return fromMedia;
-  return { width: canvasWidth, height: canvasHeight };
+  if (canvasWidth > 1 && canvasHeight > 1) {
+    return { width: canvasWidth, height: canvasHeight };
+  }
+  return null;
 }
 
 export function pictureContentRect(
@@ -131,16 +131,15 @@ export function pictureContentRect(
   sourceSizes: Readonly<Record<string, { width: number; height: number }>>,
   canvasWidth: number,
   canvasHeight: number,
-  probedSizes: Readonly<Record<string, { width: number; height: number }>> = {},
-): { left: number; top: number; width: number; height: number; rotation: number } {
+): { left: number; top: number; width: number; height: number; rotation: number } | null {
   const source = pictureSourceSize(
     clip,
     mediaById,
     sourceSizes,
     canvasWidth,
     canvasHeight,
-    probedSizes,
   );
+  if (!source) return null;
   const transform = normalizeClipTransform(clip.effects);
   const rect = contentRectForTransform(
     transform,
@@ -192,8 +191,7 @@ export function sceneItemContentRect(
   canvasWidth: number,
   canvasHeight: number,
   playhead: number,
-  probedSizes: Readonly<Record<string, { width: number; height: number }>> = {},
-): { left: number; top: number; width: number; height: number; rotation: number } {
+): { left: number; top: number; width: number; height: number; rotation: number } | null {
   if (item.kind === "text") {
     return textContentRect(item.clip, canvasWidth, canvasHeight, playhead);
   }
@@ -203,7 +201,6 @@ export function sceneItemContentRect(
     sourceSizes,
     canvasWidth,
     canvasHeight,
-    probedSizes,
   );
 }
 
@@ -221,8 +218,20 @@ function pointHitsSceneItem(
 }
 
 /**
+ * Video cover-fills, so a missing size still becomes a full-frame box.
+ * Stills contain-letterbox and used to return null — the click then fell
+ * through to the video underneath. Occupy the frame until paint publishes
+ * a real quad so stills pick like every other clip.
+ */
+export function pictureOccupancyRect(
+  rotation: number,
+): { left: number; top: number; width: number; height: number; rotation: number } {
+  return { left: 0, top: 0, width: 1, height: 1, rotation };
+}
+
+/**
  * Top lane wins. Hits the fitted bitmap rect / text box.
- * Stills contain (letterbox); video covers. Same rect as paint and overlay.
+ * Picture quads prefer the compositor's last paint when provided.
  */
 export function hitSceneItemAtPoint(
   nx: number,
@@ -233,19 +242,27 @@ export function hitSceneItemAtPoint(
   sourceSizes: Readonly<Record<string, { width: number; height: number }>>,
   canvasWidth: number,
   canvasHeight: number,
-  probedSizes: Readonly<Record<string, { width: number; height: number }>> = {},
+  paintedHits: readonly PaintedSceneHit[] = [],
 ): SceneItem | null {
   if (canvasWidth <= 0 || canvasHeight <= 0) return null;
+  const paintedById = new Map(paintedHits.map((hit) => [hit.clipId, hit]));
   for (const item of sceneItemsTopToBottom(project, playhead)) {
-    const rect = sceneItemContentRect(
+    const painted = item.kind === "text" ? undefined : paintedById.get(item.clip.id);
+    const computed = sceneItemContentRect(
       item,
       mediaById,
       sourceSizes,
       canvasWidth,
       canvasHeight,
       playhead,
-      probedSizes,
     );
+    const rect =
+      painted ??
+      computed ??
+      (item.kind === "image"
+        ? pictureOccupancyRect(normalizeClipTransform(item.clip.effects).rotation)
+        : null);
+    if (!rect) continue;
     if (pointHitsSceneItem(nx, ny, rect, canvasWidth, canvasHeight)) {
       return item;
     }
@@ -255,68 +272,4 @@ export function hitSceneItemAtPoint(
 
 export function clipIsPictureKind(kind: ClipKind | undefined): boolean {
   return kind === "video" || kind === "image";
-}
-
-/**
- * Image assets often have no stored width/height. Probe natural size from the
- * signed URL so the fitted rect matches the compositor still.
- */
-export function useProbedImageSizes(
-  clips: readonly EditorClip[],
-  mediaById: ReadonlyMap<string, EditorMediaItem>,
-): Readonly<Record<string, { width: number; height: number }>> {
-  const [probed, setProbed] = useState<
-    Record<string, { width: number; height: number }>
-  >({});
-  const probedRef = useRef(probed);
-  probedRef.current = probed;
-  const mediaRef = useRef(mediaById);
-  mediaRef.current = mediaById;
-
-  const missingKey = useMemo(() => {
-    const ids: string[] = [];
-    for (const clip of clips) {
-      if (clip.kind !== "image" || !clip.assetId) continue;
-      if (probed[clip.assetId]) continue;
-      const media = mediaById.get(clip.assetId);
-      if (!media?.url && !media?.thumbnailUrl) continue;
-      ids.push(clip.assetId);
-    }
-    return ids.sort().join(",");
-  }, [clips, mediaById, probed]);
-
-  useEffect(() => {
-    if (!missingKey) return;
-    let cancelled = false;
-    const images: HTMLImageElement[] = [];
-    for (const assetId of missingKey.split(",")) {
-      if (probedRef.current[assetId]) continue;
-      const media = mediaRef.current.get(assetId);
-      const url = media?.url || media?.thumbnailUrl;
-      if (!url) continue;
-      const img = new Image();
-      images.push(img);
-      img.onload = () => {
-        if (cancelled) return;
-        const width = img.naturalWidth;
-        const height = img.naturalHeight;
-        if (width < 2 || height < 2) return;
-        setProbed((current) => {
-          const prev = current[assetId];
-          if (prev?.width === width && prev?.height === height) return current;
-          return { ...current, [assetId]: { width, height } };
-        });
-      };
-      img.src = url;
-    }
-    return () => {
-      cancelled = true;
-      for (const img of images) {
-        img.onload = null;
-        img.src = "";
-      }
-    };
-  }, [missingKey]);
-
-  return probed;
 }

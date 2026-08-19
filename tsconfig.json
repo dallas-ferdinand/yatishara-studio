@@ -26,12 +26,22 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    "**/*.js",
+    "next.config.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.js",
+    "src/**/*.mts",
+    "packages/studio-tools/**/*.js",
+    "services/studio-ffmpeg-worker/**/*.ts",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "packages/studio-mcp", "mobile"]
+  "exclude": [
+    "node_modules",
+    "packages/studio-mcp",
+    "mobile",
+    "convex",
+    "out",
+    "services/studio-agent"
+  ]
 }

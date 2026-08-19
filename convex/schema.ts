@@ -1168,6 +1168,32 @@ export default defineSchema({
     resultAssetId: v.optional(v.id("assets")),
     createdAt: v.number(),
     updatedAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_project", ["ownerId", "projectId"]),
+
+  /**
+   * Off-Convex ffmpeg work the UI/API still awaits (clip download, speed, frames).
+   * Export uses exportJobs; edit-proxy uses mediaProxyJobs.
+   */
+  ffmpegWorkJobs: defineTable({
+    ownerId: v.optional(v.id("users")),
+    kind: v.union(
+      v.literal("clip-download"),
+      v.literal("speed"),
+      v.literal("natural-speed"),
+      v.literal("pull-frame"),
+      v.literal("sample-frames"),
+    ),
+    status: v.union(
+      v.literal("running"),
+      v.literal("done"),
+      v.literal("error"),
+    ),
+    error: v.optional(v.string()),
+    result: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
   }).index("by_owner", ["ownerId"]),
 
   /** Public creative identity — separate from private account details on users. */

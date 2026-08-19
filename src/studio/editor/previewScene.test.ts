@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { contentRectForTransform, overlaySourceSize } from "./clipTransform";
+import { picturePaintedRect } from "./playback/compositor-2d";
 import {
   hitSceneItemAtPoint,
   pictureSourceSize,
@@ -67,6 +68,22 @@ describe("sceneItemsBottomToTop", () => {
     expect(
       sceneItemsBottomToTop(project, 1).map((item) => item.clip.id),
     ).toEqual(["movie"]);
+  });
+
+  it("picks stills on leftover image-kind overlay lanes", () => {
+    const project: EditorProject = {
+      name: "legacy-lane",
+      folderId: "f",
+      duration: 8,
+      tracks: [
+        { id: "overlay", kind: "image" as never, label: "Image" },
+        { id: "track-v1", kind: "video", label: "Main" },
+      ],
+      clips: [clip("sheet", "overlay"), clip("movie", "track-v1", "video")],
+    };
+    expect(
+      sceneItemsTopToBottom(project, 1).map((item) => item.clip.id),
+    ).toEqual(["sheet", "movie"]);
   });
 });
 
@@ -284,7 +301,7 @@ describe("hitSceneItemAtPoint", () => {
     ).toBe("sheet");
   });
 
-  it("does not trust catalog dimensions for stills until decoded", () => {
+  it("does not invent a canvas-sized box for stills until decoded", () => {
     const still: EditorClip = clip("sheet", "track-v1");
     const catalog = new Map<string, EditorMediaItem>([
       [
@@ -298,23 +315,19 @@ describe("hitSceneItemAtPoint", () => {
         },
       ],
     ]);
-    expect(pictureSourceSize(still, catalog, {}, 1280, 720)).toEqual({
-      width: 1280,
-      height: 720,
-    });
+    expect(pictureSourceSize(still, catalog, {}, 1280, 720)).toBeNull();
     expect(
       pictureSourceSize(
         still,
         catalog,
-        { sheet: { width: 1920, height: 1080 } },
+        { sheet: { width: 720, height: 1280 } },
         1280,
         720,
-        { sheet: { width: 720, height: 1280 } },
       ),
     ).toEqual({ width: 720, height: 1280 });
   });
 
-  it("hits a portrait still at the top even when catalog size is landscape", () => {
+  it("hits a portrait still from the painted quad, not catalog size", () => {
     const project: EditorProject = {
       name: "mismatch",
       folderId: "f",
@@ -334,10 +347,48 @@ describe("hitSceneItemAtPoint", () => {
         },
       ],
     ]);
+    const painted = [
+      {
+        ...picturePaintedRect(1280, 720, 720, 1280, {
+          scale: 1,
+          x: 0,
+          y: 0,
+          rotation: 0,
+        }, "contain"),
+        clipId: "sheet",
+      },
+    ];
     expect(
-      hitSceneItemAtPoint(0.5, 0.08, project, 1, catalog, {}, 1280, 720, {
-        sheet: { width: 720, height: 1280 },
-      })?.clip.id,
+      hitSceneItemAtPoint(0.5, 0.08, project, 1, catalog, {}, 1280, 720, painted)
+        ?.clip.id,
+    ).toBe("sheet");
+    expect(
+      hitSceneItemAtPoint(0.5, 0.08, project, 1, catalog, {}, 1280, 720)?.clip.id,
+    ).toBe("sheet");
+  });
+
+  it("does not punch through a still to the video underneath before decode", () => {
+    const project: EditorProject = {
+      name: "overlay",
+      folderId: "f",
+      duration: 8,
+      tracks: [
+        { id: "top", kind: "video", label: "Top" },
+        { id: "track-v1", kind: "video", label: "Main" },
+      ],
+      clips: [clip("sheet", "top"), clip("movie", "track-v1", "video")],
+    };
+    expect(
+      hitSceneItemAtPoint(
+        0.5,
+        0.5,
+        project,
+        1,
+        new Map(),
+        {},
+        1280,
+        720,
+      )?.clip.id,
     ).toBe("sheet");
   });
 

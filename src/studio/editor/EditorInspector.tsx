@@ -1,10 +1,11 @@
 // @ts-nocheck
 "use client";
 
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { isIdentitySpeed } from "../../../convex/lib/naturalAudioSpeed";
 import {
   AlignCenter,
@@ -42,6 +43,7 @@ import {
   Underline,
   Gauge,
   Volume2,
+  X,
   ZoomIn,
 } from "lucide-react";
 import { StudioColorPicker } from "./StudioColorPicker";
@@ -486,44 +488,51 @@ function ExportProgressPill({
   status,
   label,
   progress,
+  emphasizePercent = false,
+  onCancel,
   onDismiss,
 }) {
   const pct =
     status === "done" || status === "error"
       ? 100
       : Math.max(0, Math.min(100, Number(progress) || 0));
+  const action = onCancel || onDismiss;
   return (
     <div
-      className={`desk-upload-pill desk-upload-pill--${status}`}
+      className={`studio-editor-export-meter studio-editor-export-meter--${status}${
+        emphasizePercent ? " is-running" : ""
+      }`}
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={pct}
       aria-label={label}
-      title={label}
     >
-      <div className="desk-upload-pill-track">
-        <div
-          className={`desk-upload-pill-fill${status === "uploading" && pct < 2 ? " is-indeterminate" : ""}`}
-          style={status === "uploading" && pct < 2 ? undefined : { width: `${pct}%` }}
-        />
-        <div className="desk-upload-pill-content">
-          <span className="desk-upload-pill-text">{label}</span>
-          {onDismiss ? (
-            <div className="desk-upload-pill-actions">
-              <button
-                type="button"
-                className="desk-upload-pill-btn desk-upload-pill-dismiss"
-                aria-label="Dismiss"
-                title="Dismiss"
-                onClick={onDismiss}
-              >
-                ×
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
+      <div
+        className={`studio-editor-export-meter-fill${
+          status === "uploading" && pct < 2 ? " is-indeterminate" : ""
+        }`}
+        style={status === "uploading" && pct < 2 ? undefined : { width: `${pct}%` }}
+      />
+      <span className="studio-editor-export-meter-label">{label}</span>
+      {emphasizePercent ? (
+        <span className="studio-editor-export-meter-pct">{Math.round(pct)}%</span>
+      ) : (
+        <span className="studio-editor-export-meter-pct" aria-hidden="true" />
+      )}
+      {action ? (
+        <button
+          type="button"
+          className="studio-editor-export-meter-x"
+          aria-label={onCancel ? "Cancel export" : "Dismiss"}
+          title={onCancel ? "Cancel" : "Dismiss"}
+          onClick={action}
+        >
+          <X size={12} strokeWidth={2.25} aria-hidden="true" />
+        </button>
+      ) : (
+        <span className="studio-editor-export-meter-x-spacer" aria-hidden="true" />
+      )}
     </div>
   );
 }
@@ -548,9 +557,10 @@ function ExportPanel({
   audioFormat,
   filename,
   exporting,
-  exportProgress,
-  exportPhase,
-  exportError,
+  exportJobId = null,
+  exportProgress: exportProgressLocal,
+  exportPhase: exportPhaseLocal,
+  exportError: exportErrorLocal,
   exportResultName,
   canExportVideo,
   canExportAudio,
@@ -562,9 +572,20 @@ function ExportPanel({
   onFilenameChange,
   onExport,
   onDismissExport,
+  onCancelExport,
   onCloseExport,
   onUpdateProject,
 }) {
+  const exportJob = useQuery(
+    api.exportJobs.get,
+    exportJobId ? { jobId: exportJobId } : "skip",
+  );
+  const exportProgress = exportJob?.progress ?? exportProgressLocal;
+  const exportPhase = exportJob?.phase || exportPhaseLocal;
+  const exportError =
+    (exportJob?.status === "error" && exportJob.error
+      ? friendlyConvexError(exportJob.error, exportJob.error)
+      : "") || exportErrorLocal;
   const frameRatio = normalizeFrameRatio(project.frameRatio);
   const size = exportSizeForRatioAndResolution(frameRatio, resolution);
   const projectName = project.name?.trim() || "export";
@@ -658,17 +679,15 @@ function ExportPanel({
                 exportError ? "error" : exporting ? "uploading" : "done"
               }
               progress={exportProgress}
+              emphasizePercent={Boolean(exporting && !exportError)}
               label={
                 exportError
                   ? exportError
                   : exporting
-                    ? `${exportPhase || "Exporting…"}${
-                        typeof exportProgress === "number" && exportProgress > 0
-                          ? ` · ${Math.round(exportProgress)}%`
-                          : ""
-                      }`
+                    ? "Exporting"
                     : `Done · ${exportResultName || namePlaceholder}`
               }
+              onCancel={exporting && !exportError ? onCancelExport : undefined}
               onDismiss={exporting ? undefined : onDismissExport}
             />
           </div>
@@ -964,6 +983,7 @@ export function EditorInspector({
   exportAudioFormat = "mp3",
   exportFilename = "",
   exporting = false,
+  exportJobId = null,
   exportProgress = 0,
   exportPhase = "",
   exportError = "",
@@ -978,6 +998,7 @@ export function EditorInspector({
   onExportFilenameChange,
   onExport,
   onDismissExport,
+  onCancelExport,
   onCloseExport,
 }) {
   const joint = jointByKey(project, jointKey);
@@ -1018,6 +1039,7 @@ export function EditorInspector({
             audioFormat={exportAudioFormat}
             filename={exportFilename}
             exporting={exporting}
+            exportJobId={exportJobId}
             exportProgress={exportProgress}
             exportPhase={exportPhase}
             exportError={exportError}
@@ -1032,6 +1054,7 @@ export function EditorInspector({
             onFilenameChange={onExportFilenameChange}
             onExport={onExport}
             onDismissExport={onDismissExport}
+            onCancelExport={onCancelExport}
             onCloseExport={onCloseExport}
             onUpdateProject={onUpdateProject}
           />

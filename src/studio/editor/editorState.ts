@@ -14,12 +14,17 @@ import {
 } from "./types";
 
 /** Image stills live on video tracks but keep clip.kind === "image". */
+export function trackKindForClipKind(clipKind: ClipKind | undefined): TrackKind {
+  return clipKind === "image" ? "video" : clipKind === "audio" || clipKind === "text"
+    ? clipKind
+    : "video";
+}
+
 export function clipKindCompatibleWithTrack(
   clipKind: ClipKind,
   trackKind: TrackKind,
 ): boolean {
-  if (clipKind === "image") return trackKind === "video";
-  return clipKind === trackKind;
+  return trackKindForClipKind(clipKind) === trackKind;
 }
 
 /** Preserve image kind when placing/normalizing onto a video track. */
@@ -163,7 +168,11 @@ export function normalizeProject(project: EditorProject): EditorProject {
   const seen = new Set<string>();
   const tracks = project.tracks.map((track) => {
     const id = LEGACY_TRACK_MAP[track.id] ?? track.id;
-    return { ...track, id };
+    const kind: TrackKind =
+      track.kind === "audio" || track.kind === "text" || track.kind === "video"
+        ? track.kind
+        : "video";
+    return { ...track, id, kind };
   }).filter((track) => {
     if (seen.has(track.id)) return false;
     seen.add(track.id);
@@ -313,7 +322,7 @@ function trackForClip(tracks: EditorTrack[], clip: Omit<EditorClip, "id">): Edit
     const explicit = tracks.find((track) => track.id === clip.trackId);
     if (explicit) return explicit;
   }
-  const want: TrackKind = clip.kind === "image" ? "video" : clip.kind;
+  const want = trackKindForClipKind(clip.kind);
   return tracks.find((track) => track.kind === want) ?? tracks[0]!;
 }
 
@@ -828,7 +837,11 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       let trackId = action.trackId ?? moving.trackId;
 
       if (action.insertTrackAt !== undefined) {
-        const inserted = insertTrackAt(project, moving.kind, action.insertTrackAt);
+        const inserted = insertTrackAt(
+          project,
+          trackKindForClipKind(moving.kind),
+          action.insertTrackAt,
+        );
         project = inserted.project;
         trackId = inserted.trackId;
       }
@@ -915,8 +928,11 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       let trackId = action.clip.trackId;
 
       if (action.insertTrackAt !== undefined) {
-        const kind = action.clip.kind ?? "video";
-        const inserted = insertTrackAt(project, kind, action.insertTrackAt);
+        const inserted = insertTrackAt(
+          project,
+          trackKindForClipKind(action.clip.kind),
+          action.insertTrackAt,
+        );
         project = inserted.project;
         trackId = inserted.trackId;
       }

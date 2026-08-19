@@ -364,7 +364,7 @@
     "requiresApproval": false,
     "http": {
       "method": "POST",
-      "pathTemplate": "/assistance/briefs/{args}/approve"
+      "pathTemplate": "/assistance/briefs/{briefId}/approve"
     },
     "inputSchema": {
       "type": "object",
@@ -583,7 +583,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/profiles/username-available{username})}"
+      "pathTemplate": "/profiles/username-available"
     },
     "inputSchema": {
       "type": "object",
@@ -2016,6 +2016,28 @@
     "sourceFile": "generations.ts"
   },
   {
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts",
+    "name": "studio_get_help_request",
+    "description": "Get one Help question (username, caption, whether you already posted Value).",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/help-requests/{postId}"
+    }
+  },
+  {
     "name": "studio_get_job",
     "description": "Get a marketplace job detail (events, deliverables, review eligibility).",
     "category": "network",
@@ -2447,7 +2469,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/feed/comments/{parentId}/replies{limit})}"
+      "pathTemplate": "/feed/comments/{parentId}/replies"
     },
     "inputSchema": {
       "type": "object",
@@ -2469,7 +2491,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/feed/posts/{postId}/comments{limit})}"
+      "pathTemplate": "/feed/posts/{postId}/comments"
     },
     "inputSchema": {
       "type": "object",
@@ -2601,7 +2623,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/feed{seedPostId})}"
+      "pathTemplate": "/feed"
     },
     "inputSchema": {
       "type": "object",
@@ -2652,6 +2674,28 @@
       "additionalProperties": true
     },
     "sourceFile": "generations.ts"
+  },
+  {
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": false,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts",
+    "name": "studio_list_help_requests",
+    "description": "List public Help questions you can post Value on (excludes your own). alreadyAnswered=true if you already posted Value on that question.",
+    "category": "social",
+    "scope": "social",
+    "risk": "read",
+    "http": {
+      "method": "GET",
+      "pathTemplate": "/feed/help-requests"
+    }
   },
   {
     "name": "studio_list_jobs_with_peer",
@@ -2755,7 +2799,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/feed/collection{limit})}"
+      "pathTemplate": "/feed/collection"
     },
     "inputSchema": {
       "type": "object",
@@ -2777,7 +2821,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/profiles/me/following{limit})}"
+      "pathTemplate": "/profiles/me/following"
     },
     "inputSchema": {
       "type": "object",
@@ -2843,7 +2887,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/network/jobs/seller${qs ? "
+      "pathTemplate": "/network/jobs/seller"
     },
     "inputSchema": {
       "type": "object",
@@ -2953,7 +2997,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/network/offers/{offerId}/reviews${qs ? "
+      "pathTemplate": "/network/offers/{offerId}/reviews"
     },
     "inputSchema": {
       "type": "object",
@@ -3085,7 +3129,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/profiles/people{limit})}"
+      "pathTemplate": "/profiles/people"
     },
     "inputSchema": {
       "type": "object",
@@ -3129,7 +3173,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/feed/posts{limit})}"
+      "pathTemplate": "/feed/posts"
     },
     "inputSchema": {
       "type": "object",
@@ -3720,7 +3764,7 @@
     "requiresApproval": true,
     "http": {
       "method": "GET",
-      "pathTemplate": "/network/offers/{offerId}/quote${qs ? "
+      "pathTemplate": "/network/offers/{offerId}/quote"
     },
     "inputSchema": {
       "type": "object",
@@ -4234,7 +4278,7 @@
   },
   {
     "name": "studio_share_asset_post",
-    "description": "Post owned image/video to the public profile feed. Args: assetId, optional caption/hashtags. Use for post/share/publish — not advice.",
+    "description": "Publish owned media to the public profile. postKind: post (default), help_request (question), or help_answer (paid Value — needs a screen-recording video ≥1 min, previewStartMs/previewEndMs 10s–5min inside the recording, optional parentRequestPostId). Confirm with the user before publishing.",
     "category": "social",
     "scope": "social",
     "risk": "outbound",
@@ -4334,7 +4378,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/feed/suggest/hashtags{limit})}"
+      "pathTemplate": "/feed/suggest/hashtags"
     },
     "inputSchema": {
       "type": "object",
@@ -4356,7 +4400,7 @@
     "requiresApproval": false,
     "http": {
       "method": "GET",
-      "pathTemplate": "/feed/suggest/people{limit})}"
+      "pathTemplate": "/feed/suggest/people"
     },
     "inputSchema": {
       "type": "object",
@@ -4475,6 +4519,28 @@
     "sourceFile": "messages.ts"
   },
   {
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts",
+    "name": "studio_undo_help_unlock",
+    "description": "Undo a help_answer unlock within ~60s (undoUntil from studio_unlock_help_answer). Refunds credits if still inside the window.",
+    "category": "social",
+    "scope": "social",
+    "risk": "paid",
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/feed/unlocks/{unlockId}/undo"
+    }
+  },
+  {
     "name": "studio_unfollow",
     "description": "Unfollow a public profile by profileId.",
     "category": "social",
@@ -4519,6 +4585,28 @@
     "sourceFile": "network.ts"
   },
   {
+    "role": null,
+    "surfaces": [
+      "agent",
+      "mcp"
+    ],
+    "requiresApproval": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sourceFile": "social.ts",
+    "name": "studio_unlock_help_answer",
+    "description": "Spend credits to unlock a paid help_answer (TT$5 under 1h recording, TT$10 at 1h+). Returns unlockId + undoUntil (~60s). Confirm with the user first — this is a paid spend.",
+    "category": "social",
+    "scope": "social",
+    "risk": "paid",
+    "http": {
+      "method": "POST",
+      "pathTemplate": "/feed/posts/{postId}/unlock"
+    }
+  },
+  {
     "name": "studio_unread_count",
     "description": "Count conversations with unseen inbound messages. Requires messages scope.",
     "category": "messages",
@@ -4542,7 +4630,7 @@
   },
   {
     "name": "studio_unshare_post",
-    "description": "Unshare a previously shared asset from the public profile (by assetId).",
+    "description": "Unshare a previously shared asset from the public profile (by assetId). For a sold help_answer, pass keepPurchasers=true to close new sales while buyers keep their copy.",
     "category": "social",
     "scope": "social",
     "risk": "destructive",

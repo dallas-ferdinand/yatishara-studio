@@ -33,12 +33,20 @@ test('catalog version present', () => {
   assert.ok(catalogVersion());
 });
 
-test('catalog has 222 tools matching MCP registrations', () => {
+test('catalog has 226 tools matching MCP registrations', () => {
   const registered = mcpRegisteredNames();
   const report = catalogParityReport(registered);
   assert.equal(report.missingInCatalog.length, 0, JSON.stringify(report.missingInCatalog));
   assert.equal(report.missingInMcp.length, 0, JSON.stringify(report.missingInMcp));
-  assert.equal(STUDIO_TOOL_CATALOG.length, 222);
+  assert.equal(STUDIO_TOOL_CATALOG.length, 226);
+});
+
+test('catalog HTTP pathTemplates are not mangled template-literal leftovers', () => {
+  for (const tool of STUDIO_TOOL_CATALOG) {
+    const path = tool.http?.pathTemplate;
+    if (!path) continue;
+    assert.equal(/\$\{|\)\}/.test(path), false, `${tool.name} ${path}`);
+  }
 });
 
 test('positive surfaces: agent excludes retired tools', () => {
@@ -124,6 +132,12 @@ test('buildStudioRequest strips dynamic ?{params} and builds real query', () => 
   const resolve = buildStudioRequest('studio_resolve_path', { path: 'Ads/JAV' });
   assert.equal(resolve.method, 'GET');
   assert.equal(resolve.path, '/workspace/resolve-path?path=Ads%2FJAV');
+});
+
+test('studio_list_feed GET does not require seedPostId', () => {
+  const feed = buildStudioRequest('studio_list_feed', { mode: 'forYou', limit: 12 });
+  assert.equal(feed.method, 'GET');
+  assert.equal(feed.path, '/feed?mode=forYou&limit=12');
 });
 
 test('mcp surface includes all tools', () => {

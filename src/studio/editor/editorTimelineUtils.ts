@@ -80,7 +80,8 @@ export function normalizeClipSelection(
 }
 
 export function tracksByKind(project: EditorProject, kind: EditorClip["kind"]) {
-  return project.tracks.filter((track) => track.kind === kind);
+  const trackKind = kind === "image" ? "video" : kind;
+  return project.tracks.filter((track) => track.kind === trackKind);
 }
 
 export function nextTrackId(project: EditorProject, kind: TrackKind): string {
@@ -246,7 +247,13 @@ export function visibleTracks(project: EditorProject) {
 
 export function pruneEmptyTracks(project: EditorProject): EditorProject {
   const clipTrackIds = new Set(project.clips.map((clip) => clip.trackId));
-  const tracks = project.tracks.filter((track) => clipTrackIds.has(track.id));
+  const tracks = project.tracks
+    .map((track) =>
+      track.kind === "audio" || track.kind === "text" || track.kind === "video"
+        ? track
+        : { ...track, kind: "video" as const },
+    )
+    .filter((track) => clipTrackIds.has(track.id));
 
   if (!tracks.some((track) => track.kind === "video")) {
     tracks.unshift(project.tracks.find((t) => t.kind === "video") ?? { id: "track-v1", kind: "video", label: "V1" });

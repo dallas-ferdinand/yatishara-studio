@@ -115,12 +115,20 @@ function registerSocialTools(server) {
   );
   server.tool(
     "studio_share_asset_post",
-    "Post owned image/video to the public profile feed. Args: assetId, optional caption/hashtags. Use for post/share/publish \u2014 not advice.",
+    "Publish owned media to the public profile. postKind: post (default), help_request (question), or help_answer (paid Value \u2014 needs a screen-recording video \u22651 min, previewStartMs/previewEndMs 10s\u20135min inside the recording, optional parentRequestPostId). Confirm with the user before publishing.",
     {
       assetId: z.string(),
+      assetIds: z.array(z.string()).optional().describe("Extra media on the same post"),
       caption: z.string().optional(),
       hashtags: z.array(z.string()).optional(),
-      keywords: z.array(z.string()).optional()
+      keywords: z.array(z.string()).optional(),
+      voiceAssetId: z.string().optional(),
+      voiceDurationSec: z.number().optional(),
+      postKind: z.enum(["post", "help_request", "help_answer"]).optional(),
+      parentRequestPostId: z.string().optional().describe("Question postId when posting Value (help_answer)"),
+      previewStartMs: z.number().optional().describe("help_answer free preview start (ms)"),
+      previewEndMs: z.number().optional().describe("help_answer free preview end (ms); 10s\u20135min window"),
+      recordingDurationMs: z.number().optional()
     },
     async (args) => jsonResult(
       await studioFetch("/feed/posts", {
@@ -131,11 +139,53 @@ function registerSocialTools(server) {
   );
   server.tool(
     "studio_unshare_post",
-    "Unshare a previously shared asset from the public profile (by assetId).",
-    { assetId: z.string() },
-    async ({ assetId }) => jsonResult(
-      await studioFetch(`/feed/posts/by-asset/${encodeURIComponent(assetId)}`, {
-        method: "DELETE"
+    "Unshare a previously shared asset from the public profile (by assetId). For a sold help_answer, pass keepPurchasers=true to close new sales while buyers keep their copy.",
+    {
+      assetId: z.string(),
+      keepPurchasers: z.boolean().optional()
+    },
+    async ({ assetId, keepPurchasers }) => jsonResult(
+      await studioFetch(
+        `/feed/posts/by-asset/${encodeURIComponent(assetId)}${qs({
+          keepPurchasers: keepPurchasers ? "true" : void 0
+        })}`,
+        { method: "DELETE" }
+      )
+    )
+  );
+  server.tool(
+    "studio_list_help_requests",
+    "List public Help questions you can post Value on (excludes your own). alreadyAnswered=true if you already posted Value on that question.",
+    { limit: z.number().optional() },
+    async ({ limit }) => jsonResult(
+      await studioFetch(`/feed/help-requests${qs({ limit })}`)
+    )
+  );
+  server.tool(
+    "studio_get_help_request",
+    "Get one Help question (username, caption, whether you already posted Value).",
+    { postId: z.string() },
+    async ({ postId }) => jsonResult(
+      await studioFetch(`/feed/help-requests/${encodeURIComponent(postId)}`)
+    )
+  );
+  server.tool(
+    "studio_unlock_help_answer",
+    "Spend credits to unlock a paid help_answer (TT$5 under 1h recording, TT$10 at 1h+). Returns unlockId + undoUntil (~60s). Confirm with the user first \u2014 this is a paid spend.",
+    { postId: z.string() },
+    async ({ postId }) => jsonResult(
+      await studioFetch(`/feed/posts/${encodeURIComponent(postId)}/unlock`, {
+        method: "POST"
+      })
+    )
+  );
+  server.tool(
+    "studio_undo_help_unlock",
+    "Undo a help_answer unlock within ~60s (undoUntil from studio_unlock_help_answer). Refunds credits if still inside the window.",
+    { unlockId: z.string() },
+    async ({ unlockId }) => jsonResult(
+      await studioFetch(`/feed/unlocks/${encodeURIComponent(unlockId)}/undo`, {
+        method: "POST"
       })
     )
   );

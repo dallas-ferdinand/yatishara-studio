@@ -147,6 +147,8 @@ import {
   StudioChatAudioPlayerLoading,
 } from "./StudioChatAudioPlayer";
 import { isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
+import { shouldShowStudioUpdatingOverlay } from "@/studio/lib/studio-live-updating";
+import { StudioUpdatingOverlay } from "@/components/studio-updating-overlay";
 import {
   STUDIO_DEFAULT_TAB_LABELS,
   STUDIO_DEFAULT_TAB_VALUES,
@@ -11062,6 +11064,26 @@ export function StudioShell({
           box-shadow: none;
           background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
           color: var(--color-cursor-text, var(--mos-text));
+        }
+        .studio-files-workspace-tab > .ys-updating-overlay {
+          position: relative;
+          inset: auto;
+          flex: 1 1 0;
+          min-width: 0;
+          height: 100%;
+          z-index: 6;
+        }
+        .studio-files-workspace-tab:has(> .ys-updating-overlay) {
+          flex-direction: row;
+          background: transparent;
+        }
+        .studio-files-workspace-tab:has(> .ys-updating-overlay) > .cursor-explorer-body {
+          flex: 0 0 min(380px, 42%);
+          width: min(380px, 42%);
+          max-width: 46%;
+          min-width: 248px;
+          height: 100%;
+          background: var(--mos-page, var(--mos-panel, #f5f5f7));
         }
         .studio-files-workspace-tab .cursor-explorer-body {
           flex: 1 1 auto;
@@ -23266,6 +23288,15 @@ export function StudioShell({
           flex-direction: column;
           overflow: hidden;
         }
+        .studio-pane-foreground > .ys-updating-overlay {
+          position: absolute;
+          inset: 0;
+          z-index: 5;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--mos-page, #f5f5f7);
+        }
         .studio-pane-foreground.is-covered {
           position: absolute;
           inset: 0;
@@ -27251,6 +27282,7 @@ export function StudioShell({
                   </>
                 }
               />
+              {shouldShowStudioUpdatingOverlay() ? <StudioUpdatingOverlay /> : null}
             </div>
           ) : null}
           <ActivePane
@@ -27450,6 +27482,7 @@ export function StudioShell({
             onOpenEditTab={isVideoEditorPreviewEnabled() ? openEditTab : undefined}
             onOpenAssetTab={(assetId) => openTab(`asset:${assetId}`)}
             onVideoEditProjectSaved={handleVideoEditProjectSaved}
+            editorLocked={shouldShowStudioUpdatingOverlay()}
             activeEditTab={activeTab}
             onOpenPublicProfile={openPublicProfile}
             onOpenProfilePost={openProfilePost}
@@ -34455,6 +34488,7 @@ function ActivePane({
   onOpenAssetTab,
   onEditorStatus,
   onVideoEditProjectSaved,
+  editorLocked = false,
   activeEditTab,
   onOpenPublicProfile,
   onOpenProfilePost,
@@ -34756,6 +34790,12 @@ function ActivePane({
     return null;
   }, [activeTab, activeEntry]);
 
+  const editorTabLocked =
+    editorLocked &&
+    (Boolean(videoEditContext) ||
+      (typeof activeTab === "string" && activeTab.startsWith("files:")) ||
+      activeEntry?.studioKind === "videoEdit");
+
   // Closing the last tab: wallpaper + centered logo only (no composer / pane chrome).
   if (!activeTab) {
     return wrapPane(
@@ -34763,6 +34803,10 @@ function ActivePane({
         <StudioEmptyLogoButton />
       </div>,
     );
+  }
+
+  if (editorTabLocked) {
+    return wrapPane(<StudioUpdatingOverlay />);
   }
 
   if (activeTab.startsWith("create:")) {
@@ -34815,6 +34859,9 @@ function ActivePane({
     );
   }
   if (videoEditContext && (videoEditContext.projectId || videoEditContext.sourceAssetId)) {
+    if (shouldShowStudioUpdatingOverlay()) {
+      return wrapPane(<StudioUpdatingOverlay />);
+    }
     // Prefer the edit's own folder (tab key / entry). Fall back to the browse
     // folder only for brand-new edits that have not been placed yet.
     const folderId =
@@ -34825,6 +34872,9 @@ function ActivePane({
       return wrapPane(
         <div className="p-6 text-sm text-cursor-muted">Choose a folder with clips to edit.</div>,
       );
+    }
+    if (shouldShowStudioUpdatingOverlay()) {
+      return wrapPane(<StudioUpdatingOverlay />);
     }
     return wrapPane(
       <StudioVideoEditor
@@ -34971,7 +35021,7 @@ function ActivePane({
     );
   }
   if (activeEntry.studioKind === "videoEdit") {
-    return wrapPane(null);
+    return wrapPane(editorLocked ? <StudioUpdatingOverlay /> : null);
   }
   if (activeEntry.studioKind === "element") {
     return wrapPane(

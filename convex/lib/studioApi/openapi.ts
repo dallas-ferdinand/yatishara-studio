@@ -2,7 +2,7 @@ export const STUDIO_API_OPENAPI = {
   openapi: "3.1.0",
   info: {
     title: "Yatishara Studio API",
-    version: "1.5.0",
+    version: "1.6.0",
     description:
       "REST API for folders, assets, documents, elements, audio, assistance, video edits, AI generation, and direct messaging. Authenticate with Bearer ysk_live_… keys. Messaging routes require the messages scope and are not limited to the API key sandbox folder.",
   },
@@ -215,7 +215,10 @@ export const STUDIO_API_OPENAPI = {
     "/feed": { get: { summary: "Ranked feed (?mode=forYou|following&limit=&seedPostId=)" } },
     "/feed/posts": {
       get: { summary: "Public posts for username (?username=&limit=)" },
-      post: { summary: "Share asset to public feed" },
+      post: {
+        summary:
+          "Share asset to public feed (postKind post|help_request|help_answer; help_answer needs preview range)",
+      },
     },
     "/feed/collection": { get: { summary: "Owner collection (?kind=saved|liked|shared)" } },
     "/feed/posts/by-asset/{assetId}": { delete: { summary: "Unshare asset from public profile" } },
@@ -227,6 +230,16 @@ export const STUDIO_API_OPENAPI = {
     "/feed/posts/{postId}/save": { post: { summary: "Toggle save" } },
     "/feed/posts/{postId}/share": { post: { summary: "Record share engagement" } },
     "/feed/posts/{postId}/view": { post: { summary: "Record post view" } },
+    "/feed/posts/{postId}/unlock": {
+      post: { summary: "Unlock a paid help_answer (credits)" },
+    },
+    "/feed/help-requests": {
+      get: { summary: "List Help questions the owner can post Value on" },
+    },
+    "/feed/help-requests/{postId}": { get: { summary: "One Help question context" } },
+    "/feed/unlocks/{unlockId}/undo": {
+      post: { summary: "Undo a help_answer unlock within ~60s" },
+    },
     "/feed/posts/{postId}/comments": {
       get: { summary: "List top-level comments" },
       post: { summary: "Add comment or reply" },
@@ -407,6 +420,10 @@ export const STUDIO_API_ROOT = {
     "POST /feed/posts/:postId/save",
     "POST /feed/posts/:postId/share",
     "POST /feed/posts/:postId/view",
+    "POST /feed/posts/:postId/unlock",
+    "GET /feed/help-requests",
+    "GET /feed/help-requests/:postId",
+    "POST /feed/unlocks/:unlockId/undo",
     "GET|POST /feed/posts/:postId/comments",
     "GET /feed/comments/:parentId/replies",
     "POST /feed/comments/:commentId/like",

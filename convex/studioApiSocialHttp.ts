@@ -282,19 +282,39 @@ export const studioApiSocial = httpAction(async (ctx, request) => {
       if (auth instanceof Response) return finish(auth);
       const body = await readJsonBody<{
         assetId?: string;
+        assetIds?: string[];
         caption?: string;
         hashtags?: string[];
         keywords?: string[];
+        voiceAssetId?: string;
+        voiceDurationSec?: number;
+        postKind?: "post" | "help_request" | "help_answer";
+        parentRequestPostId?: string;
+        previewStartMs?: number;
+        previewEndMs?: number;
+        recordingDurationMs?: number;
       }>(request);
-      if (!body.assetId) {
+      if (!body.assetId && !(body.assetIds && body.assetIds.length)) {
         return finish(errorResponse("assetId is required", 400));
       }
       const result = await ctx.runMutation(internal.profiles.shareAssetForApi, {
         userId: auth.userId,
-        assetId: asId("assets", body.assetId),
+        assetId: body.assetId ? asId("assets", body.assetId) : undefined,
+        assetIds: body.assetIds?.map((id) => asId("assets", id)),
         caption: body.caption,
         hashtags: body.hashtags,
         keywords: body.keywords,
+        voiceAssetId: body.voiceAssetId
+          ? asId("assets", body.voiceAssetId)
+          : undefined,
+        voiceDurationSec: body.voiceDurationSec,
+        postKind: body.postKind,
+        parentRequestPostId: body.parentRequestPostId
+          ? asId("profilePosts", body.parentRequestPostId)
+          : undefined,
+        previewStartMs: body.previewStartMs,
+        previewEndMs: body.previewEndMs,
+        recordingDurationMs: body.recordingDurationMs,
       });
       return finish(jsonResponse(result));
     }
@@ -321,9 +341,15 @@ export const studioApiSocial = httpAction(async (ctx, request) => {
     if (request.method === "DELETE" && unshareMatch) {
       const auth = await authFor("social");
       if (auth instanceof Response) return finish(auth);
+      const body = await readJsonBody<{ keepPurchasers?: boolean }>(request).catch(
+        () => ({}) as { keepPurchasers?: boolean },
+      );
       await ctx.runMutation(internal.profiles.unshareAssetForApi, {
         userId: auth.userId,
         assetId: asId("assets", unshareMatch[1]!),
+        keepPurchasers:
+          body.keepPurchasers === true ||
+          url.searchParams.get("keepPurchasers") === "true",
       });
       return finish(jsonResponse({ ok: true }));
     }
@@ -421,8 +447,49 @@ export const studioApiSocial = httpAction(async (ctx, request) => {
       return finish(jsonResponse(result));
     }
 
+    if (request.method === "GET" && route === "feed/help-requests") {
+      const auth = await authFor("social");
+      if (auth instanceof Response) return finish(auth);
+      const requests = await ctx.runQuery(
+        internal.profiles.listHelpRequestsToAnswerForApi,
+        {
+          userId: auth.userId,
+          limit: parseOptionalNumber(url.searchParams.get("limit")),
+        },
+      );
+      return finish(jsonResponse({ requests }));
+    }
+
+    const helpRequestMatch = route.match(/^feed\/help-requests\/([^/]+)$/);
+    if (request.method === "GET" && helpRequestMatch) {
+      const auth = await authFor("social");
+      if (auth instanceof Response) return finish(auth);
+      const result = await ctx.runQuery(
+        internal.profiles.getHelpRequestContextForApi,
+        {
+          userId: auth.userId,
+          postId: asId("profilePosts", helpRequestMatch[1]!),
+        },
+      );
+      if (!result) {
+        return finish(errorResponse("Question not found", 404));
+      }
+      return finish(jsonResponse(result));
+    }
+
+    const undoUnlockMatch = route.match(/^feed\/unlocks\/([^/]+)\/undo$/);
+    if (request.method === "POST" && undoUnlockMatch) {
+      const auth = await authFor("social");
+      if (auth instanceof Response) return finish(auth);
+      const result = await ctx.runMutation(internal.profiles.undoUnlockForApi, {
+        userId: auth.userId,
+        unlockId: asId("profileUnlocks", undoUnlockMatch[1]!),
+      });
+      return finish(jsonResponse(result));
+    }
+
     const postActionMatch = route.match(
-      /^feed\/posts\/([^/]+)\/(like|save|share|view|comments|media)$/,
+      /^feed\/posts\/([^/]+)\/(like|save|share|view|comments|media|unlock)$/,
     );
     if (postActionMatch) {
       const auth = await authFor("social");
@@ -468,6 +535,14 @@ export const studioApiSocial = httpAction(async (ctx, request) => {
       if (action === "view" && request.method === "POST") {
         const result = await ctx.runMutation(
           internal.profiles.recordPostViewForApi,
+          { userId: auth.userId, postId },
+        );
+        return finish(jsonResponse(result));
+      }
+
+      if (action === "unlock" && request.method === "POST") {
+        const result = await ctx.runMutation(
+          internal.profiles.unlockHelpAnswerForApi,
           { userId: auth.userId, postId },
         );
         return finish(jsonResponse(result));

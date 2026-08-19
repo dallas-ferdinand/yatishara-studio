@@ -1,30 +1,10 @@
 "use node";
 
-import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { createWriteStream } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
-import { promisify } from "node:util";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-import { copyObject, putObject, signBunnyCdnUrl } from "./lib/bunny";
-
-const execFileAsync = promisify(execFile);
-
-async function downloadToFile(url: string, path: string): Promise<void> {
-  const response = await fetch(url);
-  if (!response.ok || !response.body) {
-    throw new Error(`Preview source download failed (${response.status}).`);
-  }
-  await pipeline(
-    Readable.fromWeb(response.body as import("node:stream/web").ReadableStream),
-    createWriteStream(path),
-  );
-}
+import { copyObject } from "./lib/bunny";
+import { convexSiteOrigin, enqueueFfmpegJob } from "./lib/ffmpegWorkerClient";
 
 export const cutHelpAnswerPreview = internalAction({
   args: { postId: v.id("profilePosts") },
@@ -35,54 +15,16 @@ export const cutHelpAnswerPreview = internalAction({
       { postId: args.postId },
     );
     if (!prepared) return null;
-    const workDir = await mkdtemp(join(tmpdir(), "yatishara-help-preview-"));
-    const sourcePath = join(workDir, "source");
-    const outputPath = join(workDir, "preview.mp4");
     try {
-      const expires = Math.floor(Date.now() / 1000) + 30 * 60;
-      const sourceUrl = await signBunnyCdnUrl(prepared.sourceBunnyPath, expires);
-      await downloadToFile(sourceUrl, sourcePath);
-      await execFileAsync(
-        "ffmpeg",
-        [
-          "-y",
-          "-ss",
-          String(prepared.startSec),
-          "-i",
-          sourcePath,
-          "-t",
-          String(prepared.durationSec),
-          "-map",
-          "0:v:0",
-          "-map",
-          "0:a:0?",
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "23",
-          "-c:a",
-          "aac",
-          "-b:a",
-          "128k",
-          "-movflags",
-          "+faststart",
-          outputPath,
-        ],
-        { maxBuffer: 8 * 1024 * 1024, timeout: 15 * 60_000 },
-      );
-      const bytes = new Uint8Array(await readFile(outputPath));
-      await putObject({
-        path: prepared.destBunnyPath,
-        body: bytes,
-        contentType: "video/mp4",
-      });
-      await ctx.runMutation(internal.helpAnswerInternal.completePreviewAsset, {
-        previewAssetId: prepared.previewAssetId,
+      await enqueueFfmpegJob({
+        kind: "help-preview",
+        convexSiteUrl: convexSiteOrigin(),
         postId: prepared.postId,
-        byteSize: bytes.byteLength,
-        durationSeconds: prepared.durationSec,
+        previewAssetId: prepared.previewAssetId,
+        sourceBunnyPath: prepared.sourceBunnyPath,
+        destBunnyPath: prepared.destBunnyPath,
+        startSec: prepared.startSec,
+        durationSec: prepared.durationSec,
       });
     } catch (error) {
       await ctx.runMutation(internal.helpAnswerInternal.failPreviewAsset, {
@@ -92,8 +34,6 @@ export const cutHelpAnswerPreview = internalAction({
       const message =
         error instanceof Error ? error.message : "Preview clip failed.";
       console.error("cutHelpAnswerPreview", message);
-    } finally {
-      await rm(workDir, { recursive: true, force: true });
     }
     return null;
   },

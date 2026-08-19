@@ -27,6 +27,7 @@ import type {
   LivePreviewChrome,
   TransformChromeHandle,
 } from "./PreviewPointerRouter";
+import type { PaintedSceneHit } from "./previewScene";
 
 type PreviewTransformOverlayProps = {
   clip: EditorClip;
@@ -35,6 +36,7 @@ type PreviewTransformOverlayProps = {
   decodedHeight?: number;
   canvasWidth: number;
   canvasHeight: number;
+  paintedRect?: PaintedSceneHit | null;
   selected: boolean;
   playing: boolean;
   liveChromeRef: RefObject<LivePreviewChrome | null>;
@@ -51,6 +53,7 @@ export const PreviewTransformOverlay = forwardRef<
     decodedHeight,
     canvasWidth,
     canvasHeight,
+    paintedRect,
     selected,
     playing,
     liveChromeRef,
@@ -78,7 +81,7 @@ export const PreviewTransformOverlay = forwardRef<
   const sourceW = source?.width ?? 0;
   const sourceH = source?.height ?? 0;
   const fitMode = resolveFitMode(clip.effects, clip.kind);
-  const rect = source
+  const computed = source
     ? contentRectForTransform(
         display,
         canvasWidth,
@@ -88,6 +91,17 @@ export const PreviewTransformOverlay = forwardRef<
         fitMode,
       )
     : null;
+  const rect =
+    livePose && computed
+      ? computed
+      : paintedRect
+        ? {
+            left: paintedRect.left,
+            top: paintedRect.top,
+            width: paintedRect.width,
+            height: paintedRect.height,
+          }
+        : computed;
 
   const latestRef = useRef({
     canvasWidth,

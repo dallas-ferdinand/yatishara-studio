@@ -2772,8 +2772,9 @@ export function ProfilePostViewer({
     const feedNext = withProfile(feedNextList[0] ?? null);
 
     if (feedPrev && feedNext && feedPrev._id === feedNext._id) {
+      // Keep next on the natural post id so it can become current without remount.
+      upsert(feedNext, "next");
       upsert(feedPrev, "prev", `${feedPrev._id}:prev`);
-      upsert(feedNext, "next", `${feedNext._id}:next`);
     } else {
       upsert(feedPrev, "prev");
       upsert(feedNext, "next");
@@ -2895,23 +2896,19 @@ export function ProfilePostViewer({
                       </>
                     );
                   }
-                  if (!isInteractiveSlide) {
-                    return (
-                      <div className="profile-post-slide-split is-static">
-                        <div className="profile-post-media-panel">{player}</div>
-                        <div className="profile-post-caption-panel">{caption}</div>
-                      </div>
-                    );
-                  }
+                  // Same PanelGroup tree for current and neighbors — swapping
+                  // static div ↔ PanelGroup remounted FeedMedia after every switch.
                   return (
                     <PanelGroup
                       direction="vertical"
-                      id="studio-feed-caption"
+                      id={`studio-feed-caption-${key}`}
                       autoSaveId="studio-feed-caption-v"
-                      className="profile-post-slide-split"
+                      className={`profile-post-slide-split${
+                        isInteractiveSlide ? "" : " is-static"
+                      }`}
                     >
                       <Panel
-                        id="studio-feed-media"
+                        id={`studio-feed-media-${key}`}
                         order={1}
                         defaultSize={68}
                         minSize={36}
@@ -2922,9 +2919,10 @@ export function ProfilePostViewer({
                       <PanelResizeHandle
                         className="cursor-resize-v profile-post-feed-resize"
                         hitAreaMargins={{ coarse: 20, fine: 12 }}
+                        disabled={!isInteractiveSlide}
                       />
                       <Panel
-                        id="studio-feed-caption-pane"
+                        id={`studio-feed-caption-pane-${key}`}
                         order={2}
                         defaultSize={32}
                         minSize={16}
