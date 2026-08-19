@@ -1422,7 +1422,7 @@
   top: 34%;
   bottom: 34%;
   width: 5px;
-  background: #111314;
+  background: var(--mos-text, var(--color-cursor-text, #111314));
   border: none;
   border-radius: 6px;
   box-sizing: border-box;
@@ -3304,7 +3304,7 @@
   align-items: center;
   justify-content: center;
   background: transparent;
-  border-right: 1px solid #e4e7ec;
+  border-right: 1px solid var(--mos-border, var(--color-cursor-border));
   flex-shrink: 0;
   align-self: stretch;
 }
@@ -3318,7 +3318,7 @@
   width: 100%;
   height: 100%;
   padding: 0 4px;
-  color: #b0b6c0;
+  color: var(--mos-muted, var(--color-cursor-muted));
   box-sizing: border-box;
 }
 
@@ -3328,15 +3328,15 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: #9aa1ad;
+  color: var(--mos-muted, var(--color-cursor-muted));
   display: grid;
   place-items: center;
   transition: background 0.12s ease, color 0.12s ease;
 }
 
 .studio-editor-track-btn:hover {
-  background: var(--mos-bg, #ececf0);
-  color: #5c6570;
+  background: var(--mos-hover, var(--mos-bg));
+  color: var(--mos-text, var(--color-cursor-text));
 }
 
 .studio-editor-track-btn.is-static {
@@ -3596,7 +3596,7 @@ body.is-clip-pickup .studio-editor-track-insert-wrap,
   height: 22px;
   flex: 0 0 auto;
   cursor: grab;
-  color: #b0b6c0;
+  color: color-mix(in srgb, var(--color-cursor-text, var(--mos-text)) 55%, transparent);
   border-radius: 6px;
 }
 
@@ -4091,7 +4091,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   top: 34%;
   bottom: 34%;
   width: 5px;
-  background: #111314;
+  background: var(--mos-text, var(--color-cursor-text, #111314));
   border: none;
   border-radius: 6px;
   box-sizing: border-box;

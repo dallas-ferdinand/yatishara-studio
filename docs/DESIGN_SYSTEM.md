@@ -352,6 +352,10 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 - Surfaces: menu, Settings, History, Files dock (when open), DM peer actions —
   canvas L2 `--mos-plate`, handle band L1 `--mos-page` (whitish), top radii
   `18px` (peek) / `14px` (full), grab handle `44×5`.
+  Grab fill is `color-mix(in srgb, var(--mos-text) 40%, transparent)` — never
+  `--color-cursor-text-bright` (must be defined in `applyDeskTokens` **and** the
+  boot script; an unset var inside `color-mix` makes the pill vanish in dark)
+  and never a light-only `#1c1c1e` override.
 - Shadow token: `--studio-mobile-sheet-shadow` (inset top highlight + upward soft lift).
   Do **not** use inset glass panels with title+X for Settings on mobile.
 - Menu / History / Settings share peek↔full drag: bottom-anchored, band-capped under
@@ -367,9 +371,13 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
   Scoped via `.is-app-grid`. **Record** (after Post) opens the same
   Record screen + mic controls as Value compose, as a floating bar on the
   current tab — it does **not** start capture until you press Record screen.
-  Mic on/off is chosen there before the take. While live the menu tile reads
+  Mic on/off is chosen there before the take. Floating bar: tight 4px plate
+  pad, Record/Stop with **no nested stroke** and 8px side pad (not the 14px
+  compose chip), icon X with no border. While live the menu tile reads
   **Stop rec**; while the bar is up it reads **Hide rec**. Finished takes
-  save to Screen Recordings. Desktop only. Memory: **790**, **1482**.
+  save to Screen Recordings. Works where the browser has `getDisplayMedia`
+  (desktop + Chrome on Android). iOS Safari cannot capture the screen.
+  Memory: **790**, **1482**.
 - **Desktop header** keeps New + Credits + Avatar + Menu only. Feed / Network /
   Messages / Files / History / Settings / Admin / Full screen live in the same
   app grid via `.studio-mobile-app-menu-sheet.is-desktop-popover` (top-right
@@ -636,9 +644,12 @@ left/right through an author’s profile posts. Overflowing copy uses the
 caption scroller, not click-to-scroll. 16px fades pin to the top and bottom of
 the caption pane (they do not scroll with the copy). Hairline on the caption
 pane (flush under the video); title sits 8px below it.
-Question / Value is a compact plate chip beside the name; parent Value adds
+Question / Value is a compact `--mos-plate-strong` chip beside the name; parent Value adds
 `· for @user` on the time line. Paid Value lock is an L2 `--mos-plate` card
 on the player (lock mark + price + accent Unlock) — never white text on a dim.
+Feed / compose **#/@ chips** (`.post-compose-inline-chip`) are L3
+`--mos-plate-strong` fill, no stroke — L2 `--mos-plate` disappears on caption
+and compose rails in dark. Memory: **1471**.
 
 **Create post** (`PostComposeTab`): type chips live in the 32px toolbar and
 match `.studio-admin-head-tab` (24px nested pills, Lucide leading icons, idle
@@ -765,6 +776,8 @@ blue, review/amber for receipts, soft rose for failed (never harsh bordered red)
 
 **Don't**
 - Hardcode light-only greys (`#ececf0`, `#d4d4da`, `#f5f5f7`) behind `[data-appearance="light"]`.
+- Put sheet grabs on unset `--color-cursor-text-bright` or a `#1c1c1e` light-only mix.
+- Put feed/compose #/@ chips on L2 `--mos-plate` (they vanish in dark — use L3 `--mos-plate-strong`).
 - Hardcode `#fff`/`#000` borders on glass or chrome.
 - Put a stroke/border on dropdown menus (fill + shadow only).
 - Use `Icon name="chevDown"` on selects.
@@ -805,4 +818,5 @@ Update memory when you change a rule here:
 - Button/chip heights — profile compact actions **28px** / chrome heads **32px** / form primaries 34–36px (`docs/DESIGN_SYSTEM.md` §5b).
 - **668** (pinned) — Chrome + inline panel heads = `--cursor-head-h` 32px (DM New label, Offers steps, etc.); close 24px.
 - **1388** — Agent tools: vertical rows while live; after the turn, one **Worked 2.5 mins** disclosure (not summary chips).
+- **1471** — Feed/post #/@ chips = L3 `--mos-plate-strong` fill, no stroke.
 - **Preview load quality** — Video editor preview header center `CursorSelect` (40/60/80/100%, default **60%**), same plate greys as zoom controls. ≤60% loads 720 edit proxy; ≥80% prefers 1080 proxy. Also drives opened-image Bunny `signedReadUrl.quality`. Downloads / generation stay at 100%. Persisted `yatishara-studio-preview-load-quality`.

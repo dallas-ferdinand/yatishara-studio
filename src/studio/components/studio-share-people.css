@@ -214,11 +214,7 @@
   height: 5px;
   margin: 12px auto 10px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-cursor-text-bright) 22%, transparent);
-}
-
-[data-appearance="light"] .studio-share-confirm-sheet-grab {
-  background: color-mix(in srgb, #1c1c1e 22%, transparent);
+  background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 40%, transparent);
 }
 
 .studio-share-confirm-backdrop {

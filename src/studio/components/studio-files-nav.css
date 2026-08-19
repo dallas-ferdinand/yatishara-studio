@@ -325,12 +325,8 @@
   width: 44px;
   height: 5px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-cursor-text-bright) 22%, transparent);
+  background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 40%, transparent);
   pointer-events: none;
-}
-
-[data-appearance="light"] .studio-files-nav-mobile-sheet-grab {
-  background: color-mix(in srgb, #1c1c1e 22%, transparent);
 }
 
 .studio-files-nav-mobile-sheet-body {

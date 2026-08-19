@@ -44,12 +44,12 @@ export function useScreenShareSnapshot() {
 
 export async function startScreenShareRecording(): Promise<boolean> {
   if (!screenShareSupported()) {
-    toast.error("Screen recording is desktop only.");
+    toast.error("This browser can’t capture the screen. Chrome on Android can.");
     return false;
   }
   const result = await screenShareSession.start();
   if (result === "unsupported") {
-    toast.error("Screen recording is desktop only.");
+    toast.error("This browser can’t capture the screen. Chrome on Android can.");
     return false;
   }
   if (result === "cancelled") {
@@ -199,7 +199,7 @@ export function ScreenShareRecorder({
           type="button"
           className="post-compose-btn is-primary"
           onClick={() => void start()}
-          disabled={disabled || busy || !supported}
+          disabled={disabled || busy}
         >
           <Monitor size={14} aria-hidden="true" />
           Record screen
@@ -220,7 +220,9 @@ export function ScreenShareRecorder({
         )}
       </button>
       {!supported && !compact ? (
-        <p className="post-compose-record-hint">Desktop only — no camera.</p>
+        <p className="post-compose-record-hint">
+          Screen capture needs Chrome on Android, or a computer.
+        </p>
       ) : null}
     </div>
   );

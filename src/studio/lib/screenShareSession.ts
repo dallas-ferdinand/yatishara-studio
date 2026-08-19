@@ -111,6 +111,7 @@ function pickRecorderMime(): string | undefined {
     "video/webm;codecs=vp8,opus",
     "video/webm;codecs=vp9,opus",
     "video/webm",
+    "video/mp4",
   ].find((type) => MediaRecorder.isTypeSupported(type));
 }
 
@@ -126,6 +127,39 @@ function createScreenRecorder(stream: MediaStream): MediaRecorder {
   } catch {
     return mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
   }
+}
+
+const DISPLAY_CONSTRAINTS: DisplayMediaStreamOptions[] = [
+  {
+    video: {
+      width: { ideal: 1920, max: 1920 },
+      height: { ideal: 1080, max: 1080 },
+      frameRate: { ideal: 20, max: 24 },
+    },
+    audio: true,
+  },
+  {
+    video: {
+      width: { ideal: 1920, max: 1920 },
+      height: { ideal: 1080, max: 1080 },
+      frameRate: { ideal: 20, max: 24 },
+    },
+    audio: false,
+  },
+  { video: true, audio: true },
+  { video: true, audio: false },
+];
+
+async function acquireDisplayStream(): Promise<MediaStream> {
+  let lastError: unknown;
+  for (const constraints of DISPLAY_CONSTRAINTS) {
+    try {
+      return await navigator.mediaDevices.getDisplayMedia(constraints);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Screen share was cancelled");
 }
 
 type RecordedHandler = (file: File, durationMs: number) => void;
@@ -309,22 +343,7 @@ export const screenShareSession = {
       return "unsupported";
     }
     try {
-      let display: MediaStream;
-      try {
-        display = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            width: { ideal: 1920, max: 1920 },
-            height: { ideal: 1080, max: 1080 },
-            frameRate: { ideal: 20, max: 24 },
-          },
-          audio: true,
-        });
-      } catch {
-        display = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: true,
-        });
-      }
+      const display = await acquireDisplayStream();
       streams.push(display);
       let mixed: MediaStream = display;
       if (includeMic) {

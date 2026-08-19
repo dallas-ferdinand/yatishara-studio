@@ -2394,12 +2394,8 @@ button.studio-cn-book-bar-price.is-discussion.has-preview {
   width: 44px;
   height: 5px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-cursor-text-bright, #111) 22%, transparent);
+  background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text, #111)) 40%, transparent);
   pointer-events: none;
-}
-
-[data-appearance="light"] .studio-cn-book-sheet-grab {
-  background: color-mix(in srgb, #1c1c1e 22%, transparent);
 }
 
 .studio-cn-book-sheet-body {

@@ -356,7 +356,7 @@
   box-shadow: none;
 }
 
-/* Inline chips for #hashtags and @mentions — grey fill, no stroke. */
+/* Inline chips for #hashtags and @mentions — L3 fill, no stroke. */
 .post-compose-inline-chip {
   display: inline-flex;
   align-items: center;
@@ -369,7 +369,7 @@
   vertical-align: middle;
   border-radius: 999px;
   border: 0;
-  background: var(--mos-plate, var(--color-cursor-sidebar));
+  background: var(--mos-plate-strong, var(--mos-plate, var(--color-cursor-sidebar)));
   color: inherit;
   font-size: 0.82em;
   font-weight: 600;
@@ -410,7 +410,7 @@
   padding: 0 0.22em;
   vertical-align: middle;
   text-shadow: none;
-  background: var(--mos-plate, var(--color-cursor-sidebar));
+  background: var(--mos-plate-strong, var(--mos-plate, var(--color-cursor-sidebar)));
   border: 0;
   color: inherit;
 }
@@ -1327,11 +1327,23 @@ body.is-touch-file-drag .post-compose.is-touch-drop-hover .post-compose-mock {
 
 .studio-screen-share-pill.is-controls {
   max-width: min(420px, calc(100vw - 24px));
-  padding: 8px 8px 8px 8px;
+  gap: 4px;
+  padding: 4px;
 }
 
 .studio-screen-share-pill.is-controls .post-compose-record {
   flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.studio-screen-share-pill.is-controls .post-compose-btn {
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+}
+
+.studio-screen-share-pill.is-controls .post-compose-btn.is-ghost {
+  background: var(--mos-plate-strong, var(--pc-surface));
 }
 
 .studio-screen-share-pill-close {

@@ -11780,11 +11780,8 @@ export function StudioShell({
           width: 44px;
           height: 5px;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--color-cursor-text-bright) 22%, transparent);
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 40%, transparent);
           pointer-events: none;
-        }
-        [data-appearance="light"] .studio-mobile-app-menu-sheet-grab {
-          background: color-mix(in srgb, #1c1c1e 22%, transparent);
         }
         /*
           Bottom sheets: canvas + drag-handle top band = same L2 plate grey
@@ -12107,11 +12104,8 @@ export function StudioShell({
           width: 44px;
           height: 5px;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--color-cursor-text-bright) 22%, transparent);
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 40%, transparent);
           pointer-events: none;
-        }
-        [data-appearance="light"] .studio-files-dock-grab {
-          background: color-mix(in srgb, #1c1c1e 22%, transparent);
         }
         /* Keep body laid out while collapsed (height:0 + overflow:hidden).
            visibility:hidden made first open pay a cold "reveal" layout for
@@ -17870,7 +17864,7 @@ export function StudioShell({
           padding: 0;
           border: 0;
           background: transparent;
-          color: color-mix(in srgb, var(--mos-ink, currentColor) 38%, transparent);
+          color: color-mix(in srgb, var(--mos-text, var(--color-cursor-text, currentColor)) 48%, transparent);
           cursor: var(--studio-cursor-resize-nesw, nesw-resize);
           touch-action: none;
         }
@@ -17887,7 +17881,7 @@ export function StudioShell({
         }
         .studio-composer-resize-handle:hover,
         .studio-composer-resize-handle:focus-visible {
-          color: color-mix(in srgb, var(--mos-ink, currentColor) 62%, transparent);
+          color: color-mix(in srgb, var(--mos-text, var(--color-cursor-text, currentColor)) 72%, transparent);
           outline: none;
         }
         @media (max-width: 979px) {
@@ -24330,11 +24324,8 @@ export function StudioShell({
           width: 44px;
           height: 5px;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--color-cursor-text-bright) 22%, transparent);
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 40%, transparent);
           pointer-events: none;
-        }
-        [data-appearance="light"] .studio-history-mobile-sheet-grab {
-          background: color-mix(in srgb, #1c1c1e 22%, transparent);
         }
         .studio-history-mobile-sheet-body {
           display: flex;
