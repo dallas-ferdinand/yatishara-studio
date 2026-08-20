@@ -192,7 +192,7 @@ export function workspaceTabIcon(tab) {
   if (tab.studioKind === "messages") return "message";
   if (tab.studioKind === "files") return "folder";
   if (tab.studioKind === "profile") return "user";
-  if (tab.studioKind === "videoEdit") return "studioProject";
+  if (tab.studioKind === "live" || key.startsWith("live:")) return "filmCamera";
   if (tab.studioKind === "element") {
     if (tab.elementType === "character") return "user";
     if (tab.elementType === "prop") return "package";
