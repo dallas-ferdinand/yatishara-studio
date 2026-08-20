@@ -79,6 +79,8 @@ export const icons = {
   bucket: S('<path d="M7 9V6a5 5 0 0 1 10 0v3"/><path d="M4.5 9h15l-1.55 10.07A2 2 0 0 1 15.98 21H8.02a2 2 0 0 1-1.97-1.93Z"/><path d="M8 13h8"/>'),
   table: S('<path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>'),
   film: S('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/>'),
+  /** Record tab — Lucide Video (film / camcorder). */
+  filmCamera: S('<path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/>'),
   clapperboard: S('<path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="m6.18 5.276 3.1 3.899"/><path d="m12.296 3.464 3.02 3.956"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
   /**
    * .studio project — cut-scene clapperboard (brand mark lives on raster thumbs /
