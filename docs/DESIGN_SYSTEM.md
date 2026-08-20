@@ -166,8 +166,8 @@ Scenes / Sources / Mixer sit on L1 `--mos-page`. Selected rows, icon chips
 (eye, trash, add, scene glyph), Rec, and mixer strips use **L2 `--mos-plate`**
 — never L3 `--mos-plate-strong` (heavy dark slabs in light). Canvas layout
 lives in scene Settings, not the preview head. Preview head: undo/redo left,
-Rec right, no title. Bottom-right Record PIP when the Record tab is open but
-not focused.
+Rec right, no title. No floating Rec preview on other Studio tabs — stop from
+the Record tab.
 
 ### Select / dropdown (locked decision)
 
@@ -848,5 +848,5 @@ Update memory when you change a rule here:
 - **1388** — Agent tools: vertical rows while live; after the turn, one **Worked 2.5 mins** disclosure (not summary chips).
 - **1498** — Voice/audio orb = ElevenLabs Agent Orb (R3F perlin marble). Not custom fluid/particles.
 - **1471** — Feed/post #/@ chips = L3 `--mos-plate-strong` fill, no stroke.
-- **1500** — Record mixer dock chips/rows = L2 `--mos-plate` on L1 page (never L3); preview head undo/redo left + Rec right; canvas layout in scene Settings.
+- **1500** — Record mixer dock chips/rows = L2 `--mos-plate` on L1 page (never L3); preview head undo/redo left + Rec right; canvas layout in scene Settings; no floating Rec preview on other tabs.
 - **Preview load quality** — Video editor preview header center `CursorSelect` (40/60/80/100%, default **60%**), same plate greys as zoom controls. ≤60% loads 720 edit proxy; ≥80% prefers 1080 proxy. Also drives opened-image Bunny `signedReadUrl.quality`. Downloads / generation stay at 100%. Persisted `yatishara-studio-preview-load-quality`.

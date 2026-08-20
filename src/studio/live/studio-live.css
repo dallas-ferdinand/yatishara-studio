@@ -1118,42 +1118,6 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.studio-live-pip {
-  width: 220px;
-  overflow: hidden;
-  border-radius: var(--cursor-radius-md);
-  background: var(--mos-plate);
-  box-shadow: 0 10px 28px color-mix(in srgb, #000 16%, transparent);
-  outline: 1px solid var(--mos-border-soft);
-}
-
-.studio-live-pip-preview {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: #111;
-  cursor: pointer;
-}
-
-.studio-live-pip-preview video {
-  display: block;
-  width: 100%;
-  aspect-ratio: var(--pip-ar, 1.777);
-  object-fit: contain;
-  background: #111;
-  pointer-events: none;
-}
-
-.studio-live-pip-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  height: 32px;
-  padding: 0 6px;
-  background: var(--mos-page);
-}
-
 @media (max-width: 899px) {
   .studio-live-inspector,
   .studio-live-bottom {
