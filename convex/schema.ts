@@ -2290,4 +2290,65 @@ export default defineSchema({
     .index("by_owner_and_updated", ["ownerId", "updatedAt"])
     .index("by_owner_and_project", ["ownerId", "projectFolderId"])
     .index("by_owner_archived", ["ownerId", "archivedAt"]),
+
+  /** Desktop Live mixer ↔ phone camera (same Studio login, LAN WebRTC). */
+  liveSessions: defineTable({
+    hostId: v.id("users"),
+    code: v.string(),
+    status: v.union(
+      v.literal("waiting"),
+      v.literal("linking"),
+      v.literal("live"),
+      v.literal("ended"),
+    ),
+    phoneJoinedAt: v.optional(v.number()),
+    deviceId: v.optional(v.id("liveDevices")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_host_and_updated", ["hostId", "updatedAt"])
+    .index("by_host_and_status", ["hostId", "status"])
+    .index("by_code", ["code"]),
+
+  liveDevices: defineTable({
+    ownerId: v.id("users"),
+    deviceKey: v.string(),
+    kind: v.literal("phone_camera"),
+    label: v.string(),
+    status: v.union(
+      v.literal("online"),
+      v.literal("requested"),
+      v.literal("live"),
+      v.literal("ended"),
+    ),
+    sessionId: v.optional(v.id("liveSessions")),
+    facing: v.optional(v.union(v.literal("user"), v.literal("environment"))),
+    torch: v.optional(v.boolean()),
+    torchSupported: v.optional(v.boolean()),
+    cameraLabel: v.optional(v.string()),
+    mirror: v.optional(v.boolean()),
+    zoom: v.optional(v.number()),
+    zoomMin: v.optional(v.number()),
+    zoomMax: v.optional(v.number()),
+    zoomSupported: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_owner_and_updated", ["ownerId", "updatedAt"])
+    .index("by_owner_and_key", ["ownerId", "deviceKey"]),
+
+  liveSignals: defineTable({
+    sessionId: v.id("liveSessions"),
+    from: v.union(v.literal("host"), v.literal("phone")),
+    kind: v.union(
+      v.literal("offer"),
+      v.literal("answer"),
+      v.literal("ice"),
+      v.literal("bye"),
+    ),
+    payload: v.string(),
+    createdAt: v.number(),
+  }).index("by_session_and_created", ["sessionId", "createdAt"]),
 });

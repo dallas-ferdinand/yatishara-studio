@@ -97,6 +97,7 @@ import {
   Video,
   Zap,
   Bell,
+  Camera,
   Bot,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -146,7 +147,7 @@ import {
   StudioChatAudioPlayer,
   StudioChatAudioPlayerLoading,
 } from "./StudioChatAudioPlayer";
-import { isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
+import { isStudioLiveMixerEnabled, isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
 import { shouldShowStudioUpdatingOverlay } from "@/studio/lib/studio-live-updating";
 import { StudioUpdatingOverlay } from "@/components/studio-updating-overlay";
 import {
@@ -513,6 +514,10 @@ const StudioVideoEditor = dynamic(
   () => import("@/studio/editor/StudioVideoEditor").then((m) => m.StudioVideoEditor),
   { ssr: false },
 );
+const StudioLiveMixer = dynamic(
+  () => import("@/studio/live/StudioLiveMixer").then((m) => m.StudioLiveMixer),
+  { ssr: false },
+);
 const ImageZoomViewer = dynamic(
   () => import("@/desk/components/ImageZoomViewer").then((m) => m.ImageZoomViewer),
   { ssr: false },
@@ -588,6 +593,7 @@ const FILES_TAB = "files:main";
 const NETWORK_TAB = "network:home";
 /** Studio Academy — paid courses (credits, lifetime). */
 const ACADEMY_TAB = "academy:home";
+const LIVE_TAB = "live:main";
 const TRASH_FOLDER_ID = "__trash__";
 const RECENTS_FOLDER_ID = "__recents__";
 /** Newest-N live chat window — always visible; older turns via "Load earlier". */
@@ -1063,6 +1069,7 @@ const PERSISTABLE_TAB_PREFIXES = [
   "listAsset:",
   "videoEdit:",
   "edit:",
+  "live:",
 ];
 
 /** Feed tab keys: `feed:forYou:home` | `feed:following:<postId>` (legacy `feed:<seed>` → forYou). */
@@ -5328,6 +5335,24 @@ export function StudioShell({
     prefetchStudioSurface("files");
   }
 
+  function openLive() {
+    if (!isStudioLiveMixerEnabled()) return;
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    setMobileAppMenuOpen(false);
+    if (isMobile) setMobileSection("composer");
+    openTab(LIVE_TAB);
+  }
+
+  useEffect(() => {
+    const onOpen = () => {
+      if (!isStudioLiveMixerEnabled()) return;
+      openLive();
+    };
+    window.addEventListener("studio-open-live", onOpen);
+    return () => window.removeEventListener("studio-open-live", onOpen);
+  });
+
   /** Open (or create) the one-per-pair chat with a person and focus it. */
   function openChatWith(username) {
     const normalized = String(username ?? "")
@@ -5795,6 +5820,8 @@ export function StudioShell({
       } else if (open === "settings") {
         setSettingsSection(params.get("section") || "general");
         setSettingsOpen(true);
+      } else if (open === "live") {
+        if (isStudioLiveMixerEnabled()) openLive();
       } else {
         return false;
       }
@@ -23409,6 +23436,23 @@ export function StudioShell({
           pointer-events: auto;
           content-visibility: visible;
         }
+        .studio-live-keepalive-slot {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          min-width: 0;
+          overflow: hidden;
+          opacity: 0;
+          pointer-events: none;
+        }
+        .studio-live-keepalive-slot.is-active {
+          z-index: 2;
+          opacity: 1;
+          pointer-events: auto;
+        }
         .studio-pane-foreground {
           position: relative;
           z-index: 1;
@@ -28416,6 +28460,10 @@ export function StudioShell({
             setMobileAppMenuOpen(false);
             openMessages();
           }}
+          onOpenLive={() => {
+            setMobileAppMenuOpen(false);
+            openLive();
+          }}
           onOpenSection={(section) => {
             setMobileAppMenuOpen(false);
             if (section === "files") {
@@ -31688,6 +31736,7 @@ function StudioMobileAppMenu({
   onOpenAcademy,
   onOpenBilling,
   onOpenMessages,
+  onOpenLive,
   onOpenSection,
   onOpenSettings,
   onOpenCredits,
@@ -31970,19 +32019,28 @@ function StudioMobileAppMenu({
     {
       label: shareSnap.recording
         ? "Stop rec"
-        : shareSnap.panelOpen
+        : shareSnap.panelOpen && !isStudioLiveMixerEnabled()
           ? "Hide rec"
-          : "Record",
+          : isStudioLiveMixerEnabled() && !desktop
+            ? "Share camera"
+            : "Record",
       ariaLabel: shareSnap.recording
         ? "Stop recording"
-        : shareSnap.panelOpen
+        : shareSnap.panelOpen && !isStudioLiveMixerEnabled()
           ? "Hide recorder"
-          : "Record screen",
-      Icon: shareSnap.recording ? Square : Monitor,
+          : isStudioLiveMixerEnabled() && !desktop
+            ? "Share camera"
+            : "Record",
+      Icon: shareSnap.recording ? Square : isStudioLiveMixerEnabled() && !desktop ? Camera : Monitor,
       onClick: () => {
         if (shareSnap.recording) {
           screenShareSession.stop();
           onClose?.();
+          return;
+        }
+        if (isStudioLiveMixerEnabled()) {
+          onClose?.();
+          onOpenLive?.();
           return;
         }
         if (shareSnap.panelOpen) {
@@ -34725,8 +34783,14 @@ function ActivePane({
   const isNetworkActive =
     typeof activeTab === "string" &&
     (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
+  const isLiveActive =
+    typeof activeTab === "string" && activeTab.startsWith("live:");
+  const liveTabOpen =
+    isLiveActive ||
+    (Array.isArray(openTabs) &&
+      openTabs.some((tab) => typeof tab === "string" && tab.startsWith("live:")));
   const isKeepaliveCovering =
-    isSocialActive || isMessagesActive || isNetworkActive || isAgentActive;
+    isSocialActive || isMessagesActive || isNetworkActive || isAgentActive || isLiveActive;
   const needsSocialKeepalive =
     isSocialActive || keptFeedTabs.length > 0 || keptProfileTabs.length > 0;
   // Defer feed/profile keepalive until after first paint so authenticated boot
@@ -34908,6 +34972,18 @@ function ActivePane({
     </div>
   );
 
+  const liveKeepalive =
+    !liveTabOpen || !isStudioLiveMixerEnabled() ? null : (
+    <div
+      className={`studio-live-keepalive-slot${isLiveActive ? " is-active" : ""}`}
+      data-tab="live"
+      inert={!isLiveActive}
+      aria-hidden={!isLiveActive}
+    >
+      <StudioLiveMixer tabActive={isLiveActive} />
+    </div>
+  );
+
   function wrapPane(content) {
     return (
       <div className="studio-active-pane">
@@ -34915,6 +34991,7 @@ function ActivePane({
         {messagesKeepalive}
         {agentKeepalive}
         {networkKeepalive}
+        {liveKeepalive}
         {content ? (
           <div
             className={`studio-pane-foreground${isKeepaliveCovering ? " is-covered" : ""}`}
@@ -35025,6 +35102,14 @@ function ActivePane({
         onCancel={() => onCloseTab(activeTab)}
       />,
     );
+  }
+  if (typeof activeTab === "string" && activeTab.startsWith("live:")) {
+    if (!isStudioLiveMixerEnabled()) {
+      return wrapPane(
+        <div className="p-6 text-sm text-cursor-muted">Live is not on this Studio yet.</div>,
+      );
+    }
+    return wrapPane(null);
   }
   if (videoEditContext && (videoEditContext.projectId || videoEditContext.sourceAssetId)) {
     if (shouldShowStudioUpdatingOverlay()) {
@@ -40278,6 +40363,15 @@ function tabDescriptor({
       title: "Files",
       status: "ready",
       studioKind: "files",
+    };
+  }
+  if (key.startsWith("live:")) {
+    return {
+      key,
+      kind: "file",
+      title: "Record",
+      status: "ready",
+      studioKind: "live",
     };
   }
   if (key.startsWith("admin:")) {
