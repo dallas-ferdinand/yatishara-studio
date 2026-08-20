@@ -99,11 +99,6 @@ import { createLivePeer, filterReplaySignals } from "./livePeer";
 import { StudioLiveAudioMixer } from "./StudioLiveAudioMixer";
 import { StudioLiveInspector } from "./StudioLiveInspector";
 import { StudioLivePhone } from "./StudioLivePhone";
-import { StudioLiveRecordingPill } from "./StudioLiveRecordingPill";
-import {
-  publishLiveMixer,
-  setLiveMixerActions,
-} from "./liveMixerSession";
 import "./studio-live.css";
 
 const SCREEN_SHARE_VIDEO_BPS = 2_800_000;
@@ -377,10 +372,10 @@ function LiveEdgeGap({
   );
 }
 
-export function StudioLiveMixer({ tabActive = true }: { tabActive?: boolean } = {}) {
+export function StudioLiveMixer() {
   const { isMobile } = useMobileLayout();
   if (isMobile) return <StudioLivePhone />;
-  return <LiveDesktopMixer tabActive={tabActive} />;
+  return <LiveDesktopMixer />;
 }
 
 function LivePhoneBridge({
@@ -484,7 +479,7 @@ function LivePhoneBridge({
   return null;
 }
 
-function LiveDesktopMixer({ tabActive }: { tabActive: boolean }) {
+function LiveDesktopMixer() {
   const [mixer, setMixer] = useState<LiveMixerState>(
     () => loadMixerState() ?? emptyMixerState(),
   );
@@ -1969,63 +1964,6 @@ function LiveDesktopMixer({ tabActive }: { tabActive: boolean }) {
     wakeLockRef.current = null;
   };
 
-  const toggleRecRef = useRef(() => {});
-  toggleRecRef.current = () => {
-    if (saving || savedFlash) return;
-    if (recording) stopRecording();
-    else void startRecording();
-  };
-
-  useEffect(() => {
-    setLiveMixerActions({
-      toggle: () => toggleRecRef.current(),
-    });
-    return () => {
-      publishLiveMixer({
-        mounted: false,
-        recording: false,
-        saving: false,
-        previewStream: null,
-      });
-    };
-  }, []);
-
-  useEffect(() => {
-    publishLiveMixer({
-      mounted: true,
-      tabActive,
-      recording,
-      saving,
-      savedFlash,
-      elapsedMs,
-      canStart: sceneSources.length > 0,
-      previewAr: canvasSize.ar,
-    });
-  }, [
-    tabActive,
-    recording,
-    saving,
-    savedFlash,
-    elapsedMs,
-    sceneSources.length,
-    canvasSize.ar,
-  ]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    let stream: MediaStream | null = null;
-    try {
-      stream = canvas.captureStream(20);
-    } catch {
-      stream = null;
-    }
-    publishLiveMixer({ previewStream: stream });
-    return () => {
-      publishLiveMixer({ previewStream: null });
-    };
-  }, [canvasSize.w, canvasSize.h]);
-
   const previewBox = frameRef.current
     ? canvasPoint(frameRef.current, 0, 0, canvasSize.w, canvasSize.h)
     : { w: canvasSize.w, h: canvasSize.h };
@@ -2893,7 +2831,6 @@ function LiveDesktopMixer({ tabActive }: { tabActive: boolean }) {
           event.target.value = "";
         }}
       />
-      <StudioLiveRecordingPill />
     </div>
   );
 }

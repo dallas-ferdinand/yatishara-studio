@@ -5344,15 +5344,6 @@ export function StudioShell({
     openTab(LIVE_TAB);
   }
 
-  useEffect(() => {
-    const onOpen = () => {
-      if (!isStudioLiveMixerEnabled()) return;
-      openLive();
-    };
-    window.addEventListener("studio-open-live", onOpen);
-    return () => window.removeEventListener("studio-open-live", onOpen);
-  });
-
   /** Open (or create) the one-per-pair chat with a person and focus it. */
   function openChatWith(username) {
     const normalized = String(username ?? "")
@@ -34980,7 +34971,7 @@ function ActivePane({
       inert={!isLiveActive}
       aria-hidden={!isLiveActive}
     >
-      <StudioLiveMixer tabActive={isLiveActive} />
+      <StudioLiveMixer />
     </div>
   );
 
