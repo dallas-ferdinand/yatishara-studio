@@ -97,6 +97,7 @@ import {
   Video,
   Zap,
   Bell,
+  Camera,
   Bot,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -146,7 +147,7 @@ import {
   StudioChatAudioPlayer,
   StudioChatAudioPlayerLoading,
 } from "./StudioChatAudioPlayer";
-import { isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
+import { isStudioLiveMixerEnabled, isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
 import { shouldShowStudioUpdatingOverlay } from "@/studio/lib/studio-live-updating";
 import { StudioUpdatingOverlay } from "@/components/studio-updating-overlay";
 import {
@@ -279,23 +280,16 @@ import {
   StudioBalanceChip,
 } from "./CreditBalanceRing";
 import { StudioFullscreenStatusBar } from "./StudioFullscreenStatusBar";
-import { StudioMessagesPane } from "./StudioMessagesPane";
-import { StudioMessagesSidebar } from "./StudioMessagesSidebar";
-import { StudioAgentPane } from "./StudioAgentPane";
-import "./studio-agent.css";
 import {
   StudioCreativeNetworkProvider,
   useCreativeNetwork,
 } from "./StudioCreativeNetworkContext";
-import { StudioCreativeNetworkSidebar } from "./StudioCreativeNetworkSidebar";
-import { StudioAcademySidebar } from "./StudioAcademySidebar";
 import { StudioAcademyProvider } from "./StudioAcademyContext";
 import {
   AdminStudioOpsProvider,
   useAdminStudioOpsOptional,
 } from "./AdminStudioOpsContext";
 import { AdminStudioOpsSidebar } from "./AdminStudioOpsSidebar";
-import { StudioCreativeNetworkStore } from "./StudioCreativeNetworkStore";
 import { StudioOnlinePresence } from "./StudioOnlinePresence";
 import { WamPayLabel } from "./WamPayMark";
 import {
@@ -401,18 +395,14 @@ import {
   StudioOrbAvatar,
 } from "./StudioOrbPlayButton";
 import { StudioVoicePicker } from "./StudioVoicePicker";
-import "./post-compose-tab.css";
-import "./profile-post-viewer.css";
-/* Turbopack: CSS for dynamic() panes / shared chrome must also be static-imported
-   here, or HMR throws "No link element found for chunk …src_studio_components_*.css". */
-import "./public-offers.css";
 import { StudioFilesNavPane } from "./StudioFilesNavPane";
 import { StudioFilesNavMobileSheet } from "./StudioFilesNavMobileSheet";
-import "./studio-creative-network.css";
-import "./studio-creative-network-store.css";
-import "./marketplace-offers-pane.css";
-import "./public-profile.css";
-import "./studio-messages.css";
+/* Chrome used by statically mounted shell widgets. Pane CSS (Feed, CN, DMs,
+   Academy, profile) lives on the dynamic() modules so phones don't parse it
+   until that surface opens. Dev: refresh if Turbopack misses a CSS HMR link.
+   Files source toggle + search row are explorer chrome, not the Asset library
+   pane — keep them here or Your files renders the tabs unstyled. */
+import "./studio-files-chrome.css";
 import "./studio-asset-picker.css";
 import "./studio-share-people.css";
 import "./studio-profile-avatar.css";
@@ -481,6 +471,32 @@ const StudioAcademyPane = dynamic(
   () => import("./StudioAcademyPane").then((m) => m.StudioAcademyPane),
   { ssr: false },
 );
+const StudioAcademySidebar = dynamic(
+  () => import("./StudioAcademySidebar").then((m) => m.StudioAcademySidebar),
+  { ssr: false },
+);
+const StudioMessagesPane = dynamic(
+  () => import("./StudioMessagesPane").then((m) => m.StudioMessagesPane),
+  { ssr: false },
+);
+const StudioMessagesSidebar = dynamic(
+  () => import("./StudioMessagesSidebar").then((m) => m.StudioMessagesSidebar),
+  { ssr: false },
+);
+const StudioAgentPane = dynamic(
+  () => import("./StudioAgentPane").then((m) => m.StudioAgentPane),
+  { ssr: false },
+);
+const StudioCreativeNetworkSidebar = dynamic(
+  () =>
+    import("./StudioCreativeNetworkSidebar").then((m) => m.StudioCreativeNetworkSidebar),
+  { ssr: false },
+);
+const StudioCreativeNetworkStore = dynamic(
+  () =>
+    import("./StudioCreativeNetworkStore").then((m) => m.StudioCreativeNetworkStore),
+  { ssr: false },
+);
 const StudioBillingPane = dynamic(
   () => import("./StudioBillingPane").then((m) => m.StudioBillingPane),
   { ssr: false },
@@ -496,6 +512,10 @@ const StudioSoundsAlertsSettings = dynamic(
 );
 const StudioVideoEditor = dynamic(
   () => import("@/studio/editor/StudioVideoEditor").then((m) => m.StudioVideoEditor),
+  { ssr: false },
+);
+const StudioLiveMixer = dynamic(
+  () => import("@/studio/live/StudioLiveMixer").then((m) => m.StudioLiveMixer),
   { ssr: false },
 );
 const ImageZoomViewer = dynamic(
@@ -573,6 +593,7 @@ const FILES_TAB = "files:main";
 const NETWORK_TAB = "network:home";
 /** Studio Academy — paid courses (credits, lifetime). */
 const ACADEMY_TAB = "academy:home";
+const LIVE_TAB = "live:main";
 const TRASH_FOLDER_ID = "__trash__";
 const RECENTS_FOLDER_ID = "__recents__";
 /** Newest-N live chat window — always visible; older turns via "Load earlier". */
@@ -1048,6 +1069,7 @@ const PERSISTABLE_TAB_PREFIXES = [
   "listAsset:",
   "videoEdit:",
   "edit:",
+  "live:",
 ];
 
 /** Feed tab keys: `feed:forYou:home` | `feed:following:<postId>` (legacy `feed:<seed>` → forYou). */
@@ -2282,11 +2304,24 @@ export function StudioShell({
         !activeTab.startsWith("billing:") &&
         !activeTab.startsWith("admin:")));
   const needsComposerCatalog =
-    isGenerateSurface || Boolean(activeTab?.startsWith("thread:"));
+    (isGenerateSurface || Boolean(activeTab?.startsWith("thread:"))) &&
+    (!isMobile ||
+      mobileSection === "composer" ||
+      mobileSection === "files");
   const needsThreadsList =
-    historyOpen ||
-    Boolean(activeTab?.startsWith("thread:")) ||
-    openTabs.some((tab) => tab.startsWith("thread:"));
+    (historyOpen ||
+      Boolean(activeTab?.startsWith("thread:")) ||
+      openTabs.some((tab) => tab.startsWith("thread:"))) &&
+    (!isMobile ||
+      historyOpen ||
+      mobileSection === "composer" ||
+      mobileSection === "files");
+  const needsNetworkQueries =
+    !isMobile ||
+    mobileSection === "network" ||
+    settingsOpen ||
+    (typeof activeTab === "string" &&
+      (activeTab.startsWith("network:") || activeTab.startsWith("offers:")));
   // Skip heavy folder contents while Files UI is not actually shown.
   // Desktop: Messages / Feed / Network filters own the left rail.
   // Mobile: dock stays mounted for instant open, but don't subscribe until
@@ -2313,7 +2348,7 @@ export function StudioShell({
         ));
   const mySellerStatus = useQuery(
     api.marketplace.getMySellerStatus,
-    hasCurrentUser ? {} : "skip",
+    hasCurrentUser && needsNetworkQueries ? {} : "skip",
   );
   /** Per-asset listing status for explorer context menu — never boot listMyListings here. */
   const contextMenuAssetId =
@@ -2340,8 +2375,9 @@ export function StudioShell({
   }, [explorerUserId]);
 
   // Prefetch Feed / Network / History chunks after auth so first open isn't a spinner.
+  // Phones: skip — idle chunks compete with first paint; tap prefetch still warms.
   useEffect(() => {
-    if (!hasCurrentUser) return undefined;
+    if (!hasCurrentUser || isMobile) return undefined;
     let idleId = 0;
     let timeoutId = 0;
     const run = () => preloadStudioHotPanes();
@@ -2356,7 +2392,7 @@ export function StudioShell({
       }
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [hasCurrentUser]);
+  }, [hasCurrentUser, isMobile]);
 
   // Keep asset wallpaper signed URL fresh after auth / on boot.
   useEffect(() => {
@@ -2381,18 +2417,24 @@ export function StudioShell({
     };
   }, [assetUrlExpiresUnix, convex, hasCurrentUser]);
 
-  const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
-  const pricing = useQuery(api.billing.getPricing, hasCurrentUser ? {} : "skip");
-  const wamReturnPayment = useQuery(
-    api.billing.findMyPaymentForWamReturn,
-    hasCurrentUser && wamReturnIdentifier ? { identifier: wamReturnIdentifier } : "skip",
-  );
   // Defer payment lists until settings or admin — they stampeded boot and near-timeouted with listThreads.
   const needsBillingDetails =
     settingsOpen ||
     activeTab.startsWith("admin:") ||
     activeTab.startsWith("billing:") ||
     openTabs.some((tab) => tab.startsWith("admin:") || tab.startsWith("billing:"));
+  const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
+  const pricing = useQuery(
+    api.billing.getPricing,
+    hasCurrentUser &&
+      (!isMobile || needsComposerCatalog || needsBillingDetails)
+      ? {}
+      : "skip",
+  );
+  const wamReturnPayment = useQuery(
+    api.billing.findMyPaymentForWamReturn,
+    hasCurrentUser && wamReturnIdentifier ? { identifier: wamReturnIdentifier } : "skip",
+  );
   const needsProfileShares =
     settingsOpen ||
     settingsSection === "profile" ||
@@ -2506,7 +2548,11 @@ export function StudioShell({
   );
   const selectedFolder = useQuery(
     api.folders.get,
-    hasCurrentUser && activeFolderId && !isTrashView && !isRecentsView
+    hasCurrentUser &&
+      activeFolderId &&
+      !isTrashView &&
+      !isRecentsView &&
+      (needsExplorerFolderContents || needsComposerCatalog)
       ? { folderId: activeFolderId, includeDeleted: isTrashBrowse }
       : "skip",
   );
@@ -2902,7 +2948,7 @@ export function StudioShell({
   );
   const outgoingShareKeys = useQuery(
     api.studioShares.listMyOutgoingShareKeys,
-    hasCurrentUser ? {} : "skip",
+    hasCurrentUser && needsExplorerFolderContents ? {} : "skip",
   );
   const outgoingShareKeySet = useMemo(() => {
     const set = new Set();
@@ -2959,7 +3005,7 @@ export function StudioShell({
   const filesNavHomeRootId = navTrail[0]?.id ?? workspaceRoot?._id ?? null;
   const filesNavHomeFolders = useQuery(
     api.folders.listWithPeeks,
-    hasCurrentUser && filesNavHomeRootId
+    hasCurrentUser && filesNavHomeRootId && needsExplorerFolderContents
       ? { parentId: filesNavHomeRootId }
       : "skip",
   );
@@ -5289,6 +5335,24 @@ export function StudioShell({
     prefetchStudioSurface("files");
   }
 
+  function openLive() {
+    if (!isStudioLiveMixerEnabled()) return;
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    setMobileAppMenuOpen(false);
+    if (isMobile) setMobileSection("composer");
+    openTab(LIVE_TAB);
+  }
+
+  useEffect(() => {
+    const onOpen = () => {
+      if (!isStudioLiveMixerEnabled()) return;
+      openLive();
+    };
+    window.addEventListener("studio-open-live", onOpen);
+    return () => window.removeEventListener("studio-open-live", onOpen);
+  });
+
   /** Open (or create) the one-per-pair chat with a person and focus it. */
   function openChatWith(username) {
     const normalized = String(username ?? "")
@@ -5756,6 +5820,8 @@ export function StudioShell({
       } else if (open === "settings") {
         setSettingsSection(params.get("section") || "general");
         setSettingsOpen(true);
+      } else if (open === "live") {
+        if (isStudioLiveMixerEnabled()) openLive();
       } else {
         return false;
       }
@@ -6630,6 +6696,33 @@ export function StudioShell({
         return remaining.length ? remaining[remaining.length - 1] : "";
       });
     }
+  }
+
+  function closeAllTabs() {
+    const keys = Array.isArray(openTabs) ? openTabs : [];
+    if (!keys.length) return;
+    for (const key of keys) {
+      if (isComposerContextTabKey(key)) {
+        delete composerContextsRef.current[key];
+      }
+    }
+    writePersistedComposerContexts(
+      composerContextsRef.current,
+      tabAccountIdRef.current,
+    );
+    userClearedTabsRef.current = true;
+    setOpenTabs([]);
+    setActiveTab("");
+    commitLiveTabSession(
+      {
+        openTabs: [],
+        activeTab: "",
+        activeFolderId: latestTabSessionRef.current.activeFolderId,
+        navTrail: latestTabSessionRef.current.navTrail,
+        snapshots: latestTabSessionRef.current.snapshots,
+      },
+      { allowWipe: true },
+    );
   }
 
   function handleEntryOpen(entry) {
@@ -10043,16 +10136,21 @@ export function StudioShell({
             --studio-chat-column-max: 100%;
             --studio-chat-empty-clearance: calc(108px + env(safe-area-inset-bottom, 0px));
             --cursor-head-h: var(--studio-mobile-nav-height, 44px);
+            --studio-composer-glass-blur: saturate(160%) blur(8px);
+            --studio-composer-glass: color-mix(in srgb, var(--mos-bg, #05080f) 92%, transparent);
+            --studio-composer-glass-strong: color-mix(in srgb, var(--mos-bg, #05080f) 96%, transparent);
             /* Dark overlay chrome — readable bars, still slightly frosted */
-            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent);
-            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent);
-            --studio-mobile-chrome-blur: saturate(160%) blur(18px);
+            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-bg, #05080f) 92%, transparent);
+            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-bg, #05080f) 92%, transparent);
+            --studio-mobile-chrome-blur: saturate(160%) blur(8px);
           }
           [data-appearance="light"] .studio-polish.is-studio-mobile {
-            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-page, var(--mos-panel, #f5f5f7)) 84%, transparent);
-            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-page, var(--mos-panel, #f5f5f7)) 84%, transparent);
+            --studio-composer-glass-blur: saturate(160%) blur(8px);
+            --studio-composer-glass: color-mix(in srgb, var(--mos-panel, #f5f5f7) 94%, transparent);
+            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-page, var(--mos-panel, #f5f5f7)) 90%, transparent);
+            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-page, var(--mos-panel, #f5f5f7)) 90%, transparent);
             --studio-mobile-chrome-border: var(--color-cursor-border, var(--mos-border));
-            --studio-mobile-chrome-blur: saturate(160%) blur(16px);
+            --studio-mobile-chrome-blur: saturate(160%) blur(8px);
           }
           [data-appearance="light"] .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
             background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
@@ -10160,15 +10258,33 @@ export function StudioShell({
           .studio-polish .cursor-workspace-head {
             gap: 6px;
             padding-left: max(4px, env(safe-area-inset-left, 0px)) !important;
-            padding-right: max(2px, env(safe-area-inset-right, 0px)) !important;
+            padding-right: env(safe-area-inset-right, 0px) !important;
           }
           .studio-polish .cursor-workspace-tools {
             gap: 4px;
             padding-left: 4px;
-            padding-right: max(2px, env(safe-area-inset-right, 0px));
+            padding-right: env(safe-area-inset-right, 0px);
             align-items: center;
             align-self: stretch;
             height: 100%;
+          }
+          .studio-close-all-btn {
+            width: var(--studio-mobile-chrome-control, 30px) !important;
+            min-width: var(--studio-mobile-chrome-control, 30px) !important;
+            height: var(--studio-mobile-chrome-control, 30px) !important;
+            min-height: var(--studio-mobile-chrome-control, 30px) !important;
+            padding: 0 !important;
+            font-size: 0;
+          }
+          .studio-close-all-btn svg {
+            width: 14px;
+            height: 14px;
+          }
+          .studio-polish .cursor-unified-tab .cursor-tab-close {
+            width: 26px !important;
+            height: 26px !important;
+            min-width: 26px;
+            min-height: 26px;
           }
           .studio-polish .cursor-workspace-tools .studio-settings-pill:not(.studio-profile-menu-trigger) {
             min-width: var(--studio-mobile-chrome-control, 30px) !important;
@@ -10230,10 +10346,10 @@ export function StudioShell({
           .studio-polish .cursor-unified-tab {
             height: var(--studio-mobile-chrome-control, 30px) !important;
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
-            width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            min-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            max-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            padding: 0 6px !important;
+            width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
+            min-width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
+            max-width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
+            padding: 0 2px 0 6px !important;
             align-self: center;
             border-radius: 999px !important;
             border-left-width: 1px !important;
@@ -10259,9 +10375,9 @@ export function StudioShell({
             flex: 0 0 auto;
           }
           .studio-polish .cursor-unified-tab-placeholder {
-            width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            min-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            max-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
+            width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
+            min-width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
+            max-width: min(124px, var(--cursor-unified-tab-width, 136px)) !important;
             height: var(--studio-mobile-chrome-control, 30px) !important;
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
           }
@@ -10673,7 +10789,7 @@ export function StudioShell({
         @media (hover: hover) {
           /* Feed like/save/share keep their own ink; bright hover must not
              override liked red / saved gold while the pointer stays down. */
-          .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover):not(.profile-post-rail-btn):not(.profile-post-rail-follow):not(.profile-post-follow-btn):not(.profile-post-edit-btn):not(.profile-post-book-btn):not(.profile-post-caption-user):not(.profile-comments-post-action):not(.profile-comment-like) :where(svg, .icon-inline) {
+          .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover):not(.studio-orb-play):not(.profile-post-rail-btn):not(.profile-post-rail-follow):not(.profile-post-follow-btn):not(.profile-post-edit-btn):not(.profile-post-book-btn):not(.profile-post-caption-user):not(.profile-comments-post-action):not(.profile-comment-like) :where(svg, .icon-inline) {
             color: var(--color-cursor-text-bright) !important;
           }
         }
@@ -11359,7 +11475,7 @@ export function StudioShell({
             0 0 16px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
         }
         .studio-polish .cursor-workspace-head {
-          padding: 0 2px 0 4px !important;
+          padding: 0 0 0 4px !important;
           gap: 0;
           align-items: center;
           background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
@@ -11385,7 +11501,7 @@ export function StudioShell({
             height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px));
             padding-top: env(safe-area-inset-top, 0px) !important;
             padding-left: max(4px, env(safe-area-inset-left, 0px)) !important;
-            padding-right: max(2px, env(safe-area-inset-right, 0px)) !important;
+            padding-right: env(safe-area-inset-right, 0px) !important;
             background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
             border: 0 !important;
             border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
@@ -11434,9 +11550,9 @@ export function StudioShell({
         .studio-polish .cursor-unified-tab {
           height: calc(var(--cursor-head-h) - 2px) !important;
           min-height: calc(var(--cursor-head-h) - 2px) !important;
-          width: min(140px, var(--cursor-unified-tab-width, 154px));
-          min-width: min(140px, var(--cursor-unified-tab-width, 154px));
-          max-width: min(140px, var(--cursor-unified-tab-width, 154px));
+          width: min(144px, var(--cursor-unified-tab-width, 158px));
+          min-width: min(144px, var(--cursor-unified-tab-width, 158px));
+          max-width: min(144px, var(--cursor-unified-tab-width, 158px));
           border: 1px solid transparent !important;
           border-left-width: 1px !important;
           border-radius: 999px !important;
@@ -11444,7 +11560,7 @@ export function StudioShell({
           background: transparent !important;
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
-          padding: 0 6px !important;
+          padding: 0 2px 0 6px !important;
           margin: 0 !important;
           box-shadow: none !important;
           /* Visible so the inter-tab hairline (::after) can sit in the gap. */
@@ -11477,7 +11593,7 @@ export function StudioShell({
             border-radius: 999px !important;
             border-left-width: 1px !important;
             margin: 0 !important;
-            padding: 0 6px !important;
+            padding: 0 2px 0 6px !important;
             box-sizing: border-box !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab:hover:not(.cursor-unified-tab-new),
@@ -11485,7 +11601,7 @@ export function StudioShell({
             height: var(--studio-mobile-chrome-control, 30px) !important;
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
             max-height: var(--studio-mobile-chrome-control, 30px) !important;
-            padding: 0 6px !important;
+            padding: 0 2px 0 6px !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab-placeholder {
             height: var(--studio-mobile-chrome-control, 30px) !important;
@@ -11553,7 +11669,14 @@ export function StudioShell({
         }
         .studio-polish .cursor-unified-tab-preview-overlay {
           color: #fff !important;
-          background: transparent;
+          background: color-mix(in srgb, #000 22%, transparent);
+        }
+        .studio-polish .cursor-unified-tab-preview:not(:has(img)):not(:has(video)) .cursor-unified-tab-preview-overlay {
+          background: color-mix(in srgb, var(--mos-text, #111) 10%, transparent);
+        }
+        .studio-polish .cursor-unified-tab-preview:not(:has(img)):not(:has(video)) .cursor-unified-tab-preview-overlay svg {
+          color: var(--mos-text, var(--color-cursor-text)) !important;
+          filter: none !important;
         }
         .studio-polish .cursor-unified-tab-preview-overlay svg {
           color: #fff !important;
@@ -12628,9 +12751,9 @@ export function StudioShell({
           padding-left: 6px !important;
         }
         .studio-polish .cursor-unified-tab-placeholder {
-          width: min(140px, var(--cursor-unified-tab-width, 154px));
-          min-width: min(140px, var(--cursor-unified-tab-width, 154px));
-          max-width: min(140px, var(--cursor-unified-tab-width, 154px));
+          width: min(144px, var(--cursor-unified-tab-width, 158px));
+          min-width: min(144px, var(--cursor-unified-tab-width, 158px));
+          max-width: min(144px, var(--cursor-unified-tab-width, 158px));
           height: calc(var(--cursor-head-h) - 2px);
           min-height: calc(var(--cursor-head-h) - 2px);
           margin: 0;
@@ -12650,7 +12773,7 @@ export function StudioShell({
           height: calc(var(--cursor-head-h) - 2px) !important;
           min-height: calc(var(--cursor-head-h) - 2px) !important;
           max-height: calc(var(--cursor-head-h) - 2px) !important;
-          padding: 0 6px !important;
+          padding: 0 2px 0 6px !important;
           border: 1px solid transparent !important;
           box-sizing: border-box !important;
           background-clip: padding-box !important;
@@ -12727,20 +12850,24 @@ export function StudioShell({
           pointer-events: auto !important;
           z-index: 6 !important;
           position: relative;
-          color: color-mix(in srgb, var(--color-cursor-text-bright) 72%, transparent);
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 8%, transparent) !important;
+          color: var(--mos-text, var(--color-cursor-text)) !important;
         }
         .studio-polish .cursor-unified-tab .cursor-tab-close:hover,
         .studio-polish .cursor-unified-tab .cursor-tab-close:active {
-          color: var(--color-cursor-text-bright) !important;
-          background: color-mix(in srgb, var(--mos-text-bright) 10%, transparent) !important;
+          color: var(--color-cursor-text, var(--mos-text)) !important;
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 14%, transparent) !important;
         }
         .studio-polish .cursor-unified-tab.is-active .cursor-tab-close {
-          background: transparent !important;
-          color: currentColor !important;
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 8%, transparent) !important;
+          color: var(--mos-text, var(--color-cursor-text)) !important;
         }
         .studio-polish .cursor-unified-tab.is-active .cursor-tab-close:hover {
-          background: color-mix(in srgb, var(--mos-text-bright) 12%, transparent) !important;
-          color: var(--color-cursor-text-bright) !important;
+          background: color-mix(in srgb, var(--mos-text, var(--color-cursor-text)) 14%, transparent) !important;
+          color: var(--color-cursor-text, var(--mos-text)) !important;
         }
         .studio-polish .cursor-unified-tab.is-active,
         .studio-polish .cursor-unified-tab.is-streaming.is-active,
@@ -19345,6 +19472,43 @@ export function StudioShell({
           filter: none;
           padding: 0;
         }
+        .studio-close-all-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          height: 24px;
+          min-height: 24px;
+          padding: 0 8px;
+          border-radius: 999px;
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+          color: var(--color-cursor-text, var(--mos-text));
+          box-shadow: none;
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.01em;
+          line-height: 1;
+          white-space: nowrap;
+          cursor: pointer;
+          appearance: none;
+          -webkit-appearance: none;
+          font-family: inherit;
+        }
+        .studio-close-all-btn:hover {
+          border-color: var(--color-cursor-border, var(--mos-border));
+          background: var(--mos-hover, var(--color-cursor-hover));
+          color: var(--color-cursor-text, var(--mos-text));
+        }
+        .studio-workspace-tools-divider {
+          width: 1px;
+          height: 14px;
+          margin: 0 4px 0 2px;
+          flex: 0 0 auto;
+          align-self: center;
+          background: var(--mos-border, var(--color-cursor-border));
+          pointer-events: none;
+        }
         .studio-settings-trigger svg {
           width: 12px;
           height: 12px;
@@ -23272,6 +23436,23 @@ export function StudioShell({
           pointer-events: auto;
           content-visibility: visible;
         }
+        .studio-live-keepalive-slot {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          min-width: 0;
+          overflow: hidden;
+          opacity: 0;
+          pointer-events: none;
+        }
+        .studio-live-keepalive-slot.is-active {
+          z-index: 2;
+          opacity: 1;
+          pointer-events: auto;
+        }
         .studio-pane-foreground {
           position: relative;
           z-index: 1;
@@ -26193,6 +26374,24 @@ export function StudioShell({
               )
             : null}
           <div className="cursor-panel-head-tools cursor-workspace-tools">
+            {openTabs.length > 0 ? (
+              <button
+                type="button"
+                className={`studio-close-all-btn${isMobile ? " studio-settings-pill studio-settings-trigger" : ""}`}
+                onClick={closeAllTabs}
+                aria-label="Close all tabs"
+                title="Close all tabs"
+              >
+                {isMobile ? (
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  "Close all"
+                )}
+              </button>
+            ) : null}
+            {!isMobile && openTabs.length > 0 ? (
+              <span className="studio-workspace-tools-divider" aria-hidden="true" />
+            ) : null}
             {!isMobile ? (
               <>
                 <button
@@ -26973,6 +27172,24 @@ export function StudioShell({
               )
             : null}
           <div className="cursor-panel-head-tools cursor-workspace-tools">
+            {openTabs.length > 0 ? (
+              <button
+                type="button"
+                className={`studio-close-all-btn${isMobile ? " studio-settings-pill studio-settings-trigger" : ""}`}
+                onClick={closeAllTabs}
+                aria-label="Close all tabs"
+                title="Close all tabs"
+              >
+                {isMobile ? (
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  "Close all"
+                )}
+              </button>
+            ) : null}
+            {!isMobile && openTabs.length > 0 ? (
+              <span className="studio-workspace-tools-divider" aria-hidden="true" />
+            ) : null}
             {!isMobile ? (
               <>
                 <button
@@ -28242,6 +28459,10 @@ export function StudioShell({
           onOpenMessages={() => {
             setMobileAppMenuOpen(false);
             openMessages();
+          }}
+          onOpenLive={() => {
+            setMobileAppMenuOpen(false);
+            openLive();
           }}
           onOpenSection={(section) => {
             setMobileAppMenuOpen(false);
@@ -31515,6 +31736,7 @@ function StudioMobileAppMenu({
   onOpenAcademy,
   onOpenBilling,
   onOpenMessages,
+  onOpenLive,
   onOpenSection,
   onOpenSettings,
   onOpenCredits,
@@ -31797,19 +32019,28 @@ function StudioMobileAppMenu({
     {
       label: shareSnap.recording
         ? "Stop rec"
-        : shareSnap.panelOpen
+        : shareSnap.panelOpen && !isStudioLiveMixerEnabled()
           ? "Hide rec"
-          : "Record",
+          : isStudioLiveMixerEnabled() && !desktop
+            ? "Share camera"
+            : "Record",
       ariaLabel: shareSnap.recording
         ? "Stop recording"
-        : shareSnap.panelOpen
+        : shareSnap.panelOpen && !isStudioLiveMixerEnabled()
           ? "Hide recorder"
-          : "Record screen",
-      Icon: shareSnap.recording ? Square : Monitor,
+          : isStudioLiveMixerEnabled() && !desktop
+            ? "Share camera"
+            : "Record",
+      Icon: shareSnap.recording ? Square : isStudioLiveMixerEnabled() && !desktop ? Camera : Monitor,
       onClick: () => {
         if (shareSnap.recording) {
           screenShareSession.stop();
           onClose?.();
+          return;
+        }
+        if (isStudioLiveMixerEnabled()) {
+          onClose?.();
+          onOpenLive?.();
           return;
         }
         if (shareSnap.panelOpen) {
@@ -34332,6 +34563,10 @@ function StudioChatResultCard({
           <StudioChatAudioPlayer
             src={playSrc}
             title={title}
+            orbSeed={orbSeedForVoice(
+              String(entry.studioId ?? entry.path ?? title),
+              title,
+            )}
           />
         ) : needsSignedMedia ? (
           <StudioChatAudioPlayerLoading label="Loading audio" />
@@ -34548,8 +34783,14 @@ function ActivePane({
   const isNetworkActive =
     typeof activeTab === "string" &&
     (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
+  const isLiveActive =
+    typeof activeTab === "string" && activeTab.startsWith("live:");
+  const liveTabOpen =
+    isLiveActive ||
+    (Array.isArray(openTabs) &&
+      openTabs.some((tab) => typeof tab === "string" && tab.startsWith("live:")));
   const isKeepaliveCovering =
-    isSocialActive || isMessagesActive || isNetworkActive || isAgentActive;
+    isSocialActive || isMessagesActive || isNetworkActive || isAgentActive || isLiveActive;
   const needsSocialKeepalive =
     isSocialActive || keptFeedTabs.length > 0 || keptProfileTabs.length > 0;
   // Defer feed/profile keepalive until after first paint so authenticated boot
@@ -34731,6 +34972,18 @@ function ActivePane({
     </div>
   );
 
+  const liveKeepalive =
+    !liveTabOpen || !isStudioLiveMixerEnabled() ? null : (
+    <div
+      className={`studio-live-keepalive-slot${isLiveActive ? " is-active" : ""}`}
+      data-tab="live"
+      inert={!isLiveActive}
+      aria-hidden={!isLiveActive}
+    >
+      <StudioLiveMixer tabActive={isLiveActive} />
+    </div>
+  );
+
   function wrapPane(content) {
     return (
       <div className="studio-active-pane">
@@ -34738,6 +34991,7 @@ function ActivePane({
         {messagesKeepalive}
         {agentKeepalive}
         {networkKeepalive}
+        {liveKeepalive}
         {content ? (
           <div
             className={`studio-pane-foreground${isKeepaliveCovering ? " is-covered" : ""}`}
@@ -34848,6 +35102,14 @@ function ActivePane({
         onCancel={() => onCloseTab(activeTab)}
       />,
     );
+  }
+  if (typeof activeTab === "string" && activeTab.startsWith("live:")) {
+    if (!isStudioLiveMixerEnabled()) {
+      return wrapPane(
+        <div className="p-6 text-sm text-cursor-muted">Live is not on this Studio yet.</div>,
+      );
+    }
+    return wrapPane(null);
   }
   if (videoEditContext && (videoEditContext.projectId || videoEditContext.sourceAssetId)) {
     if (shouldShowStudioUpdatingOverlay()) {
@@ -35644,6 +35906,10 @@ function StudioAssetPreview({ entry, initialScale, hideName }) {
             variant="pane"
             src={mediaUrl}
             title={safeEntryTitle(entry)}
+            orbSeed={orbSeedForVoice(
+              String(entry.studioId ?? entry.path ?? ""),
+              safeEntryTitle(entry),
+            )}
           />
         ) : (
           <div className="studio-asset-empty">
@@ -40099,6 +40365,15 @@ function tabDescriptor({
       studioKind: "files",
     };
   }
+  if (key.startsWith("live:")) {
+    return {
+      key,
+      kind: "file",
+      title: "Record",
+      status: "ready",
+      studioKind: "live",
+    };
+  }
   if (key.startsWith("admin:")) {
     const kind = key.slice("admin:".length);
     const title =
@@ -40266,13 +40541,21 @@ function tabDescriptor({
         status: "ready",
       };
     }
-    const previewUrl =
+    const thumbUrl =
       (typeof entry.thumbnailUrl === "string" && entry.thumbnailUrl) ||
       entry.sheetAsset?.thumbnailUrl ||
       entry.sheetAsset?.mediaUrl ||
-      ((entry.kind === "image" || entry.kind === "video") && typeof entry.mediaUrl === "string"
+      undefined;
+    const mediaFallback =
+      (entry.kind === "image" || entry.kind === "video") &&
+      typeof entry.mediaUrl === "string"
         ? entry.mediaUrl
-        : undefined);
+        : undefined;
+    const previewUrl = thumbUrl || mediaFallback;
+    const videoPoster =
+      entry.kind === "video" &&
+      previewUrl &&
+      !/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(previewUrl);
     return {
       key,
       kind: "file",
@@ -40295,7 +40578,9 @@ function tabDescriptor({
             : previewUrl
               ? "image"
               : undefined
-          : entry.kind ?? (entry.studioKind === "element" ? "image" : undefined),
+          : videoPoster
+            ? "image"
+            : entry.kind ?? (entry.studioKind === "element" ? "image" : undefined),
       status: "ready",
     };
   }

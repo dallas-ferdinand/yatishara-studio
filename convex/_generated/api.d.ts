@@ -158,6 +158,7 @@ import type * as lib_videoModels from "../lib/videoModels.js";
 import type * as lib_voiceExploreFilters from "../lib/voiceExploreFilters.js";
 import type * as lib_wam from "../lib/wam.js";
 import type * as lib_wamSdk from "../lib/wamSdk.js";
+import type * as liveSessions from "../liveSessions.js";
 import type * as magicLoginAuth from "../magicLoginAuth.js";
 import type * as marketplace from "../marketplace.js";
 import type * as marketplaceActions from "../marketplaceActions.js";
@@ -361,6 +362,7 @@ declare const fullApi: ApiFromModules<{
   "lib/voiceExploreFilters": typeof lib_voiceExploreFilters;
   "lib/wam": typeof lib_wam;
   "lib/wamSdk": typeof lib_wamSdk;
+  liveSessions: typeof liveSessions;
   magicLoginAuth: typeof magicLoginAuth;
   marketplace: typeof marketplace;
   marketplaceActions: typeof marketplaceActions;

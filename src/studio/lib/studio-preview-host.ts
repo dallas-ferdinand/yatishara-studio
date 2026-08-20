@@ -32,3 +32,8 @@ export function isStudioLiveProductionHost(hostname?: string | null): boolean {
 export function isVideoEditorPreviewEnabled(): boolean {
   return true;
 }
+
+/** Simple Live mixer (OBS-style). On in production and preview. */
+export function isStudioLiveMixerEnabled(_hostname?: string | null): boolean {
+  return true;
+}
